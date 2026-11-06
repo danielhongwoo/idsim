@@ -25,7 +25,26 @@
 
 세 레이어로 나눈다. 아래의 시뮬레이션 레이어(PX4 SITL x N + Gazebo)는 실제 기체를 대신하고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. 운용 서비스는 시뮬레이터를 전혀 모르도록 설계해, 나중에 PX4 SITL 컨테이너를 실기체로 바꿔도 그대로 동작하게 한다.
 
+큰 그림은 다음과 같다.
+
+```mermaid
+flowchart TB
+  OPS["운용 서비스<br/>Fleet, Mission, Telemetry, Replay"]
+  BUS["ROS 2 버스<br/>기체별 토픽"]
+  SIM["시뮬레이션<br/>PX4 SITL x N + Gazebo"]
+  EXT["외부 클라이언트<br/>웹, gRPC"]
+  EXT <--> OPS
+  OPS <-->|"명령, setpoint / 상태"| BUS
+  BUS <-->|"uXRCE-DDS 에이전트"| SIM
+```
+
+- 운용 서비스는 ROS 2 버스만 보고, 아래가 시뮬레이터인지 실기체인지 모른다.
+- 시뮬레이션 레이어는 실기체로 바꿀 수 있는 자리다. 기체 하나가 PX4 하나다.
+- 외부 클라이언트는 ROS 2를 모르고 Fleet Manager의 API로만 플릿을 본다.
+
 이 원칙은 표적 경로에도 적용한다. Mission Executor는 Gazebo 토픽을 직접 구독하지 않고 `idsim_interfaces`의 `TargetState` 계약(`/targets/<id>/state`)만 구독한다. 시뮬레이션에서는 `idsim_sim`의 표적 어댑터 노드가 ros_gz_bridge로 받은 Gazebo pose를 이 계약으로 변환해 발행하고, 실기체에서는 같은 토픽을 추적기가 채운다.
+
+세부 구성은 다음과 같다.
 
 ```mermaid
 flowchart TB
