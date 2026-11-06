@@ -11,11 +11,11 @@ RUN test -n "${PX4_MSGS_REF}" && test -n "${PX4_ROS_COM_REF}" \
 # ros_gz_bridge는 vendor gz-transport만 끌어온다 (OSRF gz 패키지와 섞지 않는다)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ros-${ROS_DISTRO}-ros-gz-bridge \
-      ros-${ROS_DISTRO}-ament-cmake \
-      ros-${ROS_DISTRO}-eigen3-cmake-module \
+      "ros-${ROS_DISTRO}-ros-gz-bridge" \
+      "ros-${ROS_DISTRO}-ament-cmake" \
+      "ros-${ROS_DISTRO}-eigen3-cmake-module" \
       libeigen3-dev \
-      ros-${ROS_DISTRO}-rclpy \
+      "ros-${ROS_DISTRO}-rclpy" \
       python3-colcon-common-extensions \
       python3-rosdep \
       build-essential cmake git \
@@ -28,7 +28,7 @@ RUN mkdir -p /opt/px4_ws/src && cd /opt/px4_ws/src \
  && git clone https://github.com/PX4/px4_ros_com.git \
  && git -C px4_ros_com checkout "${PX4_ROS_COM_REF}" \
  && cd /opt/px4_ws \
- && . /opt/ros/${ROS_DISTRO}/setup.sh \
+ && . "/opt/ros/${ROS_DISTRO}/setup.sh" \
  && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release --event-handlers console_direct- \
  && rm -rf /opt/px4_ws/build /opt/px4_ws/log /opt/px4_ws/src/px4_msgs/.git /opt/px4_ws/src/px4_ros_com/.git
 

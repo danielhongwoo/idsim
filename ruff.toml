@@ -1,0 +1,22 @@
+# ruff 설정. tools/ci/lint.sh ruff 가 읽는다(lint 워크플로와 로컬 공통).
+# 규칙 세트는 명시한다. ruff 기본 선택은 버전마다 넓어지므로(0.17에서 UP, BLE, SIM, C4, ISC, RUF 등이
+# 기본으로 켜짐) 고정 버전에서도 선택을 파일에 적어 두어야 도구를 올릴 때 결과가 흔들리지 않는다.
+target-version = "py312"
+line-length = 100
+
+[lint]
+# E, W: pycodestyle / F: pyflakes. 1단계 코드가 이미 이 기준(# noqa: E402)을 전제로 쓰였다.
+select = ["E", "F", "W"]
+ignore = [
+  # E501 줄 길이: 한글 문자열과 docstring은 표시 폭 2로 계산되어 같은 내용도 줄 수가 크게 달라진다.
+  # 포매터(ruff format) 도입을 정할 때 다시 결정한다. 그전까지는 리뷰에서 본다.
+  "E501",
+]
+
+[lint.per-file-ignores]
+# 아래는 남의 소유 파일의 기존 위반에 대한 임시 예외다. 소유자가 고치면 줄을 지운다(2026-11-06 보고).
+# test-engineer: tests/support/receive.py 11행 `import rclpy` 미사용
+"tests/support/receive.py" = ["F401"]
+# test-engineer: 변수 이름 `l` (golden.py 103, 116, 182행, test_golden.py 63, 64행)
+"tests/support/golden.py" = ["E741"]
+"tests/support/test_golden.py" = ["E741"]

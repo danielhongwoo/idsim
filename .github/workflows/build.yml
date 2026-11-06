@@ -1,0 +1,42 @@
+# build: 이미지 5종(ros-base, sim-base, px4, ros-ws, xrce-agent).
+# 실제 단계는 재사용 워크플로 build-images.yml 과 tools/ci/build_images.py 에 있다.
+#
+# - PR, main 이외 브랜치의 수동 실행: 빌드만 한다(푸시 없음). 포크 PR에는 쓰기 토큰이 없다.
+#   권한은 contents: read, packages: read(레지스트리 키 확인과 캐시 읽기).
+# - main push, main의 수동 실행: 키가 없는 이미지만 빌드해 GHCR에 푸시한다. packages: write는 이 잡만.
+# 키가 레지스트리에 이미 있으면 그 이미지는 빌드하지 않는다(tools/ci/image_keys.py).
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: build-${{ github.ref }}
+  # main에서는 취소하지 않는다. 큰 이미지 빌드가 중간에 끊겨 다음 실행이 처음부터 다시 하는 것을 막는다.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: build (no push)
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/build-images.yml
+    with:
+      push: false
+
+  publish:
+    name: build and push (main)
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-images.yml
+    with:
+      push: true

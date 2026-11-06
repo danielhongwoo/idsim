@@ -1,0 +1,51 @@
+# lint: 모든 push와 PR에서 돈다. 검사 내용은 tools/ci/lint.sh 한 곳에 있고 로컬에서도
+# `tools/ci/lint.sh all` 로 같은 검사를 돌린다. 도구 버전은 docker/versions.env의 LINT_* 줄.
+#
+# 결과 표시: 검사마다 로그 마지막 줄이 "RESULT <검사>: <상태>" 이다.
+#   PASS             대상이 있었고 통과
+#   PASS-NO-TARGETS  대상 파일 0개라 검사 없이 통과 (notice 주석이 함께 남는다. 건너뜀이 아니다)
+#   FAIL-NOT-WIRED   대상 파일이 생겼는데 검사가 아직 연결되지 않음 (clang-format, clang-tidy,
+#                    ament-lint, cargo). 연결할 때까지 실패한다
+# 매트릭스 잡은 if 조건으로 건너뛰지 않는다. GitHub UI에서 "skipped"로 보이는 lint 잡은 없어야 한다.
+name: lint
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint (${{ matrix.check }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - charset
+          - shellcheck
+          - ruff
+          - hadolint
+          - actionlint
+          - yamllint
+          - pytest
+          - clang-format
+          - clang-tidy
+          - ament-lint
+          - cargo
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: tools/ci/lint.sh ${{ matrix.check }}
+        env:
+          CHECK: ${{ matrix.check }}
+        run: tools/ci/lint.sh "$CHECK"
