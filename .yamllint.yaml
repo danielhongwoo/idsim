@@ -1,0 +1,12 @@
+# yamllint 설정. tools/ci/lint.sh yamllint 가 --strict(경고도 실패)로 읽는다.
+extends: default
+
+rules:
+  # compose와 GitHub Actions 파일은 관례상 문서 시작 표시(---)를 쓰지 않는다.
+  document-start: disable
+  # GitHub Actions의 최상위 키 `on`이 truthy 값으로 오인된다. 키는 검사하지 않고 값만 검사한다.
+  truthy:
+    check-keys: false
+  # 기본 80자는 한글 주석 한 줄도 넘긴다. 긴 주석과 명령 줄을 위해 160자로 둔다.
+  line-length:
+    max: 160

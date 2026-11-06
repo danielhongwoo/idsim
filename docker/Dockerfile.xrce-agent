@@ -3,15 +3,27 @@ ARG UBUNTU_IMAGE
 
 FROM ${UBUNTU_IMAGE} AS build
 ARG XRCE_AGENT_TAG
-RUN test -n "${XRCE_AGENT_TAG}" || { echo "XRCE_AGENT_TAG 빌드 인자가 비어 있다" >&2; exit 1; }
+ARG XRCE_FASTCDR_REF
+ARG XRCE_FASTDDS_REF
+RUN test -n "${XRCE_AGENT_TAG}" && test -n "${XRCE_FASTCDR_REF}" && test -n "${XRCE_FASTDDS_REF}" \
+ || { echo "XRCE_AGENT_TAG, XRCE_FASTCDR_REF, XRCE_FASTDDS_REF 빌드 인자가 비어 있다" >&2; exit 1; }
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates git cmake build-essential \
  && rm -rf /var/lib/apt/lists/*
-# superbuild(기본)가 Fast-DDS, Fast-CDR, spdlog 등을 함께 받아 빌드한다
+# superbuild(기본)가 Fast-DDS, Fast-CDR, spdlog 등을 함께 받아 빌드한다.
+# Agent의 CMakeLists.txt는 Fast-CDR과 Fast-DDS를 유지보수 브랜치 이름으로 받으므로(빌드 시점마다 결과가
+# 달라질 수 있다) _fastcdr_tag, _fastdds_tag 두 줄을 versions.env의 커밋으로 바꾸고, 각각 정확히 한 줄이
+# 바뀌었는지 검사한다. spdlog와 foonathan_memory는 원래 릴리스 태그로 받는다.
 RUN git clone --depth 1 --branch "${XRCE_AGENT_TAG}" \
       https://github.com/eProsima/Micro-XRCE-DDS-Agent.git /src \
+ && sed -i -E \
+      -e "s/^([[:space:]]*set\(_fastcdr_tag )[^)]*\)/\1${XRCE_FASTCDR_REF})/" \
+      -e "s/^([[:space:]]*set\(_fastdds_tag )[^)]*\)/\1${XRCE_FASTDDS_REF})/" \
+      /src/CMakeLists.txt \
+ && test "$(grep -cF "set(_fastcdr_tag ${XRCE_FASTCDR_REF})" /src/CMakeLists.txt)" = 1 \
+ && test "$(grep -cF "set(_fastdds_tag ${XRCE_FASTDDS_REF})" /src/CMakeLists.txt)" = 1 \
  && cmake -S /src -B /src/build -DCMAKE_BUILD_TYPE=Release \
  && cmake --build /src/build -j"$(nproc)" \
  && cmake --install /src/build

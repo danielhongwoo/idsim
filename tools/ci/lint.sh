@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+# lint 잡의 검사를 실행한다. GitHub Actions의 lint 워크플로와 로컬이 같은 명령을 쓴다.
+#
+# 사용법: tools/ci/lint.sh <검사>... | all
+#   검사: charset shellcheck ruff hadolint actionlint yamllint pytest
+#         clang-format clang-tidy ament-lint cargo
+#
+# 대상 파일은 git이 추적하거나 무시 목록에 없는 새 파일이다(git ls-files -co --exclude-standard).
+# 그래서 로컬의 artifacts/, __pycache__/ 같은 무시 대상은 보지 않고 CI 체크아웃과 같은 파일을 본다.
+# 도구는 docker/versions.env의 LINT_* 이미지로 실행한다(호스트에 린터 설치가 필요 없다).
+#
+# 검사마다 마지막 줄에 결과를 한 줄 남긴다. 로그에서 다음 넷을 구분하기 위해서다.
+#   RESULT <검사>: PASS (N files)              대상이 있었고 검사를 통과
+#   RESULT <검사>: PASS-NO-TARGETS (0 files)   대상 파일이 없어 검사 없이 통과 (GitHub notice로도 남김)
+#   RESULT <검사>: FAIL ...                    검사 실패
+#   RESULT <검사>: FAIL-NOT-WIRED (N files)    대상 파일이 생겼는데 아직 검사를 연결하지 않음. 조용히 넘어가지 않도록 실패시킨다
+# 검사를 건너뛰는(실행하지 않는) 경로는 두지 않는다.
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
+
+set -a
+# shellcheck disable=SC1091
+. docker/versions.env
+set +a
+
+in_github() { [ "${GITHUB_ACTIONS:-}" = "true" ]; }
+
+result() {
+  # result <검사> <상태> <설명>
+  echo "RESULT $1: $2 $3"
+  if in_github; then
+    case "$2" in
+      PASS-NO-TARGETS) echo "::notice title=lint $1::대상 파일 0개. 검사 없이 통과(건너뜀 아님)" ;;
+      FAIL-NOT-WIRED) echo "::error title=lint $1::대상 파일이 생겼으나 검사가 아직 연결되지 않았다. tools/ci/lint.sh에서 연결하라" ;;
+      FAIL) echo "::error title=lint $1::$3" ;;
+    esac
+  fi
+}
+
+# list_files <pathspec>... : 대상 파일을 NUL 없이 줄 단위로 출력 (경로에 줄바꿈이 없다고 가정)
+list_files() {
+  git ls-files -co --exclude-standard -- "$@" | sort -u | while IFS= read -r f; do
+    [ -f "$f" ] && printf '%s\n' "$f"
+  done
+}
+
+drun() {
+  # drun <이미지> [docker run 추가 인자...] -- <명령...>
+  local image="$1"; shift
+  local extra=()
+  while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do extra+=("$1"); shift; done
+  shift
+  docker run --rm -v "${repo_root}:/src:ro" -w /src "${extra[@]}" "$image" "$@"
+}
+
+check_charset() {
+  local files
+  mapfile -t files < <(list_files .)
+  if [ "${#files[@]}" -eq 0 ]; then result charset PASS-NO-TARGETS "(0 files)"; return 0; fi
+  local out rc=0
+  # CLAUDE.md의 검사 명령과 같은 패턴. \x{AC00}-\x{D7A3}를 쓰려면 UTF-8 로캘이 필요하다.
+  out="$(LC_ALL=C.UTF-8 grep -nP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' -- "${files[@]}")" || rc=$?
+  if [ "$rc" -eq 1 ]; then result charset PASS "(${#files[@]} files)"; return 0; fi
+  [ -n "$out" ] && printf '%s\n' "$out"
+  result charset FAIL "완성형 한글과 아스키 밖의 문자 (grep exit ${rc})"
+  return 1
+}
+
+check_shellcheck() {
+  local files
+  mapfile -t files < <(list_files '*.sh')
+  if [ "${#files[@]}" -eq 0 ]; then result shellcheck PASS-NO-TARGETS "(0 files)"; return 0; fi
+  if drun "$LINT_SHELLCHECK_IMAGE" --network none -- "${files[@]}"; then
+    result shellcheck PASS "(${#files[@]} files)"
+  else
+    result shellcheck FAIL "shellcheck 위반"; return 1
+  fi
+}
+
+check_ruff() {
+  local files
+  mapfile -t files < <(list_files '*.py')
+  if [ "${#files[@]}" -eq 0 ]; then result ruff PASS-NO-TARGETS "(0 files)"; return 0; fi
+  # 설정은 저장소 루트 ruff.toml
+  if drun "$LINT_RUFF_IMAGE" --network none -- check --no-cache --output-format concise "${files[@]}"; then
+    result ruff PASS "(${#files[@]} files)"
+  else
+    result ruff FAIL "ruff 위반"; return 1
+  fi
+}
+
+# 파일별 임시 예외. 소유자가 고치면 줄을 지운다. 규칙 자체는 .hadolint.yaml에서 켜져 있다.
+hadolint_file_ignores() {
+  case "$1" in
+    # px4-engineer 소유. DL3013 pip 버전 미고정(비결정 빌드 요소), SC2010 ls | grep. 2026-11-06 보고, 수정 대기
+    docker/Dockerfile.px4) echo "DL3013 SC2010" ;;
+  esac
+}
+
+check_hadolint() {
+  local files
+  mapfile -t files < <(list_files '*Dockerfile*')
+  if [ "${#files[@]}" -eq 0 ]; then result hadolint PASS-NO-TARGETS "(0 files)"; return 0; fi
+  local f failed=0 rule args
+  for f in "${files[@]}"; do
+    args=(hadolint --config /src/.hadolint.yaml)
+    for rule in $(hadolint_file_ignores "$f"); do
+      echo "hadolint: ${f}: 임시 예외 ${rule}"
+      args+=(--ignore "$rule")
+    done
+    drun "$LINT_HADOLINT_IMAGE" --network none -- "${args[@]}" "$f" || failed=1
+  done
+  if [ "$failed" -eq 0 ]; then
+    result hadolint PASS "(${#files[@]} files)"
+  else
+    result hadolint FAIL "hadolint 위반"; return 1
+  fi
+}
+
+check_actionlint() {
+  local files
+  mapfile -t files < <(list_files '.github/workflows/*.yml' '.github/workflows/*.yaml')
+  if [ "${#files[@]}" -eq 0 ]; then result actionlint PASS-NO-TARGETS "(0 files)"; return 0; fi
+  # 이미지에 포함된 shellcheck로 run: 블록도 검사한다
+  if drun "$LINT_ACTIONLINT_IMAGE" --network none -- -no-color "${files[@]}"; then
+    result actionlint PASS "(${#files[@]} files)"
+  else
+    result actionlint FAIL "actionlint 위반"; return 1
+  fi
+}
+
+check_yamllint() {
+  local files
+  mapfile -t files < <(list_files '*.yml' '*.yaml' '.yamllint')
+  if [ "${#files[@]}" -eq 0 ]; then result yamllint PASS-NO-TARGETS "(0 files)"; return 0; fi
+  # 작은따옴표 안의 $0, $@는 컨테이너 안 sh가 펼친다(의도된 것)
+  # shellcheck disable=SC2016
+  if drun "$LINT_PYTHON_IMAGE" -e PIP_DISABLE_PIP_VERSION_CHECK=1 -- sh -c \
+      'pip install --no-cache-dir -q --root-user-action=ignore "yamllint==$0" && yamllint --strict -c .yamllint.yaml "$@"' \
+      "$LINT_YAMLLINT_VERSION" "${files[@]}"; then
+    result yamllint PASS "(${#files[@]} files)"
+  else
+    result yamllint FAIL "yamllint 위반"; return 1
+  fi
+}
+
+check_pytest() {
+  # rclpy 없이 도는 단위 테스트만. rclpy가 필요한 테스트는 ros-ws 이미지 안의 unit 잡(이후 단계) 몫이다.
+  local files
+  mapfile -t files < <(list_files 'tests/support/test_*.py')
+  if [ "${#files[@]}" -eq 0 ]; then result pytest PASS-NO-TARGETS "(0 files)"; return 0; fi
+  # 저장소는 읽기 전용으로 마운트하므로 캐시와 바이트코드를 쓰지 않는다
+  # shellcheck disable=SC2016
+  if drun "$LINT_PYTHON_IMAGE" -e PIP_DISABLE_PIP_VERSION_CHECK=1 -e PYTHONDONTWRITEBYTECODE=1 -- sh -c \
+      'pip install --no-cache-dir -q --root-user-action=ignore "pytest==$0" && python3 -m pytest tests/support -q -p no:cacheprovider' \
+      "$LINT_PYTEST_VERSION"; then
+    result pytest PASS "(${#files[@]} files)"
+  else
+    result pytest FAIL "pytest 실패"; return 1
+  fi
+}
+
+# 아직 대상 코드가 없는 검사. 대상이 0개면 PASS-NO-TARGETS, 생기면 FAIL-NOT-WIRED로 연결을 강제한다.
+not_wired() {
+  local name="$1"; shift
+  local files
+  mapfile -t files < <(list_files "$@")
+  if [ "${#files[@]}" -eq 0 ]; then result "$name" PASS-NO-TARGETS "(0 files)"; return 0; fi
+  printf '  %s\n' "${files[@]}"
+  result "$name" FAIL-NOT-WIRED "(${#files[@]} files)"
+  return 1
+}
+
+cpp_specs=('*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx')
+# clang-format: .clang-format 스타일 결정(ros2-engineer)과 함께 연결
+check_clang_format() { not_wired clang-format "${cpp_specs[@]}"; }
+# clang-tidy: compile_commands.json이 필요하므로 ros-ws 이미지 안 colcon 빌드 뒤에 연결
+check_clang_tidy() { not_wired clang-tidy "${cpp_specs[@]}"; }
+# ament_lint(ament_lint_auto): ROS 패키지가 생기면 ros-ws 이미지 안 colcon test로 연결
+check_ament_lint() { not_wired ament-lint 'package.xml'; }
+# cargo fmt --check, cargo clippy -D warnings: gateway/ 크레이트가 생기면 연결
+check_cargo() { not_wired cargo 'Cargo.toml'; }
+
+all_checks=(charset shellcheck ruff hadolint actionlint yamllint pytest clang-format clang-tidy ament-lint cargo)
+
+run_check() {
+  case "$1" in
+    charset) check_charset ;;
+    shellcheck) check_shellcheck ;;
+    ruff) check_ruff ;;
+    hadolint) check_hadolint ;;
+    actionlint) check_actionlint ;;
+    yamllint) check_yamllint ;;
+    pytest) check_pytest ;;
+    clang-format) check_clang_format ;;
+    clang-tidy) check_clang_tidy ;;
+    ament-lint) check_ament_lint ;;
+    cargo) check_cargo ;;
+    *) echo "모르는 검사: $1 (가능: ${all_checks[*]} all)" >&2; return 2 ;;
+  esac
+}
+
+[ "$#" -ge 1 ] || { sed -n '2,6p' "$0" >&2; exit 2; }
+if [ "$1" = "all" ]; then set -- "${all_checks[@]}"; fi
+
+failed=()
+for c in "$@"; do
+  echo "==== lint ${c}"
+  run_check "$c" || failed+=("$c")
+done
+if [ "${#failed[@]}" -gt 0 ]; then
+  echo "실패한 검사: ${failed[*]}" >&2
+  exit 1
+fi

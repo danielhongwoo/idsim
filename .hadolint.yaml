@@ -1,0 +1,12 @@
+# hadolint 설정. tools/ci/lint.sh hadolint 가 읽는다.
+# 정보 수준(info)까지 모두 실패로 본다. 끈 규칙은 아래에 이유를 적는다.
+# 파일별 임시 예외는 tools/ci/lint.sh의 hadolint_file_ignores에 둔다.
+failure-threshold: info
+ignored:
+  # DL3008 apt 패키지 버전 고정: ROS와 OSRF apt 저장소는 이전 버전을 지우므로 '=버전' 고정은 얼마 뒤
+  # 빌드를 깨뜨린다. 재현성은 베이스 digest 고정, versions.env, 그리고 키가 같은 이미지를 다시 빌드하지
+  # 않는 레지스트리 키로 관리한다(tools/ci/image_keys.py).
+  - DL3008
+  # DL3003 cd 대신 WORKDIR: RUN 안의 cd는 그 RUN에만 적용된다. WORKDIR로 바꾸면 뒤 명령과 최종
+  # 이미지의 작업 디렉터리까지 바뀌어 의도와 달라진다.
+  - DL3003
