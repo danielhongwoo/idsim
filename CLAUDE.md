@@ -1,6 +1,6 @@
 # idsim 작업 규칙
 
-idsim은 Interceptor Drone Simulator의 약자다. 설계와 로드맵은 docs/roadmap-architecture.md를 따른다.
+idsim은 Interceptor Drone Simulator의 약자다. 설계는 docs/architecture.md, 계획은 docs/roadmap.md를 따른다.
 
 ## 문자 집합 규칙
 
@@ -23,8 +23,8 @@ grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git .
 
 - `docs/architecture.md`: 목표와 범위, 레이어 구조, 기술 스택, 실행 환경, 테스트 전략. 설계가 바뀌면 여기를 고친다.
 - `docs/roadmap.md`: Phase별 작업 항목, 완료 기준, 리스크, 확장 방향. 소요 시간 예상은 적지 않는다.
-- `docs-for-agent/progress.md`: 진행 상황, 결정 기록, 미해결 사항, 다음 작업. 세션을 시작할 때 먼저 읽고, 작업 단위가 끝나면 갱신한다.
-- 진행 상황("완료", "진행 중", "다음 작업" 같은 상태 정보)은 `docs/` 아래 문서에 적지 않는다. `docs/`는 설계와 계획만 담는다.
+- `docs-for-agent/`: 에이전트용 정보. `progress.md`(진행 상황, 결정 기록, 미해결 사항, 다음 작업. 세션 시작 시 먼저 읽고 작업 단위가 끝나면 갱신), `file-ownership.md`(담당자별 파일 소유).
+- `docs/`는 프로젝트의 설계와 계획만 담는다. 진행 상황, 담당자 이름, 파일 소유, 에이전트 운영 규칙 같은 에이전트용 정보는 `docs-for-agent/`에 둔다. `docs/`에서 `docs-for-agent/`를 가리키지 않는다.
 
 ## 담당자 에이전트
 
@@ -49,3 +49,22 @@ grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git .
 - 장애 분석: 증상을 가진 담당자가 가설을 내고, 접점 담당자가 각자 영역에서 반증 실험을 돌린 뒤 결과를 모은다.
 
 사용자만 정할 수 있는 사항(범위, 언어 선택, 비용)은 담당자가 결정하지 않고 `docs-for-agent/progress.md`의 미해결 사항에 올린다.
+
+## 모델 선택 규칙
+
+담당자마다 기본 모델을 정의 파일의 `model` 항목에 둔다. 호출하는 쪽은 작업 성격에 따라 아래 규칙으로 바꿀 수 있다.
+
+| 모델 | 기본으로 쓰는 담당자 | 이유 |
+| --- | --- | --- |
+| fable | architect, reviewer | 레이어 경계와 계약을 정하는 결정, 그리고 그 결정을 앵커링 없이 반박하는 검토는 실수 비용이 가장 크다 |
+| opus | px4-engineer, ros2-engineer, sim-engineer, ops-service-engineer | 외부 시스템(PX4, DDS, Gazebo, gRPC)의 세부 동작에 대한 판단이 필요하고, 틀리면 며칠을 잃는다 |
+| sonnet | devops-engineer, logging-engineer, test-engineer | Dockerfile, 워크플로, 기록 정책, fixture는 빌드와 테스트 결과로 바로 피드백이 오는 작업이 많다 |
+
+작업 성격에 따른 조정.
+
+- 설계 토론과 계약 변경: 어느 담당자든 기본 모델 이상으로 올린다. sonnet 담당자는 opus로.
+- 정형 작업(파일 생성, 린트 수정, 문서 반영, 이름 바꾸기, 반복 적용): 어느 담당자든 sonnet으로 내린다.
+- 탐색과 조사(코드 찾기, 문서 읽고 요약): sonnet.
+- 장애 분석: 첫 두 번의 가설 검증은 기본 모델로, 그래도 못 찾으면 해당 담당자를 fable로 올리고 reviewer를 붙인다.
+- reviewer는 내리지 않는다. 검토의 가치는 놓치지 않는 데 있다.
+- 같은 담당자와 대화를 이어 갈 때는 모델을 바꾸지 않는다. 바꾸려면 새로 호출한다.

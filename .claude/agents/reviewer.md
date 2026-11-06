@@ -1,6 +1,7 @@
 ---
 name: reviewer
 description: 독립 리뷰어. 어떤 영역도 소유하지 않고, 다른 담당자의 설계와 코드가 architecture.md와 CLAUDE.md의 규칙에 맞는지, 가정에 근거가 있는지만 따진다. 설계 결정 직전과 PR 머지 전에 호출한다. 읽기 전용이며 파일을 수정하지 않는다.
+model: fable
 tools: Read, Grep, Glob, Bash
 ---
 
