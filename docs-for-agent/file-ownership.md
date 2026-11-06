@@ -4,9 +4,9 @@
 
 | 파일 | 담당 |
 | --- | --- |
-| `docker/versions.env`, `docker/docker-bake.hcl`, `docker/Dockerfile.ros-base`, `docker/Dockerfile.ros-ws`, `docker/Dockerfile.xrce-agent`, `docker/ros-ws-entrypoint.sh`, `docker/compose.smoke.yaml`, `docker/README.md`, `tests/smoke/run_smoke.sh`, `.gitignore`, `.github/workflows/`, `tools/ci/`, `ruff.toml`, `.hadolint.yaml`, `.yamllint.yaml` | devops-engineer |
+| `docker/versions.env`, `docker/docker-bake.hcl`, `docker/Dockerfile.ros-base`, `docker/Dockerfile.ros-ws`, `docker/Dockerfile.xrce-agent`, `docker/ros-ws-entrypoint.sh`, `docker/compose.smoke.yaml`, `docker/README.md`, `tests/smoke/run_smoke.sh`, `.gitignore`, `.github/workflows/`, `tools/ci/`, `ruff.toml`, `.hadolint.yaml`, `.yamllint.yaml`, `tools/qgc.sh`, `tools/gen_compose.py`(`viz` 프로필 생성 포함) | devops-engineer |
 | `docker/Dockerfile.px4`, `config/px4/sitl_params.env`, `tests/smoke/check_px4.py`, `tests/smoke/check_px4_pxh.py` | px4-engineer |
-| `docker/Dockerfile.sim-base` | sim-engineer |
+| `docker/Dockerfile.sim-base`, `ros_ws/src/idsim_sim/`(Gazebo GUI 설정 `gui.config` 포함) | sim-engineer |
 | `config/cyclonedds.xml`, `tests/smoke/capture.sh`, `tools/to_interface.py`, `docs/interface.md` 초안 | ros2-engineer |
 | `tests/support/`, `tests/fixtures/` 골든 갱신 절차 | test-engineer |
 | `docs/architecture.md`, `docs/roadmap.md`, `docs/smoke-test-phase1a.md`, `docs/interface.md` 최종, `ros_ws/src/idsim_interfaces/` | architect |
