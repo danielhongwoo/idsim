@@ -12,8 +12,8 @@
 - 산출물: `artifacts/smoke/`에 실행 기록이 약 1.2GB 있고 root 소유라 일반 권한으로 지워지지 않는다(git 비추적).
 - 2026-11-06: Phase 1a 2단계 CI 골격 작성. lint(11종, 대상 없는 4종은 PASS-NO-TARGETS)와 build(이미지별 키, 레지스트리에 키가 있으면 건너뜀, PR은 빌드만, main만 GHCR 푸시) 워크플로. 로컬 검증 통과, GitHub 첫 실행은 PR에서 한다.
 - 다음 작업:
-  1. CI 골격 PR을 올리고 첫 실행 결과 확인: 러너 디스크 여유, 빌더 캐시 누적, px4 빌드 완주와 총 시간, 없는 buildcache를 cache-from으로 줄 때 경고로 끝나는지.
-  2. main 합치기 전 결정: push 모드에서 GHCR 조회가 403이면 지금은 "키 없음"으로 보고 빌드해 같은 키 태그를 덮어쓸 수 있다. 로그인한 토큰으로 없는 패키지를 조회할 때 GHCR가 무엇을 주는지 PR 실행에서 보고 정한다.
+  1. CI 골격 PR #1 첫 실행 결과(2026-11-06): lint 11종 통과, 이미지 5종 콜드 빌드 성공(약 22분: ros-base 44초, xrce-agent 334초, ros-ws 444초, sim-base 51초, px4 255초). 러너 디스크는 정리 전 여유 86GB, 정리 후 114GB, 빌드 뒤 106GB로 문제 없음. 없는 buildcache를 cache-from으로 주면 ERROR 줄이 찍히지만 빌드는 계속된다. 같은 저장소 PR 브랜치에서는 push와 pull_request 트리거로 lint가 두 번 돈다.
+  2. GHCR 조회 결정(2026-11-06): 로그인한 토큰으로 없는 패키지를 조회하면 GHCR는 403이 아니라 not found를 준다(PR #1 실측). 그래서 push 모드는 not found만 "키 없음"으로 보고 권한 거부(denied, 403)는 중단하게 고쳤다. PR 모드와 로컬은 지금처럼 권한 거부도 "키 없음"으로 보고 빌드만 한다.
   3. 첫 main 푸시 뒤 사용자가 GHCR 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다.
   4. 다음 PR: Dockerfile.px4의 pip 고정과 PX4_OPTICAL_FLOW_REF 반영, `ls | grep` 정리(px4-engineer). Dockerfile.sim-base의 GZ_APT_KEY_FPR 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 키 재료와 KEY_<이미지> 설명 갱신(architect). image_keys.py가 bake 블록의 tags와 공백까지 해시하는 것 정리, lint가 같은 저장소 PR에서 두 번 도는 것(devops-engineer).
   5. roadmap 1a 3단계 `config/fleet.yaml`과 `tools/gen_compose.py`.

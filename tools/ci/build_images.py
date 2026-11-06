@@ -65,8 +65,13 @@ def free_gib(path: str = "/") -> float:
     return shutil.disk_usage(path).free / (1 << 30)
 
 
-def registry_has(ref: str) -> tuple[bool, str]:
-    """(있음, 사유). 없음으로 판단할 수 있는 오류만 False로 돌려주고 그 밖의 오류는 중단한다."""
+def registry_has(ref: str, strict: bool = False) -> tuple[bool, str]:
+    """(있음, 사유). 없음으로 판단할 수 있는 오류만 False로 돌려주고 그 밖의 오류는 중단한다.
+
+    strict(push 모드)에서는 not found 계열만 "없음"으로 보고, 권한 거부(denied, 403)는 중단한다.
+    로그인한 토큰으로 없는 패키지를 조회하면 GHCR는 not found를 준다(PR #1 실행에서 확인).
+    권한 거부를 "없음"으로 보면 같은 키 태그를 다른 바이트의 이미지로 덮어쓸 수 있다.
+    """
     proc = subprocess.run(
         ["docker", "buildx", "imagetools", "inspect", "--raw", ref],
         capture_output=True, text=True, check=False,
@@ -78,8 +83,13 @@ def registry_has(ref: str) -> tuple[bool, str]:
     low = msg.lower()
     # 패키지가 아직 없거나 비공개인데 토큰이 읽기 권한이 없으면 GHCR는 not found 대신 denied를 준다.
     # 어느 쪽이든 "쓸 수 있는 이미지가 없다"로 보고 빌드한다(PR은 푸시하지 않으므로 안전).
-    for word in ("not found", "manifest unknown", "name unknown", "denied", "unauthorized", "403 forbidden"):
+    for word in ("not found", "manifest unknown", "name unknown"):
         if word in low:
+            return False, msg
+    for word in ("denied", "unauthorized", "403 forbidden"):
+        if word in low:
+            if strict:
+                raise SystemExit(f"레지스트리 권한 거부(push 모드에서는 중단): {ref}: {msg}")
             return False, msg
     raise SystemExit(f"레지스트리 조회 실패(네트워크 등): {ref}: {msg}")
 
@@ -162,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
             status[n] = "BUILD (load 모드는 레지스트리를 보지 않음)"
     else:
         for n in targets:
-            has, why = registry_has(ref(n))
+            has, why = registry_has(ref(n), strict=(mode == "push"))
             if has:
                 available.add(n)
                 status[n] = f"SKIP 키가 레지스트리에 있음 ({ref(n)})"
