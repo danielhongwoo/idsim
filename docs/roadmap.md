@@ -8,7 +8,7 @@
 
 | Phase | 목표 | 산출물 |
 | --- | --- | --- |
-| 1a | 환경 검증, CI 골격, 공통 라이브러리, 이륙과 착륙 | `docker/` 이미지 5종, 스모크 골든 파일, `config/fleet.yaml`과 생성 스크립트, CI lint/build/unit 잡, `idsim_common`, `idsim_interfaces`, `/clock` 브리지, 이륙-호버-착륙 Offboard 통합 테스트, `docs/interface.md` |
+| 1a | 환경 검증, CI 골격, 공통 라이브러리, 이륙과 착륙 | `docker/` 이미지 5종, 스모크 골든 파일, `config/fleet.yaml`과 생성 스크립트, CI lint/build/unit 잡, `idsim_common`, `idsim_interfaces`, `/clock` 브리지, 이륙-호버-착륙 Offboard 통합 테스트, `docs/interface.md`, `tools/qgc.sh`와 compose `viz` 프로필(Gazebo GUI, foxglove_bridge, Lichtblick) |
 | 1b | 미션 시퀀스와 표적 추종 | `idsim_mission`, `idsim_sim`(월드, 표적 Actor, 표적 어댑터), 단일 기체 미션 통합 테스트 |
 | 2 | 텔레메트리 수집 + 로그/리플레이 | `idsim_telemetry`, `idsim_logger`, WebSocket 페이지, `replay` 프로필, 기록물 인덱스 CLI, 리플레이 CI 잡 |
 | 3 | 멀티 기체 Fleet + Mission Planning | 3대 compose 생성, `idsim_fleet`, gRPC API, Rust 게이트웨이, 시나리오 러너, 3대 배분과 재배분 nightly 테스트 |
@@ -21,13 +21,16 @@
 
 1. 환경 스모크 테스트. 설계는 [smoke-test-phase1a.md](smoke-test-phase1a.md)를 따른다. `ros-base`/`sim-base`/`px4`/`ros-ws`/`xrce-agent` 이미지와 `docker/versions.env`, 손으로 쓴 `docker/compose.smoke.yaml`을 만든다. 단계는 한 번에 한 변수만 바꾼다. S1은 `px4` 컨테이너에서 빌드된 `px4` 바이너리를 `-i` 없이 실행해 PX4가 Gazebo를 직접 띄우는 모드(`make px4_sitl gz_x500`과 같은 rcS 경로, make는 쓰지 않음)로 에이전트 접속과 CycloneDDS rmw의 `vehicle_status` 수신을 확인하고, S1b에서 `-i 1`과 `PX4_UXRCE_DDS_NS=px4_1`을 더하고, S2에서 `PX4_GZ_STANDALONE=1`로 Gazebo를 `gazebo` 컨테이너로 분리하고, S3에서 `/fmu/in` 방향으로 arm과 disarm을 왕복하고, S4에서 토픽 목록과 발행자 QoS를 `tests/fixtures/px4/<PX4_TAG>/`에 골든 파일로 저장하고, S5에서 `ros-ws`의 ros_gz_bridge가 `gazebo`의 `/clock`을 받는지(gz-transport 와이어 호환) 실측한다. PX4 태그는 v1.17.0으로 두고 S4 통과를 확정 조건으로 한다. 스모크의 정규화와 수신 확인 코드는 `tests/support/`에 두어 6단계가 재사용한다.
 2. CI 골격. `lint`(clang-format, clang-tidy, ament_lint, ruff, hadolint, actionlint, yamllint, shellcheck, 문자 집합 검사)와 `build`(이미지 5종, GHCR 푸시, 레이어 캐시, 키가 있으면 건너뜀) 잡. `docker/versions.env`로 버전 고정. 이후 모든 항목은 PR로 들어간다.
-3. `config/fleet.yaml`과 `tools/gen_compose.py`. 기체 1대짜리 레지스트리에서 compose 서비스, launch 파라미터, `ROS_DOMAIN_ID`, `GZ_PARTITION`과 포트 오프셋을 생성. healthcheck(에이전트 포트의 16진수 계산 포함)와 `depends_on` 순서 포함. `COM_OBL_RC_ACT`를 비롯한 SITL 파라미터도 여기서 주입. 1단계의 `compose.smoke.yaml`과 `run_smoke.sh`의 오프셋 임시 규칙을 대체하고, 컨테이너 `user` 매핑으로 `artifacts/`의 root 소유 파일 문제도 여기서 닫는다.
+
+2b. 시각 도구 준비. 3단계 전에 끝내는 작은 작업이며, 판정, 스모크, CI와 무관한 개발자용 화면이다. `tools/qgc.sh`(QGroundControl AppImage를 `docker/versions.env`에 고정한 버전과 sha256으로 내려받아 캐시하고 호스트에서 직접 실행한다. compose 서비스가 아니다. AppImage가 SIGTERM을 무시하므로 종료는 SIGKILL), sim-base에 `libqt5svg5` 추가(Gazebo GUI 아이콘 경고 제거), `idsim_sim`의 `gui.config`(WorldControl 플러그인을 뺀 Gazebo GUI 설정. 화면에서 실수로 월드를 일시정지하는 것을 막는다), `docker/README.md`의 실행 안내. Gazebo GUI는 sim-base 컨테이너에서 `gz sim -g`로 이미 떠 있는 `gazebo` 서버에 클라이언트만 붙인다(같은 `GZ_PARTITION`과 `GZ_IP`, `DISPLAY`, X11 소켓과 `XAUTHORITY` 읽기 전용 마운트). 완료 기준: 스모크 standalone 스택(S2 이후) 위에서 Gazebo GUI에 x500이 보이고 QGroundControl에 기체가 연결된다.
+
+3. `config/fleet.yaml`과 `tools/gen_compose.py`. 기체 1대짜리 레지스트리에서 compose 서비스, launch 파라미터, `ROS_DOMAIN_ID`, `GZ_PARTITION`과 포트 오프셋을 생성. healthcheck(에이전트 포트의 16진수 계산 포함)와 `depends_on` 순서 포함. `COM_OBL_RC_ACT`를 비롯한 SITL 파라미터도 여기서 주입. 1단계의 `compose.smoke.yaml`과 `run_smoke.sh`의 오프셋 임시 규칙을 대체하고, 컨테이너 `user` 매핑으로 `artifacts/`의 root 소유 파일 문제도 여기서 닫는다. compose 프로필 `viz`도 여기서 생성한다. 2b단계의 Gazebo GUI를 `gz-gui` 서비스(sim-base, `gz sim -g`, `gui.config`)로 옮기고, 6단계의 `foxglove`와 `lichtblick`이 같은 프로필에 들어간다. 어떤 서비스도 `viz` 프로필의 서비스에 `depends_on`하지 않고, `run_smoke.sh`, pytest fixture, CI는 이 프로필을 켜지 않는다.
 4. `idsim_common` (C++). PX4 구독용 QoS 프로필, `MESSAGE_VERSION`에서 컴파일 시점에 파생하는 토픽 이름 매핑(키는 논리 이름과 타입의 쌍), NED <-> ENU / FRD <-> FLU 변환(px4_ros_com `frame_transforms` 래핑. px4_ros_com은 release/1.17 브랜치가 없어 main 커밋으로 고정했으므로 여기서 호환을 확인하고, 안 맞으면 변환을 직접 구현), 기체 네임스페이스 해석과 `target_system` 매핑, `VehicleCommand` 빌더. GoogleTest 단위 테스트 포함. 매핑 테스트는 1단계 골든 파일과 비교하며 골든 디렉터리가 없으면 실패한다.
 5. `idsim_interfaces`. `VehicleState.msg`, `TargetState.msg`, `Mission.msg`(takeoff / goto / track_entity / loiter / rtl / land, setpoint 항목과 모드 명령 항목 구분), `ExecuteMission.action`.
-6. 이륙-호버-착륙 노드와 통합 테스트. `idsim_mission`의 뼈대로서 Offboard 진입 절차(`OffboardControlMode`와 `TrajectorySetpoint`를 20 Hz로 지속 발행, 모드 전환 전 최소 10회, EKF 수렴 대기 후 arm), 고도 도달 판정, land 명령과 disarm 확인만 구현한다. lifecycle 노드. `bridge` 서비스(ros-ws + ros_gz_bridge)가 `/clock`만 브리지해 이 단계부터 모든 노드가 `use_sim_time`을 따른다. pytest fixture가 compose를 올리고 rclpy(`qos_profile_sensor_data`, 전용 스레드 executor)로 "목표 고도 도달", "착륙 후 disarm"을 `/clock` 기준 타임아웃으로, 상태 전이는 "최신 상태 N회 연속"으로 판정.
+6. 이륙-호버-착륙 노드와 통합 테스트. `idsim_mission`의 뼈대로서 Offboard 진입 절차(`OffboardControlMode`와 `TrajectorySetpoint`를 20 Hz로 지속 발행, 모드 전환 전 최소 10회, EKF 수렴 대기 후 arm), 고도 도달 판정, land 명령과 disarm 확인만 구현한다. lifecycle 노드. `bridge` 서비스(ros-ws + ros_gz_bridge)가 `/clock`만 브리지해 이 단계부터 모든 노드가 `use_sim_time`을 따른다. pytest fixture가 compose를 올리고 rclpy(`qos_profile_sensor_data`, 전용 스레드 executor)로 "목표 고도 도달", "착륙 후 disarm"을 `/clock` 기준 타임아웃으로, 상태 전이는 "최신 상태 N회 연속"으로 판정. Offboard 진입 디버깅용으로 `viz` 프로필에 `foxglove`(ros-ws + foxglove_bridge. 주소 127.0.0.1, 포트 8765 + 스택 오프셋, 토픽 화이트리스트, clientPublish, services, parameters 기능을 빼 읽기 전용)와 `lichtblick`(Foxglove 호환 오픈소스 뷰어, 공식 이미지 digest 고정, 127.0.0.1의 18080 + 스택 오프셋)을 더해 setpoint와 `vehicle_local_position`을 같은 플롯에 놓고 본다. 이 둘은 Phase 2에서 이 단계로 당긴 것이다.
 7. `docs/interface.md`. 토픽 이름과 QoS, 좌표계, 기체 식별 규칙, 포트, SITL 파라미터, 시간 기준을 정리하고 계약으로 고정.
 
-완료 기준: 이륙-호버-착륙 통합 테스트가 headless로 로컬에서 3회 연속 통과하고 CI의 `sitl` 잡에서도 통과, QGroundControl로 같은 비행을 눈으로 확인, `docs/interface.md` 완성.
+완료 기준: 이륙-호버-착륙 통합 테스트가 headless로 로컬에서 3회 연속 통과하고 CI의 `sitl` 잡에서도 통과, QGroundControl과 Gazebo GUI로 같은 비행을 눈으로 확인, `docs/interface.md` 완성.
 
 가장 시간이 드는 곳은 Offboard 진입 타이밍과 컨테이너 간 DDS 디스커버리다.
 
@@ -36,7 +39,7 @@
 목표: YAML 미션 하나로 x500이 이륙 -> 웨이포인트 순회 -> 이동 표적의 현재 위치로 접근 -> 복귀, 착륙을 수행하고, pytest가 판정한다.
 
 1. `idsim_mission` 상태기. 미션 항목을 실행하는 상태기는 ROS에 의존하지 않는 순수 C++ 클래스로 만들고 시계와 입출력 포트를 주입한다. 노드는 그 클래스를 토픽에 연결하는 얇은 껍질이다. setpoint 항목은 Offboard로, rtl과 land는 PX4 모드 명령으로 처리하며 `nav_state`로 전이를 추적하고 Offboard 재진입을 다룬다. 실패 시 폴백은 `COM_OBL_RC_ACT`와 일치시킨다. YAML 로더가 `Mission.msg`로 변환.
-2. `idsim_sim`. 커스텀 Gazebo 월드(기본 월드 상속), 스크립트 궤적을 따르는 표적 Actor, 1a의 `/clock` 브리지에 표적 pose를 더하는 ros_gz_bridge 설정, 표적 어댑터 노드(Gazebo pose -> `TargetState`, ENU 유지), 전체 launch 파일.
+2. `idsim_sim`. 커스텀 Gazebo 월드(기본 월드 상속), 스크립트 궤적을 따르는 표적 Actor, 1a의 `/clock` 브리지에 표적 pose를 더하는 ros_gz_bridge 설정, 표적 어댑터 노드(Gazebo pose -> `TargetState`, ENU 유지), 전체 launch 파일. 표적 Actor는 Gazebo GUI로 보이면 충분하다. Lichtblick 3D 패널(ENU TF, 표적 마커)은 선택이다.
 3. `track_entity` 항목. `TargetState`를 구독해 그 위치를 NED로 변환한 setpoint로 쓰는 단순 추종.
 4. 통합 테스트. "각 웨이포인트 반경 1 m 이내 도달", "표적 접근 거리 임계 이내", "착륙 후 disarm"을 토픽으로 판정. 상태기 단위 테스트(GoogleTest, 시뮬레이터 없음)로 전이와 타임아웃을 먼저 덮는다.
 
@@ -49,11 +52,11 @@
 1. `idsim_telemetry` 수집기 (C++, lifecycle). `/px4_N/fmu/out/*` 중 운용에 필요한 토픽(vehicle_status, vehicle_local_position, vehicle_global_position, battery_status, failsafe_flags)을 구독해 `VehicleState`로 요약하고 5 Hz로 재발행. 기체 네임스페이스를 파라미터로 받아 Phase 3에서 N개 인스턴스로 띄울 수 있게. Executor와 같은 컴포넌트 컨테이너에 올린다.
 2. WebSocket 발행 (Python, 임시). `VehicleState`를 JSON으로 뿌리는 어댑터와 브라우저에서 지도 위에 기체 위치를 찍는 최소 페이지 한 장. Phase 3의 Rust 게이트웨이가 같은 페이지를 gRPC 위에서 서빙하게 되면 이 어댑터는 개발용으로만 남긴다. 페이지의 WebSocket 메시지 형식은 Phase 3에서 바뀌지 않도록 여기서 JSON 스키마를 고정한다.
 3. `idsim_logger` 기록 제어. 미션 시작/종료에 맞춰 rosbag2 기록을 MCAP 스토리지, `--use-sim-time`으로 자동 시작, 종료(서비스 호출 또는 rosbag2 API 직접 사용). 기록 대상은 네임스페이스별 선별 목록이며 `/clock`은 제외. 기록물 이름은 `<시각>_<미션 id>_<기체 id>`. PX4가 남긴 ULog(`px4` 컨테이너의 `<px4 작업 디렉터리>/log/`, 작업 디렉터리는 compose가 고정하며 `-i N`이면 `rootfs/N`, 볼륨으로 공유)를 같은 디렉터리로 복사하고 시작 시각 오프셋을 메타데이터로 기록. 시뮬레이션에서는 오프셋이 0에 가깝지만 실기체 전환을 위해 필드를 둔다.
-4. 리플레이 모드. compose 프로필 `replay`: 시뮬레이터, PX4, 에이전트 없이 `ros2 bag play --clock`으로 토픽을 재생하고, 수집기, WebSocket, (Phase 3의) Fleet Manager가 그대로 올라온다. 모든 노드가 `use_sim_time`을 따르므로 재생 속도를 바꿔도 동일하게 동작.
+4. 리플레이 모드. compose 프로필 `replay`: 시뮬레이터, PX4, 에이전트 없이 `ros2 bag play --clock`으로 토픽을 재생하고, 수집기, WebSocket, (Phase 3의) Fleet Manager가 그대로 올라온다. 모든 노드가 `use_sim_time`을 따르므로 재생 속도를 바꿔도 동일하게 동작. `viz` 프로필을 함께 켜면 재생 토픽을 Lichtblick으로도 본다.
 5. 기록물 인덱스. 기록물 디렉터리를 훑어 미션 id, 기체, 기간, 결과를 SQLite 한 개에 정리하는 CLI(`idsim-log ls / show / replay`, Python). 대규모 로깅 시스템의 축소판.
 6. 검증. Phase 1b 통합 테스트를 "라이브로 1회 실행 -> 기록 -> 리플레이로 같은 판정 통과"로 확장. 이것은 시스템이 아니라 수집기와 판정 코드의 회귀 테스트이며, 시뮬레이터가 필요 없어 CI에서 수 초에 돈다. 리플레이 CI 잡을 이 단계에서 추가.
 
-완료 기준: 기록물 하나를 Foxglove에서 열어 궤적과 상태 변화를 확인할 수 있고, `replay` 프로필로 올린 WebSocket 페이지에 같은 움직임이 다시 나오며, 리플레이 CI 잡이 모든 push에서 돈다.
+완료 기준: 기록물 하나를 Lichtblick(Foxglove 호환 오픈소스 뷰어)에서 열어 궤적과 상태 변화를 확인할 수 있고, `replay` 프로필로 올린 WebSocket 페이지에 같은 움직임이 다시 나오며, 리플레이 CI 잡이 모든 push에서 돈다.
 
 함정은 QoS와 데이터량이다. PX4 토픽은 best-effort로 발행되므로 rosbag2가 기록할 때는 퍼블리셔 QoS를 자동으로 따라가지만, 재생 시 구독자가 reliable을 요구하면 받지 못하므로 수집기와 테스트는 라이브와 같은 sensor_data QoS를 써야 하고 필요하면 `--qos-profile-overrides-path`로 맞춘다. 또 PX4 토픽이 수백 Hz로 나와 기록 대상을 골라야 한다.
 
@@ -67,11 +70,11 @@
 4. gRPC API (`proto/fleet.proto`). `ListVehicles`, `StreamVehicleStates`(server streaming), `StreamMissionEvents`(server streaming), `SubmitMission`, `AbortMission`, `GetMissionStatus`. Protobuf `VehicleState`와 ROS msg의 변환은 `idsim_fleet` 변환 모듈 한 곳에서만 하고 왕복 단위 테스트를 둔다. Python 클라이언트 CLI로 호출.
 5. 브라우저 게이트웨이 (`gateway/`, Rust). tonic으로 Fleet Manager의 두 스트림을 구독해 WebSocket으로 중계하고, 미션 제출과 중단을 HTTP JSON으로 받아 gRPC로 넘기며, Phase 2 페이지를 정적으로 서빙한다. ROS 2 비의존이므로 cargo만으로 빌드하고 단위 테스트는 gRPC 서버 목으로 한다. Phase 2에서 고정한 WebSocket JSON 스키마를 그대로 지킨다.
 6. 시나리오 정의. `missions/scenario_*.yaml`에 기체 수, 초기 배치, 표적 Actor 경로, 미션 목록을 한 파일로. 시나리오 러너(Python)가 `config/fleet.yaml` 생성 -> compose 생성 -> `up --wait` -> 미션 제출 -> 기록 -> 판정까지 한 번에.
-7. 검증. 시나리오 "3대, 표적 2개, 동시 배분"에서 두 미션이 서로 다른 기체에 배분되고 모두 완료되는지, 한 기체의 px4 컨테이너를 강제 종료했을 때 Fleet Manager가 이탈을 감지하고 미션을 다른 기체에 재배분하는지를 pytest로. 배분 규칙은 단위 테스트로 먼저 덮고, SITL 테스트는 nightly 전용.
+7. 검증. 시나리오 "3대, 표적 2개, 동시 배분"에서 두 미션이 서로 다른 기체에 배분되고 모두 완료되는지, 한 기체의 px4 컨테이너를 강제 종료했을 때 Fleet Manager가 이탈을 감지하고 미션을 다른 기체에 재배분하는지를 pytest로. 배분 규칙은 단위 테스트로 먼저 덮고, SITL 테스트는 nightly 전용. QGroundControl에 3대가 `MAV_SYS_ID`로 구분되어 모두 표시되는지는 확인 항목이며 판정에는 넣지 않는다.
 
 완료 기준: 3대 시나리오가 headless로 nightly에서 통과하고, 재배분 테스트가 통과하며, 기록물 하나에 3대 모두의 토픽이 네임스페이스로 구분되어 들어 있다.
 
-PC 한 대에서 Gazebo + PX4 3대 + 노드들을 돌리면 CPU가 부족할 수 있어 `PX4_SIM_SPEED_FACTOR`를 1 이하로 내리는 옵션을 처음부터 두는 게 좋다.
+PC 한 대에서 Gazebo + PX4 3대 + 노드들을 돌리면 CPU가 부족할 수 있어 `PX4_SIM_SPEED_FACTOR`를 1 이하로 내리는 옵션을 처음부터 두는 게 좋다. 3대 시나리오의 CPU 측정은 `viz` 프로필 없이 한다.
 
 ## 리스크와 확장 방향
 
@@ -85,6 +88,7 @@ PC 한 대에서 Gazebo + PX4 3대 + 노드들을 돌리면 CPU가 부족할 수
 | Jazzy + 24.04 + PX4 조합의 문서 부족 | 공식 예제가 Humble 기준이라 초기 시행착오 증가 | Phase 1a 첫머리에 스모크 테스트를 두고, 막히면 `ros-ws`만 Humble 컨테이너로 내려 비교(DDS 도메인은 배포판 간에도 통함) |
 | 컨테이너 간 DDS 데이터 미수신 | 토픽은 보이나 데이터가 안 오거나 간헐적으로 끊김 | rmw를 CycloneDDS로 고정해 공유 메모리 전송 경로를 없애고, `network_mode: host`, `config/cyclonedds.xml`에 유니캐스트 피어 명시(인터페이스는 고정하지 않음. 에이전트가 호스트 인터페이스 주소만 광고한다) |
 | 같은 호스트의 스택 충돌 | 개발자 둘 또는 병렬 CI 잡이 서로의 토픽과 포트를 봄 | `fleet.yaml` 스택 오프셋으로 `ROS_DOMAIN_ID`, 에이전트 포트, MAVLink 포트 분리 |
+| 스택 둘의 GCS 포트 충돌 | 두 스택의 PX4가 모두 14550으로 보내고 `MAV_SYS_ID`도 같아 QGroundControl이 기체를 구분하지 못함(미실측) | 3단계에서 GCS 포트 기준값을 스택 오프셋으로 분리할 수 있는지 PX4 rcS에서 확인하고, 안 되면 QGroundControl은 한 번에 스택 하나에만 붙인다고 `docs/interface.md`에 적는다 |
 | 시작 순서 | gazebo 전에 px4가 스폰을 시도해 실패, 테스트 플래키 | healthcheck + `depends_on` 조건 + `compose up --wait` |
 | 시간 기준 불일치 | 라이브와 리플레이의 판정이 다름 | 정식 기준은 `/clock`, 기록은 `--use-sim-time`, `/clock` 미기록 |
 | PC 성능 | 3대 시나리오에서 Gazebo 물리 스텝 드롭, PX4 타이밍 경고 | headless 기본, `PX4_SIM_SPEED_FACTOR` 조절, 카메라와 라이다 없는 기본 x500 모델 사용, 표적은 Actor |
