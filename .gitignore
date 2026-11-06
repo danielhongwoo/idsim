@@ -1,0 +1,23 @@
+# ROS 2 colcon 산출물
+ros_ws/build/
+ros_ws/install/
+ros_ws/log/
+
+# Rust
+gateway/target/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 기록물과 로그
+records/
+*.mcap
+*.ulg
+
+# 편집기와 OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
