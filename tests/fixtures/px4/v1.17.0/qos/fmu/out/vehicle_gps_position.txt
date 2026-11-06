@@ -1,0 +1,4 @@
+reliability=BEST_EFFORT
+durability=TRANSIENT_LOCAL
+history=KEEP_LAST
+depth=1
