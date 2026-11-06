@@ -1,0 +1,47 @@
+# ros-ws: ros-base + px4_msgs + px4_ros_com(underlay) + ros_gz_bridge + 개발 도구
+# gz 서버는 넣지 않는다. 프로젝트 소스는 /opt/idsim에 마운트한다.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ARG PX4_MSGS_REF
+ARG PX4_ROS_COM_REF
+RUN test -n "${PX4_MSGS_REF}" && test -n "${PX4_ROS_COM_REF}" \
+ || { echo "PX4_MSGS_REF, PX4_ROS_COM_REF 빌드 인자가 비어 있다" >&2; exit 1; }
+
+# ros_gz_bridge는 vendor gz-transport만 끌어온다 (OSRF gz 패키지와 섞지 않는다)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ros-${ROS_DISTRO}-ros-gz-bridge \
+      ros-${ROS_DISTRO}-ament-cmake \
+      ros-${ROS_DISTRO}-eigen3-cmake-module \
+      libeigen3-dev \
+      ros-${ROS_DISTRO}-rclpy \
+      python3-colcon-common-extensions \
+      python3-rosdep \
+      build-essential cmake git \
+ && rm -rf /var/lib/apt/lists/*
+
+# px4_msgs를 고정 커밋으로, px4_ros_com(frame_transforms 라이브러리)을 underlay로 빌드한다
+RUN mkdir -p /opt/px4_ws/src && cd /opt/px4_ws/src \
+ && git clone https://github.com/PX4/px4_msgs.git \
+ && git -C px4_msgs checkout "${PX4_MSGS_REF}" \
+ && git clone https://github.com/PX4/px4_ros_com.git \
+ && git -C px4_ros_com checkout "${PX4_ROS_COM_REF}" \
+ && cd /opt/px4_ws \
+ && . /opt/ros/${ROS_DISTRO}/setup.sh \
+ && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release --event-handlers console_direct- \
+ && rm -rf /opt/px4_ws/build /opt/px4_ws/log /opt/px4_ws/src/px4_msgs/.git /opt/px4_ws/src/px4_ros_com/.git
+
+COPY ros-ws-entrypoint.sh /usr/local/bin/ros-ws-entrypoint.sh
+RUN chmod +x /usr/local/bin/ros-ws-entrypoint.sh
+
+# 프로젝트 패키지(ros_ws/src) 빌드 단계는 자리만 둔다. 개발 중에는 /opt/idsim을 볼륨으로 마운트한다.
+# RUN cd /opt/idsim/ros_ws && colcon build ...
+
+# 스모크 S0가 versions.env와 대조하도록 빌드 인자를 남긴다
+ENV IDSIM_BUILD_PX4_MSGS_REF=${PX4_MSGS_REF} \
+    IDSIM_BUILD_PX4_ROS_COM_REF=${PX4_ROS_COM_REF} \
+    CYCLONEDDS_URI=file:///opt/idsim/config/cyclonedds.xml
+WORKDIR /opt/idsim
+ENTRYPOINT ["/usr/local/bin/ros-ws-entrypoint.sh"]
+CMD ["bash"]

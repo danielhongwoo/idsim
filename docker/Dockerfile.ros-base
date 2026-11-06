@@ -1,0 +1,35 @@
+# ros-base: Ubuntu + ROS 2 + CycloneDDS rmw + 공통 도구
+ARG UBUNTU_IMAGE
+FROM ${UBUNTU_IMAGE}
+
+ARG ROS_DISTRO
+RUN test -n "${ROS_DISTRO}" || { echo "ROS_DISTRO 빌드 인자가 비어 있다 (versions.env 확인)" >&2; exit 1; }
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    ROS_DISTRO=${ROS_DISTRO} \
+    RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# ROS apt 저장소 등록 (Ubuntu 24.04 noble)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+ && curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+      -o /usr/share/keyrings/ros-archive-keyring.gpg \
+ && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu noble main" \
+      > /etc/apt/sources.list.d/ros2.list \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ros-${ROS_DISTRO}-ros-base \
+      ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+      iproute2 \
+      python3-pytest \
+      procps \
+      less \
+ && rm -rf /var/lib/apt/lists/*
+
+# bash -l 로그인 셸에서도 ROS 환경이 잡히도록 한다
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" > /etc/profile.d/ros.sh
+
+CMD ["bash"]

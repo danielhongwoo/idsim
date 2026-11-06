@@ -1,0 +1,26 @@
+# xrce-agent: Micro XRCE-DDS Agent 소스 빌드 (ROS 없음, 멀티스테이지)
+ARG UBUNTU_IMAGE
+
+FROM ${UBUNTU_IMAGE} AS build
+ARG XRCE_AGENT_TAG
+RUN test -n "${XRCE_AGENT_TAG}" || { echo "XRCE_AGENT_TAG 빌드 인자가 비어 있다" >&2; exit 1; }
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates git cmake build-essential \
+ && rm -rf /var/lib/apt/lists/*
+# superbuild(기본)가 Fast-DDS, Fast-CDR, spdlog 등을 함께 받아 빌드한다
+RUN git clone --depth 1 --branch "${XRCE_AGENT_TAG}" \
+      https://github.com/eProsima/Micro-XRCE-DDS-Agent.git /src \
+ && cmake -S /src -B /src/build -DCMAKE_BUILD_TYPE=Release \
+ && cmake --build /src/build -j"$(nproc)" \
+ && cmake --install /src/build
+
+FROM ${UBUNTU_IMAGE}
+ARG XRCE_AGENT_TAG
+# 스모크 S0가 versions.env와 대조하도록 빌드 인자를 남긴다
+ENV DEBIAN_FRONTEND=noninteractive \
+    IDSIM_BUILD_XRCE_AGENT_TAG=${XRCE_AGENT_TAG}
+COPY --from=build /usr/local /usr/local
+RUN ldconfig
+ENTRYPOINT ["MicroXRCEAgent"]

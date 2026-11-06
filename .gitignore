@@ -21,3 +21,6 @@ records/
 .idea/
 *.swp
 .DS_Store
+
+# 스모크 등 원시 산출물
+artifacts/

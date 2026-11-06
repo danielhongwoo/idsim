@@ -1,0 +1,228 @@
+# syntax=docker/dockerfile:1
+#
+# px4: PX4-Autopilot을 PX4_TAG로 소스 빌드한 SITL 실행 이미지. 담당: px4-engineer.
+# 베이스는 sim-base이며 뜨는 컨테이너는 px4-1 ... px4-N 이다.
+#
+# 빌드 인자 (docker/versions.env의 항목 이름과 같다. 기본값 없음, 비면 실패)
+#   BASE_IMAGE         sim-base 이미지. bake가 named context "idsim-sim-base"
+#                      (= target:sim-base)를 넘긴다. bake 없이 빌드할 때는
+#                      --build-arg BASE_IMAGE=idsim/sim-base:local
+#   PX4_TAG            PX4-Autopilot 릴리스 태그. 예: v1.17.0
+#   PX4_GZ_MODELS_REF  PX4-gazebo-models 커밋 SHA(40자리). Tools/simulation/gz
+#                      서브모듈 커밋과 sim-base의 /opt/px4-gz가 이 값과 같아야 한다.
+#
+# 결과물 (runtime 단계, 빌드 때와 같은 절대 경로)
+#   /opt/PX4-Autopilot/build/px4_sitl_default/{bin,etc,rootfs}
+#   /opt/PX4-Autopilot/Tools/simulation/gz -> /opt/px4-gz (심볼릭 링크)
+#   /opt/PX4-Autopilot/src/modules/simulation/gz_bridge/server.config
+#       -> /opt/px4-gz/server.idsim.config (심볼릭 링크, sim-base의 파생 파일)
+#
+# gz_env.sh 메모 (v1.17.0 src/modules/simulation/gz_bridge/gz_env.sh.in)
+#   빌드 때 rootfs/gz_env.sh로 configure되며 다음 네 경로를 박는다.
+#     PX4_GZ_MODELS        = <소스>/Tools/simulation/gz/models
+#     PX4_GZ_WORLDS        = <소스>/Tools/simulation/gz/worlds
+#     PX4_GZ_PLUGINS       = <빌드>/src/modules/simulation/gz_plugins
+#     PX4_GZ_SERVER_CONFIG = <소스>/src/modules/simulation/gz_bridge/server.config
+#   그리고 GZ_SIM_RESOURCE_PATH, GZ_SIM_SYSTEM_PLUGIN_PATH, GZ_SIM_SERVER_CONFIG_PATH를
+#   export 한다. Tools/simulation/gz 링크 하나로는 앞의 둘만 살아나므로
+#   server.config도 링크로 살린다(대상은 sim-base의 server.idsim.config).
+#   gz_plugins(OpticalFlowSystem, GstCameraSystem 등)는 OpenCV, GStreamer 런타임을 끌어오고 x500에는 쓰이지 않으므로 복사하지 않는다.
+#   그 디렉터리는 없고, GZ_SIM_SYSTEM_PLUGIN_PATH에 없는 경로가 하나 붙을 뿐이다.
+#   gz_env.sh는 px4-rc.gzsim의 embedded 분기(S1)에서만 읽힌다. standalone 분기는
+#   읽지 않으므로 compose가 PX4_GZ_MODELS를 직접 준다.
+#
+# 실행
+#   px4 바이너리는 rootfs 아래에 없다. 작업 디렉터리가 rootfs일 때 상대 경로는
+#   ../bin/px4 이다. PATH에 bin을 넣으므로 "px4 -i 1"로도 실행된다.
+#   -i N이면 px4가 스스로 rootfs/N으로 이동한다(platforms/posix/src/px4/common/main.cpp).
+
+ARG BASE_IMAGE
+
+# ---------------------------------------------------------------------------
+# builder
+# ---------------------------------------------------------------------------
+FROM ${BASE_IMAGE} AS builder
+
+ARG PX4_TAG
+ARG PX4_GZ_MODELS_REF
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    CCACHE_DIR=/root/.ccache \
+    CCACHE_MAXSIZE=5G
+
+# 1. 빌드 도구. Tools/setup/ubuntu.sh(v1.17.0)의 일반 의존성과 시뮬레이션 의존성 중
+#    px4_sitl_default 빌드에 필요한 것만 고른다. NuttX 교차 컴파일러는 넣지 않는다.
+#    - libopencv-dev: gz_plugins/optical_flow가 find_package(OpenCV REQUIRED)라서
+#      없으면 configure가 실패한다. 산출물은 runtime에 복사하지 않는다.
+#    - protobuf-compiler, libprotobuf-dev: gz_msgs(opticalflow.proto) 생성
+#    - cppzmq-dev, libunwind-dev: ubuntu.sh가 24.04에서 gz-harmonic과 함께 설치
+#    - GStreamer 개발 패키지는 넣지 않는다. 없으면 GstCameraSystem만 경고와 함께
+#      빠진다(gz_plugins/gstreamer/CMakeLists.txt).
+RUN test -n "${PX4_TAG}" || { echo "PX4_TAG is empty" >&2; exit 1; } \
+ && test -n "${PX4_GZ_MODELS_REF}" || { echo "PX4_GZ_MODELS_REF is empty" >&2; exit 1; } \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential \
+      ccache \
+      cmake \
+      cppzmq-dev \
+      file \
+      git \
+      libeigen3-dev \
+      libopencv-dev \
+      libprotobuf-dev \
+      libssl-dev \
+      libunwind-dev \
+      libxml2-dev \
+      libxml2-utils \
+      make \
+      ninja-build \
+      pkg-config \
+      protobuf-compiler \
+      python3 \
+      python3-dev \
+      python3-pip \
+      python3-setuptools \
+      python3-wheel \
+      rsync \
+      unzip \
+ && rm -rf /var/lib/apt/lists/*
+
+# 2. 빌드에 필요한 Python 패키지. requirements.txt 중 코드 생성에 쓰이는 것만.
+#    Noble은 PEP 668 때문에 --break-system-packages가 필요하다.
+#    empy는 4.x에서 API가 바뀌어 PX4 생성기가 깨지므로 3.3.4로 고정한다
+#    (requirements.txt도 empy>=3.3,<4). ROS가 apt로 넣은 패키지가 조건을 만족하면
+#    pip는 건드리지 않는다.
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
+      "empy==3.3.4" \
+      future \
+      jinja2 \
+      jsonschema \
+      kconfiglib \
+      lark \
+      lxml \
+      numpy \
+      packaging \
+      pyros-genmsg \
+      pyyaml \
+      six \
+      toml \
+ && python3 -c "import em, genmsg, jinja2, yaml, menuconfig, jsonschema; assert em.__version__.startswith('3.'), em.__version__"
+
+# 3. PX4-Autopilot 클론. 태그로 얕게 받고 서브모듈도 얕게 받는다.
+#    버전 헤더: px_update_git_header.py와 최상위 CMakeLists.txt는
+#    "git describe --exclude ext/* --tags"를 쓴다. --branch <태그> --depth 1 클론은
+#    그 태그 ref를 함께 가져오므로 describe가 "v1.17.0"을 낸다(2026-11-06 확인).
+#    서브모듈 SHA 직접 fetch는 GitHub가 허용한다.
+RUN git clone --quiet --depth 1 --branch "${PX4_TAG}" \
+      --recurse-submodules --shallow-submodules --jobs 8 \
+      https://github.com/PX4/PX4-Autopilot.git /opt/PX4-Autopilot \
+ && test "$(git -C /opt/PX4-Autopilot describe --exclude 'ext/*' --tags --exact-match)" = "${PX4_TAG}"
+
+WORKDIR /opt/PX4-Autopilot
+
+# 4. 모델 저장소 정합성 검사. 다르면 실패한다.
+#    (a) 상위 저장소가 기록한 서브모듈 커밋 (b) 실제 체크아웃된 커밋
+#    (c) sim-base /opt/px4-gz의 내용 (d) PX4 gz_bridge/server.config와 모델 저장소
+#    server.config의 동일성(smoke-test-phase1a.md 가정 절).
+#    sim-base가 만든 파생 파일 server.idsim.config는 (c)의 비교에서 뺀다.
+RUN recorded="$(git ls-tree HEAD Tools/simulation/gz | awk '{print $3}')" \
+ && actual="$(git -C Tools/simulation/gz rev-parse HEAD)" \
+ && echo "gz submodule recorded=${recorded} actual=${actual} expected=${PX4_GZ_MODELS_REF}" \
+ && test "${recorded}" = "${PX4_GZ_MODELS_REF}" \
+ && test "${actual}" = "${PX4_GZ_MODELS_REF}" \
+ && diff -r --exclude=.git --exclude=server.idsim.config Tools/simulation/gz /opt/px4-gz \
+ && diff src/modules/simulation/gz_bridge/server.config Tools/simulation/gz/server.config
+
+# 5. SITL 빌드. ccache는 캐시 마운트에 둔다.
+#    GIT_SUBMODULES_ARE_EVIL=1: Tools/check_submodules.sh가 빌드 중에 서브모듈을
+#    다시 sync/update하거나 대화형 입력(read)을 기다리지 않게 한다. 서브모듈은
+#    3단계에서 태그가 기록한 커밋으로 받았다.
+#    참고: gz_plugins/optical_flow는 빌드 중 PX4-OpticalFlow의 master를 받는다
+#    (optical_flow.cmake). 결과물은 runtime에 들어가지 않는다.
+RUN --mount=type=cache,target=/root/.ccache \
+    GIT_SUBMODULES_ARE_EVIL=1 make px4_sitl_default \
+ && { ccache --show-stats || true; }
+
+# 6. 산출물 검사. gz_bridge와 uxrce_dds_client 모듈 링크, rcS, gz_env.sh.
+#    px4_posix_generate_symlinks가 모듈마다 bin/px4-<모듈> 링크를 만든다.
+RUN b=build/px4_sitl_default \
+ && test -x "${b}/bin/px4" \
+ && test -L "${b}/bin/px4-gz_bridge" \
+ && test -L "${b}/bin/px4-uxrce_dds_client" \
+ && test -f "${b}/etc/init.d-posix/rcS" \
+ && test -f "${b}/etc/init.d-posix/px4-rc.gzsim" \
+ && test -f "${b}/rootfs/gz_env.sh" \
+ && grep -q "PX4_GZ_MODELS=/opt/PX4-Autopilot/Tools/simulation/gz/models" "${b}/rootfs/gz_env.sh" \
+ && grep -q "PX4_GZ_SERVER_CONFIG=/opt/PX4-Autopilot/src/modules/simulation/gz_bridge/server.config" "${b}/rootfs/gz_env.sh" \
+ && ls "${b}/bin" | grep -E '^px4-gz_'
+
+# ---------------------------------------------------------------------------
+# runtime
+# ---------------------------------------------------------------------------
+FROM ${BASE_IMAGE} AS runtime
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# bc: rcS가 PX4_SIM_SPEED_FACTOR를 계산할 때 쓴다(ubuntu.sh의 시뮬레이션 의존성).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends bc \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/PX4-Autopilot/build/px4_sitl_default/bin    /opt/PX4-Autopilot/build/px4_sitl_default/bin
+COPY --from=builder /opt/PX4-Autopilot/build/px4_sitl_default/etc    /opt/PX4-Autopilot/build/px4_sitl_default/etc
+COPY --from=builder /opt/PX4-Autopilot/build/px4_sitl_default/rootfs /opt/PX4-Autopilot/build/px4_sitl_default/rootfs
+
+# gz_env.sh에 박힌 소스 경로를 sim-base의 한 벌로 살린다(모델 복사 없음).
+# server.config 링크는 sim-base의 파생 파일 server.idsim.config(PX4 전용 플러그인
+# OpticalFlowSystem, GstCameraSystem 두 줄을 뺀 것)를 가리킨다. gz_env.sh가
+# GZ_SIM_SERVER_CONFIG_PATH를 이 경로로 다시 설정하므로 embedded(S1)도
+# standalone gazebo 서비스와 같은 파일을 쓴다.
+# 공유 라이브러리가 모두 풀리는지(gz-transport 등은 sim-base에 있다) 확인한다.
+RUN mkdir -p /opt/PX4-Autopilot/Tools/simulation /opt/PX4-Autopilot/src/modules/simulation/gz_bridge \
+ && ln -s /opt/px4-gz /opt/PX4-Autopilot/Tools/simulation/gz \
+ && ln -s /opt/px4-gz/server.idsim.config /opt/PX4-Autopilot/src/modules/simulation/gz_bridge/server.config \
+ && test -f /opt/PX4-Autopilot/Tools/simulation/gz/models/x500/model.sdf \
+ && test -f /opt/PX4-Autopilot/Tools/simulation/gz/worlds/default.sdf \
+ && test -f /opt/PX4-Autopilot/src/modules/simulation/gz_bridge/server.config \
+ && ! grep -qE 'OpticalFlowSystem|GstCameraSystem' /opt/PX4-Autopilot/src/modules/simulation/gz_bridge/server.config \
+ && test -z "$(ldd /opt/PX4-Autopilot/build/px4_sitl_default/bin/px4 | grep 'not found')"
+
+# PX4_PARAM_ 재적용 훅.
+# rcS(v1.17.0 129-136행)는 PX4_PARAM_ 환경변수를 airframe 스크립트보다 먼저
+# "param set"한다. 값이 그 시점의 펌웨어 기본값과 같으면 변경으로 기록되지 않아,
+# 뒤이어 airframe이 "param set-default"로 기본값을 바꾸면 그 값이 이긴다.
+# 실측(2026-11-06): PX4_PARAM_NAV_DLL_ACT=0 을 줘도 4001_gz_x500의
+# set-default 2 때문에 NAV_DLL_ACT가 2로 남았다.
+# rcS 363행은 airframe 파일 옆의 "<airframe>.post"를 mavlink 시작 뒤에 읽는다.
+# PX4 소스는 고치지 않고 이 공식 훅에 rcS와 같은 루프를 한 번 더 둔다.
+# 다른 airframe을 쓰게 되면 같은 내용을 그 이름.post로 추가한다.
+COPY <<'POST' /opt/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes/4001_gz_x500.post
+# idsim: airframe 뒤에 PX4_PARAM_ 환경변수를 다시 적용한다(docker/Dockerfile.px4 참조).
+env | while IFS='=' read -r line; do
+  value=${line#*=}
+  name=${line%%=*}
+  case $name in
+    "PX4_PARAM_"*) param set "${name#PX4_PARAM_}" "$value" ;;
+  esac
+done
+POST
+
+# healthcheck의 px4-uxrce_dds_client 등 모듈 명령을 PATH로 찾게 한다.
+ENV PATH=/opt/PX4-Autopilot/build/px4_sitl_default/bin:${PATH}
+
+# 이 이미지가 빌드된 PX4 태그. 스모크 산출물(check_px4_pxh.py)이 기록한다.
+ARG PX4_TAG
+RUN test -n "${PX4_TAG}" || { echo "PX4_TAG is empty" >&2; exit 1; }
+ENV IDSIM_BUILD_PX4_TAG=${PX4_TAG}
+
+WORKDIR /opt/PX4-Autopilot/build/px4_sitl_default/rootfs
+
+# compose가 덮어쓴다. 작업 디렉터리 기준 상대 경로 bin/px4는 없으므로 절대 경로로 둔다.
+# -d(데몬 모드): 컨테이너 stdin이 닫혀 있으면 대화형 pxh 셸이 프롬프트를 끝없이 출력해
+# 로그가 수 GB까지 분다. -d에서도 px4-commander, px4-param 같은 모듈 명령은 동작한다.
+CMD ["/opt/PX4-Autopilot/build/px4_sitl_default/bin/px4", "-d", "-i", "1"]

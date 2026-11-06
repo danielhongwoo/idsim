@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  idsim CycloneDDS 설정. ros-ws, bridge, smoke 컨테이너가
+  CYCLONEDDS_URI=file:///opt/idsim/config/cyclonedds.xml 로 읽는다.
+
+  환경변수 치환 없는 고정 파일이다(docs/smoke-test-phase1a.md).
+  - 인터페이스는 고정하지 않는다(NetworkInterface 없음, CycloneDDS 가 자동 선택).
+    uXRCE-DDS Agent 의 Fast DDS 는 호스트 인터페이스 주소(lo 가 아닌 것)만 광고하므로,
+    lo 로 고정하면 Cyclone 이 그 주소로 닿지 못해 PX4 토픽을 받지 못한다(스모크 S1 실측).
+  - 멀티캐스트는 끄고, 디스커버리는 127.0.0.1 유니캐스트 피어로 한다.
+    모든 컨테이너가 network_mode: host 라 같은 호스트의 참가자만 찾으면 된다.
+  - 스택 격리는 인터페이스가 아니라 ROS_DOMAIN_ID(20 + 스택 번호)로 한다.
+  - ParticipantIndex auto: 참가자마다 0부터 빈 인덱스를 잡아 유니캐스트 포트를 정한다.
+    피어 디스커버리는 인덱스 0..MaxAutoParticipantIndex 의 포트로 SPDP 를 보낸다.
+    한 도메인에서 동시에 뜨는 참가자(ROS 2 프로세스, CLI 포함) 수가 이 값을
+    넘으면 새 참가자가 생성에 실패한다. 50 은 3대 SITL 과 테스트 도구를 덮는 여유값이다.
+  - 도메인 번호는 ROS_DOMAIN_ID 가 정하므로 Id="any".
+  - 설정 없음과 비교할 때는 CYCLONEDDS_URI 를 비운다.
+
+  스키마: https://cyclonedds.io/docs/cyclonedds/latest/config/config_file_reference.html
+  Jazzy 의 cyclonedds 0.10.x etc/cyclonedds.xsd 에도 같은 요소가 있다.
+-->
+<CycloneDDS xmlns="https://cdds.io/config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/releases/0.10.x/etc/cyclonedds.xsd">
+  <Domain Id="any">
+    <General>
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>50</MaxAutoParticipantIndex>
+      <Peers>
+        <Peer Address="127.0.0.1"/>
+      </Peers>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

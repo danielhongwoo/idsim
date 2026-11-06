@@ -1,0 +1,126 @@
+# syntax=docker/dockerfile:1
+#
+# sim-base: ros-base 위에 OSRF apt의 Gazebo와 PX4-gazebo-models를 올린 이미지.
+# 담당: sim-engineer. 뜨는 컨테이너는 gazebo 서비스이며, px4 이미지의 베이스가 된다.
+#
+# 가정 (devops-engineer와 맞출 것)
+# - 베이스 이미지는 ros-base이며 로컬 태그는 idsim/ros-base:local 이다.
+#   BASE_IMAGE는 기본값 없이 받고 bake가 넣는다. 현재 docker-bake.hcl은
+#   named context "idsim-ros-base"(= target:ros-base)를 BASE_IMAGE로 넘긴다.
+#   bake 없이 빌드할 때는 --build-arg BASE_IMAGE=idsim/ros-base:local 로 준다.
+# - ARG 이름은 docker/versions.env의 항목 이름과 같다.
+#     GZ_RELEASE          Gazebo 릴리스 이름. 예: harmonic -> apt 패키지 gz-harmonic
+#     PX4_GZ_MODELS_REF   PX4-gazebo-models 커밋 SHA(40자리 전체)
+#   versions.env는 이 파일이 만들지 않는다. 값이 비면 빌드가 실패한다.
+# - ros-base는 Ubuntu 24.04(noble), amd64, root 사용자이며 apt를 쓸 수 있다.
+#   curl, git, gnupg 유무는 가정하지 않고 여기서 설치한다.
+#
+# 결과물
+# - /opt/px4-gz/{models,worlds,server.config,simulation-gazebo}
+#   PX4-gazebo-models 저장소 루트를 그대로 둔다(.git 제외).
+# - /opt/px4-gz/server.idsim.config: 원본에서 PX4 전용 플러그인 두 개를 뺀 것.
+#   gazebo 서비스의 기본 서버 설정이다.
+# - GZ_SIM_RESOURCE_PATH, GZ_SIM_SERVER_CONFIG_PATH 기본값. compose가 덮어쓸 수 있다.
+#
+# 헤드리스 메모
+# - gazebo 서비스는 `gz sim -r -s <월드>`로 서버만 띄운다. GPU는 없다.
+# - server.config의 Sensors 시스템은 렌더링 센서(카메라, 라이다 등)가 있을 때만
+#   렌더 엔진을 초기화한다. x500에는 렌더링 센서가 없으므로 렌더링은 뜨지 않는다.
+# - 렌더링 센서를 쓰게 되면 ogre2 + --headless-rendering(EGL) + Mesa llvmpipe로 간다.
+#   ogre(1.x)는 X 디스플레이(XOpenDisplay)가 필요해 Xvfb 없이는 헤드리스가 안 된다.
+# - HEADLESS, PX4_GZ_SIM_RENDER_ENGINE은 PX4 px4-rc.gzsim만 읽는다. gz 자체는 읽지 않는다.
+
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ARG GZ_RELEASE
+ARG PX4_GZ_MODELS_REF
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 1. OSRF apt 저장소 추가와 Gazebo 설치.
+#    공식 절차: https://gazebosim.org/docs/harmonic/install_ubuntu/
+#    키: https://packages.osrfoundation.org/gazebo.gpg
+#        -> /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
+#    목록: /etc/apt/sources.list.d/gazebo-stable.list
+#    lsb_release 대신 /etc/os-release의 VERSION_CODENAME을 쓴다(lsb-release 미설치 대비).
+#    gz-<릴리스> 메타 패키지는 -dev 헤더까지 끌어온다. px4 builder의 gz_bridge가
+#    find_package로 OSRF 헤더를 찾기 때문에 런타임 패키지만으로 줄이지 않는다.
+#
+#    헤드리스 소프트웨어 렌더링 런타임(GPU 없음).
+#    - libgl1, libglx-mesa0, libopengl0: ogre/ogre2 렌더 플러그인의 GL 진입점
+#    - libegl1, libegl-mesa0: ogre2 --headless-rendering의 EGL 경로
+#    - libgl1-mesa-dri: llvmpipe 소프트웨어 래스터라이저
+#    - libglu1-mesa: OGRE 1.9 GL 렌더 시스템이 쓰는 GLU
+#    대부분 gz 패키지가 이미 끌어오지만, 소프트웨어 렌더링에 필요한 것을 명시해
+#    의존성 변화에 흔들리지 않게 한다.
+RUN test -n "${GZ_RELEASE}" || { echo "GZ_RELEASE is empty" >&2; exit 1; } \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      git \
+ && curl -fsSL https://packages.osrfoundation.org/gazebo.gpg \
+      --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg \
+ && . /etc/os-release \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] https://packages.osrfoundation.org/gazebo/ubuntu-stable ${VERSION_CODENAME} main" \
+      > /etc/apt/sources.list.d/gazebo-stable.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      "gz-${GZ_RELEASE}" \
+      libgl1 \
+      libglx-mesa0 \
+      libopengl0 \
+      libegl1 \
+      libegl-mesa0 \
+      libgl1-mesa-dri \
+      libglu1-mesa \
+ && rm -rf /var/lib/apt/lists/* \
+ && gz sim --versions
+
+# 2. PX4-gazebo-models를 고정 커밋으로 받는다.
+#    https://github.com/PX4/PX4-gazebo-models
+#    루트에 models/, worlds/, server.config, simulation-gazebo가 있다.
+#    GitHub는 SHA 직접 fetch를 허용하므로 얕게 받고 HEAD가 REF와 같은지 확인한 뒤
+#    .git을 지운다. px4 builder가 PX4 서브모듈 커밋과 이 값을 대조한다.
+RUN test -n "${PX4_GZ_MODELS_REF}" || { echo "PX4_GZ_MODELS_REF is empty" >&2; exit 1; } \
+ && git init -q /opt/px4-gz \
+ && git -C /opt/px4-gz remote add origin https://github.com/PX4/PX4-gazebo-models.git \
+ && git -C /opt/px4-gz fetch -q --depth 1 origin "${PX4_GZ_MODELS_REF}" \
+ && git -C /opt/px4-gz checkout -q FETCH_HEAD \
+ && test "$(git -C /opt/px4-gz rev-parse HEAD)" = "${PX4_GZ_MODELS_REF}" \
+ && rm -rf /opt/px4-gz/.git \
+ && test -d /opt/px4-gz/models \
+ && test -d /opt/px4-gz/worlds \
+ && test -f /opt/px4-gz/server.config \
+ && test -f /opt/px4-gz/models/x500/model.sdf \
+ && test -f /opt/px4-gz/worlds/default.sdf
+
+# 3. idsim용 server.config 생성 (architect 결정, 방식 (나)).
+#    원본 server.config의 libOpticalFlowSystem.so, libGstCameraSystem.so 플러그인은
+#    PX4 빌드 산출물(gz_plugins)이라 sim-base에 없고, gazebo 서비스에서 로드 실패
+#    오류만 남긴다. 원본에서 이 두 plugin 요소만 뺀 server.idsim.config를 만든다.
+#    원본 구조: 두 요소 모두 한 줄짜리 자기 닫힘 요소 <plugin .../>.
+#    검사: 대상 줄이 정확히 2개이고 각각 "/>"로 닫히며, 결과 파일에서 정확히 2줄이
+#    줄었고 두 라이브러리 이름이 남지 않아야 한다. 원본 server.config는 그대로 둔다
+#    (px4 builder가 PX4 소스의 gz_bridge/server.config와 diff로 대조한다).
+RUN cd /opt/px4-gz \
+ && pat='^[[:space:]]*<plugin [^>]*filename="lib(OpticalFlowSystem|GstCameraSystem)\.so"[^>]*/>[[:space:]]*$' \
+ && n="$(grep -cE "${pat}" server.config)" \
+ && test "${n}" = 2 || { echo "expected 2 single-line plugin elements, found ${n}" >&2; exit 1; } \
+ && grep -vE "${pat}" server.config > server.idsim.config \
+ && test "$(( $(wc -l < server.config) - $(wc -l < server.idsim.config) ))" = 2 \
+ && ! grep -qE 'OpticalFlowSystem|GstCameraSystem' server.idsim.config \
+ && grep -q '</server_config>' server.idsim.config
+
+# 4. gz sim 기본 경로. compose가 덮어쓸 수 있다.
+#    server.config는 월드 SDF에 <plugin>이 없을 때 적용되며 Physics, UserCommands,
+#    SceneBroadcaster, Imu, AirPressure, NavSat, Magnetometer, Sensors 등을 올린다.
+ENV GZ_SIM_RESOURCE_PATH=/opt/px4-gz/models:/opt/px4-gz/worlds \
+    GZ_SIM_SERVER_CONFIG_PATH=/opt/px4-gz/server.idsim.config
+
+# 5. 빌드 버전 기록. 스모크가 docker/versions.env와 대조한다(architect 결정).
+ENV IDSIM_BUILD_GZ_RELEASE=${GZ_RELEASE} \
+    IDSIM_BUILD_PX4_GZ_MODELS_REF=${PX4_GZ_MODELS_REF}
