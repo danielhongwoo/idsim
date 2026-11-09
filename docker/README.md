@@ -168,7 +168,7 @@ docker run --rm --name idsim-gz-gui --network host --ipc=host \
 
 - `gui.config`는 WorldControl 플러그인을 뺐으므로 GUI에서 월드를 멈출 수 없다. 화면에서 실수로 일시정지하는 것을 막기 위해서다.
 - `--ipc=host`가 없으면 GPU 가속이 없는 호스트(소프트웨어 렌더링)에서 창이 검게 나온다. Mesa의 소프트웨어 경로가 X 서버와 MIT-SHM 공유 메모리로 화면을 전달하는데, 컨테이너의 IPC 네임스페이스가 분리되어 있으면 X 서버가 그 메모리에 붙지 못하기 때문이다. GPU 가속(DRI3) 경로에서는 없어도 되지만 항상 붙인다.
-- `gui.config`는 바닥 격자(GridConfig, 1m 간격, 50 x 50 m, 어두운 선)를 켠다. PX4 기본 월드는 배경과 바닥이 균일한 회색이라 격자가 없으면 기체 이동이 보이지 않는다. 왼쪽 패널의 "Grid config"에서 칸 수와 간격을 바꿀 수 있다.
+- `gui.config`는 바닥 격자(GridConfig, 2m 간격, 500 x 500 m, 어두운 선)를 켠다. PX4 기본 월드는 배경과 바닥이 균일한 회색이라 격자가 없으면 기체 이동이 보이지 않는다. 왼쪽 패널의 "Grid config"에서 칸 수와 간격을 바꿀 수 있다.
 - 화면이 깜빡이면 `docker run`에 `-e QSG_RENDER_LOOP=basic -e vblank_mode=1`을 더해 본다. Qt 렌더 루프를 단일 스레드로 고정하고 Mesa 수직 동기를 켜 주사율 이하로 그린다. 가상머신에서 효과가 있는지는 확인 중이다.
 - 도구 모음 아이콘이 보이도록 `sim-base`에 `libqt5svg5`가 들어 있다.
 - 종료는 Ctrl-C나 `docker stop idsim-gz-gui`다. GUI만 끝나고 서버는 계속 돈다.
