@@ -46,7 +46,9 @@ GZ_ERROR_PATTERNS = [
 
 # MAVLink UDP 포트 bind 실패. PX4 v1.17.0 mavlink 모듈의 경고
 # "WARN  [mavlink] bind failed: Address already in use".
-MAVLINK_BIND_PATTERN = r"WARN\s+\[mavlink\]\s+bind failed"
+MAVLINK_BIND_PATTERNS = [
+    r"WARN\s+\[mavlink\]\s+bind failed",
+]
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -146,10 +148,10 @@ def mode_log(args):
     hits = [line for line in text.splitlines() if pat.search(line)]
     report.check("gz_bridge_errors", not hits and bool(text.strip()),
                  lines=hits, patterns=GZ_ERROR_PATTERNS, log_empty=not text.strip())
-    bind_re = re.compile(MAVLINK_BIND_PATTERN)
+    bind_re = re.compile("|".join(MAVLINK_BIND_PATTERNS))
     bind_hits = [line for line in text.splitlines() if bind_re.search(line)]
     report.check("mavlink_bind_failed", not bind_hits and bool(text.strip()),
-                 lines=bind_hits, pattern=MAVLINK_BIND_PATTERN, log_empty=not text.strip())
+                 lines=bind_hits, patterns=MAVLINK_BIND_PATTERNS, log_empty=not text.strip())
     return report
 
 

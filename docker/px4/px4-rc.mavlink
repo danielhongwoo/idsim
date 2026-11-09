@@ -5,8 +5,9 @@
 #
 # 출처: PX4-Autopilot v1.17.0 ROMFS/px4fmu_common/init.d-posix/px4-rc.mavlink
 #   (빌드 산출물 build/px4_sitl_default/etc/init.d-posix/px4-rc.mavlink).
-#   상류 파일의 sha256은 docker/Dockerfile.px4의 PX4_RC_MAVLINK_UPSTREAM_SHA256에
-#   기록하고 빌드 때 대조한다. PX4 태그를 올려 값이 달라지면 이 파일을 다시 검토한다.
+#   상류 파일의 sha256은 docker/Dockerfile.px4의 "sha256sum -c" 줄에 기록하고 빌드 때
+#   대조한다(PX4_TAG와 짝으로 움직이는 값). PX4 태그를 올려 값이 달라지면 이 파일을
+#   새 상류와 비교해 다시 검토한다.
 #
 # 바꾼 이유
 #   상류 파일은 포트가 인스턴스 번호 N만으로 정해진다. 같은 호스트(host 네트워크)에
@@ -17,25 +18,36 @@
 #   ". px4-rc.mavlink"). Dockerfile.px4가 이 파일의 디렉터리를 PATH 맨 앞에 둔다.
 #
 # 상류와 다른 점
-#   1. 환경변수 IDSIM_MAVLINK_OFFSET(기본 0, 0 이상의 정수)을 GCS와 API 포트에 더한다.
+#   1. 환경변수 IDSIM_MAVLINK_OFFSET(기본 0)을 GCS와 API 포트에 더한다. 허용 값은
+#      0 또는 앞자리 0 없는 십진 정수, 상한 9000(스택 k 0-9의 1000k). 앞자리 0은 sh가
+#      8진수로 읽으므로 거부한다. 범위 밖이면 종료 코드 1.
 #      GCS 링크에 원격 포트(-o)를 명시한다. 오프셋 0이면 mavlink 기본값 14550과 같다.
 #   2. payload(카메라)와 gimbal 링크를 열지 않는다. idsim은 쓰지 않는다.
 #   3. N > 9 이면 종료 코드 1로 실패한다. 상류의 "N > 9 이면 원격 14549 고정" 규칙은
-#      쓰지 않는다.
+#      쓰지 않는다. N 1-9는 compose 경로(px4-N 컨테이너)가 쓰고, N 0은 -i 없이 수동으로
+#      px4를 실행할 때를 위해 허용한다.
 #   SIH 표시용 링크(PX4_SIMULATOR=sihsim)는 상류 그대로다(오프셋을 더하지 않는다).
 #
-# 포트 식 (O = IDSIM_MAVLINK_OFFSET, N = px4 인스턴스 번호 0-9)
+# 포트 식 (O = IDSIM_MAVLINK_OFFSET 0-9000, N = px4 인스턴스 번호 0-9)
 #   GCS 링크: 로컬 18570 + O + N, 원격 14550 + O
 #   API 링크: 로컬 14580 + O + N, 원격 14540 + O + N
 #   스택 k의 오프셋은 1000k 이다(compose 생성기가 넘긴다).
 
 idsim_mavlink_offset=${IDSIM_MAVLINK_OFFSET:-0}
+# 0 또는 앞자리 0 없는 1-4자리 십진수만 받고(sh 산술은 앞자리 0을 8진수로 읽는다),
+# 그다음 상한 9000을 본다.
+idsim_mavlink_offset_ok=yes
 case $idsim_mavlink_offset in
-	''|*[!0-9]*)
-		echo "ERROR [idsim] IDSIM_MAVLINK_OFFSET must be a non-negative integer: '$idsim_mavlink_offset'"
-		exit 1
+	0) ;;
+	[1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9])
+		[ "$idsim_mavlink_offset" -le 9000 ] || idsim_mavlink_offset_ok=no
 		;;
+	*) idsim_mavlink_offset_ok=no ;;
 esac
+if [ "$idsim_mavlink_offset_ok" != yes ]; then
+	echo "ERROR [idsim] IDSIM_MAVLINK_OFFSET must be 0 or a decimal integer without leading zeros, at most 9000: '$idsim_mavlink_offset'"
+	exit 1
+fi
 if [ "$px4_instance" -gt 9 ]; then
 	echo "ERROR [idsim] px4 instance $px4_instance > 9 is not supported (px4-rc.mavlink)"
 	exit 1
