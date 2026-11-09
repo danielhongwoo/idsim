@@ -155,7 +155,6 @@
 - 스모크는 호스트당 하나만 돌린다(`compose.smoke.yaml`의 이름이 `idsim-smoke` 고정). 3단계 C가 `compose.smoke.yaml`을 삭제하고 스모크가 생성된 compose(`idsim-<k>`)를 쓰게 되면 닫힌다.
 - MAVLink bind에 실패한 PX4 인스턴스의 동작(GCS 링크 없이 계속 뜨는지, uXRCE 영향)은 미실측. 3단계 이후에는 오프셋으로 충돌 자체가 없어야 하므로 check_px4_log의 `bind failed` 판정이 회귀를 잡는다.
 - lockstep 반대 방향(PX4가 느릴 때 Gazebo가 기다리는지)은 미실측. Phase 3 CPU 포화 해석의 전제.
-- `--render-engine-gui` 플래그가 `gui.config`의 engine을 덮는지, ogre1 + GridConfig 조합은 미확인(sim-engineer).
 - compose healthcheck `start_interval`의 Docker 하한은 미실측(Docker 29.1.3, Compose 2.40.3에서 수용). `check_host.sh`에 넣을 값은 devops-engineer가 정한다.
 - 1b 전 결정: 기체별 EKF 원점은 월드 원점이 아니라 스폰 지점이라 월드 ENU `TargetState`를 기체 NED setpoint로 바꾸려면 스폰 pose 또는 `VehicleLocalPosition`의 ref_lat/lon/alt가 필요하다(px4, sim, ros2 제기). 1b 커스텀 월드에서 `world.origin`과 SDF `<spherical_coordinates>` 일치 검사 주체도 1b 착수 때 정한다. 월드 SDF에 `<plugin>`이 하나라도 있으면 서버 설정 파일이 무시된다(sim).
 
