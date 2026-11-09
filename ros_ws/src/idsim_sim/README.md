@@ -13,4 +13,8 @@ Gazebo 시뮬레이션 쪽 설정과 노드를 모으는 패키지다. 설계는
 
 ## 현재 들어 있는 것
 
-- `config/gui.config`: Gazebo GUI 클라이언트(`gz sim -g`) 설정. gz-sim8 기본 설정에서 WorldControl 플러그인을 빼고 바닥 격자(GridConfig)를 더했다. 화면에서 실수로 월드를 일시정지하거나 스텝 실행해 시뮬레이션 시계를 멈추는 것을 막고, 균일한 회색 월드에서 기체 이동이 보이게 한다. 출처와 이유는 파일 첫머리 주석에 있다. sim-base 컨테이너에 읽기 전용으로 마운트해 `gz sim -g --gui-config <경로>`로 쓴다.
+- `config/gui.config`: Gazebo GUI 클라이언트(`gz sim -g`) 설정. gz-sim8 기본 설정에서 WorldControl 플러그인을 빼고 바닥 격자(GridConfig)를 더했다. 화면에서 실수로 월드를 일시정지하거나 스텝 실행해 시뮬레이션 시계를 멈추는 것을 막고, 균일한 회색 월드에서 기체 이동이 보이게 한다. 출처와 이유는 파일 첫머리 주석에 있다. `scripts/gz_gui.sh`가 `--gui-config`로 넘긴다.
+- `scripts/gz_server.sh`: gazebo 서비스의 진입 스크립트(sim-base, root). 월드 SDF의 `<world name>`이 `IDSIM_WORLD_NAME`과 같은지 검사하고, `gz sim -r -s <IDSIM_WORLD_FILE>`을 자식으로 띄워 `/world/<이름>/scene/info`가 응답할 때까지(상한 60초) 기다린다. `IDSIM_ORIGIN_LAT/LON/ALT` 세 값이 모두 있으면 `set_spherical_coordinates`를 한 번 호출하고 `data: true`를 받으면 표시 파일 `/tmp/idsim/origin_set`을 남긴다. 세 값 중 일부만 있거나, 이름이 다르거나, 응답이 `data: true`가 아니면 종료 코드 1로 끝난다. TERM/INT는 자식 서버에 전달한다. `data: true`는 요청 수리일 뿐이라 원점의 실제 적용은 px4의 `sensor_gps` 좌표로 판정한다. healthcheck 명령은 파일 머리 주석에 있다.
+- `scripts/gz_gui.sh`: gz-gui 서비스(`viz` 프로필)의 진입 스크립트(호스트 uid:gid). `DISPLAY`가 비었거나 Xauthority 파일(`/tmp/.Xauthority`)이 없거나 비었거나 읽을 수 없거나 GUI 설정 파일을 읽을 수 없으면 안내 메시지와 종료 코드 1로 끝낸다(gz는 설정 파일을 못 읽으면 경고만 내고 WorldControl이 있는 기본 설정으로 뜨기 때문이다). `HOME`에 쓸 수 없으면 `/tmp/gz-home`을 쓴다. 그 뒤 `gz sim -g --gui-config ${IDSIM_GUI_CONFIG:-/opt/idsim/sim/config/gui.config} --render-engine-gui ${IDSIM_GZ_GUI_ENGINE:-ogre2}`로 exec한다. `--render-engine-gui`는 `gui.config`의 `<engine>`을 덮는다(ogre를 주면 OGRE 1.9가 로드되고 격자도 보인다, 2026-11-09 실측).
+
+두 스크립트는 이 패키지 디렉터리를 컨테이너의 `/opt/idsim/sim`에 읽기 전용으로 마운트해 쓴다(`/opt/idsim/sim/scripts/...`, `/opt/idsim/sim/config/gui.config`).
