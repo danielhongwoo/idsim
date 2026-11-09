@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 #
 # sim-base: ros-base 위에 OSRF apt의 Gazebo와 PX4-gazebo-models를 올린 이미지.
-# 담당: sim-engineer. 뜨는 컨테이너는 gazebo 서비스이며, px4 이미지의 베이스가 된다.
+# 담당: sim-engineer. 뜨는 컨테이너는 gazebo 서비스와 GUI 클라이언트(지금은 README의 수동 docker run, 3단계부터 gz-gui 서비스)이며,
+# px4 이미지의 베이스가 된다.
 #
 # 가정 (devops-engineer와 맞출 것)
 # - 베이스 이미지는 ros-base이며 로컬 태그는 idsim/ros-base:local 이다.
@@ -21,6 +22,8 @@
 # - /opt/px4-gz/server.idsim.config: 원본에서 PX4 전용 플러그인 두 개를 뺀 것.
 #   gazebo 서비스의 기본 서버 설정이다.
 # - GZ_SIM_RESOURCE_PATH, GZ_SIM_SERVER_CONFIG_PATH 기본값. compose가 덮어쓸 수 있다.
+# - Gazebo GUI 클라이언트(gz sim -g) 실행용 libqt5svg5. GUI 설정 파일(gui.config)은
+#   이미지에 넣지 않고 ros_ws/src/idsim_sim/config/gui.config를 마운트한다.
 #
 # 헤드리스 메모
 # - gazebo 서비스는 `gz sim -r -s <월드>`로 서버만 띄운다. GPU는 없다.
@@ -56,6 +59,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 #    - libglu1-mesa: OGRE 1.9 GL 렌더 시스템이 쓰는 GLU
 #    대부분 gz 패키지가 이미 끌어오지만, 소프트웨어 렌더링에 필요한 것을 명시해
 #    의존성 변화에 흔들리지 않게 한다.
+#
+#    GUI 클라이언트 런타임.
+#    - libqt5svg5: Qt SVG 이미지 플러그인. 없으면 gz sim -g의 툴바와 플러그인 아이콘
+#      (SVG)을 읽지 못해 아이콘이 비고 경고가 찍힌다. gz 패키지가 끌어오지 않는다.
 RUN test -n "${GZ_RELEASE}" || { echo "GZ_RELEASE is empty" >&2; exit 1; } \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -77,6 +84,7 @@ RUN test -n "${GZ_RELEASE}" || { echo "GZ_RELEASE is empty" >&2; exit 1; } \
       libegl-mesa0 \
       libgl1-mesa-dri \
       libglu1-mesa \
+      libqt5svg5 \
  && rm -rf /var/lib/apt/lists/* \
  && gz sim --versions
 
