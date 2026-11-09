@@ -19,7 +19,7 @@
 - 2026-11-09: 이 호스트에서 archive.ubuntu.com이 IPv4, IPv6 모두 타임아웃(security.ubuntu.com, kr.archive.ubuntu.com, mirror.kakao.com은 정상). 로컬 sim-base와 px4 이미지는 저장소 Dockerfile을 바꾸지 않고 scratch 복사본에 kr 미러 sed 한 줄을 넣어 빌드했다. 따라서 이 호스트의 `idsim/sim-base:local`, `idsim/px4:local`의 apt sources는 kr 미러다. 정식 이미지는 CI가 원본 Dockerfile로 빌드한다.
 - 다음 작업:
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
-  2. 2b PR을 CI 통과 후 main에 합친다. CI에서 sim-base와 px4 이미지가 다시 빌드된다(키 변경). 합친 뒤 사람이 화면으로 확인할 것: standalone 스택 위에서 Gazebo GUI에 x500이 보이는지(에이전트는 창 존재와 엔티티 목록 `x500_1`까지만 확인), `tools/qgc.sh`로 QGC에 기체가 연결되는지.
+  2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
   2b. 새 PC 재구성 지원(사용자 요청, 2b 다음 별도 PR): 저장소 루트 `README.md`(소개, 호스트 조건, 빌드와 스모크, 문서 지도)와 `tools/check_host.sh`(x86_64, docker 실행 권한, compose v2, buildx, python3, curl, sha256sum, 화면이면 DISPLAY 확인). 아울러 apt 미러를 빌드 인자로 바꿀 수 있게 할지(devops-engineer 판단, 아래 미해결 항목).
   3. CI 후속 PR: Dockerfile.px4의 pip 고정과 PX4_OPTICAL_FLOW_REF 반영, `ls | grep` 정리(px4-engineer). Dockerfile.sim-base의 GZ_APT_KEY_FPR 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 키 재료와 KEY_<이미지> 설명 갱신(architect). image_keys.py가 bake 블록의 tags와 공백까지 해시하는 것 정리, lint가 같은 저장소 PR에서 두 번 도는 것(devops-engineer).
   4. roadmap 1a 3단계 `config/fleet.yaml`과 `tools/gen_compose.py`(`viz` 프로필 생성 포함).
@@ -37,7 +37,7 @@
 
 | Phase | 상태 | 마지막 갱신 | 비고 |
 | --- | --- | --- | --- |
-| 1a | 1, 2단계 완료(main), 2b단계 시각 도구 준비 구현 완료, 완료 기준의 화면 확인(x500 육안, QGC 연결)은 사람이 할 것 | 2026-11-09 | 스모크 설계는 `docs/smoke-test-phase1a.md` |
+| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500) | 2026-11-09 | 스모크 설계는 `docs/smoke-test-phase1a.md` |
 | 1b | 시작 전 | 2026-11-06 | |
 | 2 | 시작 전 | 2026-11-06 | |
 | 3 | 시작 전 | 2026-11-06 | |
@@ -100,6 +100,8 @@
 
 - 2026-11-09: Gazebo GUI 창이 검게 나오던 원인은 컨테이너 IPC 네임스페이스. VM 3D 가속을 끈 상태(커널 vmwgfx 기능 목록에 3D 없음, Xwayland가 DRI3를 제공하지 않음, Mesa llvmpipe)에서 Mesa 소프트웨어 경로가 MIT-SHM으로 X 서버에 프레임을 넘기는데 컨테이너의 IPC가 분리되어 X 서버가 붙지 못했다. GUI 내부 스크린샷 서비스는 정상 프레임을 저장했으므로 렌더링 자체는 됐다. `docker run --ipc=host`로 해결(xwd 캡처로 확인). 하드웨어 DRI3 경로(2026-11-06 실측)에서는 dma-buf로 넘기므로 증상이 없었다. 3단계 `gz-gui` 서비스에 `ipc: host`를 넣는다.
 - 2026-11-09: GridConfig 기본 격자는 색이 0.7 회색이라 0.8 바닥 위에서 보이지 않는다. `<insert>`로 50 x 50 m, 1 m, 색 0.25를 지정하니 선명하다(스크린샷 확인). MinimalScene의 `<sky>true</sky>`는 "Child elements of <sky> are not supported" 경고만 내고 효과가 없어 넣지 않았다.
+
+- 2026-11-09: Gazebo GUI에서 기체가 안 보이는 흔한 원인은 거리다. 기본 카메라는 원점(-6, 0, 6)을 보는데 QGC로 비행한 기체는 178 m 밖에 있었다. Entity Tree에서 x500_1 오른쪽 클릭 -> Move To 뒤 Follow를 거는 순서가 확실하다(Move To 없이 Follow만 걸면 따라가지 않는 경우가 있었다). 서비스로는 `/gui/move_to`(StringMsg) 뒤 `/gui/follow`, 오프셋은 `/gui/follow/offset`. 격자는 바닥 평면 전체(500 x 500 m, 2 m 칸)로 넓혔다. GUI 안 `/gui/screenshot` 서비스(StringMsg에 디렉터리)로 렌더 프레임을 파일로 받을 수 있어, 화면 없이도 렌더링 결과를 확인하는 데 쓸 수 있다.
 
 ## 미해결 사항
 
