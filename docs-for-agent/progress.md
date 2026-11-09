@@ -20,14 +20,14 @@
 - 다음 작업:
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
   2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
-  2b. 새 PC 재구성 지원(사용자 요청, 2b 다음 별도 PR): 저장소 루트 `README.md`(소개, 호스트 조건, 빌드와 스모크, 문서 지도)와 `tools/check_host.sh`(x86_64, docker 실행 권한, compose v2, buildx, python3, curl, sha256sum, 화면이면 DISPLAY 확인). 아울러 apt 미러를 빌드 인자로 바꿀 수 있게 할지(devops-engineer 판단, 아래 미해결 항목).
+  2b. (완료 2026-11-09, 브랜치 docs/readme-check-host) 새 PC 재구성 지원: 저장소 루트 `README.md`와 `tools/check_host.sh`. 남은 것: apt 미러를 빌드 인자로 바꿀 수 있게 할지와 GHCR 이미지를 받아 쓰는 `--mode pull`(devops-engineer 판단, 아래 미해결 항목). README의 "알려진 제약" 절은 미러 문제가 풀리거나 GHCR가 공개되면 함께 고친다.
   3. CI 후속 PR: Dockerfile.px4의 pip 고정과 PX4_OPTICAL_FLOW_REF 반영, `ls | grep` 정리(px4-engineer). Dockerfile.sim-base의 GZ_APT_KEY_FPR 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 키 재료와 KEY_<이미지> 설명 갱신(architect). image_keys.py가 bake 블록의 tags와 공백까지 해시하는 것 정리, lint가 같은 저장소 PR에서 두 번 도는 것(devops-engineer).
   4. roadmap 1a 3단계 `config/fleet.yaml`과 `tools/gen_compose.py`(`viz` 프로필 생성 포함).
   5. 6단계에서 ros-ws에 foxglove_bridge 추가와 Lichtblick 브라우저 실접속 확인.
 
 ## 새 개발 PC에서 시작할 때
 
-1. 호스트 조건: x86_64 Linux, Docker와 compose v2, docker buildx, git, gh(GitHub CLI, `gh auth login`). 화면 확인을 하려면 X11 또는 XWayland 데스크톱.
+1. 호스트 조건: x86_64 Linux, Docker와 compose v2, docker buildx, git, python3, curl, sha256sum, gh(GitHub CLI, `gh auth login`). 화면 확인을 하려면 X11 또는 XWayland 데스크톱. `tools/check_host.sh`가 이 조건과 포트 충돌, apt 미러 접근을 점검한다. 사람용 시작 안내는 저장소 루트 `README.md`.
 2. 같은 호스트에 다른 ROS 2 스택, Gazebo, compose 프로젝트가 있는지 먼저 본다(`docker ps`, `docker compose ls`). idsim은 ROS 도메인 20 + k, 에이전트 포트 8888 + k, `GZ_PARTITION=idsim-<k>`, compose 프로젝트 `idsim-smoke`를 쓴다. 겹치면 스택 번호 k(`IDSIM_STACK_INDEX`)를 바꾼다.
 3. 이미지: `python3 tools/ci/build_images.py --mode load`로 로컬 빌드한다. GHCR 패키지가 Public이면 `ghcr.io/danielhongwoo/idsim/<이미지>:<키>`를 받아 쓸 수도 있다(키는 `python3 tools/ci/image_keys.py`).
 4. 확인: `tests/smoke/run_smoke.sh S0`로 이미지 버전과 `docker/versions.env` 일치를 보고, `S2`로 PX4와 Gazebo 연동, 파라미터 저장값을 본다. `tools/ci/lint.sh all`이 통과해야 한다.
@@ -102,6 +102,8 @@
 - 2026-11-09: GridConfig 기본 격자는 색이 0.7 회색이라 0.8 바닥 위에서 보이지 않는다. `<insert>`로 50 x 50 m, 1 m, 색 0.25를 지정하니 선명하다(스크린샷 확인). MinimalScene의 `<sky>true</sky>`는 "Child elements of <sky> are not supported" 경고만 내고 효과가 없어 넣지 않았다.
 
 - 2026-11-09: Gazebo GUI에서 기체가 안 보이는 흔한 원인은 거리다. 기본 카메라는 원점(-6, 0, 6)을 보는데 QGC로 비행한 기체는 178 m 밖에 있었다. Entity Tree에서 x500_1 오른쪽 클릭 -> Move To 뒤 Follow를 거는 순서가 확실하다(Move To 없이 Follow만 걸면 따라가지 않는 경우가 있었다). 서비스로는 `/gui/move_to`(StringMsg) 뒤 `/gui/follow`, 오프셋은 `/gui/follow/offset`. 격자는 바닥 평면 전체(500 x 500 m, 2 m 칸)로 넓혔다. GUI 안 `/gui/screenshot` 서비스(StringMsg에 디렉터리)로 렌더 프레임을 파일로 받을 수 있어, 화면 없이도 렌더링 결과를 확인하는 데 쓸 수 있다.
+
+- 2026-11-09: 루트 `README.md`와 `tools/check_host.sh` 추가(devops-engineer, reviewer 검토 반영). reviewer가 포트 충돌 검사가 `ss -ulnp`의 5번째 열(Peer)을 보던 결함을 실험으로 잡아 4번째 열(Local)로 고쳤고, UDP 8888을 점유한 상태에서 WARN이 나오는 것을 확인했다. 권장치는 근거가 있는 값만 적는다: 메모리는 확인된 최소 16GB(CI 러너) 미만을 WARN, 디스크 30GB는 이미지 합 8.6GB + px4 builder 7.7GB + 캐시. python3은 3.12 확인, 하한 3.10. 에이전트 포트 검사는 `IDSIM_STACK_INDEX`를 따른다. 스크립트 단위 테스트(가짜 ss, df, docker를 PATH에 두는 셸 테스트)는 test-engineer 판단으로 미룬다.
 
 ## 미해결 사항
 
