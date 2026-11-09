@@ -128,6 +128,10 @@
   - 그 밖에 합의: compose `name: idsim-<k>`(스모크 포함), host 네트워크, `restart: no`, `GZ_IP=127.0.0.1` 유지, `MAV_SYS_ID = UXRCE_DDS_KEY = N + 1`은 PX4가 `-i N`에서 자동 설정(rcS 140-141)이라 compose에 넣지 않고 stack.json에만, `.post` 훅은 Dockerfile이 `airframes/*_gz_*` 전부에 생성하고 1a 허용 airframe은 `4001_gz_x500` 하나, 기체별 `px4_params`는 이름 `^[A-Z0-9_]{1,16}$`와 값 공백 금지 검사. lockstep은 gazebo 정지 시 PX4 정지(한 방향 실측).
 - 2026-11-09: 사용자 결정 4건(3단계). (1) `world.origin` 기본값은 서울시청(37.5665, 126.9780, 38). (2) 파서는 ros-ws 컨테이너 안에서 실행, 호스트 조건 불변. (3) S1(인스턴스 0) 재현 포기, embedded(S1b) 유지. (4) 편의 스크립트 `tools/stack.sh`(up|down|logs)와 `tools/qgc.sh --stack k`(다른 k의 GCS 포트) 둘 다 3단계에 추가, devops-engineer 범위. `qgc.sh --stack`은 QGC Comm Link 설정 방법(설정 파일 또는 명령행 인자) 조사가 필요하다.
 
+- 2026-11-09: 3단계 B 완료(sim-engineer, reviewer 검토 반영). `ros_ws/src/idsim_sim/scripts/gz_server.sh`(월드 이름 검사, 서버 자식 실행, scene/info 대기 60초, 원점 1회 호출과 `data: true` 확인, 표시 파일, TERM 뒤 5초 유예 후 KILL, INT 130/TERM 143)와 `gz_gui.sh`(DISPLAY, Xauthority, GUI 설정 점검, HOME 대체, XAUTHORITY=/tmp/.Xauthority를 스스로 export). 실측: wrapper가 원점을 적용한 뒤 PX4_HOME_* 없이 붙인 px4의 `sensor_gps`가 37.566500, 126.978000(서울시청). healthcheck 창 없음(표시 파일은 원점 응답 뒤에만 생기고 시작 시 삭제, reviewer 실측).
+- 2026-11-09: 준비 파일 단일화(결정 (j) 보완). wrapper는 원점 단계가 끝나면 원점 유무와 무관하게 `/tmp/idsim/ready`를 쓰고, 원점을 적용한 경우에만 `/tmp/idsim/origin_set`을 더 쓴다. gazebo healthcheck는 한 가지: `gz service -i --service /world/<이름>/scene/info | grep -q "Service providers" && test -f /tmp/idsim/ready`. 근거: 원점이 있을 때 생성기가 표시 파일 항을 빠뜨리면 "스폰은 원점 설정 뒤"가 조용히 깨지는 경로를 없앤다. gz-gui 기본 설정 경로는 `/opt/idsim/sim/config/gui.config`(패키지 전체를 `/opt/idsim/sim`에 마운트).
+- 2026-11-09: `--render-engine-gui ogre`는 gui.config의 `<engine>ogre2</engine>`을 덮는다(sim-engineer 실측: OGRE 1.9 라이브러리 로드, GridConfig 격자 렌더링 정상). 미해결 항목 닫힘.
+
 ## 미해결 사항
 
 사용자 결정이 필요한 항목.
