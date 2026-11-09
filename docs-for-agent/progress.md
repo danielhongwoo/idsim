@@ -4,12 +4,12 @@
 
 ## 현재 상태 (2026-11-06)
 
-- 저장소: 원격 github.com/danielhongwoo/idsim. 첫 커밋(문서와 규칙)만 올라가 있고, 스모크 구현과 이후 문서 변경은 아직 커밋 전이다.
-- 개발 호스트: docker buildx 0.30.1 설치. 같은 호스트에 다른 compose 프로젝트(`docker`: open_manipulator, zenoh_daemon, cyclo_manager 등)가 host 네트워크로 떠 있다. compose 명령은 항상 `-p idsim-smoke`로 한다.
+- 저장소: 원격 github.com/danielhongwoo/idsim. 지금까지의 모든 작업은 main에 있다(PR #1 CI 골격, #2 큰 그림 다이어그램, #3 시각 도구 로드맵). 열린 PR과 커밋 전 변경은 없다.
+- 첫 개발 호스트(2026-11-06까지): VMware VM, x86_64 Ubuntu 24.04, 16 vCPU, 31GB, NVIDIA 없음, GNOME Wayland. 이 호스트에는 다른 compose 프로젝트(`docker`: open_manipulator, zenoh_daemon, cyclo_manager 등)가 host 네트워크로 떠 있었다. 아래 실측값(빌드 시간, 이미지 크기, Gazebo GUI fps)은 이 호스트 기준이다.
 - Phase 1a 1단계 환경 스모크 테스트 S0부터 S5까지 로컬에서 모두 통과(스택 번호 0, 도메인 20). 설계는 `docs/smoke-test-phase1a.md`.
 - 이미지 5종 빌드 완료: ros-base 838MB, sim-base 2.97GB, px4 3.06GB(builder 단계 7.7GB), ros-ws 1.57GB, xrce-agent 153MB. 전체 재빌드는 부분 캐시로 약 2분 30초, PX4 첫 빌드는 이 호스트(16 vCPU)에서 163초.
 - 골든 첫 생성: `tests/fixtures/px4/v1.17.0/`(토픽 65, qos 27, env 4키). 재실행 `--check` 일치.
-- 산출물: `artifacts/smoke/`에 실행 기록이 약 1.2GB 있고 root 소유라 일반 권한으로 지워지지 않는다(git 비추적).
+- 산출물: 스모크 실행 기록 `artifacts/smoke/`는 git에 추적되지 않으므로 다른 PC로 옮겨지지 않는다. 판정에 필요한 골든은 `tests/fixtures/`에 추적된다.
 - 2026-11-06: Phase 1a 2단계 CI 골격 완료. PR #1로 main에 합침(ddbe835). lint(11종, 대상 없는 4종은 PASS-NO-TARGETS)와 build(이미지별 키, 레지스트리에 키가 있으면 건너뜀, PR은 빌드만, main만 GHCR 푸시) 워크플로.
 - 2026-11-06: 아키텍처 문서에 큰 그림 다이어그램 추가(PR #2).
 - 2026-11-06: 시각 도구 실측(sim-engineer)에 따라 `docs/roadmap.md`와 `docs/architecture.md`에 시각 도구 구성을 반영(1a 2b단계 신설, 3단계 `viz` 프로필, 6단계 foxglove_bridge, Foxglove 표기를 Lichtblick으로).
@@ -21,6 +21,14 @@
   3. CI 후속 PR: Dockerfile.px4의 pip 고정과 PX4_OPTICAL_FLOW_REF 반영, `ls | grep` 정리(px4-engineer). Dockerfile.sim-base의 GZ_APT_KEY_FPR 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 키 재료와 KEY_<이미지> 설명 갱신(architect). image_keys.py가 bake 블록의 tags와 공백까지 해시하는 것 정리, lint가 같은 저장소 PR에서 두 번 도는 것(devops-engineer).
   4. roadmap 1a 3단계 `config/fleet.yaml`과 `tools/gen_compose.py`(`viz` 프로필 생성 포함).
   5. 6단계에서 ros-ws에 foxglove_bridge 추가와 Lichtblick 브라우저 실접속 확인.
+
+## 새 개발 PC에서 시작할 때
+
+1. 호스트 조건: x86_64 Linux, Docker와 compose v2, docker buildx, git, gh(GitHub CLI, `gh auth login`). 화면 확인을 하려면 X11 또는 XWayland 데스크톱.
+2. 같은 호스트에 다른 ROS 2 스택, Gazebo, compose 프로젝트가 있는지 먼저 본다(`docker ps`, `docker compose ls`). idsim은 ROS 도메인 20 + k, 에이전트 포트 8888 + k, `GZ_PARTITION=idsim-<k>`, compose 프로젝트 `idsim-smoke`를 쓴다. 겹치면 스택 번호 k(`IDSIM_STACK_INDEX`)를 바꾼다.
+3. 이미지: `python3 tools/ci/build_images.py --mode load`로 로컬 빌드한다. GHCR 패키지가 Public이면 `ghcr.io/danielhongwoo/idsim/<이미지>:<키>`를 받아 쓸 수도 있다(키는 `python3 tools/ci/image_keys.py`).
+4. 확인: `tests/smoke/run_smoke.sh S0`로 이미지 버전과 `docker/versions.env` 일치를 보고, `S2`로 PX4와 Gazebo 연동, 파라미터 저장값을 본다. `tools/ci/lint.sh all`이 통과해야 한다.
+5. 사용자 전역 규칙은 저장소 밖에 있다: `~/.claude/CLAUDE.md`(커밋과 PR에 공동 저자 줄을 넣지 않는다). 새 PC에도 같은 파일을 두어야 한다.
 
 ## Phase별 진행
 
