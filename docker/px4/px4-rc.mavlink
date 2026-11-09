@@ -1,0 +1,71 @@
+#!/bin/sh
+# shellcheck disable=SC2154
+#
+# idsim용 px4-rc.mavlink. 담당: px4-engineer.
+#
+# 출처: PX4-Autopilot v1.17.0 ROMFS/px4fmu_common/init.d-posix/px4-rc.mavlink
+#   (빌드 산출물 build/px4_sitl_default/etc/init.d-posix/px4-rc.mavlink).
+#   상류 파일의 sha256은 docker/Dockerfile.px4의 PX4_RC_MAVLINK_UPSTREAM_SHA256에
+#   기록하고 빌드 때 대조한다. PX4 태그를 올려 값이 달라지면 이 파일을 다시 검토한다.
+#
+# 바꾼 이유
+#   상류 파일은 포트가 인스턴스 번호 N만으로 정해진다. 같은 호스트(host 네트워크)에
+#   스택을 둘 이상 올리면 두 번째 스택의 같은 N px4가 같은 로컬 포트를 열려다
+#   "WARN  [mavlink] bind failed: Address already in use"를 내고 그 링크 없이 계속 돈다.
+#   스택마다 다른 오프셋을 더해 포트가 겹치지 않게 한다.
+#   rcS는 이 파일을 PATH에서 찾는다(rcS의 PATH="$PATH:${R}etc/init.d-posix" 와
+#   ". px4-rc.mavlink"). Dockerfile.px4가 이 파일의 디렉터리를 PATH 맨 앞에 둔다.
+#
+# 상류와 다른 점
+#   1. 환경변수 IDSIM_MAVLINK_OFFSET(기본 0, 0 이상의 정수)을 GCS와 API 포트에 더한다.
+#      GCS 링크에 원격 포트(-o)를 명시한다. 오프셋 0이면 mavlink 기본값 14550과 같다.
+#   2. payload(카메라)와 gimbal 링크를 열지 않는다. idsim은 쓰지 않는다.
+#   3. N > 9 이면 종료 코드 1로 실패한다. 상류의 "N > 9 이면 원격 14549 고정" 규칙은
+#      쓰지 않는다.
+#   SIH 표시용 링크(PX4_SIMULATOR=sihsim)는 상류 그대로다(오프셋을 더하지 않는다).
+#
+# 포트 식 (O = IDSIM_MAVLINK_OFFSET, N = px4 인스턴스 번호 0-9)
+#   GCS 링크: 로컬 18570 + O + N, 원격 14550 + O
+#   API 링크: 로컬 14580 + O + N, 원격 14540 + O + N
+#   스택 k의 오프셋은 1000k 이다(compose 생성기가 넘긴다).
+
+idsim_mavlink_offset=${IDSIM_MAVLINK_OFFSET:-0}
+case $idsim_mavlink_offset in
+	''|*[!0-9]*)
+		echo "ERROR [idsim] IDSIM_MAVLINK_OFFSET must be a non-negative integer: '$idsim_mavlink_offset'"
+		exit 1
+		;;
+esac
+if [ "$px4_instance" -gt 9 ]; then
+	echo "ERROR [idsim] px4 instance $px4_instance > 9 is not supported (px4-rc.mavlink)"
+	exit 1
+fi
+
+udp_offboard_port_local=$((14580+idsim_mavlink_offset+px4_instance))
+udp_offboard_port_remote=$((14540+idsim_mavlink_offset+px4_instance))
+udp_gcs_port_local=$((18570+idsim_mavlink_offset+px4_instance))
+udp_gcs_port_remote=$((14550+idsim_mavlink_offset))
+
+# GCS link
+mavlink start -x -u $udp_gcs_port_local -r 4000000 -f -o $udp_gcs_port_remote
+mavlink stream -r 50 -s POSITION_TARGET_LOCAL_NED -u $udp_gcs_port_local
+mavlink stream -r 50 -s LOCAL_POSITION_NED -u $udp_gcs_port_local
+mavlink stream -r 50 -s GLOBAL_POSITION_INT -u $udp_gcs_port_local
+mavlink stream -r 50 -s ATTITUDE -u $udp_gcs_port_local
+mavlink stream -r 50 -s ATTITUDE_QUATERNION -u $udp_gcs_port_local
+mavlink stream -r 50 -s ATTITUDE_TARGET -u $udp_gcs_port_local
+mavlink stream -r 50 -s SERVO_OUTPUT_RAW_0 -u $udp_gcs_port_local
+mavlink stream -r 20 -s RC_CHANNELS -u $udp_gcs_port_local
+mavlink stream -r 10 -s OPTICAL_FLOW_RAD -u $udp_gcs_port_local
+
+# API/Offboard link
+mavlink start -x -u $udp_offboard_port_local -r 4000000 -f -m onboard -o $udp_offboard_port_remote
+
+# To display for SIH sitl
+if [ "$PX4_SIMULATOR" = "sihsim" ]; then
+	udp_sihsim_port_local=$((19450+px4_instance))
+	udp_sihsim_port_remote=$((19410+px4_instance))
+	mavlink start -x -u $udp_sihsim_port_local -r 400000 -m custom -o $udp_sihsim_port_remote
+	mavlink stream -r 200 -s HIL_ACTUATOR_CONTROLS -u  $udp_sihsim_port_local
+	mavlink stream -r 25 -s HIL_STATE_QUATERNION -u  $udp_sihsim_port_local
+fi

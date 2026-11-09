@@ -16,8 +16,11 @@ PX4 서버와 같은 컨테이너 안에서만 동작한다(서버 소켓이 컨
    ver_all          "px4-ver --instance N all" 출력이 비어 있지 않음(원문 저장용)
    원문은 JSON의 raw 아래에 넣는다. IDSIM_BUILD_PX4_TAG 환경변수도 기록한다.
 
-2) --log-file PATH : 호스트에서 실행. compose logs로 받은 PX4 로그에서
-   gz_bridge 관련 오류 줄이 없는지 판정한다(gz_bridge_errors).
+2) --log-file PATH : 호스트에서 실행. compose logs로 받은 PX4 로그에서 다음을 판정한다.
+   gz_bridge_errors     gz_bridge 관련 오류 줄이 없음
+   mavlink_bind_failed  "WARN  [mavlink] bind failed" 줄이 없음. 같은 호스트의 다른
+                        스택과 MAVLink 포트가 겹치면 PX4는 이 경고만 내고 그 링크 없이
+                        계속 돈다(docker/px4/px4-rc.mavlink의 IDSIM_MAVLINK_OFFSET 참조).
    PX4 로그는 컨테이너 stdout이라 컨테이너 안에서는 읽을 수 없기 때문이다.
 
 결과는 JSON 한 덩어리로 stdout에 쓴다. 모두 통과하면 종료 코드 0, 판정 실패는 1,
@@ -40,6 +43,10 @@ GZ_ERROR_PATTERNS = [
     r"ERROR\s+\[init\]\s+gz_bridge failed",
     r"ERROR\s+\[init\]\s+Timed out waiting for Gazebo world",
 ]
+
+# MAVLink UDP 포트 bind 실패. PX4 v1.17.0 mavlink 모듈의 경고
+# "WARN  [mavlink] bind failed: Address already in use".
+MAVLINK_BIND_PATTERN = r"WARN\s+\[mavlink\]\s+bind failed"
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -133,11 +140,16 @@ def mode_log(args):
             text = ANSI_RE.sub("", f.read().decode("utf-8", errors="replace"))
     except OSError as exc:
         report.check("gz_bridge_errors", False, error=str(exc))
+        report.check("mavlink_bind_failed", False, error=str(exc))
         return report
     pat = re.compile("|".join(GZ_ERROR_PATTERNS))
     hits = [line for line in text.splitlines() if pat.search(line)]
     report.check("gz_bridge_errors", not hits and bool(text.strip()),
                  lines=hits, patterns=GZ_ERROR_PATTERNS, log_empty=not text.strip())
+    bind_re = re.compile(MAVLINK_BIND_PATTERN)
+    bind_hits = [line for line in text.splitlines() if bind_re.search(line)]
+    report.check("mavlink_bind_failed", not bind_hits and bool(text.strip()),
+                 lines=bind_hits, pattern=MAVLINK_BIND_PATTERN, log_empty=not text.strip())
     return report
 
 

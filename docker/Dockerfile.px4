@@ -16,6 +16,9 @@
 #   /opt/PX4-Autopilot/Tools/simulation/gz -> /opt/px4-gz (심볼릭 링크)
 #   /opt/PX4-Autopilot/src/modules/simulation/gz_bridge/server.config
 #       -> /opt/px4-gz/server.idsim.config (심볼릭 링크, sim-base의 파생 파일)
+#   /opt/idsim/px4/init.d-posix/px4-rc.mavlink (docker/px4/px4-rc.mavlink, PATH 맨 앞)
+#       환경변수 IDSIM_MAVLINK_OFFSET(기본 0)을 MAVLink 포트에 더한다.
+#   etc/init.d-posix/airframes/<gz airframe>.post (PX4_PARAM_ 재적용 훅)
 #
 # gz_env.sh 메모 (v1.17.0 src/modules/simulation/gz_bridge/gz_env.sh.in)
 #   빌드 때 rootfs/gz_env.sh로 configure되며 다음 네 경로를 박는다.
@@ -200,8 +203,10 @@ RUN mkdir -p /opt/PX4-Autopilot/Tools/simulation /opt/PX4-Autopilot/src/modules/
 # set-default 2 때문에 NAV_DLL_ACT가 2로 남았다.
 # rcS 363행은 airframe 파일 옆의 "<airframe>.post"를 mavlink 시작 뒤에 읽는다.
 # PX4 소스는 고치지 않고 이 공식 훅에 rcS와 같은 루프를 한 번 더 둔다.
-# 다른 airframe을 쓰게 되면 같은 내용을 그 이름.post로 추가한다.
-COPY <<'POST' /opt/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes/4001_gz_x500.post
+# airframes/*_gz_* 전부(.post 자신 제외)에 같은 내용의 .post를 만든다. 상류에 이미
+# .post가 있는 gz airframe이 생기면(v1.17.0에는 없다) 훅이 덮어쓰거나 빠지지 않도록
+# 빌드를 실패시켜 검토를 강제한다.
+COPY <<'POST' /opt/idsim/px4/airframe.post
 # idsim: airframe 뒤에 PX4_PARAM_ 환경변수를 다시 적용한다(docker/Dockerfile.px4 참조).
 env | while IFS='=' read -r line; do
   value=${line#*=}
@@ -212,8 +217,32 @@ env | while IFS='=' read -r line; do
 done
 POST
 
-# healthcheck의 px4-uxrce_dds_client 등 모듈 명령을 PATH로 찾게 한다.
-ENV PATH=/opt/PX4-Autopilot/build/px4_sitl_default/bin:${PATH}
+RUN a=/opt/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes \
+ && n=0 \
+ && for f in "${a}"/*_gz_*; do \
+      case "${f}" in *.post) echo "upstream .post exists: ${f}" >&2; exit 1 ;; esac; \
+      install -m 0644 /opt/idsim/px4/airframe.post "${f}.post"; \
+      n=$((n + 1)); \
+    done \
+ && echo "generated ${n} .post hooks" \
+ && test "${n}" -gt 1 \
+ && test -f "${a}/4001_gz_x500.post"
+
+# MAVLink 링크 정의 교체(docker/px4/px4-rc.mavlink 머리 주석 참조).
+# rcS(v1.17.0)는 14행에서 PATH="$PATH:${R}etc/init.d-posix"로 상류 디렉터리를 PATH
+# "뒤"에 붙이고, 360행에서 ". px4-rc.mavlink"로 PATH를 검색한다. 그래서 idsim 파일의
+# 디렉터리를 PATH 맨 앞에 두면 상류 파일 대신 읽힌다. 상류 파일은 지우지 않는다.
+# 상류 파일의 sha256을 대조한다. PX4 태그를 올려 상류가 바뀌면 여기서 실패하므로
+# docker/px4/px4-rc.mavlink를 새 상류와 비교해 고친 뒤 이 값을 갱신한다.
+#   v1.17.0: ae7ddfc7f0a8428aa33b53e909862c9f499ca065013c05dbdabf9ef2172899c9
+COPY px4/px4-rc.mavlink /opt/idsim/px4/init.d-posix/px4-rc.mavlink
+RUN echo "ae7ddfc7f0a8428aa33b53e909862c9f499ca065013c05dbdabf9ef2172899c9  /opt/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/px4-rc.mavlink" \
+      | sha256sum -c - \
+ && sh -n /opt/idsim/px4/init.d-posix/px4-rc.mavlink
+
+# 앞: idsim px4-rc.mavlink(위 절). 다음: healthcheck의 px4-uxrce_dds_client 등
+# 모듈 명령을 PATH로 찾게 하는 bin.
+ENV PATH=/opt/idsim/px4/init.d-posix:/opt/PX4-Autopilot/build/px4_sitl_default/bin:${PATH}
 
 # 이 이미지가 빌드된 PX4 태그. 스모크 산출물(check_px4_pxh.py)이 기록한다.
 ARG PX4_TAG
