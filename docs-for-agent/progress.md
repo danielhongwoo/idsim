@@ -128,6 +128,8 @@
   - 그 밖에 합의: compose `name: idsim-<k>`(스모크 포함), host 네트워크, `restart: no`, `GZ_IP=127.0.0.1` 유지, `MAV_SYS_ID = UXRCE_DDS_KEY = N + 1`은 PX4가 `-i N`에서 자동 설정(rcS 140-141)이라 compose에 넣지 않고 stack.json에만, `.post` 훅은 Dockerfile이 `airframes/*_gz_*` 전부에 생성하고 1a 허용 airframe은 `4001_gz_x500` 하나, 기체별 `px4_params`는 이름 `^[A-Z0-9_]{1,16}$`와 값 공백 금지 검사. lockstep은 gazebo 정지 시 PX4 정지(한 방향 실측).
 - 2026-11-09: 사용자 결정 4건(3단계). (1) `world.origin` 기본값은 서울시청(37.5665, 126.9780, 38). (2) 파서는 ros-ws 컨테이너 안에서 실행, 호스트 조건 불변. (3) S1(인스턴스 0) 재현 포기, embedded(S1b) 유지. (4) 편의 스크립트 `tools/stack.sh`(up|down|logs)와 `tools/qgc.sh --stack k`(다른 k의 GCS 포트) 둘 다 3단계에 추가, devops-engineer 범위. `qgc.sh --stack`은 QGC Comm Link 설정 방법(설정 파일 또는 명령행 인자) 조사가 필요하다.
 
+- 2026-11-09: 3단계 A 완료(px4-engineer, reviewer와 devops 접점 검토 반영). `docker/px4/px4-rc.mavlink`가 PATH 맨 앞에서 상류를 대체하고 `IDSIM_MAVLINK_OFFSET`(0 또는 앞자리 0 없는 십진수, 최대 9000)을 GCS/API 포트에 더한다. 실측: 오프셋 1000, -i 1에서 15550에 sysid 2 패킷 4809개, 15541에 5256개, 14550과 14541에 0개. 오프셋 0은 기존과 동일. reviewer 재현(오프셋 2000, -i 3): 16550에 5433개, 16543에 5993개. 추가 결정: 상류에 `.post`가 이미 있는 gz airframe이 생기면 빌드를 실패시킨다(훅이 조용히 빠지거나 덮어쓰는 것 방지. v1.17.0에는 없음). N=0은 수동 실행용으로 거부하지 않는다. px4 이미지 키 변경(builder 단계 캐시 유지). `docker/px4/px4-rc.mavlink`는 `*.sh`가 아니라 lint.sh shellcheck 대상 밖이며 C에서 devops가 명시 경로로 추가한다.
+
 ## 미해결 사항
 
 사용자 결정이 필요한 항목.
