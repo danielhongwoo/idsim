@@ -13,4 +13,4 @@ Gazebo 시뮬레이션 쪽 설정과 노드를 모으는 패키지다. 설계는
 
 ## 현재 들어 있는 것
 
-- `config/gui.config`: Gazebo GUI 클라이언트(`gz sim -g`) 설정. gz-sim8 기본 설정에서 WorldControl 플러그인만 뺐다. 화면에서 실수로 월드를 일시정지하거나 스텝 실행해 시뮬레이션 시계를 멈추는 것을 막는다. 출처와 이유는 파일 첫머리 주석에 있다. sim-base 컨테이너에 읽기 전용으로 마운트해 `gz sim -g --gui-config <경로>`로 쓴다.
+- `config/gui.config`: Gazebo GUI 클라이언트(`gz sim -g`) 설정. gz-sim8 기본 설정에서 WorldControl 플러그인을 빼고 바닥 격자(GridConfig)를 더했다. 화면에서 실수로 월드를 일시정지하거나 스텝 실행해 시뮬레이션 시계를 멈추는 것을 막고, 균일한 회색 월드에서 기체 이동이 보이게 한다. 출처와 이유는 파일 첫머리 주석에 있다. sim-base 컨테이너에 읽기 전용으로 마운트해 `gz sim -g --gui-config <경로>`로 쓴다.
