@@ -2,9 +2,9 @@
 
 이 폴더는 에이전트와 작업자가 세션을 시작할 때 현재 상태를 파악하기 위한 기록이다. 설계는 `docs/architecture.md`, 계획은 `docs/roadmap.md`에 두고, 여기에는 무엇이 끝났고 무엇이 진행 중이며 다음에 무엇을 할지만 적는다. 날짜는 항상 절대 날짜(YYYY-MM-DD)로 쓴다.
 
-## 현재 상태 (2026-11-06)
+## 현재 상태 (2026-11-09)
 
-- 저장소: 원격 github.com/danielhongwoo/idsim. 지금까지의 모든 작업은 main에 있다(PR #1 CI 골격, #2 큰 그림 다이어그램, #3 시각 도구 로드맵). 열린 PR과 커밋 전 변경은 없다.
+- 저장소: 원격 github.com/danielhongwoo/idsim. main에 PR #1 CI 골격, #2 큰 그림 다이어그램, #3 시각 도구 로드맵, #4 인계용 진행 기록이 합쳐져 있다. 2b단계는 브랜치 `feat/phase1a-viz-tools`에서 PR로 올린다.
 - 첫 개발 호스트(2026-11-06까지): VMware VM, x86_64 Ubuntu 24.04, 16 vCPU, 31GB, NVIDIA 없음, GNOME Wayland. 이 호스트에는 다른 compose 프로젝트(`docker`: open_manipulator, zenoh_daemon, cyclo_manager 등)가 host 네트워크로 떠 있었다. 아래 실측값(빌드 시간, 이미지 크기, Gazebo GUI fps)은 이 호스트 기준이다.
 - Phase 1a 1단계 환경 스모크 테스트 S0부터 S5까지 로컬에서 모두 통과(스택 번호 0, 도메인 20). 설계는 `docs/smoke-test-phase1a.md`.
 - 이미지 5종 빌드 완료: ros-base 838MB, sim-base 2.97GB, px4 3.06GB(builder 단계 7.7GB), ros-ws 1.57GB, xrce-agent 153MB. 전체 재빌드는 부분 캐시로 약 2분 30초, PX4 첫 빌드는 이 호스트(16 vCPU)에서 163초.
@@ -15,9 +15,12 @@
 - 2026-11-06: 시각 도구 실측(sim-engineer)에 따라 `docs/roadmap.md`와 `docs/architecture.md`에 시각 도구 구성을 반영(1a 2b단계 신설, 3단계 `viz` 프로필, 6단계 foxglove_bridge, Foxglove 표기를 Lichtblick으로).
 - CI 첫 실행 결과(PR #1, 2026-11-06): lint 11종 통과, 이미지 5종 콜드 빌드 성공(약 22분: ros-base 44초, xrce-agent 334초, ros-ws 444초, sim-base 51초, px4 255초). 러너 디스크는 정리 전 여유 86GB, 정리 후 114GB, 빌드 뒤 106GB로 문제 없음. 없는 buildcache를 cache-from으로 주면 ERROR 줄이 찍히지만 빌드는 계속된다. 같은 저장소 PR 브랜치에서는 push와 pull_request 트리거로 lint가 두 번 돈다.
 - GHCR 조회(2026-11-06): 로그인한 토큰으로 없는 패키지를 조회하면 GHCR는 403이 아니라 not found를 준다(PR #1 실측). 그래서 push 모드는 not found만 "키 없음"으로 보고 권한 거부(denied, 403)는 중단한다. PR 모드와 로컬은 권한 거부도 "키 없음"으로 보고 빌드만 한다.
+- 2026-11-09: Phase 1a 2b단계 시각 도구 준비 구현(브랜치 `feat/phase1a-viz-tools`). `tools/qgc.sh`(QGC v5.1.5 AppImage, `versions.env`의 `QGC_VERSION`과 `QGC_APPIMAGE_SHA256`으로 내려받아 `${XDG_CACHE_HOME:-$HOME/.cache}/idsim/qgc/<버전>/`에 캐시, INT/TERM에 TERM 후 5초 유예, 그다음 SIGKILL), sim-base에 `libqt5svg5`, `ros_ws/src/idsim_sim/config/gui.config`(gz-sim8 기본에서 WorldControl만 제외, 플러그인 17개), `docker/README.md` 시각 도구 절. 로컬 검증: QGC 다운로드, 캐시 재사용, 손상 재다운로드, INT와 TERM 종료 통과. Gazebo GUI는 standalone 스택 위에서 50초 생존, SVG 경고 29건에서 0건, 창 `Gazebo Sim` 존재, `Loaded plugin` 17개에 WorldControl 없음, GUI를 붙여도 서버 RTF 1.0. lint 11종 통과.
+- 2026-11-09: 이 호스트에서 archive.ubuntu.com이 IPv4, IPv6 모두 타임아웃(security.ubuntu.com, kr.archive.ubuntu.com, mirror.kakao.com은 정상). 로컬 sim-base와 px4 이미지는 저장소 Dockerfile을 바꾸지 않고 scratch 복사본에 kr 미러 sed 한 줄을 넣어 빌드했다. 따라서 이 호스트의 `idsim/sim-base:local`, `idsim/px4:local`의 apt sources는 kr 미러다. 정식 이미지는 CI가 원본 Dockerfile로 빌드한다.
 - 다음 작업:
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
-  2. roadmap 1a 2b단계 시각 도구 준비: `tools/qgc.sh`와 `versions.env`의 QGC 버전, sha256(devops-engineer), sim-base `libqt5svg5`와 `idsim_sim/gui.config`(sim-engineer), `docker/README.md` 실행 안내(devops-engineer). 완료 기준은 스모크 standalone 스택 위에서 Gazebo GUI에 x500이 보이고 QGC에 기체가 연결되는 것.
+  2. 2b PR을 CI 통과 후 main에 합친다. CI에서 sim-base와 px4 이미지가 다시 빌드된다(키 변경). 합친 뒤 사람이 화면으로 확인할 것: standalone 스택 위에서 Gazebo GUI에 x500이 보이는지(에이전트는 창 존재와 엔티티 목록 `x500_1`까지만 확인), `tools/qgc.sh`로 QGC에 기체가 연결되는지.
+  2b. 새 PC 재구성 지원(사용자 요청, 2b 다음 별도 PR): 저장소 루트 `README.md`(소개, 호스트 조건, 빌드와 스모크, 문서 지도)와 `tools/check_host.sh`(x86_64, docker 실행 권한, compose v2, buildx, python3, curl, sha256sum, 화면이면 DISPLAY 확인). 아울러 apt 미러를 빌드 인자로 바꿀 수 있게 할지(devops-engineer 판단, 아래 미해결 항목).
   3. CI 후속 PR: Dockerfile.px4의 pip 고정과 PX4_OPTICAL_FLOW_REF 반영, `ls | grep` 정리(px4-engineer). Dockerfile.sim-base의 GZ_APT_KEY_FPR 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 키 재료와 KEY_<이미지> 설명 갱신(architect). image_keys.py가 bake 블록의 tags와 공백까지 해시하는 것 정리, lint가 같은 저장소 PR에서 두 번 도는 것(devops-engineer).
   4. roadmap 1a 3단계 `config/fleet.yaml`과 `tools/gen_compose.py`(`viz` 프로필 생성 포함).
   5. 6단계에서 ros-ws에 foxglove_bridge 추가와 Lichtblick 브라우저 실접속 확인.
@@ -34,7 +37,7 @@
 
 | Phase | 상태 | 마지막 갱신 | 비고 |
 | --- | --- | --- | --- |
-| 1a | 1, 2단계 완료(CI 골격 main 반영), 2b단계 시각 도구 준비 전 | 2026-11-06 | 스모크 설계는 `docs/smoke-test-phase1a.md` |
+| 1a | 1, 2단계 완료(main), 2b단계 시각 도구 준비 구현 완료, 완료 기준의 화면 확인(x500 육안, QGC 연결)은 사람이 할 것 | 2026-11-09 | 스모크 설계는 `docs/smoke-test-phase1a.md` |
 | 1b | 시작 전 | 2026-11-06 | |
 | 2 | 시작 전 | 2026-11-06 | |
 | 3 | 시작 전 | 2026-11-06 | |
@@ -83,8 +86,14 @@
 - 2026-11-06: airframe `4001_gz_x500`이 `NAV_DLL_ACT`를 `set-default 2`로 덮어써 `PX4_PARAM_NAV_DLL_ACT=0`이 무시된다(펌웨어 기본값과 같은 값은 변경으로 기록되지 않기 때문). px4 이미지에 공식 훅 `etc/init.d-posix/airframes/4001_gz_x500.post`를 넣어 `PX4_PARAM_*`를 다시 적용한다. 다른 기체를 쓰면 같은 훅이 필요하다.
 - 2026-11-06: `artifacts/`의 root 소유 파일 문제는 1단계에서 감수하고 3단계 `gen_compose.py`의 `user` 매핑에서 닫는다. 지금 비루트 사용자를 넣으면 ros-ws 이미지의 HOME과 로그 디렉터리 설정이 따라와 스모크 범위가 커진다.
 - 2026-11-06: Foxglove 화면 앱은 Lichtblick(사용자 결정). 이유: 계정 없이 로컬에서 쓸 수 있고 MPL 라이선스, 공식 이미지(2.5.2, 285MB)를 digest로 고정할 수 있다. 공식 Foxglove 앱은 쓰지 않는다. 브리지는 ros-jazzy-foxglove-bridge 3.6.0(서브프로토콜 foxglove.sdk.v1, 현재 cyclonedds.xml로 채널 69개 수신 실측).
-- 2026-11-06: 시각 도구 구성(사용자 결정, sim-engineer 실측 근거). compose 프로필 `viz`에 `gz-gui`(sim-base에서 `gz sim -g`로 기존 서버에 클라이언트만 붙임, WorldControl을 뺀 `gui.config`), `foxglove`(ros-ws + foxglove_bridge, 127.0.0.1, 8765 + k, 토픽 화이트리스트, clientPublish, services, parameters 제외로 읽기 전용), `lichtblick`(공식 이미지 digest 고정, 127.0.0.1의 18080 + k). QGroundControl은 compose 서비스가 아니라 호스트 스크립트 `tools/qgc.sh`(버전과 sha256은 `versions.env`, 캐시, 종료는 SIGKILL). `viz` 프로필은 어떤 서비스의 `depends_on` 대상도 아니고 `run_smoke.sh`, pytest fixture, CI는 켜지 않는다. 3대 시나리오 CPU 측정은 GUI 없이. 로드맵은 1a 2b단계(3단계 전 작은 작업), 3단계 `viz` 프로필 생성, 6단계 foxglove_bridge(Phase 2에서 당김)로 배치. gz 웹 시각화(gz-launch websocket)는 프런트엔드 미성숙으로 보류, VNC는 17 fps에 2코어라 원격 작업이 생길 때만.
+- 2026-11-06: 시각 도구 구성(사용자 결정, sim-engineer 실측 근거). compose 프로필 `viz`에 `gz-gui`(sim-base에서 `gz sim -g`로 기존 서버에 클라이언트만 붙임, WorldControl을 뺀 `gui.config`), `foxglove`(ros-ws + foxglove_bridge, 127.0.0.1, 8765 + k, 토픽 화이트리스트, clientPublish, services, parameters 제외로 읽기 전용), `lichtblick`(공식 이미지 digest 고정, 127.0.0.1의 18080 + k). QGroundControl은 compose 서비스가 아니라 호스트 스크립트 `tools/qgc.sh`(버전과 sha256은 `versions.env`, 캐시, 종료는 TERM 뒤 유예를 두고 SIGKILL). `viz` 프로필은 어떤 서비스의 `depends_on` 대상도 아니고 `run_smoke.sh`, pytest fixture, CI는 켜지 않는다. 3대 시나리오 CPU 측정은 GUI 없이. 로드맵은 1a 2b단계(3단계 전 작은 작업), 3단계 `viz` 프로필 생성, 6단계 foxglove_bridge(Phase 2에서 당김)로 배치. gz 웹 시각화(gz-launch websocket)는 프런트엔드 미성숙으로 보류, VNC는 17 fps에 2코어라 원격 작업이 생길 때만.
 - 2026-11-06: Gazebo GUI의 GPU 경로는 실측대로 문서화. 컨테이너 안 OpenGL은 VMware SVGA3D(Mesa 25.2.8, OpenGL 4.3), Xwayland가 DRI3로 렌더 노드를 넘겨 `--device /dev/dri` 없이 약 90 fps. llvmpipe 강제 시 15 fps. sim-base Qt5에 wayland 플러그인이 없어 xcb만. GUI를 붙이면 서버 CPU 21%에서 31%, RTF 1.0 유지.
+
+- 2026-11-09: sim-base에 `libqt5svg5` 추가(sim-engineer 실측). 기존 이미지의 GUI `-v 4` 로그에 SVG 디코딩 경고 29건, 설치 뒤 0건. 추가 의존성 없이 libqsvg.so만 들어온다. 이미지 키가 바뀌어 CI가 sim-base와 px4를 다시 빌드한다.
+- 2026-11-09: `idsim_sim/config/gui.config`는 gz-sim8 기본 `/usr/share/gz/gz-sim8/gui/gui.config`에서 WorldControl 블록만 뺀 것(플러그인 17개). gz 버전을 올릴 때는 새 기본 파일에서 같은 방식으로 다시 만든다. 이미지에 넣지 않고 컨테이너에 읽기 전용으로 마운트한다.
+- 2026-11-09: QGC 릴리스 자산은 `QGroundControl-x86_64.AppImage`(v5.1.5, 195,332,600바이트), sha256은 GitHub API digest와 대조해 `versions.env`에 고정. `qgc.sh`는 versions.env를 source하지 않고 두 키만 grep으로 읽는다(다른 값에 `@`가 있음).
+
+- 2026-11-09: "QGC AppImage가 SIGTERM을 무시한다"는 2026-11-06 관측은 reviewer 재실험으로 반증됐다. AppRun이 QGC 바이너리를 exec하므로 `qgc.sh`의 자식 PID가 QGC 본체이고, 그 PID에 TERM을 보내면 1초 안에 종료 코드 0으로 끝나며 설정(QGroundControl.ini)이 저장된다. 원래 관측은 FUSE 도우미 PID에 보냈거나 기체 연결 상태의 종료 확인 대화상자였을 가능성이 크다. `qgc.sh`는 TERM -> 5초 유예 -> KILL로 바꿨다(INT는 130, TERM은 143). 기체가 연결된 상태의 TERM 동작은 미실측. 2026-11-09 호스트 재확인: INT는 정상 종료(130), TERM도 끝나지만 한 번은 QGC가 종료 중 segfault를 냈다(프로세스와 마운트 잔재 없음).
 
 ## 미해결 사항
 
@@ -104,7 +113,10 @@
 - 스택 둘의 GCS 포트 충돌(미실측). 두 스택의 PX4가 모두 14550으로 보내고 `MAV_SYS_ID`도 같아 QGC가 기체를 구분하지 못할 것으로 본다. 3단계에서 GCS 포트 기준값을 스택 오프셋으로 분리할 수 있는지 PX4 rcS에서 확인하고, 안 되면 "QGC는 한 번에 스택 하나" 제약을 `docs/interface.md`에 적는다.
 - `COM_RC_IN_MODE`=4라 QGC 수동 모드와 가상 조이스틱은 쓸 수 없다. ARM, TAKEOFF(2.5m, `MIS_TAKEOFF_ALT` 기본), LAND, 자동 disarm은 pymavlink로 확인. `docs/interface.md`의 SITL 파라미터 절에 적을 것(ros2-engineer 초안, px4-engineer 확인).
 - Lichtblick 2.5.2 공식 이미지의 브라우저 실접속은 미확인. 두 서브프로토콜(foxglove.websocket.v1, foxglove.sdk.v1)을 제시하는 것만 확인했고 foxglove_bridge 3.6.0과의 실제 접속은 1a 6단계에서 확인한다.
-- QGC AppImage v5.1.5는 SIGTERM을 무시해 `tools/qgc.sh`가 SIGKILL로 끝내야 한다. 호스트 포트 5900, 8090은 다른 프로젝트의 novnc-server가 쓰므로 VNC를 도입하면 피한다.
+- apt 미러 고정 리스크(2026-11-09 실측). Dockerfile이 ubuntu 베이스의 archive.ubuntu.com에 묶여 있어 그 미러가 막히면 새 PC 콜드 빌드가 실패한다. 선택지: 빌드 인자로 미러 지정(이미지 키에 들어가지 않게 할 방법 포함), apt `Acquire::Retries`, GHCR 공개 이미지를 받아 `idsim/<이미지>:local`로 태그하는 `build_images.py --mode pull`. devops-engineer가 2b 다음 PR에서 제안한다.
+- WorldControl을 빼도 GUI가 읽기 전용은 아니다. Spawn, Shapes, TransformControl, ComponentInspector가 남아 월드 내용을 바꿀 수 있고, `gz service`로 `/world/<월드>/control`을 부르면 멈출 수도 있다. 3단계 `gz-gui` 서비스에서 편집 플러그인까지 뺄지는 architect 결정.
+- `qgc.sh`의 sha256 불일치 시 종료 코드 1 경로는 코드만 있고 실행으로 확인하지 않았다(손상 캐시 재다운로드 경로는 같은 함수를 쓰며 확인됨).
+- 호스트 포트 5900, 8090은 다른 프로젝트의 novnc-server가 쓰므로 VNC를 도입하면 피한다.
 
 2026-11-06 실측으로 닫힌 항목.
 
