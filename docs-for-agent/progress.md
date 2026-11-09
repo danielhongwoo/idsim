@@ -98,6 +98,9 @@
 - 2026-11-09: `gui.config`에 GridConfig 플러그인 추가(플러그인 18개). PX4 기본 월드(`default.sdf`)는 `<grid>false`, 배경 0.7, 바닥 0.8 회색이라 GUI에서 기체 이동이 보이지 않았다. gz-gui 8의 Grid3D는 QML 리소스가 없어 로드 실패(`Can't find :/Grid3D/Grid3D.qml`). GridConfig는 장면에 격자가 없으면 기본 격자를 만든다.
 - 2026-11-09: 기체 출발 위치는 PX4 환경변수 `PX4_HOME_LAT/LON/ALT`(셋 다 필수)로 바꾼다. `px4-rc.gzsim`이 시작 시 `/world/<월드>/set_spherical_coordinates` 서비스를 불러 월드 기준 좌표를 바꾼다(서울시청으로 실측, PX4 `sensor_gps`가 37.5660, 126.9785를 보고). QGC에는 기본 위치 설정이 없고 기체 위치를 따라간다. 저장소에는 README의 덮어쓰기 예시만 두고 정식 값은 3단계 `fleet.yaml`에 넣는다.
 
+- 2026-11-09: Gazebo GUI 창이 검게 나오던 원인은 컨테이너 IPC 네임스페이스. VM 3D 가속을 끈 상태(커널 vmwgfx 기능 목록에 3D 없음, Xwayland가 DRI3를 제공하지 않음, Mesa llvmpipe)에서 Mesa 소프트웨어 경로가 MIT-SHM으로 X 서버에 프레임을 넘기는데 컨테이너의 IPC가 분리되어 X 서버가 붙지 못했다. GUI 내부 스크린샷 서비스는 정상 프레임을 저장했으므로 렌더링 자체는 됐다. `docker run --ipc=host`로 해결(xwd 캡처로 확인). 하드웨어 DRI3 경로(2026-11-06 실측)에서는 dma-buf로 넘기므로 증상이 없었다. 3단계 `gz-gui` 서비스에 `ipc: host`를 넣는다.
+- 2026-11-09: GridConfig 기본 격자는 색이 0.7 회색이라 0.8 바닥 위에서 보이지 않는다. `<insert>`로 50 x 50 m, 1 m, 색 0.25를 지정하니 선명하다(스크린샷 확인). MinimalScene의 `<sky>true</sky>`는 "Child elements of <sky> are not supported" 경고만 내고 효과가 없어 넣지 않았다.
+
 ## 미해결 사항
 
 사용자 결정이 필요한 항목.
@@ -119,7 +122,7 @@
 - apt 미러 고정 리스크(2026-11-09 실측). Dockerfile이 ubuntu 베이스의 archive.ubuntu.com에 묶여 있어 그 미러가 막히면 새 PC 콜드 빌드가 실패한다. 선택지: 빌드 인자로 미러 지정(이미지 키에 들어가지 않게 할 방법 포함), apt `Acquire::Retries`, GHCR 공개 이미지를 받아 `idsim/<이미지>:local`로 태그하는 `build_images.py --mode pull`. devops-engineer가 2b 다음 PR에서 제안한다.
 - WorldControl을 빼도 GUI가 읽기 전용은 아니다. Spawn, Shapes, TransformControl, ComponentInspector가 남아 월드 내용을 바꿀 수 있고, `gz service`로 `/world/<월드>/control`을 부르면 멈출 수도 있다. 3단계 `gz-gui` 서비스에서 편집 플러그인까지 뺄지는 architect 결정.
 - `qgc.sh`의 sha256 불일치 시 종료 코드 1 경로는 코드만 있고 실행으로 확인하지 않았다(손상 캐시 재다운로드 경로는 같은 함수를 쓰며 확인됨).
-- Gazebo GUI 깜빡임과 장면 미표시(사용자 관측 2026-11-09, VMware + Xwayland). `QSG_RENDER_LOOP=basic`과 `vblank_mode=1`, GridConfig 격자를 적용해도 해결되지 않았다(격자도 보이지 않음). 2026-11-06 실측(SVGA3D 약 90 fps)과 달리 VM의 3D 가속이 꺼져 있을 가능성이 있어 사용자가 3D 가속을 켜고 재부팅해 다시 본다. 재확인 때 컨테이너 안 `glxinfo -B`의 renderer가 SVGA3D인지 llvmpipe인지 먼저 본다(sim-base에는 glxinfo가 없으므로 `apt-get install mesa-utils`로 임시 설치하거나 호스트에서 본다). 다음 후보: SceneBroadcaster `state_hertz`(기본 60) 낮추기(sim-base 서버 설정), GUI 렌더 엔진 ogre(`--render-engine-gui ogre`), 소프트웨어 렌더링(15fps, CPU 부담). 효과가 확인되면 README의 `docker run` 기본 명령이나 3단계 `gz-gui` 서비스 환경에 넣는다.
+- Gazebo GUI 깜빡임(사용자 관측 2026-11-09, VMware 3D 가속 켠 상태). `QSG_RENDER_LOOP=basic`과 `vblank_mode=1`은 효과 미확인. 3D 가속을 끈 소프트웨어 렌더링(llvmpipe, GUI 컨테이너 CPU 약 2.7코어)에서는 깜빡임 여부를 사용자가 다시 본다. 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
 - 호스트 포트 5900, 8090은 다른 프로젝트의 novnc-server가 쓰므로 VNC를 도입하면 피한다.
 
 2026-11-06 실측으로 닫힌 항목.

@@ -159,7 +159,7 @@ services:
 이 스택은 `run_smoke.sh`와 같은 프로젝트 이름과 스택 번호를 쓰므로, 떠 있는 동안 `run_smoke.sh`를 돌리면 스크립트 끝의 `compose down`이 이 스택을 내린다. 3단계의 `gen_compose.py`가 이 번거로움을 없앤다. 스택이 뜨면 다음 명령으로 GUI를 붙인다. `GZ_PARTITION`은 스택 번호 k에 따라 `idsim-k`다.
 
 ```
-docker run --rm --name idsim-gz-gui --network host \
+docker run --rm --name idsim-gz-gui --network host --ipc=host \
   -e DISPLAY -e XAUTHORITY=/tmp/.Xauthority -e GZ_PARTITION=idsim-0 -e GZ_IP=127.0.0.1 \
   -v /tmp/.X11-unix:/tmp/.X11-unix:ro -v "$XAUTHORITY:/tmp/.Xauthority:ro" \
   -v "$PWD/ros_ws/src/idsim_sim/config/gui.config:/opt/idsim/gui.config:ro" \
@@ -167,7 +167,8 @@ docker run --rm --name idsim-gz-gui --network host \
 ```
 
 - `gui.config`는 WorldControl 플러그인을 뺐으므로 GUI에서 월드를 멈출 수 없다. 화면에서 실수로 일시정지하는 것을 막기 위해서다.
-- `gui.config`는 바닥 격자(GridConfig, 1m 간격)를 켠다. PX4 기본 월드는 배경과 바닥이 균일한 회색이라 격자가 없으면 기체 이동이 보이지 않는다. 왼쪽 패널의 "Grid config"에서 칸 수와 간격을 바꿀 수 있다.
+- `--ipc=host`가 없으면 GPU 가속이 없는 호스트(소프트웨어 렌더링)에서 창이 검게 나온다. Mesa의 소프트웨어 경로가 X 서버와 MIT-SHM 공유 메모리로 화면을 전달하는데, 컨테이너의 IPC 네임스페이스가 분리되어 있으면 X 서버가 그 메모리에 붙지 못하기 때문이다. GPU 가속(DRI3) 경로에서는 없어도 되지만 항상 붙인다.
+- `gui.config`는 바닥 격자(GridConfig, 1m 간격, 50 x 50 m, 어두운 선)를 켠다. PX4 기본 월드는 배경과 바닥이 균일한 회색이라 격자가 없으면 기체 이동이 보이지 않는다. 왼쪽 패널의 "Grid config"에서 칸 수와 간격을 바꿀 수 있다.
 - 화면이 깜빡이면 `docker run`에 `-e QSG_RENDER_LOOP=basic -e vblank_mode=1`을 더해 본다. Qt 렌더 루프를 단일 스레드로 고정하고 Mesa 수직 동기를 켜 주사율 이하로 그린다. 가상머신에서 효과가 있는지는 확인 중이다.
 - 도구 모음 아이콘이 보이도록 `sim-base`에 `libqt5svg5`가 들어 있다.
 - 종료는 Ctrl-C나 `docker stop idsim-gz-gui`다. GUI만 끝나고 서버는 계속 돈다.
