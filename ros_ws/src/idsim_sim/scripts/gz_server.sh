@@ -4,14 +4,16 @@
 # 하는 일
 #   1. 월드 SDF의 <world name="...">이 IDSIM_WORLD_NAME과 같은지 검사한다. 다르면 종료 코드 1.
 #   2. `gz sim -r -s <월드 파일>`을 자식 프로세스로 띄운다. exec하지 않는 이유는 서버가 뜬 뒤
-#      원점을 설정해야 하기 때문이다. TERM/INT를 받으면 자식에 TERM을 전달하고 함께 끝난다.
+#      원점을 설정해야 하기 때문이다. TERM/INT를 받으면 자식에 TERM을 전달하고(5초 안에 안 끝나면
+#      KILL) 함께 끝난다. 종료 코드는 TERM 143, INT 130.
 #   3. /world/<이름>/scene/info 서비스가 응답할 때까지 기다린다(상한 60초).
 #   4. 원점 세 값(IDSIM_ORIGIN_LAT/LON/ALT)이 모두 있으면 /world/<이름>/set_spherical_coordinates를
 #      한 번 호출한다. 응답이 `data: true`가 아니거나 타임아웃이면 서버를 내리고 종료 코드 1.
 #      성공하면 표시 파일 /tmp/idsim/origin_set을 남긴다(내용: 월드, 좌표, UTC 시각).
 #      주의: `data: true`는 요청을 받았다는 뜻일 뿐 적용 확인이 아니다. 실제 적용은 px4 쪽
 #      sensor_gps 좌표로 판정한다(S2). 이 표시 파일도 호출 성공 기록 이상이 아니다.
-#   5. 그 뒤 자식을 기다리고 자식의 종료 코드로 끝난다.
+#   5. 원점 단계가 끝나면(원점이 없어도) 준비 파일 /tmp/idsim/ready를 남긴다.
+#   6. 그 뒤 자식을 기다리고 자식의 종료 코드로 끝난다.
 #
 # 입력 환경변수
 #   IDSIM_WORLD_NAME   필수. 월드 이름. PX4_GZ_WORLD, healthcheck 경로와 같은 값(fleet.yaml world.name)
@@ -19,6 +21,8 @@
 #   IDSIM_ORIGIN_LAT   선택. 위도(도). 세 값은 모두 주거나 모두 비워야 한다. 일부만 있으면 시작 전에 종료 코드 1
 #   IDSIM_ORIGIN_LON   선택. 경도(도)
 #   IDSIM_ORIGIN_ALT   선택. 고도(m)
+#                      원점 값은 십진 표기 문자열이다(예: 37.5665, -12, 지수 표기 불가).
+#                      생성기는 fleet.yaml 값을 문자열 그대로 넘긴다.
 #   GZ_PARTITION       필수. 스택 격리용 gz-transport 파티션(idsim-<k>)
 #   GZ_IP              선택(compose는 127.0.0.1을 준다)
 #   GZ_SIM_SERVER_CONFIG_PATH, GZ_SIM_RESOURCE_PATH는 이미지 ENV 또는 compose가 주는 값을 그대로 쓴다.
@@ -26,36 +30,50 @@
 #   (1b 커스텀 월드는 SDF에 원점을 넣고 이 값들을 비운다).
 #
 # healthcheck (compose 생성기가 그대로 쓴다. <이름>은 IDSIM_WORLD_NAME 값)
-#   원점을 줄 때:
-#     gz service -i --service /world/<이름>/scene/info | grep -q "Service providers" && test -f /tmp/idsim/origin_set
-#   원점을 주지 않을 때:
-#     gz service -i --service /world/<이름>/scene/info | grep -q "Service providers"
-#   표시 파일은 컨테이너 안 /tmp/idsim/origin_set 고정이며 시작할 때 지운다.
+#   원점 유무와 무관하게 하나다.
+#     gz service -i --service /world/<이름>/scene/info | grep -q "Service providers" && test -f /tmp/idsim/ready
+#   /tmp/idsim/ready: 월드 준비와 원점 단계(원점이 없으면 건너뜀)가 끝났다는 표시.
+#   /tmp/idsim/origin_set: 원점 설정 요청이 data: true로 수리된 경우에만 생긴다(내용은 좌표와 시각).
+#   두 파일 모두 컨테이너 안 고정 경로이며 시작할 때 지운다.
 
 set -euo pipefail
 
 readonly MARKER_DIR=/tmp/idsim
 readonly MARKER_FILE="${MARKER_DIR}/origin_set"
+readonly READY_FILE="${MARKER_DIR}/ready"
 readonly READY_TIMEOUT_S=60
 readonly ORIGIN_CALL_TIMEOUT_MS=5000
+readonly STOP_GRACE_S=5
 
 log() { echo "[gz_server] $*"; }
 err() { echo "[gz_server] ERROR: $*" >&2; }
 
 child=""
 
-# 자식 gz 서버에 TERM을 보내고 끝날 때까지 기다린다.
+# 자식 gz 서버에 TERM을 보내고 STOP_GRACE_S초 동안 끝나기를 기다린다.
+# 그래도 살아 있으면 KILL한다(서버가 TERM을 무시해 wrapper가 멈추는 것을 막는다).
 stop_child() {
-  if [ -n "${child}" ] && kill -0 "${child}" 2>/dev/null; then
-    kill -TERM "${child}" 2>/dev/null || true
-    wait "${child}" 2>/dev/null || true
+  if [ -z "${child}" ] || ! kill -0 "${child}" 2>/dev/null; then
+    return 0
   fi
+  kill -TERM "${child}" 2>/dev/null || true
+  local i
+  for ((i = 0; i < STOP_GRACE_S * 10; i++)); do
+    kill -0 "${child}" 2>/dev/null || break
+    sleep 0.1
+  done
+  if kill -0 "${child}" 2>/dev/null; then
+    err "gz 서버가 ${STOP_GRACE_S}초 안에 끝나지 않아 KILL한다"
+    kill -KILL "${child}" 2>/dev/null || true
+  fi
+  wait "${child}" 2>/dev/null || true
 }
 
 # shellcheck disable=SC2329  # trap에서 호출된다
 on_signal() {
-  log "신호를 받아 gz 서버에 TERM을 전달한다"
+  log "$1 신호를 받아 gz 서버에 TERM을 전달한다"
   stop_child
+  if [ "$1" = INT ]; then exit 130; fi
   exit 143
 }
 
@@ -77,7 +95,10 @@ world="${IDSIM_WORLD_NAME}"
 
 # SDF의 <world name="...">을 찾는다. 정확히 하나여야 한다.
 # grep이 못 찾으면 종료 코드 1이므로 || true로 받고 개수로 판정한다.
-# 한계: 주석 안의 <world name=...>도 센다. 그 경우 개수 검사에서 실패하므로 조용히 틀리지는 않는다.
+# 한계(줄 단위 grep이라 생기는 것. 둘 다 거부 쪽으로 실패하므로 조용히 틀리지는 않는다)
+# - 주석 안의 <world name=...>도 센다. 개수 검사에서 실패한다.
+# - <world 와 name=이 여러 줄로 나뉜 요소(<world\n  name="...">)는 찾지 못해 0개로 실패한다.
+#   월드 SDF는 <world name="..."> 한 줄로 쓴다.
 sdf_names=()
 while IFS= read -r line; do
   sdf_names+=("${line}")
@@ -116,11 +137,12 @@ if [ -n "${lat}" ] || [ -n "${lon}" ] || [ -n "${alt}" ]; then
   set_origin=1
 fi
 
-rm -f "${MARKER_FILE}"
+rm -f "${MARKER_FILE}" "${READY_FILE}"
 
 # ---- 서버 기동 ----
 
-trap on_signal TERM INT
+trap 'on_signal TERM' TERM
+trap 'on_signal INT' INT
 
 log "월드 ${world} (${IDSIM_WORLD_FILE}), GZ_PARTITION=${GZ_PARTITION}, GZ_IP=${GZ_IP:-}"
 log "서버 설정 ${GZ_SIM_SERVER_CONFIG_PATH:-}"
@@ -168,6 +190,13 @@ if [ "${set_origin}" -eq 1 ]; then
 else
   log "원점 값이 없어 월드 SDF의 spherical_coordinates를 그대로 쓴다"
 fi
+
+# ---- 준비 파일 ----
+# healthcheck는 원점 유무와 무관하게 이 파일 하나를 본다.
+mkdir -p "${MARKER_DIR}"
+date -u +%Y-%m-%dT%H:%M:%SZ > "${READY_FILE}.tmp"
+mv -f "${READY_FILE}.tmp" "${READY_FILE}"
+log "준비 완료. 준비 파일 ${READY_FILE}"
 
 # ---- 서버 종료까지 대기 ----
 # 신호는 on_signal이 처리한다. 자식이 스스로 끝나면 그 종료 코드로 끝낸다.

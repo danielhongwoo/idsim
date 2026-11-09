@@ -6,14 +6,14 @@
 #
 # 점검
 #   - DISPLAY가 비어 있지 않을 것. compose는 ${DISPLAY:-}를 넘긴다.
-#   - XAUTHORITY(기본 /tmp/.Xauthority) 파일이 있고 비어 있지 않으며 읽을 수 있을 것.
+#   - Xauthority 파일(마운트 지점 /tmp/.Xauthority 고정, 스크립트가 XAUTHORITY로 내보낸다)이 있고 비어 있지 않으며 읽을 수 있을 것.
 #     compose는 ${XAUTHORITY:-/dev/null}:/tmp/.Xauthority:ro로 마운트하므로 호스트에 XAUTHORITY가
 #     없으면 /dev/null(크기 0)이 들어와 여기서 걸린다.
 #   - GUI 설정 파일을 읽을 수 있을 것(못 읽으면 gz가 경고만 내고 기본 설정으로 뜬다).
 #   - HOME에 쓸 수 없으면 /tmp/gz-home을 만들어 HOME으로 쓴다(gz GUI는 ~/.gz에 설정을 쓴다).
 #
 # 입력 환경변수
-#   DISPLAY, XAUTHORITY        X11 접속
+#   DISPLAY                    X11 접속(XAUTHORITY는 스크립트가 /tmp/.Xauthority로 정한다)
 #   GZ_PARTITION, GZ_IP        gazebo 서비스와 같은 값
 #   IDSIM_GUI_CONFIG           GUI 설정 파일. 기본 /opt/idsim/sim/config/gui.config (idsim_sim 마운트)
 #   IDSIM_GZ_GUI_ENGINE        GUI 렌더 엔진. 기본 ogre2
@@ -23,7 +23,11 @@ set -euo pipefail
 
 err() { echo "[gz_gui] ERROR: $*" >&2; }
 
-xauth_file="${XAUTHORITY:-/tmp/.Xauthority}"
+# 마운트 지점은 /tmp/.Xauthority 고정이다. compose env에 의존하지 않고 여기서 XAUTHORITY를 정한다.
+# 호스트 경로(XAUTHORITY=/run/user/...)가 그대로 넘어와도 컨테이너 안에는 그 파일이 없으므로 덮어쓴다.
+# XAUTHORITY 없이 exec하면 Xlib이 HOME/.Xauthority를 찾아 인증에 실패한다(실측).
+readonly xauth_file=/tmp/.Xauthority
+export XAUTHORITY="${xauth_file}"
 
 if [ -z "${DISPLAY:-}" ]; then
   err "DISPLAY가 비어 있다. 호스트 셸에서 DISPLAY를 내보낸 뒤 다시 올려라(예: export DISPLAY=:0)."
