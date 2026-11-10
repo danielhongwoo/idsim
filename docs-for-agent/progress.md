@@ -2,7 +2,7 @@
 
 이 폴더는 에이전트와 작업자가 세션을 시작할 때 현재 상태를 파악하기 위한 기록이다. 설계는 `docs/architecture.md`, 계획은 `docs/roadmap.md`에 두고, 여기에는 무엇이 끝났고 무엇이 진행 중이며 다음에 무엇을 할지만 적는다. 날짜는 항상 절대 날짜(YYYY-MM-DD)로 쓴다.
 
-## 현재 상태 (2026-11-10)
+## 현재 상태 (2026-11-11)
 
 - 저장소: 원격 github.com/danielhongwoo/idsim. main에 PR #1 CI 골격, #2 큰 그림 다이어그램, #3 시각 도구 로드맵, #4 인계용 진행 기록이 합쳐져 있다. 2b단계(PR #5)와 루트 README, `check_host.sh`(PR #6)도 합쳐졌다.
 - 첫 개발 호스트(2026-11-06까지): VMware VM, x86_64 Ubuntu 24.04, 16 vCPU, 31GB, NVIDIA 없음, GNOME Wayland. 이 호스트에는 다른 compose 프로젝트(`docker`: open_manipulator, zenoh_daemon, cyclo_manager 등)가 host 네트워크로 떠 있었다. 아래 실측값(빌드 시간, 이미지 크기, Gazebo GUI fps)은 이 호스트 기준이다.
@@ -41,6 +41,13 @@
   - `tools/ros_ws.sh ci`: 148 tests(idsim_common 109, idsim_interfaces 39), clang-tidy PASS. 결함 주입 4가지(필드 타입, 상수 값, `TYPE_*` 추가, 중첩 타입 변경의 전파와 직접 변경 구분) 확인.
   - 관련 owner 검토: ros2, test, sim 승인. ops, logging 조건부 -> 반영. reviewer 최종 검토 PR 가능(PX4 읽기 검토 포함: Hold의 위치 요구, NAV_LAND force, 지상 아닌 disarm 거부, 자동 disarm 조건이 v1.17.0 원문과 모순 없음). 비차단 지적은 반영.
   - `MissionEvent` 고정 시점은 사용자 결정 1의 기준(첫 소비자가 생기는 Phase 완료)의 예외로 Phase 2 완료다(architect 결정, logging-engineer 동의). 이유는 decisions.md. 1a 완료로 당길 수 있다.
+- 2026-11-10: 1a 5번 작업은 PR #17로 main에 합쳐졌다(88afeda). main CI(lint, unit, build) 통과. PR #16(용어 변경)도 합쳐졌다. PR #14는 사용자가 close했다.
+- 2026-11-11: GHCR 이미지는 이미 익명으로 조회된다(devops 실측, 현재 key의 ros-ws, px4, sim-base, xrce-agent manifest 200). 아래 "다음 작업 1"의 Public 전환은 끝난 것으로 본다.
+- 2026-11-11: 1a 6번 작업(이륙-호버-착륙 노드와 통합 테스트) 설계 확정, 구현 전. 브랜치 `feat/1a-6-takeoff-land`(main 88afeda 기준). 계획, 결정, 의견서, 실측 근거는 `docs-for-agent/plan-1a-6-takeoff-land/`(README.md, decisions.md, questions.md, opinion-*.md 일곱 개).
+  - 절차: architect 질문지 -> 담당자 여섯 의견(첫 라운드는 여섯이 동시에 스택을 올려 load 6-19 경합. 시간 값은 결정 근거로 쓰지 않음) -> 종합 초안 -> 재질문 13문항(한 번에 한 담당자만 스택) -> reviewer 근거 검증(조건부, 필수 M1-M6 반영) -> px4 추가 실험 E1-E5 -> 취소 분기 재정 -> ops 검토(조건부, C1-C3 반영) -> 사용자 결정 9항목 확정.
+  - px4-engineer는 이번에 중단 없이 실험을 마쳤다.
+  - 구현 순서는 plan README의 PR 표(PR 0 `file-ownership.md`, PR 1-3과 3b 병렬, 그 뒤 4-10). 첫 세션에서 px4에게 미해결 셋(battery_simulator 원인, 낮은 `height_m` 하한, 취소 착륙 제한 시간), test와 devops에게 battery_simulator 대응을 보낸다.
+  - 이 호스트에는 화면 세션이 없다(SSH). 육안 확인은 사용자 결정 6대로 호스트 화면 세션에서 한다.
 - 다음 작업:
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
   2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
@@ -191,12 +198,23 @@
 - 2026-11-10: 1a 4번 작업의 PX4 인터페이스 검토 완료. 16개 항목(공개 /fmu/in 허용 3개와 차단 35개의 분류, VehicleCommand 빌더 필드 표와 `CommandSource` 범위와 `is_ack_for`, `Px4Timestamp`의 0과 1 us 미만 거부) 모두 승인, 수정 요구 없음. 근거는 PX4 원문(Commander.cpp, dds_topics.yaml, ucdr_msg.h.em, uxrce_dds_client.cpp)과 `opinion-px4.md` 실측이다. 원문 사본이 v1.17.0 태그인지는 직접 확인하지 않았다(인용 행 번호와 골든 토픽 목록 일치가 간접 근거). 6단계 실측으로 남는 것: NAV_LAND의 공중 착륙 동작과 param 사용, `vehicle_command.hpp`의 "`from_external=false`면 MAVLink로 재송출" 주석의 소스 근거, sim 시간 timestamp 경로의 failsafe 회귀 판정.
 - 2026-11-10: 1a 5번 작업 `idsim_interfaces` 사용자 결정 2건(둘 다 권고안). 1) 계약 고정 시점을 나눈다. 1a 완료 시 공통 규칙, `ExecuteMission`, TAKEOFF/LOITER/LAND. 1b 완료 시 `TargetState`, GOTO/TRACK/RTL. Phase 2 완료 시 `VehicleState`. 2) 6단계 이륙-호버-착륙 노드는 `ExecuteMission` action server로 미션 [TAKEOFF, LOITER, LAND]를 받는다. 그래서 취소 시 Hold 동작 실험을 6단계로 당기고 1a 고정 전에 결과를 반영한다. 근거와 확정 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md`.
 - 2026-11-10: 1a 5번 작업 ros2-engineer 실측 2건(Jazzy, rclcpp_action, rosbag2 0.26.11). 1) `ACCEPT_AND_EXECUTE`로 받은 뒤 사유를 실어 abort하는 방식은 동작한다(BUSY와 VEHICLE_ID_MISMATCH 사유 전달, 실행 중인 첫 goal 무영향, cancel과 abort 혼합 5가지 정상). `ACCEPT_AND_DEFER` 뒤 abort는 예외를 던지므로 Executor는 `ACCEPT_AND_EXECUTE`만 쓴다. 2) rosbag2는 action goal과 result를 기록하지 않는다(`--include-hidden-topics`로 feedback과 status만). Jazzy action에는 introspection이 없다. 그래서 기록물 인덱스용으로 일반 토픽 `MissionEvent.msg`를 둔다.
+- 2026-11-11: 1a 6번 작업 사용자 결정 9항목, 모두 권고안(근거와 문안은 `docs-for-agent/plan-1a-6-takeoff-land/decisions.md` "사용자 결정 항목").
+  1. `sitl` job은 PR마다 시나리오 넷(정상 비행, BUSY, VEHICLE_ID_MISMATCH, INVALID_MISSION) 1회. 취소와 failsafe는 단위 테스트와 로컬. 한도 테스트 단계 15분, job 35분.
+  2. ROS 비의존 상태기를 6단계로 당긴다(구조와 TAKEOFF, LOITER, LAND, 취소만. roadmap 1b 1번의 일부).
+  3. `sitl` 실패 artifact의 MCAP은 Phase 2로 미룬다(ULog와 컨테이너 로그만).
+  4. ros-ws 이미지에 foxglove_bridge를 넣는다(49.6 MB 증가).
+  5. 취소 정책 변경 여섯 채택. 취소는 실행 중인 항목으로 가른다: TAKEOFF(도달 전)와 LAND 중이면 착륙을 끝낸 뒤 CANCELED, LOITER 중만 Hold. failsafe 중 취소는 명령 없이 ABORTED(FAILSAFE). Hold 확인 즉시 setpoint 중단. 지상 armed 취소는 setpoint 유지한 채 disarm, 거부되면 착륙. CANCELED 기체는 "지상 disarm이거나 armed Hold 모드"까지만 약속. ExecuteMission result 끝에 `end_state`(UNKNOWN 0, GROUND_DISARMED 1, ARMED_HOLD 2) 추가로 5단계 golden이 바뀐다(고정 전, 끝에 추가). 근거: px4 추가 실험에서 신호가 모두 꺼진 Hold 33회 중 23회가 지면 위 armed Hold로 남았고 착륙 명령은 54/54 정상.
+  6. 육안 확인은 호스트 화면 세션, 안 되면 Lichtblick만 tunnel로 먼저.
+  7. `sitl`은 6단계에서 필수 검사로 두지 않는다. 1a 완료 때 실행 기록으로 다시 본다.
+  8. `tests/px4_facts/`(묵은 timestamp 주입 실험)는 로컬 전용.
+  9. CLAUDE.md 담당자 표: ros2-engineer에 `idsim_mission`(PX4 절차 상태기 제외), px4-engineer에 `idsim_mission`의 PX4 절차 상태기. 같은 날 고쳤다.
+- 2026-11-11: 1a 6번 작업 설계에서 정정된 사실(재측정): Lichtblick 실제 버전은 1.30.0("2.5.2"는 Caddy 버전, architecture.md 고칠 것). bridge와 xrce-agent가 SIGTERM에 끝나지 않아 down이 약 21 s였다(bridge 직접 exec와 xrce-agent `init: true`로 0.8 s). 경합 없이 `/clock` 끊김 최대 25.9 ms. ULog는 sim 1분당 약 18 MB, Gazebo가 먼저 죽어도 온전(4/4). PX4 SITL battery_simulator 주기 정지 7회 관측(원인 미확인, sitl 플래키 후보).
 
 ## 미해결 사항
 
 사용자 결정이 필요한 항목.
 
-- (2026-11-10) PR #14(apt security 미러 분리) 처리. devops-engineer 분석: PR 자신의 build 실패(run 42770470337, sim-base apt install)는 `security.ubuntu.com`의 91.189.91.82가 noble-security 신규 패키지(perl-base 5.38.2-3.2ubuntu0.7 등)에 404를 준 것이라, "security를 archive 미러로 바꾼 탓"이라는 PR 가설이 반증됐다. Canonical 노드 풀 일부의 동기화 시차이고 DNS가 주는 노드에 따라 성패가 갈린다(같은 코드의 앞선 run 42767888913은 통과). 권고: #14 close, 필요하면 미러 RUN 단계 테스트만 작은 PR로. CI 안정성 대안 (a) apt 단계 재시도(가장 쌈, 확률적), (b) CI에서 archive와 security 모두 `azure.archive.ubuntu.com`(noble-security 반영 시차는 미검증). 사용자 결정 대기.
+- (2026-11-10, 2026-11-11 갱신) PR #14는 사용자가 close했다. 남은 결정은 CI apt 404 대안이다(기본은 현행 유지, 실패 시 재실행). 이전 기록: PR #14(apt security 미러 분리) 처리. devops-engineer 분석: PR 자신의 build 실패(run 42770470337, sim-base apt install)는 `security.ubuntu.com`의 91.189.91.82가 noble-security 신규 패키지(perl-base 5.38.2-3.2ubuntu0.7 등)에 404를 준 것이라, "security를 archive 미러로 바꾼 탓"이라는 PR 가설이 반증됐다. Canonical 노드 풀 일부의 동기화 시차이고 DNS가 주는 노드에 따라 성패가 갈린다(같은 코드의 앞선 run 42767888913은 통과). 권고: #14 close, 필요하면 미러 RUN 단계 테스트만 작은 PR로. CI 안정성 대안 (a) apt 단계 재시도(가장 쌈, 확률적), (b) CI에서 archive와 security 모두 `azure.archive.ubuntu.com`(noble-security 반영 시차는 미검증). 사용자 결정 대기.
 
 - 없음(2026-11-10 기준).
 
