@@ -24,7 +24,7 @@
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",
-      "sha256": "20f48202767f80e6126fc0548dd7effa3d4197a27c894f772ba6c46dac9ff31a"
+      "sha256": "232245890c75d07cbe9e9bced1ca9e27e21137e5193227f0435e769c95dd907e"
     },
     "versions_env": {
       "path": "docker/versions.env",
@@ -118,7 +118,8 @@
         "COM_OF_LOSS_T": "1.0",
         "COM_RC_IN_MODE": "4",
         "NAV_DLL_ACT": "0",
-        "SDLOG_MODE": "2"
+        "SDLOG_MODE": "2",
+        "UXRCE_DDS_SYNCT": "0"
       },
       "gz_model_name": "x500_1",
       "host_rootfs_dir": "/work/idsim/artifacts/runs/20261109-090000-k0/px4-1",
