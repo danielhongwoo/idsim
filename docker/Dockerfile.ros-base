@@ -14,6 +14,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ROS_DISTRO=${ROS_DISTRO} \
     RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
+# 우분투 apt 미러 (versions.env의 UBUNTU_APT_MIRROR). archive와 security를 모두 이 미러로 바꾼다.
+# 이 단계에서 한 번 바꾸면 sim-base, px4, ros-ws가 이 이미지를 베이스로 상속한다.
+# ros.list 등 서드파티 저장소는 건드리지 않는다.
+ARG UBUNTU_APT_MIRROR
+RUN test -n "${UBUNTU_APT_MIRROR}" || { echo "UBUNTU_APT_MIRROR 빌드 인자가 비어 있다 (versions.env 확인)" >&2; exit 1; } \
+ && sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#${UBUNTU_APT_MIRROR%/}/#" /etc/apt/sources.list.d/ubuntu.sources \
+ && grep -q "^URIs: ${UBUNTU_APT_MIRROR%/}/\$" /etc/apt/sources.list.d/ubuntu.sources
+
 # ROS apt 저장소 등록 (Ubuntu 24.04 noble)
 # ros.key는 rosdistro master에서 받는다. 만료일 연장으로 파일 내용은 바뀔 수 있으므로 URL을 커밋에
 # 고정하지 않고, 받은 파일에 주 키가 하나뿐이며 그 지문이 versions.env의 ROS_APT_KEY_FPR과 같은지 검사한다.

@@ -8,6 +8,11 @@ ARG XRCE_FASTDDS_REF
 RUN test -n "${XRCE_AGENT_TAG}" && test -n "${XRCE_FASTCDR_REF}" && test -n "${XRCE_FASTDDS_REF}" \
  || { echo "XRCE_AGENT_TAG, XRCE_FASTCDR_REF, XRCE_FASTDDS_REF 빌드 인자가 비어 있다" >&2; exit 1; }
 ENV DEBIAN_FRONTEND=noninteractive
+# 우분투 apt 미러 (versions.env의 UBUNTU_APT_MIRROR). 최종 단계는 apt를 쓰지 않으므로 build 단계에만 적용한다.
+ARG UBUNTU_APT_MIRROR
+RUN test -n "${UBUNTU_APT_MIRROR}" || { echo "UBUNTU_APT_MIRROR 빌드 인자가 비어 있다 (versions.env 확인)" >&2; exit 1; } \
+ && sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#${UBUNTU_APT_MIRROR%/}/#" /etc/apt/sources.list.d/ubuntu.sources \
+ && grep -q "^URIs: ${UBUNTU_APT_MIRROR%/}/\$" /etc/apt/sources.list.d/ubuntu.sources
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates git cmake build-essential \

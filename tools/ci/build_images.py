@@ -158,6 +158,10 @@ def main(argv: list[str] | None = None) -> int:
 
     env = dict(os.environ)
     env.update(versions)
+    # 수송 경로 값은 미리 설정된 환경변수가 versions.env보다 우선한다 (CI가 기본 미러로 덮어쓴다)
+    for k in image_keys.KEY_EXCLUDED_ARGS:
+        if os.environ.get(k):
+            env[k] = os.environ[k]
     env.update({images[n].env_name: images[n].key for n in order})
 
     log(f"mode={mode} registry={registry}")
