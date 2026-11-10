@@ -151,6 +151,7 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 | `gazebo` | sim-base | `PX4_GZ_STANDALONE=1` 모드의 Gazebo 서버. `gz sim -r -s`로 월드를 직접 띄운다(`simulation-gazebo` 스크립트는 첫 실행 때 모델을 내려받으므로 쓰지 않는다). PX4-gazebo-models(모델, 월드, `server.config`)는 sim-base의 `/opt/px4-gz`에 한 벌만 두고 `GZ_SIM_SERVER_CONFIG_PATH`(PX4 전용 카메라, 광류 플러그인 두 줄을 뺀 `server.idsim.config`), `GZ_SIM_RESOURCE_PATH`로 가리킨다. 월드 이름은 `config/fleet.yaml`의 `world.name`(모든 px4의 `PX4_GZ_WORLD`와 healthcheck 경로가 여기서 나온다). 헤드리스는 `gz sim -s`(서버만)로 얻는다. `HEADLESS`와 `PX4_GZ_SIM_RENDER_ENGINE`은 PX4 rcS 전용 변수라 이 서비스에는 주지 않는다. 명령은 `idsim_sim`의 wrapper 스크립트로, 서버 기동 뒤 SDF의 `<world name>`이 `world.name`과 같은지 검사하고 `world.origin`이 있으면 `/world/<월드>/set_spherical_coordinates`를 한 번 호출해 응답을 확인한 뒤 표시 파일을 남긴다. 응답 `data: true`는 요청 수리를 뜻할 뿐 적용 확인이 아니므로 실제 적용은 px4 쪽 `sensor_gps` 좌표로 판정한다. px4 서비스에는 `PX4_HOME_*`를 주지 않는다(gz 경로에서 이 변수의 소비자는 `px4-rc.gzsim`의 원점 호출뿐이다. SIH 경로 `px4-rc.sihsim`도 이 변수를 읽으므로 SIH 변형을 추가하면 다시 본다) | 1a |
 | `px4-1` ... `px4-N` | px4 | 빌드된 `px4` 바이너리를 `px4 -d -i N`으로 직접 실행(`make`가 아님. `-d`는 데몬 모드로, 컨테이너 stdin이 닫힌 상태에서 대화형 셸이 프롬프트를 끝없이 출력해 로그가 부푸는 것을 막는다. `build/px4_sitl_default/bin`이 PATH에 있고 작업 디렉터리는 `rootfs`). `PX4_SIM_MODEL=gz_x500`, `PX4_GZ_MODELS`, `PX4_GZ_MODEL_POSE`, `PX4_UXRCE_DDS_NS`, `GZ_IP`, `COM_OBL_RC_ACT` 등은 생성 스크립트가 넣는다. 인스턴스마다 환경변수가 달라 compose `scale`로는 부족하므로 `config/fleet.yaml`에서 N개 서비스를 생성. 작업 디렉터리 `rootfs/N`은 `artifacts/runs/<실행 id>/px4-N/`의 바인드 마운트이며 실행마다 새로 만든다(이전 `parameters.bson`을 읽지 않고 ULog, dataman이 산출물로 남는다). 호스트 uid:gid로 실행하고 `HOME`은 컨테이너 안 `/tmp`다. MAVLink 포트는 생성 스크립트가 넘기는 `IDSIM_MAVLINK_OFFSET`(1000k)을 px4 이미지의 idsim용 `px4-rc.mavlink`가 읽어 정한다 | 1a (1대), 3 (N대) |
 | `xrce-agent` | xrce-agent (Micro XRCE-DDS Agent v2.4.3) | `MicroXRCEAgent udp4 -p <에이전트 포트>`. 포트는 기준값 8888 + 스택 번호 k이며 PX4의 `PX4_UXRCE_DDS_PORT`와 같다. 모든 PX4가 여기로 접속 | 1a |
+| `runner` (`tools` 프로필) | ros-ws | 상주하지 않는 판정용 컨테이너. 스모크 스크립트와 통합 테스트가 `compose run`으로 판정 명령(check 스크립트, pytest)을 실행한다. 호스트 uid:gid, 저장소 마운트와 `IDSIM_STACK_FILE`(실행 디렉터리의 `stack.json`)을 `bridge`와 같은 방식으로 받는다. 본 스택의 `up --wait` 대상이 아니다 | 1a |
 | `ros-ws` | ros-ws | 운용 노드 실행. 기체별 Executor와 Collector는 기체당 컴포넌트 컨테이너 하나에 올려 프로세스와 DDS 참가자 수를 줄인다. 개발 중에는 소스를 볼륨 마운트 | 1a |
 | `bridge` | ros-ws | ros_gz_bridge와 `idsim_sim` 표적 어댑터. 1a에서는 시계를 `/clock`으로만 노출하고, 1b에서 Gazebo 표적 pose를 `TargetState`로 더한다. ros-ws 안의 vendor gz-transport와 sim-base의 OSRF gz-transport가 와이어로 호환되는지는 스모크 테스트가 실측하며, 실패하면 이 서비스만 sim-base 계열 이미지로 옮긴다 | 1a (`/clock`), 1b (표적) |
 | `gz-gui` (`viz` 프로필) | sim-base | `gz sim -g`로 이미 떠 있는 `gazebo` 서버에 GUI 클라이언트만 붙인다. 같은 `GZ_PARTITION`과 `GZ_IP`, `DISPLAY`, X11 소켓과 `XAUTHORITY` 읽기 전용 마운트. `idsim_sim`의 `gui.config`(WorldControl 플러그인 제외)를 쓴다. `ipc: host`, 호스트 uid:gid, `gazebo`에 `depends_on`(viz -> 본 스택 방향은 허용), healthcheck 없음. `idsim_sim`의 wrapper가 `DISPLAY`와 Xauthority 파일이 비어 있으면 안내 메시지와 함께 끝낸다. `/dev/dri`와 NVIDIA 전달은 opt-in | 1a |
@@ -163,6 +164,8 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 
 컨테이너 사용자. 호스트에 쓰는 바인드 마운트가 있는 서비스(`px4-N`, `bridge`, `ros-ws`, 테스트 러너, `gz-gui`)는 생성 시 구운 호스트 사용자의 uid:gid로 실행하고 `HOME`을 컨테이너 안 `/tmp` 아래로, ROS 로그는 `ROS_LOG_DIR`로 `artifacts/runs/<실행 id>/ros_log/<서비스>/`에 둔다. `xrce-agent`와 `gazebo`는 root로 둔다(호스트에 쓰지 않는다). 그 uid가 이미지의 passwd에 없어도(CI 러너는 1001) ros2 CLI, rclpy, px4, gz CLI는 동작함이 실측되었고 깨지는 것은 `whoami`, `pwd.getpwuid`, `getpass.getuser`뿐이다. 그래서 저장소 코드는 사용자 이름을 조회하지 않고(`getpass`, `pwd` 호출 금지) uid 숫자만 쓴다. 바인드 마운트 안에 또 바인드 마운트를 두면 마운트 지점이 root 소유가 되므로 생성 스크립트는 중첩 마운트를 만들지 않고 단위 테스트가 이를 검사한다. 생성 스크립트를 돌리는 러너는 `--network none`이고 `CYCLONEDDS_URI`를 비운다(설정 파일을 마운트하지 않은 채 두면 rmw가 파일을 못 열어 CLI가 실패한다).
 
+생성된 compose. 스택은 `tools/stack.sh`(또는 생성만 하는 `tools/gen_compose.sh`)가 `artifacts/runs/<실행 id>/compose.yaml`과 `stack.json`을 만들고 그 compose로 올린다. 실행 id의 기본값은 `<UTC 시각>-k<k>`이고 스모크는 단계 이름을 붙인다. 값(도메인, 포트, 경로, uid:gid, 이미지 태그)은 모두 구체값으로 박고 보간 변수를 쓰지 않으므로 실행 디렉터리만 보면 무엇으로 돌았는지 재현된다. 식별자의 단일 출처는 `stack.json`이며 스크립트, 판정 코드, 테스트는 이를 다시 계산하지 않고 읽는다(생성기와 `tests/support/`의 로더가 같은 스키마를 공유하고, 골든 `stack.json`을 로더로 읽는 교차 테스트가 어긋남을 잡는다). 구현에서 정한 점 네 가지. (1) compose 파일이 저장소 밖 실행 디렉터리에 놓이므로 compose 안의 경로는 호스트 저장소 루트 기준 절대 경로이고, 바인드 마운트는 원본이 없을 때 만들지 않는 긴 형식이다. (2) 저장소는 `bridge`와 `runner`에 `/opt/idsim`으로 읽기/쓰기 하나만 마운트하고 `cyclonedds.xml` 같은 하위 파일을 따로 겹쳐 마운트하지 않는다(중첩 마운트 금지 규칙). (3) 서비스 사이 공통 환경변수는 YAML 앵커로 묶지 않고 서비스마다 풀어 쓴다. 생성기가 쓰는 PyYAML은 병합 키를 출력하지 못하고 출력 순서를 고정해야 골든이 안정되기 때문이다. (4) 변형은 `standalone`(기본)과 `embedded`(진단용. 기체 1대, `gazebo`와 `bridge` 없이 PX4가 Gazebo를 직접 띄움)이고, 호스트 Docker Engine은 healthcheck `start_interval` 때문에 25.0 이상이어야 한다.
+
 이미지 구성. 이미지는 다섯 종이다. ROS 계열 셋은 `ros-base` 위에 쌓이고(`ros-base` -> `sim-base` -> `px4`, `ros-ws`는 `ros-base`에서 바로 갈라진다), `xrce-agent`는 독립이다. 모든 Dockerfile은 `docker/` 아래에 있고 버전은 `docker/versions.env`에서만 읽는다.
 
 | 이미지 | 베이스 | 들어가는 것 | 뜨는 컨테이너 | 다시 빌드되는 때 |
@@ -170,7 +173,7 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 | `ros-base` | Ubuntu 24.04 (digest 고정) | ROS 2 Jazzy, CycloneDDS rmw, 공통 도구. `RMW_IMPLEMENTATION` 고정 | 없음 (베이스 전용) | ROS 버전이나 공통 도구 변경 |
 | `sim-base` | `ros-base` | OSRF apt의 Gazebo Harmonic, PX4-gazebo-models의 모델, 월드, `server.config`를 `/opt/px4-gz`에. 원본에서 PX4 전용 플러그인 두 줄을 뺀 `server.idsim.config`를 함께 생성. Gazebo GUI 클라이언트용 `libqt5svg5`. PX4 gz_plugins(광류, GStreamer 카메라)는 넣지 않음 | `gazebo`, `gz-gui` | Gazebo 버전이나 모델 커밋 변경 |
 | `px4` | `sim-base` | PX4 릴리스 태그를 소스 빌드한 결과물: `px4` 바이너리, ROMFS 시작 스크립트. 모델은 복사하지 않고 `/opt/px4-gz`를 심볼릭 링크로 가리킴. 멀티스테이지라 빌드 도구와 소스는 최종 이미지에 없음 | `px4-1` ... `px4-N` (기체당 하나) | PX4 태그 변경 |
-| `ros-ws` | `ros-base` | px4_msgs, px4_ros_com, ros_gz_bridge(vendor gz-transport만), foxglove_bridge, 이 프로젝트의 ROS 패키지. gz 서버는 없음 | `ros-ws`, `bridge`, `foxglove`, `smoke`, 통합 테스트 | 프로젝트 코드 변경 (가장 자주) |
+| `ros-ws` | `ros-base` | px4_msgs, px4_ros_com, ros_gz_bridge(vendor gz-transport만), foxglove_bridge, 이 프로젝트의 ROS 패키지. gz 서버는 없음 | `ros-ws`, `bridge`, `runner`, `foxglove` | 프로젝트 코드 변경 (가장 자주) |
 | `xrce-agent` | Ubuntu 24.04 (digest 고정) | Micro XRCE-DDS Agent를 소스 빌드한 멀티스테이지. ROS 없음 | `xrce-agent` | 에이전트 버전 변경 |
 
 이렇게 나눈 이유.
@@ -199,7 +202,7 @@ GUI와 GPU. 개발 중 Gazebo 화면은 `viz` 프로필의 `gz-gui` 서비스로
 ```
 idsim/
   docker/            # Dockerfile.ros-base, Dockerfile.sim-base, Dockerfile.px4, Dockerfile.ros-ws,
-                     # Dockerfile.xrce-agent, versions.env, compose.smoke.yaml
+                     # Dockerfile.xrce-agent, versions.env (compose 파일은 손으로 두지 않고 생성한다)
     px4/             # px4-rc.mavlink (idsim용 MAVLink 시작 스크립트. Dockerfile.px4가 PATH 앞에 COPY)
   config/
     fleet.yaml       # 기체 레지스트리, 월드, 표적 (단일 출처. 스택 번호는 생성 인자)
@@ -223,9 +226,11 @@ idsim/
   gateway/           # Rust 크레이트: gRPC -> WebSocket/HTTP 게이트웨이, Fleet 페이지
   missions/          # YAML 미션, 시나리오 정의
   tests/
-    support/         # 정규화, 토픽 수신 확인 등 스모크와 pytest가 공유하는 Python 모듈
+    support/         # 정규화, 토픽 수신 확인, stack.json 로더 등 스모크와 pytest가 공유하는 Python 모듈
     smoke/           # 1단계 스모크 스크립트 (run_smoke.sh, capture.sh, check_px4.py)
+    tools/           # 생성기 단위 테스트 (test_gen_compose.py. 골든과 불변식 검사)
     fixtures/px4/<PX4_TAG>/  # 골든 토픽 목록, 발행자 QoS, env (추적)
+    fixtures/gen_compose/    # 생성기 골든: 케이스별 fleet.yaml, compose.yaml, stack.json (추적)
     ...              # pytest 통합 테스트 (ros-ws 컨테이너 안에서 실행)
   artifacts/         # 실행 로그, ULog, 원시 측정값, 생성된 compose와 stack.json(runs/<실행 id>/) (비추적, CI 잡 아티팩트로 업로드)
   docs/
