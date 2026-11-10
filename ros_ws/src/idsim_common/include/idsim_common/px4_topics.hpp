@@ -1,3 +1,17 @@
+// Copyright 2026 Daniel Hongwoo Lee
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // PX4 uXRCE-DDS 토픽 기술자. 토픽 이름은 이 헤더의 기술자로만 얻는다.
 //
 // 기술자(topics::VehicleStatus 등)는 메시지 타입, 방향, 논리 이름, 발행 허용을 하나로 묶는다.

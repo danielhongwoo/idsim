@@ -1,3 +1,17 @@
+// Copyright 2026 Daniel Hongwoo Lee
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // VehicleCommand 빌더의 필드 표와 ack 매칭 술어.
 // 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 6. 필드 값은 opinion-px4.md P3 표.
 

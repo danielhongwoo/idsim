@@ -1,3 +1,17 @@
+# Copyright 2026 Daniel Hongwoo Lee
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 cmake_minimum_required(VERSION 3.8)
 project(idsim_common CXX)
 
@@ -42,13 +56,15 @@ ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(eigen3_cmake_module Eigen3 px4_msgs rclcpp rclcpp_lifecycle rmw rosidl_runtime_cpp)
 
 if(BUILD_TESTING)
-  # ---- ament 린터: xmllint, lint_cmake, cpplint만. uncrustify, copyright, cppcheck는 쓰지 않는다 ----
-  # cpplint의 legal/copyright는 라이선스 결정 전까지 끈다.
+  # ---- ament 린터: xmllint, lint_cmake, cpplint, copyright만. uncrustify, cppcheck는 쓰지 않는다 ----
+  # copyright는 Apache-2.0 머리말을 검사한다. cpplint의 legal/copyright는 켜 둔다.
   find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_copyright REQUIRED)
   find_package(ament_cmake_cpplint REQUIRED)
-  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_cpplint)
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_copyright ament_cmake_cpplint)
   ament_lint_auto_find_test_dependencies()
-  ament_cpplint(FILTERS "-legal/copyright")
+  ament_copyright()
+  ament_cpplint()
 
   # ---- 골든 경로: 태그와 px4_msgs 커밋은 docker/versions.env에서만 읽는다 ----
   set(IDSIM_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." CACHE PATH "idsim repository root (holds docker/versions.env)")

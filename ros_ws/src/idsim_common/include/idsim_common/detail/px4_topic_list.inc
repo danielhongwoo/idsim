@@ -1,3 +1,17 @@
+// Copyright 2026 Daniel Hongwoo Lee
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // PX4 v1.17.0 dds_topics.yaml에 있는 토픽 65개의 기술자 목록. 이 파일이 유일한 출처다.
 //
 // 이 파일은 idsim_common/px4_topics.hpp만 include한다. 다른 곳에서 include하지 않는다.

@@ -1,3 +1,17 @@
+// Copyright 2026 Daniel Hongwoo Lee
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // 토픽 기술자의 방향과 발행 허용 trait 전수 검사, 허용 목록 명시 비교, msg_version 규칙.
 // 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 2.
 
