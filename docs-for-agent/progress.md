@@ -26,6 +26,8 @@
   - 검증 결과: k=0에서 S0, S1b, S2, S3, S4(`--check` 일치), S5 통과. k=0과 k=1 동시 S2 통과, 두 스택 px4 로그 모두 `bind failed` 0건. `artifacts/runs/`에 root 소유 파일 0건. 단위 테스트 141 passed. `tools/ci/lint.sh all` 전부 PASS. `stack.sh up --viz`에서 gz-gui 창 확인(플러그인 18개). `qgc.sh --stack 1`에서 QGC가 15550을 수신하고 연결 확인(ParamCache 갱신). 8889를 점유한 상태에서 에이전트 `bind error` 보고 확인.
   - 접점 승인: test-engineer 조건부 승인 -> 조건 반영, ros2-engineer 승인, sim-engineer 조건부 승인(C1) -> 반영, px4-engineer 접점 문제 없음, reviewer 조건부 -> 반영.
   - 사용자 육안 확인 2건은 아직 안 됨: `stack.sh up --viz`의 Gazebo GUI에서 x500_1 확인, `qgc.sh --stack`으로 QGC 기체 연결 확인.
+- 2026-11-10: 3단계는 PR #10으로 main에 합쳐졌다(5fd11a6).
+- 2026-11-10: 1a 4번 작업 `idsim_common` 설계 확정(ros2, px4, devops 의견, architect 결정, reviewer 검증 조건부 -> 반영). 구현은 시작 전이며 다른 작업 환경에서 이어갈 수 있도록 계획과 근거 전체를 `docs-for-agent/plan-1a-4-idsim-common/`에 두었다.
 - 다음 작업:
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
   2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
@@ -44,6 +46,7 @@
      - 사용자 육안 확인 2건: `tools/stack.sh up --viz`의 Gazebo GUI에서 x500_1, `tools/qgc.sh --stack` 뒤 QGC 기체 연결.
      - 로드맵 다음 단계: 1a 4단계 `idsim_common`(C++, QoS 프로필, 토픽 이름 매핑, 좌표 변환, 네임스페이스 해석, `VehicleCommand` 빌더, GoogleTest). 이어서 5단계 `idsim_interfaces`, 6단계 이륙-호버-착륙 노드와 통합 테스트, 7단계 `docs/interface.md`. 4단계 착수 때 `frame_transforms`와 px4_msgs v1.17.0 호환을 확인한다.
      - 3단계 C 미해결 항목 처리는 미해결 사항 절 참조(`--run-id` 제거 PR, gz_server.sh 주석 정정 등).
+  4c. 1a 4번 작업 `idsim_common` 구현: `docs-for-agent/plan-1a-4-idsim-common/README.md`의 작업 단위 A-E와 순서를 따른다. 계약은 같은 디렉터리 `decisions.md`. 빌드 도구와 CI 단위(C)는 PR #11(이미지 빌드 apt 미러) 머지 뒤 시작한다.
   5. 6단계에서 ros-ws에 foxglove_bridge 추가와 Lichtblick 브라우저 실접속 확인. 생성기에 ROS params 파일과 bridge 설정 파일 생성 추가.
 
 ## 새 개발 PC에서 시작할 때
@@ -58,7 +61,7 @@
 
 | Phase | 상태 | 마지막 갱신 | 비고 |
 | --- | --- | --- | --- |
-| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계는 A, B, C 구현 완료(브랜치 `feat/step3-compose`, PR 생성 전. 사용자 육안 확인 2건 남음). 4단계 이후 시작 전 | 2026-11-10 | 스모크 설계는 `docs/smoke-test-phase1a.md` |
+| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계 완료(PR #10, 사용자 육안 확인 2건 남음). 4단계 설계 확정, 구현 시작 전(`docs-for-agent/plan-1a-4-idsim-common/`) | 2026-11-10 | 스모크 설계는 `docs/smoke-test-phase1a.md` |
 | 1b | 시작 전 | 2026-11-06 | |
 | 2 | 시작 전 | 2026-11-06 | |
 | 3 | 시작 전 | 2026-11-06 | |
@@ -153,11 +156,19 @@
   - (n) 같은 `GZ_PARTITION`의 다른 gz 서버 검사(`scene/info` 제공자 1, `/clock` 발행자 1)를 `stack.sh` 사전 검사와 `run_smoke.sh` S2 양쪽에 둔다. 근거: sim-engineer가 재현한 사례(같은 파티션에 서버가 둘이면 모델 유일성 판정만으로는 못 잡는 경로가 있음).
   - (o) 설계와 달라진 구현 결정. 1) compose 안 경로는 절대 경로(`<host-repo-root>/...`). compose.yaml이 run 디렉터리에 있기 때문. 2) 바인드 마운트는 긴 형식에 `create_host_path: false`. 3) bridge/runner는 저장소를 `/opt/idsim`에 rw 하나만 마운트하고 `cyclonedds.xml` 중첩 마운트를 없앴다. 4) YAML 앵커 미사용(PyYAML가 merge 키를 출력하지 못하고 자동 앵커를 끔). 5) Docker Engine 25.0 하한은 문서 근거이며 `check_host.sh`가 WARN(실측 아님). 6) `lint.sh`에 `core.quotepath=off` 적용(한글 경로 파일이 검사에서 빠지던 버그). 7) lint의 `compose config -q`는 골든 compose를 `/work/idsim` 치환 후 `--profile viz --profile tools`, DISPLAY/XAUTHORITY 미설정으로 검사.
   - (p) `check_px4.py --expect-origin`은 `vehicle_gps_position`(SensorGps) 기준, 수평 0.5 m, 수직 1.0 m. 실측 최대 오차 수평 0.07 m, 수직 0.34 m. pose 보정은 하지 않는다(1대 기준). `derived_params`도 S2에서 `pxh`로 판정한다.
+- 2026-11-10 (1a 4번 작업 `idsim_common`. 원문과 근거는 `docs-for-agent/plan-1a-4-idsim-common/decisions.md`)
+  - (q) 좌표 변환은 직접 구현하고 px4_ros_com은 단위 테스트 비교 기준으로만 쓴다(공분산 변환 2개 오류, 템플릿 링크 실패, NaN 번짐 실측). 미해결의 frame_transforms 호환 항목은 이 결정으로 닫는다.
+  - (r) 토픽 매핑은 골든 65개 전부를 기술자 목록 하나에 두고 키는 (방향, 논리 이름)이다. 2026-11-06의 "키는 논리 이름과 타입의 쌍"을 갱신한다. 접미사는 여전히 `MESSAGE_VERSION`에서 파생한다. /fmu/in 발행은 `offboard_control_mode`, `trajectory_setpoint`, `vehicle_command`만 허용하며 이 차단은 실수 방지 수준이지 보안 경계가 아니다.
+  - (s) QoS는 구독과 발행 모두 BEST_EFFORT, VOLATILE, KEEP_LAST 5, liveliness Automatic. 계약은 reliability와 durability이고 골든 depth는 계약 밖이다.
+  - (t) SITL에 `UXRCE_DDS_SYNCT=0`을 넣어 PX4 timestamp를 sim 시간으로 통일한다. /fmu/in timestamp는 `Px4Timestamp::now(rclcpp::Clock &)`로만 만들며 ROS 시간이 활성이고 값이 0보다 클 때만 성공한다.
+  - (u) 노드는 sysid를 params로 받고 vehicle_status와 대조한다. N+1 공식은 코드에 두지 않는다. VehicleCommand 빌더에 "ACCEPTED = 성공" 헬퍼와 raw()를 두지 않는다.
+  - (v) 패키지는 SHARED, C++17, `-Werror`. CI는 새 unit 잡(`tools/ros_ws.sh ci`)에서 colcon 빌드와 테스트, clang-tidy, ament 린터를 돌리고 clang-format은 lint 잡에 둔다. ros-ws 이미지에 clang 18 도구를 더한다.
 
 ## 미해결 사항
 
 사용자 결정이 필요한 항목.
 
+- 저장소 라이선스와 소스 파일 저작권 머리말 정책(2026-11-10). 정해질 때까지 `ament_copyright`와 cpplint `legal/copyright` 검사를 끈다. 정해지면 LICENSE 추가와 두 검사를 켜는 작업이 따른다.
 - `tools/qgc.sh`가 바꾼 `udpListenPort`를 되돌리는 옵션(`--restore`)을 둘지. 지금은 `--stack k`가 설정을 바꾸고 되돌리지 않으며, `--stack`을 생략하면 `IDSIM_STACK_INDEX`(기본 0)의 포트를 쓰므로, 그 변수가 없으면 14550으로 돌아가고 설정된 셸에서는 그 스택 포트가 된다는 점과 기본으로 돌리려면 `--stack 0`을 쓴다는 점을 안내로만 둔다(2026-11-10).
 
 아직 열린 항목.
@@ -166,7 +177,6 @@
 - 이미지 ENV와 `versions.env` 대조가 S0에서만 일어난다. S1-S5를 단독 실행하면 대조가 없다.
 - `GZ_IP=127.0.0.1`을 빼면 gz-transport 디스커버리가 불안정한지(추측). 지금은 명시하고 가며 제거 비교는 하지 않았다.
 - `artifacts/`를 CI 잡 아티팩트로 업로드(가정, CI 골격에서 확인).
-- `frame_transforms`(px4_ros_com main 커밋)와 v1.17.0 px4_msgs의 호환(1a 4단계).
 - Phase 3 주기 하한 계약이 필요한 토픽 목록(px4-engineer, Phase 3 전에).
 - `COM_RC_IN_MODE`=4라 QGC 수동 모드와 가상 조이스틱은 쓸 수 없다. ARM, TAKEOFF(2.5m, `MIS_TAKEOFF_ALT` 기본), LAND, 자동 disarm은 pymavlink로 확인. `docs/interface.md`의 SITL 파라미터 절에 적을 것(ros2-engineer 초안, px4-engineer 확인).
 - Lichtblick 2.5.2 공식 이미지의 브라우저 실접속은 미확인. 두 서브프로토콜(foxglove.websocket.v1, foxglove.sdk.v1)을 제시하는 것만 확인했고 foxglove_bridge 3.6.0과의 실제 접속은 1a 6단계에서 확인한다.
