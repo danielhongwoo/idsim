@@ -12,6 +12,7 @@ diff는 리뷰에서 본다. 고정 인자 중 versions_env의 sha256만 상수�
 골든이 바뀌지 않게). 나머지 입력 sha256은 실제 파일 값이다.
 """
 import copy
+import hashlib
 import json
 import os
 import re
@@ -38,6 +39,7 @@ FIXED = {
     "git_commit": "0" * 40,
     "git_dirty": False,
     "versions_env_sha256": "0" * 64,
+    "cyclonedds_xml_sha256": "0" * 64,
 }
 
 BASE_FLEET = {
@@ -110,6 +112,7 @@ def make_ctx(k=0, variant="standalone", run_id=None, fleet_path="config/fleet.ya
             "px4_params_file": {"path": "config/px4/sitl_params.env",
                                 "sha256": gc._sha256_file(os.path.join(REPO, "config/px4/sitl_params.env"))},
             "versions_env": {"path": gc.VERSIONS_ENV_REL, "sha256": FIXED["versions_env_sha256"]},
+            "cyclonedds_xml": {"path": gc.CYCLONEDDS_REL, "sha256": FIXED["cyclonedds_xml_sha256"]},
         },
         "params_env": PARAMS_ENV,
         "participant_index_max": PMAX,
@@ -166,6 +169,12 @@ def test_golden_stack_loads_with_support_loader(case):
     assert [v.service for v in s.vehicles] == s.services["px4"]
     assert s.run_id == s.raw["run"]["id"] and s.compose_file.name == "compose.yaml"
     assert s.startup_stages == s.raw["startup"]["stages"]
+    assert os.path.basename(s.raw["run"]["host_dir"]) == s.run_id
+    if variant == "embedded":
+        assert s.startup_stages[-1] == [s.vehicles[-1].service]
+    else:
+        px4 = [v.service for v in s.vehicles]
+        assert s.startup_stages == [["xrce-agent", "gazebo"], px4, ["bridge"]]
     assert s.vehicle_by_ns(s.vehicles[0].ns) is s.vehicles[0]
     assert s.vehicles[0].ns == "/" + s.vehicles[0].px4_ns
     assert s.service("agent") == "xrce-agent" and s.service("runner") == "runner"
@@ -293,7 +302,7 @@ def test_standalone_services_and_healthchecks():
         assert gui["environment"][name] is None
     assert s["runner"]["environment"]["IDSIM_STACK_FILE"] == \
         "/opt/idsim/artifacts/runs/20261109-090000-k0/stack.json"
-    assert stack["startup"]["stages"] == [["xrce-agent", "gazebo"], ["px4-1", "bridge"]]
+    assert stack["startup"]["stages"] == [["xrce-agent", "gazebo"], ["px4-1"], ["bridge"]]
 
 
 def test_origin_absent_gives_no_env_and_null():
@@ -508,3 +517,124 @@ def test_no_user_lookup_in_repo_code():
 def test_print_gcs_port(capsys):
     assert gc.main(["--print-gcs-port", "1"]) == 0
     assert capsys.readouterr().out.strip() == "15550"
+
+
+# ------------------------------------------------------------------ run.host_dir 불변식(build 수준)
+@pytest.mark.parametrize("case", sorted(GOLDEN_CASES))
+def test_golden_host_dir_invariant(case):
+    k, variant = GOLDEN_CASES[case]
+    rel = f"tests/fixtures/gen_compose/{case}/fleet.yaml"
+    norm, _ = gc.validate_fleet(gc.load_yaml(_read(os.path.join(REPO, rel))))
+    _, stack, _ = gc.build(norm, make_ctx(k=k, variant=variant, fleet_path=rel))
+    run = stack["run"]
+    assert run["host_dir"] == HOST_REPO + "/artifacts/runs/" + run["id"]
+    assert os.path.basename(run["host_dir"]) == run["id"]
+
+
+def test_build_rejects_basename_mismatch():
+    norm, _ = gc.validate_fleet(fleet())
+    ctx = make_ctx()
+    ctx["run_id"] = "other-id"
+    with pytest.raises(gc.FleetError, match="run id"):
+        gc.build(norm, ctx)
+
+
+@pytest.mark.parametrize("parent", [
+    "",
+    "/artifacts/x",
+    "/artifacts/runs/a",
+])
+def test_build_rejects_wrong_parent(parent):
+    norm, _ = gc.validate_fleet(fleet())
+    ctx = make_ctx()
+    ctx["host_run_dir"] = f"{HOST_REPO}{parent}/{ctx['run_id']}"
+    with pytest.raises(gc.FleetError, match="artifacts/runs"):
+        gc.build(norm, ctx)
+
+
+def test_assert_invariants_catches_tampered_host_dir():
+    norm, _ = gc.validate_fleet(fleet())
+    compose, stack, _ = gc.build(norm, make_ctx())
+    gc.assert_invariants(compose, stack)
+    stack["run"]["host_dir"] = f"{HOST_REPO}/artifacts/runs/tampered"
+    with pytest.raises(gc.FleetError):
+        gc.assert_invariants(compose, stack)
+
+
+def test_runner_stack_file_path_uses_run_id():
+    compose, stack, _ = gen(run_id="abc-1")
+    assert compose["services"]["runner"]["environment"]["IDSIM_STACK_FILE"] == \
+        "/opt/idsim/artifacts/runs/abc-1/stack.json"
+    assert stack["run"]["id"] == "abc-1"
+
+
+# ------------------------------------------------------------------ generate(CLI) 수준
+def _cli(tmp_path, *extra, out=True, k="0"):
+    argv = ["--repo-root", REPO, "--host-repo-root", HOST_REPO, "--stack", k,
+            "--generated-at", FIXED["generated_at"], "--uid", "1000", "--gid", "1000",
+            "--git-commit", "0" * 40, "--git-dirty", "false"]
+    out_dir = tmp_path / "out"
+    if out:
+        argv += ["--out-dir", str(out_dir)]
+    return gc.main(argv + list(extra)), out_dir
+
+
+def _stack_of(out_dir):
+    with open(out_dir / "stack.json", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def test_cli_run_dir_only(tmp_path, capsys):
+    rd = f"{HOST_REPO}/artifacts/runs/myrun"
+    rc, out = _cli(tmp_path, "--run-dir", rd)
+    assert rc == 0 and capsys.readouterr().out.strip() == rd
+    st = _stack_of(out)
+    assert st["run"]["id"] == "myrun" and st["run"]["host_dir"] == rd
+
+
+def test_cli_run_id_only(tmp_path):
+    rc, out = _cli(tmp_path, "--run-id", "idonly")
+    assert rc == 0
+    st = _stack_of(out)
+    assert st["run"]["id"] == "idonly"
+    assert st["run"]["host_dir"] == f"{HOST_REPO}/artifacts/runs/idonly"
+
+
+def test_cli_run_dir_and_id_match(tmp_path):
+    rd = f"{HOST_REPO}/artifacts/runs/same"
+    rc, out = _cli(tmp_path, "--run-dir", rd, "--run-id", "same")
+    assert rc == 0 and _stack_of(out)["run"]["id"] == "same"
+
+
+def test_cli_run_dir_and_id_mismatch_rejected(tmp_path, capsys):
+    rd = f"{HOST_REPO}/artifacts/runs/aaa"
+    rc, out = _cli(tmp_path, "--run-dir", rd, "--run-id", "bbb")
+    assert rc == 1
+    assert "gen_compose: 실패" in capsys.readouterr().err
+    assert not out.exists() or not os.listdir(out)
+
+
+def test_cli_default_run_id_pattern(tmp_path):
+    rc, out = _cli(tmp_path, k="3")
+    assert rc == 0
+    st = _stack_of(out)
+    assert re.fullmatch(r"[0-9]{8}-[0-9]{6}-k3", st["run"]["id"])
+    assert os.path.basename(st["run"]["host_dir"]) == st["run"]["id"]
+
+
+def test_cli_trailing_slash_run_dir(tmp_path):
+    rc, out = _cli(tmp_path, "--run-dir", f"{HOST_REPO}/artifacts/runs/slash/")
+    assert rc == 0
+    st = _stack_of(out)
+    assert st["run"]["id"] == "slash"
+    assert st["run"]["host_dir"] == f"{HOST_REPO}/artifacts/runs/slash"
+
+
+def test_cli_inputs_sha256_match_real_files(tmp_path):
+    rc, out = _cli(tmp_path, "--run-id", "hash")
+    assert rc == 0
+    inputs = _stack_of(out)["inputs"]
+    assert set(inputs) >= {"fleet", "versions_env", "px4_params_file", "cyclonedds_xml"}
+    for name in ("fleet", "versions_env", "px4_params_file", "cyclonedds_xml"):
+        real = hashlib.sha256(open(os.path.join(REPO, inputs[name]["path"]), "rb").read()).hexdigest()
+        assert inputs[name]["sha256"] == real, name

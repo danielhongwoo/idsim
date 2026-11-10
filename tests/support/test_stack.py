@@ -83,7 +83,8 @@ K0_STANDALONE = r'''{
     "model_precheck": true,
     "stages": [
       ["xrce-agent", "gazebo"],
-      ["px4-1", "bridge"]
+      ["px4-1"],
+      ["bridge"]
     ]
   },
   "user": {
@@ -312,7 +313,7 @@ def test_load_standalone(tmp_path):
     assert s.world_name == "default" and s.speed_factor is None
     assert s.world_origin == {"lat": 37.5665, "lon": 126.978, "alt": 38.0}
     assert s.service("gazebo") == "gazebo" and s.services["px4"] == ["px4-1"]
-    assert s.startup_stages == [["xrce-agent", "gazebo"], ["px4-1", "bridge"]]
+    assert s.startup_stages == [["xrce-agent", "gazebo"], ["px4-1"], ["bridge"]]
     assert s.namespaces == ["/px4_1"]
     v = s.vehicles[0]
     assert (v.id, v.instance, v.ns, v.px4_ns, v.sysid) == (1, 1, "/px4_1", "px4_1", 2)
