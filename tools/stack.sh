@@ -30,6 +30,15 @@ say() { echo "stack.sh: $*" >&2; }
 
 [ "$#" -ge 1 ] || usage
 cmd="$1"; shift
+# --옵션=값 형식은 --옵션 값으로 펼친다(값 있는 옵션만)
+_expanded=()
+for _a in "$@"; do
+  case "$_a" in
+    --stack=*|--fleet=*|--variant=*|--run-dir=*) _expanded+=("${_a%%=*}" "${_a#*=}") ;;
+    *) _expanded+=("$_a") ;;
+  esac
+done
+set -- ${_expanded[@]+"${_expanded[@]}"}
 stack="${IDSIM_STACK_INDEX:-0}"
 fleet=""
 viz=0
@@ -109,7 +118,30 @@ model_precheck() { # stack.json
       return 1
     fi
   done
-  say "모델 사전 검사 통과: ${models} 없음"
+  gz_unique_check "$sf" || return 1
+  say "모델 사전 검사 통과: ${models} 없음, gz 서버 1개"
+}
+
+# 같은 파티션에 gz 서버가 정확히 하나인지 본다. 둘 이상이면 px4가 두 서버의 센서를 섞어 받아 timestamp error가 난다.
+# 기준: scene/info 서비스의 provider(tcp://) 줄 수와 /clock 발행자 수가 각각 정확히 1
+gz_unique_check() { # stack.json
+  local sf="$1" world k svc_out clk_out n_prov n_pub
+  world="$(sj "$sf" world.name)"
+  k="$(sj "$sf" stack.index)"
+  svc_out="$(docker run --rm --network host \
+    -e GZ_PARTITION="$(sj "$sf" stack.gz_partition)" -e GZ_IP="$(sj "$sf" stack.gz_ip)" -e HOME=/tmp \
+    "$(sj "$sf" images.sim_base)" gz service -i --service "/world/${world}/scene/info" 2>&1)" || true
+  clk_out="$(docker run --rm --network host \
+    -e GZ_PARTITION="$(sj "$sf" stack.gz_partition)" -e GZ_IP="$(sj "$sf" stack.gz_ip)" -e HOME=/tmp \
+    "$(sj "$sf" images.sim_base)" gz topic -i -t /clock 2>&1)" || true
+  printf '%s\n---\n%s\n' "$svc_out" "$clk_out" > "$(dirname "$sf")/model_precheck_gz.txt"
+  n_prov="$(printf '%s\n' "$svc_out" | grep -c 'tcp://' || true)"
+  n_pub="$(printf '%s\n' "$clk_out" | grep -c 'tcp://' || true)"
+  if [ "$n_prov" -ne 1 ] || [ "$n_pub" -ne 1 ]; then
+    say "gz 서버 검사 실패: scene/info provider ${n_prov}개, /clock 발행자 ${n_pub}개(각각 정확히 1이어야 한다)"
+    say "같은 파티션 idsim-${k}에 다른 gz 서버가 있다. 구 compose.smoke.yaml의 idsim-smoke 프로젝트나 수동 docker run을 내려라(응답: $(dirname "$sf")/model_precheck_gz.txt)"
+    return 1
+  fi
 }
 
 do_up() {
