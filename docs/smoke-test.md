@@ -74,11 +74,11 @@ compose 프로젝트 이름. 모든 compose 파일은 `name:`을 명시한다(�
 
 ## 골든 파일 단위 테스트
 
-`idsim_common`의 토픽 매핑은 `px4_topic<T>(ns, dir, base)` 형태다. 키는 논리 이름 `base`와 타입 `T`의 쌍이며, 접미사는 `T::MESSAGE_VERSION`에서 컴파일 시점에 파생한다. 상수가 없는 메시지와 상수가 0인 메시지 둘 다 `std::void_t` 특수화로 0이 된다(두 경우 모두 px4_msgs에 실존한다고 보며, 가정 절 참조). 같은 타입을 쓰는 토픽이 둘 이상이어도 논리 이름이 다르므로 구분된다.
+`idsim_common`의 토픽 매핑은 기술자 목록 하나다. 기술자는 px4_msgs 타입, 방향, 논리 이름, 발행 허용을 묶고, 목록은 골든의 토픽 전부를 담는다. key는 방향과 논리 이름이며(같은 논리 이름이 in과 out 양쪽에 있는 토픽이 있다), 접미사는 기술자에 묶인 타입의 `MESSAGE_VERSION`에서 컴파일 시점에 파생한다. 문자열 인자를 받아 이름을 만드는 함수는 공개하지 않고, 공개 API는 목록에 등록된 기술자만 받는다. 상수가 없는 메시지와 상수가 0인 메시지 둘 다 `std::void_t` 특수화로 0이 된다(두 경우 모두 px4_msgs에 실존한다고 보며, 가정 절 참조). 같은 타입을 쓰는 토픽이 둘 이상이어도 논리 이름이 다르므로 구분된다.
 
-GoogleTest는 다음을 검사한다. 테스트 안에서만 정의한 더미 타입(상수 없음, 상수 0, 상수 N)으로 `msg_version` 특수화 자체를 검사하고, px4_msgs 타입의 버전 값을 리터럴로 고정하지 않는다. 그 값은 매핑이 만드는 (이름, 타입) 쌍 집합이 `topics.txt`의 부분집합인지로 검사한다. `env.txt`의 `PX4_MSGS_REF`가 `versions.env`와 같음(다르면 먼저 실패).
+GoogleTest는 다음을 검사한다. 테스트 안에서만 정의한 더미 타입(상수 없음, 상수 0, 상수 N)으로 `msg_version` 특수화 자체를 검사하고, px4_msgs 타입의 버전 값을 리터럴로 고정하지 않는다. 그 값은 기술자 목록 전체가 만드는 (상대 이름, 타입) 쌍 집합이 `topics.txt`의 집합과 양방향으로 일치하는지로 검사한다(타입 문자열은 생성 코드의 `rosidl_generator_traits::name`에서 얻는다). 그래서 태그를 올려 토픽이 더해지거나 빠지거나 접미사가 바뀌면 이 테스트가 깨진다. `env.txt`의 `PX4_MSGS_REF`, `versions.env`의 값, 테스트가 도는 ros-ws 이미지의 ENV `IDSIM_BUILD_PX4_MSGS_REF` 셋이 같은지도 단정한다(이미지 ENV가 없으면 FAIL). 컴파일된 px4_msgs는 이미지의 것이므로, 이 대조가 있어야 매핑이 파생된 px4_msgs와 비교 대상 골든이 같은 조합임이 보장된다.
 
-`idsim_common/CMakeLists.txt`가 `docker/versions.env`에서 `PX4_TAG`를 읽어 `ament_add_gtest`의 ENV로 `IDSIM_PX4_FIXTURE_DIR` 절대 경로를 넘긴다. 변수나 디렉터리가 없으면 SKIP이 아니라 FAIL. `ament_index`는 쓰지 않는다. 실패 메시지에는 태그, 경로, SHA, 없는 쌍 목록, 접미사를 뗀 기본 이름이 같은 후보를 함께 적는다. 이 설계는 ros-ws 컨테이너에서 저장소 루트가 `/opt/idsim`에 마운트된다는 가정에 선다.
+`idsim_common/CMakeLists.txt`가 테스트를 빌드할 때 `docker/versions.env`에서 `PX4_TAG`와 `PX4_MSGS_REF`를 읽어 `ament_add_gtest`의 ENV로 `IDSIM_PX4_FIXTURE_DIR` 절대 경로와 `IDSIM_PX4_MSGS_REF`를 넘긴다. `versions.env`에 해당 줄이 없거나 둘 이상이거나 골든 디렉터리가 없으면 configure가 실패하고, 테스트도 변수나 디렉터리가 없거나 `topics.txt`가 비어 있으면 SKIP이 아니라 FAIL이다. `ament_index`는 쓰지 않는다. 실패 메시지에는 경로, 양쪽에만 있는 쌍 목록, 접미사를 뗀 기본 이름을 함께 적는다. 이 테스트는 `tools/ros_ws.sh test`로 ros-ws 컨테이너 안에서 돌리며, 저장소 루트가 `/opt/idsim`에 마운트된다는 가정에 선다(다른 위치면 `-DIDSIM_REPO_ROOT=`로 지정).
 
 갱신 절차: `versions.env`의 `PX4_TAG`와 `PX4_MSGS_REF`를 함께 올리고, `run_smoke.sh --update-golden`으로 골든을 다시 만들고, 단위 테스트를 돌리고, PR에서 골든 diff를 검토해 승인한다. CI는 비교만 하고 갱신하지 않는다.
 
@@ -90,13 +90,14 @@ GoogleTest는 다음을 검사한다. 테스트 안에서만 정의한 더미 �
 - 1단계의 compose는 손으로 썼고 3단계의 `gen_compose.py`가 대체했다(`docker/compose.smoke.yaml`은 삭제). pytest fixture는 6단계에서 만들고, `tests/support/` 모듈은 1단계부터 만들어 재사용한다.
 - `server.config`는 PX4 소스 `src/modules/simulation/gz_bridge/server.config`와 PX4-gazebo-models 루트의 것이 같다(실측 확인). px4 builder가 diff로 계속 검사한다. gz_plugins(광류, GStreamer 카메라)를 sim-base에 넣지 않는다. OpenCV, GStreamer 의존과 비재현 빌드가 따라오고 x500 기본 모델에는 쓸 곳이 없다.
 - `OffboardControlMode`에는 `MESSAGE_VERSION` 상수가 없고 `VehicleStatus`는 1임이 실측으로 확인되었다. versioned 34개 중 9개가 1, 25개가 0이며 `TrajectorySetpoint`, `VehicleCommand`, `VehicleCommandAck`는 0이다. `ArmingCheckReply.msg`만 등호 앞 공백이 두 칸이라 `.msg`를 읽는 파서는 공백에 관대해야 한다.
-- px4_ros_com에는 release/1.17 브랜치가 없다(release/1.13, 1.15, 1.16, v1.14, main). `PX4_ROS_COM_REF`는 release/1.16 HEAD와 같은 main 커밋으로 고정했고, `frame_transforms`가 v1.17.0 px4_msgs와 호환된다는 것은 가정이다. 4단계 `idsim_common` 빌드와 단위 테스트에서 확인하고, 안 맞으면 `idsim_common`이 변환을 직접 구현한다.
+- px4_ros_com에는 release/1.17 브랜치가 없다(release/1.13, 1.15, 1.16, v1.14, main). `PX4_ROS_COM_REF`는 release/1.16 HEAD와 같은 main 커밋으로 고정했다. 4단계에서 확인한 결론: `frame_transforms`는 px4_msgs에 의존하지 않아 태그 호환은 문제가 아니지만 공분산 변환 두 개가 틀리고 동체 변환이 NaN을 다른 축으로 번지게 하므로, `idsim_common`은 래핑하지 않고 변환을 직접 구현한다. 벡터와 쿼터니언 변환은 맞아서 px4_ros_com은 단위 테스트의 비교 기준으로만 쓴다.
 - 1단계에서는 호스트에서 `compose run`으로 ros-ws를 띄우면 `artifacts/`에 root 소유 파일이 생겼다. 3단계부터 생성된 compose가 호스트 uid:gid `user` 매핑을 넣어 해결했다. 3단계부터 S2 판정에 `sensor_gps` 좌표가 `fleet.yaml`의 `world.origin`과 일치하는지, `gz model --list`에 `x500_1`이 정확히 하나인지, PX4 로그에 `WARN  [mavlink] bind failed`가 없는지를 더한다.
 - 가정: 모델 저장소 커밋은 `PX4_GZ_MODELS_REF`로 고정하고 px4 builder가 서브모듈 커밋과 같은지 검사한다. 런타임 이미지는 `/opt/PX4-Autopilot/Tools/simulation/gz`를 `/opt/px4-gz`로 가리키는 심볼릭 링크로 두어 빌드 때 박힌 gz_env.sh 경로를 살린다.
 - 가정: `px4-uxrce_dds_client status`의 연결 문자열은 `Running, connected`다. S1에서 실측해 다르면 healthcheck 문자열을 고친다.
 - 가정: `GZ_IP=127.0.0.1`을 빼면 gz-transport 디스커버리가 불안정하다(`make` 타깃이 이 값을 넣어 주는 것을 근거로 한 추측). 스모크는 명시하고 간다.
 - 가정: `server.idsim.config`가 없으면 센서 시스템이 올라오지 않아 EKF가 수렴하지 않는다(PX4 소스 읽기 기반). S2의 `commander check`가 반증 지점이다. `COM_RC_IN_MODE=4`에서 `commander check`가 통과하는지도 같은 지점에서 본다.
 - SITL 파라미터는 `config/px4/sitl_params.env`가 단일 출처이며 값마다 근거 주석을 둔다. Offboard 손실 시 동작 파라미터의 이름은 `COM_OBL_RC_ACT`(4 = Land)다. `COM_OBL_ACT`라는 파라미터는 v1.17.0에 없고, 잘못된 이름은 rcS의 `param set`이 오류만 찍고 넘어가 기본값(Position)이 남으므로 이름 오타는 조용한 실패가 된다. S4의 `param show` 저장값에서 이 이름의 값이 4인지 확인한다.
+- 4단계부터 공통 SITL 파라미터에 `UXRCE_DDS_SYNCT=0`이 있다(PX4 timestamp를 시뮬레이션 시간 축에 둔다). S2의 `param show` 판정이 저장값 0을 확인한다. 이 값에서 `timesync_status` 토픽은 그래프와 골든에 남지만 데이터가 오지 않으므로 S4의 `hz` 측정 대상에서 뺀다.
 - 가정: `/proc/net/udp`에서 에이전트 포트의 행이 보인다(st 값은 보지 않는다). S0에서 확인한다.
 
 ## 로컬 빌드

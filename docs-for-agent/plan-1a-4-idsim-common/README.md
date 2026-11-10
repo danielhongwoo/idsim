@@ -1,6 +1,18 @@
 # Phase 1a 4번 작업 idsim_common 작업 계획
 
-작성 2026-11-10. 설계는 확정, 구현은 시작 전이다. 다른 작업 환경에서 이어서 구현할 수 있도록 이 디렉터리에 근거를 모두 둔다.
+작성 2026-11-10. 설계는 확정되었고 구현은 같은 날 브랜치 `feat/1a-4-idsim-common`에서 진행했다. 다른 작업 환경에서 이어서 구현할 수 있도록 이 디렉터리에 근거를 모두 둔다.
+
+## 진행 상태 (2026-11-10)
+
+| 단위 | 상태 |
+| --- | --- |
+| A | 파일 수정 완료(`sitl_params.env`, `check_px4_pxh.py`). S2-S5 회귀는 사용자가 직접 실행 중, 생성기 골든 갱신은 devops-engineer가 진행 중 |
+| B | 완료(`tools/ros_ws.sh ci` 통과) |
+| C | 완료. unit job의 CI 첫 실행은 PR 뒤 |
+| D | 완료 |
+| E | 진행(설계 문서와 progress.md 반영) |
+
+남은 것: px4-engineer 접점 검토, reviewer 검토, PR과 CI. 실측값과 열린 항목은 `docs-for-agent/progress.md`에 있다.
 
 ## 이 디렉터리의 파일
 
@@ -86,3 +98,4 @@ B의 하위 작업(세부는 `decisions.md`의 해당 쟁점).
 
 - 이 설계 토론에서 Fable로 부른 architect와 reviewer가 모델 안전장치 오류(`[general_harms]`)로 세 번 중단되었다. 재호출하면 통과한 경우가 있었다.
 - 사용자 결정: architect는 이번 설계 결정 한 번만 Opus로 불렀다. reviewer는 Fable을 유지한다.
+- 구현 중 px4-engineer 호출이 같은 모델 안전장치 오류(`[general_harms]`)로 두 번 중단되었다. 그래서 `UXRCE_DDS_SYNCT=0` 스모크 S2-S5 회귀는 사용자가 호스트에서 직접 돌리기로 했다.
