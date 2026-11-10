@@ -55,6 +55,17 @@ if ! command -v docker > /dev/null 2>&1; then
 elif timeout 15 docker info > /dev/null 2>&1; then
   ok "docker 데몬 접근 가능"
   docker_ok=1
+  # 생성 compose의 bridge healthcheck가 start_interval을 쓴다. Docker 문서상 Engine 25.0(API 1.44)부터 지원.
+  # 하한은 문서 근거이며 실측은 29.1.3(Compose 2.40.3)뿐이다. 그 아래에서는 healthcheck가 거부되거나 무시될 수 있다.
+  sv="$(docker version --format '{{.Server.Version}}' 2> /dev/null || true)"
+  sv_major="${sv%%.*}"
+  if [ -z "$sv" ] || ! [ "$sv_major" -eq "$sv_major" ] 2> /dev/null; then
+    warn "Docker Engine 버전을 읽지 못했다('${sv}'). 25.0 이상이 필요하다(healthcheck start_interval)"
+  elif [ "$sv_major" -ge 25 ]; then
+    ok "Docker Engine $sv (25.0 이상, healthcheck start_interval 지원)"
+  else
+    warn "Docker Engine $sv: 25.0 미만이다. 생성 compose의 healthcheck start_interval이 동작하지 않을 수 있다"
+  fi
 else
   fail "docker info 실패: 데몬이 실행 중이 아니거나 현재 사용자가 docker 그룹에 속하지 않는다. 그룹 추가는 sudo usermod -aG docker \$USER 뒤 다시 로그인"
 fi
@@ -138,11 +149,18 @@ else
   warn "메모리를 확인하지 못했다"
 fi
 
-# (i) 화면
+# (i) 화면. gz-gui(viz 프로필)는 DISPLAY와 XAUTHORITY 파일을 읽기 전용으로 받는다
 if [ -n "${DISPLAY:-}" ]; then
   ok "DISPLAY=$DISPLAY"
 else
   warn "DISPLAY가 비어 있다. 화면 확인 도구(QGC, Gazebo GUI)를 쓰지 않으면 무시해도 된다"
+fi
+if [ -n "${XAUTHORITY:-}" ] && [ -s "${XAUTHORITY}" ] && [ -r "${XAUTHORITY}" ]; then
+  ok "XAUTHORITY=$XAUTHORITY"
+elif [ -n "${XAUTHORITY:-}" ]; then
+  warn "XAUTHORITY 파일($XAUTHORITY)이 없거나 비어 있거나 읽을 수 없다. Gazebo GUI가 X 서버 인증에 실패한다"
+else
+  warn "XAUTHORITY가 비어 있다. Gazebo GUI(tools/stack.sh up --viz)를 쓰려면 내보내라. GNOME Wayland: export XAUTHORITY=\$(ls /run/user/\$(id -u)/.mutter-Xwaylandauth.* | head -n 1)"
 fi
 
 # (j) 포트 충돌 힌트
@@ -150,15 +168,17 @@ if command -v ss > /dev/null 2>&1; then
   ss_out="$(ss -ulnp 2> /dev/null || true)"
   conflict=0
   k="${IDSIM_STACK_INDEX:-0}"
+  case "$k" in [0-9]) ;; *) warn "IDSIM_STACK_INDEX '$k'가 0-9가 아니다. 0으로 본다"; k=0 ;; esac
   agent_port=$((8888 + k))
-  for port in "$agent_port" 14550; do
+  gcs_port=$((14550 + 1000 * k))  # 식의 출처는 tools/gen_compose.py 상수(여기는 힌트용 점검)
+  for port in "$agent_port" "$gcs_port"; do
     # ss -ulnp 출력에서 Local Address:Port는 4번째 열이다(5번째는 Peer)
     if printf '%s\n' "$ss_out" | awk -v p=":$port" '$4 ~ p"$" {f=1} END {exit !f}'; then
-      warn "UDP 포트 $port 가 이미 쓰이고 있다. 스택 번호를 바꿔 실행하라(예: IDSIM_STACK_INDEX=1). 14550은 GCS 포트라 바뀌지 않을 수 있다"
+      warn "UDP 포트 $port 가 이미 쓰이고 있다. 스택 번호를 바꿔 실행하라(예: tools/stack.sh up --stack 1). GCS 포트는 QGC가 듣는 중이면 정상이다"
       conflict=1
     fi
   done
-  [ "$conflict" -eq 0 ] && ok "UDP ${agent_port}(에이전트, 스택 번호 ${k}), 14550(GCS) 사용 중이지 않음"
+  [ "$conflict" -eq 0 ] && ok "UDP ${agent_port}(에이전트), ${gcs_port}(GCS) 사용 중이지 않음 (스택 번호 ${k})"
 else
   warn "ss 명령이 없어 포트 충돌을 확인하지 못했다"
 fi
