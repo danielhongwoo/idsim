@@ -2,7 +2,7 @@
 
 이 폴더는 에이전트와 작업자가 세션을 시작할 때 현재 상태를 파악하기 위한 기록이다. 설계는 `docs/architecture.md`, 계획은 `docs/roadmap.md`에 두고, 여기에는 무엇이 끝났고 무엇이 진행 중이며 다음에 무엇을 할지만 적는다. 날짜는 항상 절대 날짜(YYYY-MM-DD)로 쓴다.
 
-## 현재 상태 (2026-11-09)
+## 현재 상태 (2026-11-10)
 
 - 저장소: 원격 github.com/danielhongwoo/idsim. main에 PR #1 CI 골격, #2 큰 그림 다이어그램, #3 시각 도구 로드맵, #4 인계용 진행 기록이 합쳐져 있다. 2b단계(PR #5)와 루트 README, `check_host.sh`(PR #6)도 합쳐졌다.
 - 첫 개발 호스트(2026-11-06까지): VMware VM, x86_64 Ubuntu 24.04, 16 vCPU, 31GB, NVIDIA 없음, GNOME Wayland. 이 호스트에는 다른 compose 프로젝트(`docker`: open_manipulator, zenoh_daemon, cyclo_manager 등)가 host 네트워크로 떠 있었다. 아래 실측값(빌드 시간, 이미지 크기, Gazebo GUI fps)은 이 호스트 기준이다.
@@ -18,25 +18,38 @@
 - 2026-11-09: Phase 1a 2b단계 시각 도구 준비 구현(브랜치 `feat/phase1a-viz-tools`). `tools/qgc.sh`(QGC v5.1.5 AppImage, `versions.env`의 `QGC_VERSION`과 `QGC_APPIMAGE_SHA256`으로 내려받아 `${XDG_CACHE_HOME:-$HOME/.cache}/idsim/qgc/<버전>/`에 캐시, INT/TERM에 TERM 후 5초 유예, 그다음 SIGKILL), sim-base에 `libqt5svg5`, `ros_ws/src/idsim_sim/config/gui.config`(gz-sim8 기본에서 WorldControl만 제외, 플러그인 17개), `docker/README.md` 시각 도구 절. 로컬 검증: QGC 다운로드, 캐시 재사용, 손상 재다운로드, INT와 TERM 종료 통과. Gazebo GUI는 standalone 스택 위에서 50초 생존, SVG 경고 29건에서 0건, 창 `Gazebo Sim` 존재, `Loaded plugin` 17개에 WorldControl 없음, GUI를 붙여도 서버 RTF 1.0. lint 11종 통과.
 - 2026-11-09: 이 호스트에서 archive.ubuntu.com이 IPv4, IPv6 모두 타임아웃(security.ubuntu.com, kr.archive.ubuntu.com, mirror.kakao.com은 정상). 로컬 sim-base와 px4 이미지는 저장소 Dockerfile을 바꾸지 않고 scratch 복사본에 kr 미러 sed 한 줄을 넣어 빌드했다. 따라서 이 호스트의 `idsim/sim-base:local`, `idsim/px4:local`의 apt sources는 kr 미러다. 정식 이미지는 CI가 원본 Dockerfile로 빌드한다.
 - 2026-11-09: 1a 3단계 설계 토론 완료. architect 주재, devops/px4/ros2/sim 의견, reviewer가 가정 10건을 실측 검증, 사용자 결정 4건. 결정은 아래 결정 기록, 설계 문서 반영은 브랜치 `docs/phase1a-step3-design`. 구현(A, B, C)은 시작 전.
+- 2026-11-10: Phase 1a 3단계 C 완료(브랜치 `feat/step3-compose`, HEAD 1347e6d, origin/main 병합 e0ab940 이후 커밋 15개. devops-engineer 구현, test-engineer와 px4-engineer 참여). PR 생성 전.
+  - 산출물 구조: `artifacts/runs/<run_id>/{compose.yaml, stack.json, px4-N/, ros_log/, smoke/}`. 기본 run_id는 `<UTC>-k<k>`, 스모크는 `<UTC>-k<k>-<단계>`.
+  - 진입점: `tools/stack.sh`(`up`, `down`, `ps`, 옵션 `--stack`, `--fleet`, `--variant`, `--viz`)와 `tools/gen_compose.sh`(ros-ws 컨테이너에서 생성기 실행). `runner` 서비스(프로필 `tools`)가 판정 명령을 돌린다. `config/fleet.yaml`(1대, 서울시청 원점), `tools/gen_compose.py`, `tests/tools/test_gen_compose.py`와 골든 4종(`tests/fixtures/gen_compose/{1대-k0, 1대-k3, 3대-k0, embedded}`), lint 잡의 pytest와 `compose config -q`, `LINT_PYYAML_VERSION=6.0.1`.
+  - `tools/qgc.sh --stack k`: QGC 설정 `~/.config/QGroundControl/QGroundControl.ini`의 `[AutoConnect] udpListenPort`를 14550 + 1000k로 바꾼다. 실행이 끝나도 되돌리지 않는다(되돌림 옵션은 미해결 사항).
+  - `docker/compose.smoke.yaml` 삭제. `run_smoke.sh`는 생성기를 호출해 stack.json을 소비하고, S2-S5는 운영 스택과 같은 구성으로 `bridge`까지 올린다(결정 기록 (k)).
+  - 검증 결과: k=0에서 S0, S1b, S2, S3, S4(`--check` 일치), S5 통과. k=0과 k=1 동시 S2 통과, 두 스택 px4 로그 모두 `bind failed` 0건. `artifacts/runs/`에 root 소유 파일 0건. 단위 테스트 141 passed. `tools/ci/lint.sh all` 전부 PASS. `stack.sh up --viz`에서 gz-gui 창 확인(플러그인 18개). `qgc.sh --stack 1`에서 QGC가 15550을 수신하고 연결 확인(ParamCache 갱신). 8889를 점유한 상태에서 에이전트 `bind error` 보고 확인.
+  - 접점 승인: test-engineer 조건부 승인 -> 조건 반영, ros2-engineer 승인, sim-engineer 조건부 승인(C1) -> 반영, px4-engineer 접점 문제 없음, reviewer 조건부 -> 반영.
+  - 사용자 육안 확인 2건은 아직 안 됨: `stack.sh up --viz`의 Gazebo GUI에서 x500_1 확인, `qgc.sh --stack`으로 QGC 기체 연결 확인.
 - 다음 작업:
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
   2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
   2b. (완료 2026-11-09, 브랜치 docs/readme-check-host) 새 PC 재구성 지원: 저장소 루트 `README.md`와 `tools/check_host.sh`. 남은 것: apt 미러를 빌드 인자로 바꿀 수 있게 할지와 GHCR 이미지를 받아 쓰는 `--mode pull`(devops-engineer 판단, 아래 미해결 항목). README의 "알려진 제약" 절은 미러 문제가 풀리거나 GHCR가 공개되면 함께 고친다.
   3. CI 후속 PR: Dockerfile.px4의 pip 고정과 PX4_OPTICAL_FLOW_REF 반영, `ls | grep` 정리(px4-engineer). Dockerfile.sim-base의 GZ_APT_KEY_FPR 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 키 재료와 KEY_<이미지> 설명 갱신(architect). image_keys.py가 bake 블록의 tags와 공백까지 해시하는 것 정리, lint가 같은 저장소 PR에서 두 번 도는 것(devops-engineer).
-  4. roadmap 1a 3단계 구현. 설계 결정은 결정 기록 2026-11-09 참조. 순서 E -> A, B 병렬 -> C -> 검증.
+  4. roadmap 1a 3단계 구현(E, A, B, C 완료, 아래는 계획 당시 기록). 설계 결정은 결정 기록 2026-11-09 참조. 순서 E -> A, B 병렬 -> C -> 검증.
      - E (architect, 완료 2026-11-09, 브랜치 `docs/phase1a-step3-design`): architecture.md, roadmap.md, smoke-test-phase1a.md, progress.md, file-ownership.md 반영. 검토 reviewer.
      - 첫 작업(ros2-engineer, A와 B와 같은 시점): `stack.json` 스키마 초안 확정(k, domain, gz_partition, agent_port, world, foxglove_port, lichtblick_port, mavlink_offset, vehicles[{id, ns, px4_ns, sysid, key, instance, model, pose, mavlink_ports}]). A, B, C가 이 스키마를 기준으로 한다. 검토 devops, test-engineer.
      - A (px4-engineer): `docker/px4/px4-rc.mavlink`(idsim용, GCS와 API만, `IDSIM_MAVLINK_OFFSET` 읽음)와 `docker/Dockerfile.px4`의 COPY, PATH 앞 배치, 상류 sha256 기록과 빌드 시 대조, `airframes/*_gz_*` 전부의 `.post` 훅. `check_px4_pxh.py`에 PX4 로그의 `WARN  [mavlink] bind failed` 부재 판정 추가. check 스크립트의 stack.json 소비와 서비스 이름 `px4-1` 전환, S2의 `sensor_gps` 원점 판정과 모델 유일성 판정은 C로 미룬다(px4-engineer가 C에서 맡는다). 접점 검토 devops(Dockerfile, 이미지 키), reviewer. 완료: `IDSIM_MAVLINK_OFFSET=1000`에서 15550과 15541에 패킷, 14550에 0개, 이미지 빌드 통과.
      - B (sim-engineer): `ros_ws/src/idsim_sim/scripts/gz_server.sh`(서버 기동, 월드 이름 검사, 원점 설정과 응답 확인, 표시 파일), `gz_gui.sh`(DISPLAY와 Xauthority 점검, `gz sim -g` exec), `docker/README.md` 시각 도구 절 문안을 devops에 전달. 접점 검토 px4(원점이 `sensor_gps`에 반영), devops(compose 명령과 마운트 경로), reviewer. 완료: sim-base 단독으로 wrapper 실행 뒤 px4 `sensor_gps`가 원점 좌표, 잘못된 월드 이름에서 종료 코드 1.
-     - C (devops-engineer, test-engineer 참여): `config/fleet.yaml`(1대, 서울시청 원점), `tools/gen_compose.py`, `tools/gen_compose.sh`, `tools/stack.sh`, `tools/qgc.sh --stack`, `tests/tools/test_gen_compose.py`(성질: viz 비의존, host 네트워크, restart no, `${:?}` 없음, 16진수 포트, 도메인 일치, 에이전트에 도메인 없음, px4-1..N 개수, 중첩 마운트 없음, k 0-9와 N 1-9 포트 비충돌. 거부: id 0과 중복과 10 이상, pose 2 m 미만, origin 일부, targets 비어 있지 않음, speed_factor 비null, 모르는 키, 금지 파라미터, k 범위 밖, embedded 2대 이상), 골든 `tests/fixtures/gen_compose/{1대 k0, 1대 k3, 3대 k0, embedded}`, lint 잡에 pytest 범위와 `LINT_PYYAML_VERSION`과 `compose config -q`(viz 포함, DISPLAY 미설정), `run_smoke.sh` 재작성(오프셋 계산과 IDSIM_* 제거, 생성기 호출, stack.json 소비, down 뒤 up, 모델 잔존 사전 검사, 에이전트 bind 오류 보고), `docker/compose.smoke.yaml` 삭제, `README.md`와 `docker/README.md`, `check_host.sh`에 Docker 하한과 XAUTHORITY 점검. 3단계 뒤 틀리게 되는 문장 갱신: `README.md` 40, 51행과 `docker/README.md` 19, 47, 63-69, 81, 83, 113, 130, 136, 138-147, 159, 162-166, 175행(reviewer가 뽑은 목록). px4-engineer가 같은 PR에서 `check_px4.py`, `check_px4_pxh.py`를 stack.json과 `px4-1`에 맞추고 S2에 `sensor_gps` 원점 판정과 모델 유일성 판정을 넣는다. test-engineer는 `tests/support/stack.py`(stack.json 읽기)와 `tests/tools/` 구조 승인. 접점 검토 ros2(stack.json 스키마, ROS 환경변수), px4(px4-N 환경과 파라미터 검증, healthcheck), sim(gazebo와 gz-gui 서비스), reviewer.
+     - C (완료 2026-11-10, 위 진행 상황 참조. 계획 당시 범위) (devops-engineer, test-engineer 참여): `config/fleet.yaml`(1대, 서울시청 원점), `tools/gen_compose.py`, `tools/gen_compose.sh`, `tools/stack.sh`, `tools/qgc.sh --stack`, `tests/tools/test_gen_compose.py`(성질: viz 비의존, host 네트워크, restart no, `${:?}` 없음, 16진수 포트, 도메인 일치, 에이전트에 도메인 없음, px4-1..N 개수, 중첩 마운트 없음, k 0-9와 N 1-9 포트 비충돌. 거부: id 0과 중복과 10 이상, pose 2 m 미만, origin 일부, targets 비어 있지 않음, speed_factor 비null, 모르는 키, 금지 파라미터, k 범위 밖, embedded 2대 이상), 골든 `tests/fixtures/gen_compose/{1대 k0, 1대 k3, 3대 k0, embedded}`, lint 잡에 pytest 범위와 `LINT_PYYAML_VERSION`과 `compose config -q`(viz 포함, DISPLAY 미설정), `run_smoke.sh` 재작성(오프셋 계산과 IDSIM_* 제거, 생성기 호출, stack.json 소비, down 뒤 up, 모델 잔존 사전 검사, 에이전트 bind 오류 보고), `docker/compose.smoke.yaml` 삭제, `README.md`와 `docker/README.md`, `check_host.sh`에 Docker 하한과 XAUTHORITY 점검. 3단계 뒤 틀리게 되는 문장 갱신: `README.md` 40, 51행과 `docker/README.md` 19, 47, 63-69, 81, 83, 113, 130, 136, 138-147, 159, 162-166, 175행(reviewer가 뽑은 목록). px4-engineer가 같은 PR에서 `check_px4.py`, `check_px4_pxh.py`를 stack.json과 `px4-1`에 맞추고 S2에 `sensor_gps` 원점 판정과 모델 유일성 판정을 넣는다. test-engineer는 `tests/support/stack.py`(stack.json 읽기)와 `tests/tools/` 구조 승인. 접점 검토 ros2(stack.json 스키마, ROS 환경변수), px4(px4-N 환경과 파라미터 검증, healthcheck), sim(gazebo와 gz-gui 서비스), reviewer.
      - 검증(C 머지 전): roadmap 3단계 완료 기준 그대로. k=0 S0-S5 재통과(S4 `--check` 일치), k=1 동시 S2 통과(두 스택 모두 bind failed 없음), lint 잡 통과, `artifacts/runs/`에 호스트 사용자 소유가 아닌 파일 없음, 생성된 스택 위 `--profile viz`의 Gazebo GUI에 x500_1(사용자 화면 확인).
      - interface.md 초안(ros2-engineer): 포트와 식별자 표(k 0-9, N 1-9, DDS 포트 범위 근거, MAVLink 1000k), QGC 한 스택 제약, SIH 변형의 `PX4_HOME_*` 주의.
+  4b. 3단계 C 후속(2026-11-10):
+     - PR 생성과 CI 통과 확인(devops-engineer). 사용자 머지.
+     - 사용자 육안 확인 2건: `tools/stack.sh up --viz`의 Gazebo GUI에서 x500_1, `tools/qgc.sh --stack` 뒤 QGC 기체 연결.
+     - 로드맵 다음 단계: 1a 4단계 `idsim_common`(C++, QoS 프로필, 토픽 이름 매핑, 좌표 변환, 네임스페이스 해석, `VehicleCommand` 빌더, GoogleTest). 이어서 5단계 `idsim_interfaces`, 6단계 이륙-호버-착륙 노드와 통합 테스트, 7단계 `docs/interface.md`. 4단계 착수 때 `frame_transforms`와 px4_msgs v1.17.0 호환을 확인한다.
+     - 3단계 C 미해결 항목 처리는 미해결 사항 절 참조(`--run-id` 제거 PR, gz_server.sh 주석 정정 등).
   5. 6단계에서 ros-ws에 foxglove_bridge 추가와 Lichtblick 브라우저 실접속 확인. 생성기에 ROS params 파일과 bridge 설정 파일 생성 추가.
 
 ## 새 개발 PC에서 시작할 때
 
 1. 호스트 조건: x86_64 Linux, Docker와 compose v2, docker buildx, git, python3, curl, sha256sum, gh(GitHub CLI, `gh auth login`). 화면 확인을 하려면 X11 또는 XWayland 데스크톱. `tools/check_host.sh`가 이 조건과 포트 충돌, apt 미러 접근을 점검한다. 사람용 시작 안내는 저장소 루트 `README.md`.
-2. 같은 호스트에 다른 ROS 2 스택, Gazebo, compose 프로젝트가 있는지 먼저 본다(`docker ps`, `docker compose ls`). idsim은 ROS 도메인 20 + k, 에이전트 포트 8888 + k, `GZ_PARTITION=idsim-<k>`, compose 프로젝트 `idsim-smoke`를 쓴다. 겹치면 스택 번호 k(`IDSIM_STACK_INDEX`)를 바꾼다.
+2. 같은 호스트에 다른 ROS 2 스택, Gazebo, compose 프로젝트가 있는지 먼저 본다(`docker ps`, `docker compose ls`). idsim은 ROS 도메인 20 + k, 에이전트 포트 8888 + k, `GZ_PARTITION=idsim-<k>`, compose 프로젝트 `idsim-<k>`를 쓴다. 겹치면 스택 번호 k(`IDSIM_STACK_INDEX`)를 바꾼다. 3단계 이전에 만든 `idsim-smoke` 프로젝트가 남아 있으면 먼저 내려라(`docker compose -p idsim-smoke down`).
 3. 이미지: `python3 tools/ci/build_images.py --mode load`로 로컬 빌드한다. GHCR 패키지가 Public이면 `ghcr.io/danielhongwoo/idsim/<이미지>:<키>`를 받아 쓸 수도 있다(키는 `python3 tools/ci/image_keys.py`).
 4. 확인: `tests/smoke/run_smoke.sh S0`로 이미지 버전과 `docker/versions.env` 일치를 보고, `S2`로 PX4와 Gazebo 연동, 파라미터 저장값을 본다. `tools/ci/lint.sh all`이 통과해야 한다.
 5. 사용자 전역 규칙은 저장소 밖에 있다: `~/.claude/CLAUDE.md`(커밋과 PR에 공동 저자 줄을 넣지 않는다). 새 PC에도 같은 파일을 두어야 한다.
@@ -45,7 +58,7 @@
 
 | Phase | 상태 | 마지막 갱신 | 비고 |
 | --- | --- | --- | --- |
-| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계는 설계 결정 완료, 구현 시작 전 | 2026-11-09 | 스모크 설계는 `docs/smoke-test-phase1a.md` |
+| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계는 A, B, C 구현 완료(브랜치 `feat/step3-compose`, PR 생성 전. 사용자 육안 확인 2건 남음). 4단계 이후 시작 전 | 2026-11-10 | 스모크 설계는 `docs/smoke-test-phase1a.md` |
 | 1b | 시작 전 | 2026-11-06 | |
 | 2 | 시작 전 | 2026-11-06 | |
 | 3 | 시작 전 | 2026-11-06 | |
@@ -118,7 +131,7 @@
   - (b) 월드 원점은 gazebo 서비스의 wrapper(`idsim_sim/scripts/gz_server.sh`, sim-engineer)가 월드 로드 직후 `set_spherical_coordinates`를 한 번 호출하고 표시 파일을 남긴다. px4-N에는 `PX4_HOME_*`를 주지 않는다. reviewer 실측: gz 경로의 소비자는 `px4-rc.gzsim` 93-105뿐이지만 `px4-rc.sihsim` 5-13도 읽는다(SIH 변형 추가 시 주의). 응답 `data: true`는 세 경우 모두 돌아와 요청 수리일 뿐 적용 확인이 아니므로 적용은 S2 판정의 `sensor_gps` 좌표로 본다. 같은 값 재호출은 navsat 값 동일, 다른 값은 즉시 변경(비행 중 GPS 점프). 키 이름은 `origin`(PX4 home position과 혼동 방지). 1b 커스텀 월드는 SDF `<spherical_coordinates>`에 넣고 wrapper는 건너뛴다.
   - (c) MAVLink는 px4 이미지가 PATH 앞에 두는 idsim용 `px4-rc.mavlink`로 스택 오프셋 1000k(GCS 14550 + 1000k, API 14540 + 1000k + N, 로컬 18570/14580 + 1000k + N, payload와 gimbal 제거, 상류 sha256 기록). 근거: 오프셋 없이 두 스택을 올리면 두 번째 px4가 `WARN  [mavlink] bind failed: Address already in use`(18571, 14581, 14281, 13031)를 내고 계속 동작, 첫 스택 무영향(reviewer 실측). 생성기가 `IDSIM_MAVLINK_OFFSET`을 넘기고 stack.json에 포트를 적는다. 완료 기준의 "k=1 동시 S2"는 두 스택 px4 로그 모두에 `WARN  [mavlink] bind failed` 부재로 판정(check_px4_log). netns 분리 카드는 꺼내지 않는다. `MAV_SYS_ID`가 같아 QGC 하나는 한 번에 한 스택만 본다(interface.md에).
   - (d) fleet.yaml 스키마: `schema`, `world.{name, file, origin{lat,lon,alt}, speed_factor}`, `vehicles[].{id, airframe, pose{x,y,z,yaw}, px4_params}`, `targets`, `px4.{params_file, start}`. `airframe` 하나에서 SYS_AUTOSTART, PX4_SIM_MODEL, 모델 이름 `<모델>_N` 파생(x500_N 규칙의 일반화). pose는 Gazebo 월드 좌표 ENU, m, rad, 2 m 미만 거부, 4 m 미만 경고, 3대 예시 y 0, 4, 8. 파생값 키와 식별 파라미터(MAV_SYS_ID, UXRCE_DDS_KEY, UXRCE_DDS_DOM_ID, UXRCE_DDS_AG_IP, SYS_AUTOSTART)는 거부. `stack`, `viz` 섹션은 두지 않는다. k는 `--stack` > `IDSIM_STACK_INDEX` > 0, 기준값은 생성기 상수. 1a에서 `targets`는 비어야 하고 `speed_factor`는 null이어야 한다(Phase 3에서 sim과 px4가 기제 결정).
-  - (e) k 범위 0-9. MAVLink 로컬 18579 + 1000k가 임시 포트 범위 아래여야 하고(k <= 14), 한 자리가 이름과 손계산을 단순하게 한다. DDS 포트 범위(12400 + 250k부터 참가자 인덱스 50까지)와 MAVLink 포트는 k 0-9, N 1-9에서 겹치지 않음을 손계산했고 생성기 단위 테스트가 전 범위를 검사한다. 에이전트 FastDDS 참가자 인덱스는 0으로 실측(도메인 25에서 13660/13661).
+  - (e) k 범위 0-9. MAVLink 로컬 18579 + 1000k가 임시 포트 범위 아래여야 하고(k <= 14), 한 자리가 이름과 손계산을 단순하게 한다. DDS 포트 범위(12400 + 250k부터 참가자 인덱스 50까지)와 MAVLink 포트는 k 0-9, N 1-9에서 겹치지 않음을 손계산했고 생성기 단위 테스트가 전 범위를 검사한다. 에이전트 FastDDS 참가자 인덱스는 0으로 실측(도메인 25에서 13660/13661). 보강(2026-11-10): 한 스택에 기체 N대면 에이전트 참가자 인덱스는 0..N-1(3대 실측).
   - (f) gz-gui의 gazebo `depends_on`은 허용(금지는 본 스택 -> viz 방향뿐). 편집 플러그인(Spawn, Shapes, TransformControl, ComponentInspector)은 3단계에서 빼지 않는다(WorldControl 제거 목적은 한 번 클릭 사고 방지였고 TransformControl은 선택 기능을 겸한다). `ipc: host`, 호스트 uid:gid, `HOME=/tmp/gz-home`, `${XAUTHORITY:-/dev/null}` 마운트와 wrapper의 빈 파일 점검, `--render-engine-gui ${IDSIM_GZ_GUI_ENGINE:-ogre2}`, 렌더링 환경변수는 이름만 통과, `/dev/dri`와 NVIDIA는 opt-in. viz 서비스에 `${X:?}` 금지(꺼진 프로필도 보간됨, devops와 sim 실측).
   - (g) 생성기는 인스턴스 0을 지원하지 않는다. S1은 2026-11-06 1회 기록으로 남기고 재현하지 않는다(사용자 동의). `--variant embedded`(1대, gazebo 서비스 없음, `HEADLESS=1`)로 S1b는 유지. `compose.smoke.yaml`은 삭제.
   - (h) 생성기는 ros-ws 컨테이너에서 실행(`tools/gen_compose.sh`, 호스트 uid:gid, `--network none`, `CYCLONEDDS_URI` 비움). 사용자 결정으로 호스트 조건(표준 라이브러리만) 불변. 핵심은 dict -> dict 순수 함수, PyYAML은 읽기와 쓰기만. 단위 테스트는 lint 잡의 python:3.12-slim에 `pyyaml==<LINT_PYYAML_VERSION>`(ros-ws의 6.0.1, S0에서 대조). reviewer 실측: cyclonedds.xml을 마운트하지 않은 채 `CYCLONEDDS_URI`가 남아 있으면 rmw가 파일을 못 열어 모든 ROS CLI가 실패한다.
@@ -133,11 +146,19 @@
 - 2026-11-09: 준비 파일 단일화(결정 (j) 보완). wrapper는 원점 단계가 끝나면 원점 유무와 무관하게 `/tmp/idsim/ready`를 쓰고, 원점을 적용한 경우에만 `/tmp/idsim/origin_set`을 더 쓴다. gazebo healthcheck는 한 가지: `gz service -i --service /world/<이름>/scene/info | grep -q "Service providers" && test -f /tmp/idsim/ready`. 근거: 원점이 있을 때 생성기가 표시 파일 항을 빠뜨리면 "스폰은 원점 설정 뒤"가 조용히 깨지는 경로를 없앤다. gz-gui 기본 설정 경로는 `/opt/idsim/sim/config/gui.config`(패키지 전체를 `/opt/idsim/sim`에 마운트).
 - 2026-11-09: `--render-engine-gui ogre`는 gui.config의 `<engine>ogre2</engine>`을 덮는다(sim-engineer 실측: OGRE 1.9 라이브러리 로드, GridConfig 격자 렌더링 정상). 미해결 항목 닫힘.
 
+- 2026-11-10: 3단계 C 결정(architect 주재, devops/test/ros2/sim/px4 의견, reviewer 검토). 구현은 `feat/step3-compose`.
+  - (k) 스모크 S2-S5는 운영 스택과 같은 구성으로 `bridge`까지 올린다. `startup.stages`는 세 단계: standalone `[[xrce-agent, gazebo], [px4-1..N], [bridge]]`, embedded `[[xrce-agent], [px4-1]]`. 변수 분리는 기동 단계가 맡는다. S5는 "bridge가 처음 올라오는 단계"가 아니라 "/clock 품질 판정 단계"이며 `/clock` 발행자 수 1 판정을 더한다. 근거: 스모크 전용 구성을 따로 두면 운영 스택과 어긋난 채 통과할 수 있다.
+  - (l) `run.id == basename(run_dir)` 불변식은 생성기가 보장한다. `--run-dir`만 오면 basename이 run id, 둘 다 오고 어긋나면 거부, 부모가 `<host_repo_root>/artifacts/runs`가 아니면 거부. 로더는 검사하지 않는다(옛 산출물 호환). `--run-id` 인자 제거는 다음 PR. `run.id`는 표시용이고 경로 조립에 쓰지 않는다.
+  - (m) `stack.json`에 `inputs.cyclonedds_xml {path, sha256}` 추가(필수, null 불가, schema 1 유지, generator.version 증가). 골든은 상수 0 x 64(`versions_env` 선례). 소비자는 `run_smoke.sh`(스택 기동 뒤 판정 전에 저장소 `config/cyclonedds.xml`의 sha256과 대조, 다르면 실패)와 6단계 ST. 런타임 컨테이너는 `/opt/idsim` 마운트의 현재 파일을 읽으므로 생성 시점 해시와 다르면 참가자 간 DDS 설정이 섞인 상태다.
+  - (n) 같은 `GZ_PARTITION`의 다른 gz 서버 검사(`scene/info` 제공자 1, `/clock` 발행자 1)를 `stack.sh` 사전 검사와 `run_smoke.sh` S2 양쪽에 둔다. 근거: sim-engineer가 재현한 사례(같은 파티션에 서버가 둘이면 모델 유일성 판정만으로는 못 잡는 경로가 있음).
+  - (o) 설계와 달라진 구현 결정. 1) compose 안 경로는 절대 경로(`<host-repo-root>/...`). compose.yaml이 run 디렉터리에 있기 때문. 2) 바인드 마운트는 긴 형식에 `create_host_path: false`. 3) bridge/runner는 저장소를 `/opt/idsim`에 rw 하나만 마운트하고 `cyclonedds.xml` 중첩 마운트를 없앴다. 4) YAML 앵커 미사용(PyYAML가 merge 키를 출력하지 못하고 자동 앵커를 끔). 5) Docker Engine 25.0 하한은 문서 근거이며 `check_host.sh`가 WARN(실측 아님). 6) `lint.sh`에 `core.quotepath=off` 적용(한글 경로 파일이 검사에서 빠지던 버그). 7) lint의 `compose config -q`는 골든 compose를 `/work/idsim` 치환 후 `--profile viz --profile tools`, DISPLAY/XAUTHORITY 미설정으로 검사.
+  - (p) `check_px4.py --expect-origin`은 `vehicle_gps_position`(SensorGps) 기준, 수평 0.5 m, 수직 1.0 m. 실측 최대 오차 수평 0.07 m, 수직 0.34 m. pose 보정은 하지 않는다(1대 기준). `derived_params`도 S2에서 `pxh`로 판정한다.
+
 ## 미해결 사항
 
 사용자 결정이 필요한 항목.
 
-- 없음.
+- `tools/qgc.sh`가 바꾼 `udpListenPort`를 되돌리는 옵션(`--restore`)을 둘지. 지금은 `--stack k`가 설정을 바꾸고 되돌리지 않으며, `--stack`을 생략하면 14550으로 돌아가지 않는다는 점을 안내로만 둔다(2026-11-10).
 
 아직 열린 항목.
 
@@ -152,8 +173,17 @@
 - apt 미러 고정 리스크(2026-11-09 실측). Dockerfile이 ubuntu 베이스의 archive.ubuntu.com에 묶여 있어 그 미러가 막히면 새 PC 콜드 빌드가 실패한다. 선택지: 빌드 인자로 미러 지정(이미지 키에 들어가지 않게 할 방법 포함), apt `Acquire::Retries`, GHCR 공개 이미지를 받아 `idsim/<이미지>:local`로 태그하는 `build_images.py --mode pull`. devops-engineer가 2b 다음 PR에서 제안한다.
 - `qgc.sh`의 sha256 불일치 시 종료 코드 1 경로는 코드만 있고 실행으로 확인하지 않았다(손상 캐시 재다운로드 경로는 같은 함수를 쓰며 확인됨).
 - Gazebo GUI 깜빡임(사용자 관측 2026-11-09, VMware 3D 가속 켠 상태). `QSG_RENDER_LOOP=basic`과 `vblank_mode=1`은 효과 미확인. 3D 가속을 끈 소프트웨어 렌더링(llvmpipe, GUI 컨테이너 CPU 약 2.7코어)에서는 깜빡임 여부를 사용자가 다시 본다. 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
+- (2026-11-10, 3단계 C에서 올라온 항목)
+- 다대 원점 판정의 pose 보정 방식(`check_px4 --expect-pose-enu` 또는 stack.json 기체별 기대 위경도). 지금 `--expect-origin`은 1대 기준이다. architect와 test-engineer, 1b에서.
+- GPS 잡음 출처 미확인(PX4 gz_bridge 추정).
+- ULog가 `compose down`에서 정상 종료되는지 미확인. `SDLOG` 기록량은 약 285 KiB/s, 기체당 약 1 GB/h. logging-engineer가 Phase 2 전에 확인.
+- bridge healthcheck에 `ROS_LOG_DIR=/tmp/hc`를 적용한 뒤 run 디렉터리에 로그 파일이 안 생기는지 미확인.
+- 에이전트의 Fast DDS 멀티캐스트가 0.0.0.0에 bind되어 같은 LAN의 다른 호스트와 디스커버리가 섞일 가능성(추정, 미실측).
+- `gen_compose.sh`의 `--run-id` 인자 제거 검토(다음 PR, 결정 기록 (l)).
+- 1b 제약: bridge healthcheck는 `/clock` 1회 수신을 유지하고 표적 어댑터 판정은 별도 단계로 둔다. 커스텀 모델은 `GZ_SIM_RESOURCE_PATH`에 `/opt/idsim/sim/models` 추가가 필요하다.
+- `ros_ws/src/idsim_sim/scripts/gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다" 표현이 부정확하다(sim-engineer 다음 작업).
+- uid 1001(passwd에 없음) 재실측은 C 구현 뒤 하지 않았다.
 - 호스트 포트 5900, 8090은 다른 프로젝트의 novnc-server가 쓰므로 VNC를 도입하면 피한다.
-- 스모크는 호스트당 하나만 돌린다(`compose.smoke.yaml`의 이름이 `idsim-smoke` 고정). 3단계 C가 `compose.smoke.yaml`을 삭제하고 스모크가 생성된 compose(`idsim-<k>`)를 쓰게 되면 닫힌다.
 - MAVLink bind에 실패한 PX4 인스턴스의 동작(GCS 링크 없이 계속 뜨는지, uXRCE 영향)은 미실측. 3단계 이후에는 오프셋으로 충돌 자체가 없어야 하므로 check_px4_log의 `bind failed` 판정이 회귀를 잡는다.
 - lockstep 반대 방향(PX4가 느릴 때 Gazebo가 기다리는지)은 미실측. Phase 3 CPU 포화 해석의 전제.
 - compose healthcheck `start_interval`의 Docker 하한은 미실측(Docker 29.1.3, Compose 2.40.3에서 수용). `check_host.sh`에 넣을 값은 devops-engineer가 정한다.
