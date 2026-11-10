@@ -10,10 +10,13 @@ idsim은 Interceptor Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, RO
 | --- | --- |
 | OS와 CPU | x86_64 Linux (Ubuntu 24.04에서 확인) |
 | Docker | Docker Engine 25.0 이상(healthcheck `start_interval`), compose v2 플러그인, buildx. 사용자가 docker 그룹에 속해야 한다(`sudo usermod -aG docker $USER` 뒤 다시 로그인). Ubuntu 24.04 패키지는 `docker.io`, `docker-compose-v2`, `docker-buildx`이고, Docker 공식 저장소는 `docker-ce`, `docker-compose-plugin`, `docker-buildx-plugin`이다 |
+| 저장소 경로 | 공백과 아스키 밖 문자가 없어야 한다(생성기 `PATH_SAFE_RE`가 거부한다) |
 | 도구 | git, python3 (표준 라이브러리만 사용. 3.12에서 확인, 하한 3.10), curl, sha256sum |
 | 디스크 | 30GB 이상 권장. 근거: 이미지 5종 합 약 8.6GB(공유 레이어 중복 포함이라 실제 점유는 더 작다) + px4 builder 단계 7.7GB + buildkit 캐시 |
 | 메모리 | 16GB 이상. 개발 VM 31GB와 CI 러너 16GB에서 확인했고 그 아래는 미실측 |
 | 선택 | gh (PR을 올리거나 합칠 때), 화면 확인용 X11 또는 XWayland 데스크톱 |
+
+compose 생성기 골든(`tests/tools`)을 의도해서 바꿨다면 ros-ws 컨테이너에서 `python3 -m pytest tests/tools --update-golden`으로 갱신한다(CI에서는 거부된다).
 
 조건은 `tools/check_host.sh`가 점검한다. 시스템을 바꾸지 않고 조회만 하며, 외부 네트워크 검사는 `--offline`으로 건너뛴다.
 

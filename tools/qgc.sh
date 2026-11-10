@@ -45,6 +45,7 @@ while [ "$#" -gt 0 ]; do
     --help|-h) usage; exit 0 ;;
     --download-only) mode="download"; shift ;;
     --print-path) mode="path"; shift ;;
+    --stack=*) stack="${1#--stack=}"; shift ;;
     --stack) stack="${2:-}"; shift 2 || { echo "qgc.sh: --stack 값이 없다" >&2; exit 2; } ;;
     *) break ;;
   esac
@@ -96,6 +97,9 @@ esac
 gcs_port="$(python3 "${repo_root}/tools/gen_compose.py" --print-gcs-port "$stack")" \
   || { echo "qgc.sh: 스택 번호는 0-9: '${stack}'" >&2; exit 2; }
 ini="${XDG_CONFIG_HOME:-$HOME/.config}/QGroundControl/QGroundControl.ini"
+if pgrep -x QGroundControl > /dev/null 2>&1 || pgrep -f 'QGroundControl-x86_64.AppImage' > /dev/null 2>&1; then
+  echo "qgc.sh: 경고: QGroundControl이 이미 떠 있다. 이 편집은 QGC가 종료할 때 설정을 다시 써서 덮어쓸 수 있다(추정, 미실측). 기존 QGC를 닫고 다시 실행하라" >&2
+fi
 mkdir -p "$(dirname "$ini")"
 python3 - "$ini" "$gcs_port" <<'PY'
 import os
@@ -130,6 +134,7 @@ with open(tmp, "w", encoding="utf-8") as f:
 os.replace(tmp, path)
 PY
 echo "qgc.sh: 스택 ${stack}, GCS UDP ${gcs_port}를 듣는다 (${ini} [AutoConnect] udpListenPort)" >&2
+echo "qgc.sh: QGC 설정의 udpListenPort를 ${gcs_port}로 바꿨다. 스크립트가 끝나도 되돌리지 않는다. 기본으로 돌리려면 --stack 없이 다시 실행" >&2
 
 # exec 대신 자식으로 띄운다. 신호 처리기에서 QGC에 TERM을 보내고 유예 뒤 KILL로 끝내기 위해서다.
 # AppRun이 QGC 바이너리를 exec하므로 $child가 QGC 본체 PID다.
