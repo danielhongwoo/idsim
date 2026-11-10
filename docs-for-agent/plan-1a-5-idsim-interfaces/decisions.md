@@ -627,7 +627,7 @@ feedback 주기는 계약이 아니다. 참고값은 전이 시점과 2 Hz 이�
 
 | 받는 쪽 | 시점 | 항목 |
 | --- | --- | --- |
-| px4-engineer | 6단계 | Hold 실험: failsafe 진행 중의 Hold 명령 동작, Hold 확인 타임아웃 기본값. 결과는 1a 고정 전에 쟁점 9에 반영한다(architect와). `commander_params`의 배터리, geofence, 바람, 비행 시간 failsafe 기본값 대조. takeoff의 `acceptance_m` 기본값([추정] 0.3 m 이상), Offboard 상승 속도 제한 확인, land 완료 판정(지상 판정 뒤 자동 disarm) |
+| px4-engineer | 6단계 | Hold 실험: failsafe 진행 중의 Hold 명령 동작, Hold 확인 타임아웃 기본값, 지상 취소에서 disarm이 거부되거나 확인되지 않을 때의 분기(PX4가 아직 landed가 아니면 강제가 아닌 disarm은 거부된다. 5단계 PR reviewer 지적). 결과는 1a 고정 전에 쟁점 9에 반영한다(architect와). `commander_params`의 배터리, geofence, 바람, 비행 시간 failsafe 기본값 대조. takeoff의 `acceptance_m` 기본값([추정] 0.3 m 이상), Offboard 상승 속도 제한 확인, land 완료 판정(지상 판정 뒤 자동 disarm) |
 | px4-engineer | 1b 첫 작업 | EKF 원점과 스폰 지점의 오차 실측(표적 접근 임계값을 이 결과로 정한다), `ref_timestamp`가 비행 중 바뀌는 조건, navsat 고도와 `ref_alt` 대조, 실행 중 `EKF2_HGT_REF` 실제 값 확인 |
 | px4-engineer | Phase 2 | `nav_state` -> `MODE_*` 전체 대응표와 Collector 단위 테스트 입력, `failsafe_flags` -> `WARN_*` 비트 대응, `vehicle_status` 최대 발행 간격 실측(uXRCE-DDS를 거친 뒤) |
 | sim-engineer | 1b 착수 | 표적 생산 방식((가), (나), (다)) 실측과 선택, `dynamic_pose/info` 금지, Actor 월드에서 `gz-gui` 확인, wrapper의 원점 항상 적용과 `heading_deg: 0`, 커스텀 월드의 `<plugin>` 조건, `targets` 스키마(devops와), 표적과 기체 스폰 위치 겹침 검사, "Gazebo 화면은 참고용" 문장과 architecture.md 범위 문구의 처리 |

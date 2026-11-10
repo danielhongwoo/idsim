@@ -195,7 +195,7 @@ do_build() {
 do_test() {
   # 함정 둘(opinion-devops E6, E7)
   #  1. colcon test는 테스트가 실패해도 0을 돌려준다 -> --return-code-on-test-failure
-  #  2. colcon test-result는 빌드가 실패했거나 패키지가 하나도 없어도 "0 tests"로 0을 돌려준다 -> 합계 > 0 단정과 ament 패키지별 1건 이상 단정
+  #  2. colcon test-result는 빌드가 실패했거나 패키지가 하나도 없어도 "0 tests"로 0을 돌려준다 -> ament 패키지별 1건 이상 단정(검사할 패키지가 0개여도 실패)
   #     colcon test-result는 build/ 전체의 결과 XML을 읽는다. 이전 실행의 결과가 남아 있으면 이번에 0건이 돌아도
   #     그 수가 잡히므로(--packages-select 오타로 확인), 테스트 전에 이전 결과를 지운다.
   # 재시도는 두지 않는다(단위 층은 결정적이어야 한다).

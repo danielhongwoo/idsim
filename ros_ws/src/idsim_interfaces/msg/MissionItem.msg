@@ -7,7 +7,7 @@ uint8 TYPE_RTL = 5
 uint8 TYPE_LAND = 6
 
 uint8 type                           # TYPE_*. 0은 무효
-builtin_interfaces/Duration timeout  # 이 항목의 제한 시간(sim 시간). 0보다 크다
+builtin_interfaces/Duration timeout  # 이 항목의 제한 시간(ROS 시각, use_sim_time이면 /clock). 0보다 크다
 TakeoffItem takeoff                  # type == TYPE_TAKEOFF일 때만
 GoToItem go_to                       # type == TYPE_GOTO일 때만
 TrackEntityItem track_entity         # type == TYPE_TRACK_ENTITY일 때만
