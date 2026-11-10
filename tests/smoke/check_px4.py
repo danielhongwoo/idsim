@@ -2,7 +2,7 @@
 """스모크 S1, S1b, S2, S3의 PX4 쪽 토픽 판정. 담당: px4-engineer.
 
 ros-ws 컨테이너 안에서 실행한다(px4_msgs, rclpy 필요). 판정 기준은
-docs/smoke-test-phase1a.md를 따른다.
+docs/smoke-test.md를 따른다.
 
 사용법
   check_px4.py --system-id 1 --timeout 30              # S1 (네임스페이스 없음)

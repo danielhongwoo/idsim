@@ -2,7 +2,7 @@
 """스모크 골든과 원시 산출물에서 docs/interface.md 용 PX4 토픽 표를 만든다.
 
 입력
-  골든 디렉터리 (tests/fixtures/px4/<PX4_TAG>/, docs/smoke-test-phase1a.md 형식)
+  골든 디렉터리 (tests/fixtures/px4/<PX4_TAG>/, docs/smoke-test.md 형식)
     topics.txt          한 줄에 "<상대 토픽> <타입>"
     qos/<상대 토픽>.txt  reliability, durability, history, depth 네 줄(발행자 값)
     env.txt             PX4_TAG, PX4_MSGS_REF, RMW_IMPLEMENTATION, XRCE_AGENT_TAG

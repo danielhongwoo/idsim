@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>idsim_common</name>
+  <version>0.1.0</version>
+  <description>idsim 공통 C++ 라이브러리: PX4 토픽 기술자와 QoS, 좌표 변환, 기체 식별, VehicleCommand 빌더</description>
+  <maintainer email="27140685+danielhongwoo@users.noreply.github.com">Daniel Hongwoo Lee</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>px4_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>rmw</depend>
+  <depend>rosidl_runtime_cpp</depend>
+
+  <build_export_depend>eigen3_cmake_module</build_export_depend>
+
+  <test_depend>ament_cmake_copyright</test_depend>
+  <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_lint_cmake</test_depend>
+  <test_depend>ament_cmake_xmllint</test_depend>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>geometry_msgs</test_depend>
+  <test_depend>px4_ros_com</test_depend>
+  <test_depend>rcl</test_depend>
+  <test_depend>sensor_msgs</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

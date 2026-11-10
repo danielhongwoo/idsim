@@ -1,6 +1,6 @@
 """골든 파일 정규화, 읽기/쓰기, 비교. rclpy에 의존하지 않는다.
 
-형식은 docs/smoke-test-phase1a.md의 "산출물 위치와 골든 파일 형식" 절을 따른다.
+형식은 docs/smoke-test.md의 "산출물 위치와 골든 파일 형식" 절을 따른다.
 """
 import os
 import re
