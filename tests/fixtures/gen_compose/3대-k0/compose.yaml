@@ -228,7 +228,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - . /opt/ros/$${ROS_DISTRO}/setup.sh && timeout 4 ros2 topic echo --once --no-daemon /clock > /dev/null
+        - . /opt/ros/$${ROS_DISTRO}/setup.sh && ROS_LOG_DIR=/tmp/hc timeout 4 ros2 topic echo --once --no-daemon /clock > /dev/null
       interval: 30s
       timeout: 5s
       retries: 3

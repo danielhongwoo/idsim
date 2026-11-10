@@ -169,16 +169,27 @@ if command -v ss > /dev/null 2>&1; then
   conflict=0
   k="${IDSIM_STACK_INDEX:-0}"
   case "$k" in [0-9]) ;; *) warn "IDSIM_STACK_INDEX '$k'가 0-9가 아니다. 0으로 본다"; k=0 ;; esac
-  agent_port=$((8888 + k))
-  gcs_port=$((14550 + 1000 * k))  # 식의 출처는 tools/gen_compose.py 상수(여기는 힌트용 점검)
-  for port in "$agent_port" "$gcs_port"; do
+  # 포트 식의 출처는 tools/gen_compose.py 상수 하나다. 저장소 밖에서 돌아 생성기를 못 찾으면 이 검사를 건너뛴다
+  gen_py="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2> /dev/null && pwd)/gen_compose.py"
+  agent_port=""
+  gcs_port=""
+  if [ -f "$gen_py" ] && command -v python3 > /dev/null 2>&1; then
+    agent_port="$(python3 "$gen_py" --print-agent-port "$k" 2> /dev/null || true)"
+    gcs_port="$(python3 "$gen_py" --print-gcs-port "$k" 2> /dev/null || true)"
+  fi
+  if [ -z "$agent_port" ] || [ -z "$gcs_port" ]; then
+    warn "tools/gen_compose.py를 찾지 못해 포트 충돌을 확인하지 못했다(저장소 밖에서 실행했거나 python3가 없다)"
+    agent_port=""
+    gcs_port=""
+  fi
+  for port in $agent_port $gcs_port; do
     # ss -ulnp 출력에서 Local Address:Port는 4번째 열이다(5번째는 Peer)
     if printf '%s\n' "$ss_out" | awk -v p=":$port" '$4 ~ p"$" {f=1} END {exit !f}'; then
       warn "UDP 포트 $port 가 이미 쓰이고 있다. 스택 번호를 바꿔 실행하라(예: tools/stack.sh up --stack 1). GCS 포트는 QGC가 듣는 중이면 정상이다"
       conflict=1
     fi
   done
-  [ "$conflict" -eq 0 ] && ok "UDP ${agent_port}(에이전트), ${gcs_port}(GCS) 사용 중이지 않음 (스택 번호 ${k})"
+  [ "$conflict" -eq 0 ] && [ -n "$agent_port" ] && ok "UDP ${agent_port}(에이전트), ${gcs_port}(GCS) 사용 중이지 않음 (스택 번호 ${k})"
 else
   warn "ss 명령이 없어 포트 충돌을 확인하지 못했다"
 fi

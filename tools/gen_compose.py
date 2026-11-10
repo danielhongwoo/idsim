@@ -9,7 +9,7 @@ ros-ws 컨테이너 안에서 실행한다(PyYAML 6.0.1). 호스트 진입점은
   - 핵심은 순수 함수다: validate_fleet(dict) -> dict, build(fleet, ctx) -> (compose, stack, 경고).
     파일을 읽거나 쓰지 않으며 단위 테스트(tests/tools/test_gen_compose.py)가 이 함수를 직접 부른다.
   - PyYAML은 읽기(load_yaml)와 쓰기(dump_compose)에만 쓴다. 모듈을 불러올 때는 yaml을 import하지 않으므로
-    --print-gcs-port는 호스트의 표준 라이브러리 python3로도 돈다(tools/qgc.sh가 쓴다).
+    --print-gcs-port와 --print-agent-port는 호스트의 표준 라이브러리 python3로도 돈다(tools/qgc.sh가 쓴다).
   - 사용자 이름을 조회하지 않는다(getpass, pwd 금지). uid, gid는 숫자 인자로만 받는다.
 
 기준값(스택 번호 k, 기체 번호 N)은 이 파일의 상수가 유일한 출처다. fleet.yaml에는 적을 수 없다.
@@ -20,6 +20,7 @@ ros-ws 컨테이너 안에서 실행한다(PyYAML 6.0.1). 호스트 진입점은
                  [--uid U --gid G] [--image-tag local | --registry R] [--image 이름=참조]...
                  [--generated-at 2026-11-09T09:00:00Z] [--git-commit SHA] [--git-dirty true|false]
   gen_compose.py --print-gcs-port k     # QGC가 들을 GCS 포트(14550 + 1000k)만 출력
+  gen_compose.py --print-agent-port k   # 에이전트 UDP 포트(8888 + k)만 출력
 종료 코드: 0 성공, 1 검증 실패(stderr에 이유), 2 인자 오류.
 """
 
@@ -620,7 +621,7 @@ def build(fleet_norm, ctx):
                         "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock"],
             "healthcheck": {
                 "test": ["CMD-SHELL", ". /opt/ros/$${ROS_DISTRO}/setup.sh && "
-                         "timeout 4 ros2 topic echo --once --no-daemon /clock > /dev/null"],
+                         "ROS_LOG_DIR=/tmp/hc timeout 4 ros2 topic echo --once --no-daemon /clock > /dev/null"],
                 # start_period 동안은 start_interval 5초로, 그 뒤로는 30초마다(디스커버리 소음 줄이기)
                 "interval": "30s", "timeout": "5s", "retries": 3,
                 "start_period": "60s", "start_interval": "5s",
@@ -883,8 +884,11 @@ def _sha256_file(path):
 
 
 def _read(path):
-    with open(path, encoding="utf-8") as f:
-        return f.read()
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except OSError as e:
+        raise FleetError(f"파일을 읽지 못했다: {path} ({e.strerror})") from e
 
 
 def _repo_rel(path, repo_root):
@@ -977,6 +981,7 @@ def parse_args(argv):
     default_repo = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--print-gcs-port", metavar="K", help="스택 K의 GCS 포트만 출력하고 끝낸다(PyYAML 불필요)")
+    p.add_argument("--print-agent-port", metavar="K", help="스택 K의 에이전트 UDP 포트만 출력하고 끝낸다(PyYAML 불필요)")
     p.add_argument("--repo-root", default=default_repo, help="저장소 경로(이 프로세스가 읽는 쪽, 기본: 스크립트 위)")
     p.add_argument("--fleet", default="config/fleet.yaml", help="저장소 기준 fleet 파일")
     p.add_argument("--stack", help="스택 번호 k 0-9 (없으면 IDSIM_STACK_INDEX, 없으면 0)")
@@ -994,7 +999,7 @@ def parse_args(argv):
     p.add_argument("--git-commit")
     p.add_argument("--git-dirty", choices=("true", "false"))
     args = p.parse_args(argv)
-    if args.print_gcs_port is None and not args.host_repo_root:
+    if args.print_gcs_port is None and args.print_agent_port is None and not args.host_repo_root:
         p.error("--host-repo-root가 필요하다(tools/gen_compose.sh가 넘긴다)")
     return args
 
@@ -1004,6 +1009,9 @@ def main(argv=None):
     try:
         if args.print_gcs_port is not None:
             print(gcs_remote_port(stack_index(args.print_gcs_port, {})))
+            return 0
+        if args.print_agent_port is not None:
+            print(agent_port(stack_index(args.print_agent_port, {})))
             return 0
         host_run, warnings = generate(args)
     except FleetError as e:

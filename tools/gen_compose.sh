@@ -9,7 +9,7 @@
 # 컨테이너 조건
 #   --user <호스트 uid:gid>  만드는 파일(compose.yaml, stack.json, px4-N/, ros_log/)이 호스트 사용자 소유가 된다
 #   --network none           생성기는 네트워크를 쓰지 않는다
-#   -e CYCLONEDDS_URI=        설정 파일을 마운트하지 않으므로 비운다(남아 있으면 rmw가 파일을 못 열어 실패)
+#   -e CYCLONEDDS_URI=        생성기는 DDS를 쓰지 않으며 rmw 초기화를 피하려고 비운다
 #   저장소는 /opt/idsim에 읽기 전용, 실행 디렉터리만 /out에 쓰기로 마운트한다(중첩 아님: /out은 저장소 마운트 밖)
 # git 커밋과 dirty 여부는 호스트에서 계산해 넘긴다(컨테이너에는 uid가 달라 safe.directory 문제가 있다).
 # 이미지 태그는 --image-tag(기본 local)에서 ros-ws 이미지도 고른다.
@@ -18,7 +18,14 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-args=("$@")
+# --옵션=값 형식은 --옵션 값으로 펼친다(값 있는 옵션만)
+args=()
+for a in "$@"; do
+  case "$a" in
+    --stack=*|--run-id=*|--run-dir=*|--image-tag=*|--registry=*|--fleet=*|--variant=*) args+=("${a%%=*}" "${a#*=}") ;;
+    *) args+=("$a") ;;
+  esac
+done
 stack="${IDSIM_STACK_INDEX:-0}"
 run_id=""
 run_dir=""
@@ -51,8 +58,18 @@ fi
 if [ -z "$run_dir" ]; then
   run_dir="${repo_root}/artifacts/runs/${run_id}"
 fi
+created_dir=0
+if [ ! -e "$run_dir" ]; then created_dir=1; fi
 mkdir -p "$run_dir"
 run_dir="$(cd "$run_dir" && pwd)"
+# 생성에 실패했고 우리가 만든 디렉터리가 비어 있으면 지운다
+cleanup() {
+  rc=$?
+  if [ "$rc" -ne 0 ] && [ "$created_dir" -eq 1 ] && [ -d "$run_dir" ]; then
+    rmdir "$run_dir" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
 case "$run_dir/" in
   "${repo_root}/"*) ;;
   *) echo "gen_compose.sh: 실행 디렉터리는 저장소(${repo_root}) 안이어야 한다: ${run_dir}" >&2; exit 2 ;;
