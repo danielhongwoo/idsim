@@ -6,13 +6,13 @@
 
 | 단위 | 상태 |
 | --- | --- |
-| A | 파일 수정 완료(`sitl_params.env`, `check_px4_pxh.py`). S2-S5 회귀는 사용자가 직접 실행 중, 생성기 골든 갱신은 devops-engineer가 진행 중 |
+| A | 완료. S2-S5 회귀 통과(사용자 실행), 생성기 골든 갱신 완료 |
 | B | 완료(`tools/ros_ws.sh ci` 통과) |
 | C | 완료. unit job의 CI 첫 실행은 PR 뒤 |
 | D | 완료 |
-| E | 진행(설계 문서와 progress.md 반영) |
+| E | 완료 |
 
-남은 것: px4-engineer 접점 검토, reviewer 검토, PR과 CI. 실측값과 열린 항목은 `docs-for-agent/progress.md`에 있다.
+남은 것: px4 접점 검토(사용자 확인 대기), PR과 CI unit job 첫 통과. 실측값과 열린 항목은 `docs-for-agent/progress.md`에 있다.
 
 ## 이 디렉터리의 파일
 
@@ -99,3 +99,4 @@ B의 하위 작업(세부는 `decisions.md`의 해당 쟁점).
 - 이 설계 토론에서 Fable로 부른 architect와 reviewer가 모델 안전장치 오류(`[general_harms]`)로 세 번 중단되었다. 재호출하면 통과한 경우가 있었다.
 - 사용자 결정: architect는 이번 설계 결정 한 번만 Opus로 불렀다. reviewer는 Fable을 유지한다.
 - 구현 중 px4-engineer 호출이 같은 모델 안전장치 오류(`[general_harms]`)로 두 번 중단되었다. 그래서 `UXRCE_DDS_SYNCT=0` 스모크 S2-S5 회귀는 사용자가 호스트에서 직접 돌리기로 했다.
+- 세 번째 중단은 읽기 전용 검토 세 항목(공개 /fmu/in 허용과 차단 분류, 빌더 필드 표, `Px4Timestamp` 거부)만 맡긴 px4-engineer 호출에서 났다. 그래서 이 접점 검토는 사용자가 직접 확인하기로 했고 상태는 사용자 확인 대기다.

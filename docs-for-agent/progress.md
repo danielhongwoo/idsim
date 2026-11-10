@@ -31,7 +31,7 @@
 - 2026-11-10: 개발 호스트가 바뀌었다. 새 개발 PC는 x86_64 Ubuntu 24.04, 4 vCPU, 7GB RAM이다. 이미지 5종을 이 호스트에서 로컬 빌드했다(px4 3.07GB, sim-base 2.98GB, ros-ws 1.99GB, ros-base 838MB, xrce-agent 153MB). 이 항목 아래의 실측값은 이 호스트 기준이다.
 - 2026-11-10: 1a 4번 작업 `idsim_common` 구현 완료(브랜치 `feat/1a-4-idsim-common`). 작업 단위 A(파일 수정), B, C, D, E가 끝났고 접점 검토, reviewer 검토, PR은 아직이다. 아직 끝나지 않은 것은 미해결 사항의 "1a 4번 작업에서 올라온 항목" 참조.
   - 산출물: `ros_ws/src/idsim_common/`(좌표 변환, 토픽 기술자 65개와 io 템플릿, QoS, `Px4Timestamp`, 기체 식별, `VehicleCommand` 빌더, GoogleTest와 음성 컴파일 테스트 4건), 루트 `.clang-format`과 `.clang-tidy`, `tools/ros_ws.sh`(build, test, tidy, ci, clean, shell), `.github/workflows/unit.yml`, `tools/ci/lint.sh`의 clang-format 연결과 새 검사 `px4-api`(clang-tidy와 ament-lint 항목은 삭제), `config/px4/sitl_params.env`의 `UXRCE_DDS_SYNCT=0`과 `check_px4_pxh.py` 기대값, `capture.sh`의 hz 목록에서 `timesync_status` 제외.
-  - ros-ws 이미지: clang-tidy-18과 clang-format-18 추가로 key가 3774f33946b0b4d7에서 1d6b08eb3f6efc06으로 바뀌었다. 크기는 1.58GB에서 1.99GB로 약 410MB 늘었다(계획 때 예상은 297MB). 새 ros-ws 빌드에 400초가 걸렸다.
+  - ros-ws 이미지: clang-tidy-18과 clang-format-18 추가로 key가 3774f33946b0b4d7에서 a0f1847b30f3b76f로 바뀌었다(reviewer 지적으로 `Dockerfile.ros-ws` 주석의 음차를 고쳐 1d6b08eb3f6efc06에서 다시 바뀜. 크기는 같다). 크기는 1.58GB에서 1.99GB로 약 410MB 늘었다(계획 때 예상은 297MB). 새 ros-ws 빌드에 400초가 걸렸다.
   - `tools/ros_ws.sh ci` 실측: build 33초(콜드), test 12초(84 tests, 0 failures), clang-tidy PASS(5 files, 14초).
   - test-engineer 검증: 테스트 실패를 주입하면 종료 코드 1, 테스트가 0건이면 종료 코드 1(`colcon test-result` 자체는 0을 반환), tidy 위반이면 종료 코드 1. 종료 코드 규칙과 아티팩트 범위 승인.
   - 설계 문서 반영(E): `docs/roadmap.md`, `docs/architecture.md`, `docs/smoke-test.md`. `docs/interface.md`는 7단계 몫이라 만들지 않았다.
@@ -54,7 +54,7 @@
      - 사용자 육안 확인 2건: `tools/stack.sh up --viz`의 Gazebo GUI에서 x500_1, `tools/qgc.sh --stack` 뒤 QGC 기체 연결.
      - 로드맵 다음 단계: 1a 4단계 `idsim_common`(C++, QoS 프로필, 토픽 이름 매핑, 좌표 변환, 네임스페이스 해석, `VehicleCommand` 빌더, GoogleTest). 이어서 5단계 `idsim_interfaces`, 6단계 이륙-호버-착륙 노드와 통합 테스트, 7단계 `docs/interface.md`. 4단계 착수 때 `frame_transforms`와 px4_msgs v1.17.0 호환을 확인한다(2026-11-10 확인 끝, 결정 기록 (q)).
      - 3단계 C 미해결 항목 처리는 미해결 사항 절 참조(`--run-id` 제거 PR, gz_server.sh 주석 정정 등).
-  4c. 1a 4번 작업 `idsim_common`(구현 완료 2026-11-10, 브랜치 `feat/1a-4-idsim-common`). 계획은 `docs-for-agent/plan-1a-4-idsim-common/README.md`, 계약은 같은 디렉터리 `decisions.md`. 남은 순서: px4-engineer 접점 검토, SYNCT=0 스모크 S2-S5 회귀, 생성기 골든 갱신(셋 다 진행 중, 미해결 사항 참조) -> reviewer 검토 -> PR과 CI의 unit job 통과 -> 사용자 머지. 머지 뒤 unit job의 단계별 시간을 3회 기록한다(devops-engineer).
+  4c. 1a 4번 작업 `idsim_common`(구현 완료 2026-11-10, 브랜치 `feat/1a-4-idsim-common`). 계획은 `docs-for-agent/plan-1a-4-idsim-common/README.md`, 계약은 같은 디렉터리 `decisions.md`. S2-S5 회귀와 생성기 골든 갱신, reviewer 검토는 끝났다. 남은 순서: px4-engineer 접점 검토(사용자 확인 대기) -> PR과 CI의 unit job 통과 -> 사용자 머지. 머지 뒤 unit job의 단계별 시간을 3회 기록한다(devops-engineer).
   5. 6단계에서 ros-ws에 foxglove_bridge 추가와 Lichtblick 브라우저 실접속 확인. 생성기에 ROS params 파일과 bridge 설정 파일 생성 추가.
 
 ## 새 개발 PC에서 시작할 때
@@ -202,12 +202,17 @@
 - `qgc.sh`의 sha256 불일치 시 종료 코드 1 경로는 코드만 있고 실행으로 확인하지 않았다(손상 캐시 재다운로드 경로는 같은 함수를 쓰며 확인됨).
 - Gazebo GUI 깜빡임(사용자 관측 2026-11-09, VMware 3D 가속 켠 상태). `QSG_RENDER_LOOP=basic`과 `vblank_mode=1`은 효과 미확인. 3D 가속을 끈 소프트웨어 렌더링(llvmpipe, GUI 컨테이너 CPU 약 2.7코어)에서는 깜빡임 여부를 사용자가 다시 본다. 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
 - (2026-11-10, 1a 4번 작업에서 올라온 항목)
-- 진행 중(결과는 끝난 뒤 적는다): px4-engineer 접점 검토(공개 /fmu/in 허용과 차단 분류 35개, VehicleCommand 빌더 필드 표, `Px4Timestamp`의 1 us 미만 거부).
-- 진행 중: `UXRCE_DDS_SYNCT=0`에서 스모크 S2-S5 회귀. 사용자가 이 호스트에서 직접 실행하고 있다(px4-engineer 호출이 모델 안전장치 오류로 두 번 중단되어 사용자가 맡았다).
-- 진행 중: 생성기 골든 `tests/fixtures/gen_compose/` 갱신(`sitl_params.env`가 바뀌어 `stack.json`의 파라미터 목록과 입력 해시가 달라진다. devops-engineer).
+- 사용자 확인 대기: px4-engineer 접점 검토(공개 /fmu/in 허용과 차단 분류 35개, VehicleCommand 빌더 필드 표, `Px4Timestamp`의 1 us 미만 거부). px4-engineer 호출이 모델 안전장치 오류(`[general_harms]`)로 이번 작업에서 세 번 중단되었고, 세 번째는 읽기 전용 검토 세 항목만 맡긴 호출이었다. 그래서 사용자가 직접 확인하기로 했다. 결과는 아직 없다.
+- 완료: `UXRCE_DDS_SYNCT=0`에서 스모크 S2-S5 통과. 사용자가 이 호스트에서 직접 실행했다. 스택 6, run id는 20261110-093814-k6-s2, 20261110-093949-k6-s3, 20261110-094205-k6-s4, 20261110-095000-k6-s5. S2의 pxh 판정에서 `UXRCE_DDS_SYNCT` 저장값은 0이고, vehicle_status timestamp가 약 46 s로 sim 시간 축이다.
+- 완료: 생성기 골든 `tests/fixtures/gen_compose/` 갱신. stack.json 4개에서 기대 파라미터에 `UXRCE_DDS_SYNCT`가 추가되고 sitl_params.env sha256이 바뀐 것뿐이며 compose.yaml은 그대로다.
+- reviewer PR 전 검토 결과(2026-11-10). 결함 주입 실험에서 음성 컴파일 4건, 골든 양방향 일치, 3곳 일치 테스트가 실제로 실패를 잡았다. 머지 차단 3건(테스트의 버전 리터럴, architecture.md ros-ws 설명, 음차)은 모두 반영했다. 권고 중 반영한 것: px4-api 패턴 확대, unit.yml key 계산 실패 검사, ros_ws.sh errexit 주석, 묵은 test_results로 테스트 수가 집계되던 문제 수정(사실로 확인됨. `do_test`가 colcon test 전에 결과를 지운다), 테스트 2곳 정리.
+- PX4 timestamp와 `/clock`이 같은 축이라는 주장은 1회 실측과 구조 논증만 있고 회귀 판정은 6단계 failsafe 테스트까지 없다. S5에 `vehicle_status.timestamp`와 `/clock`의 차이 상한 판정을 넣을지 px4-engineer와 test-engineer가 검토한다.
+- px4-api 검사는 C++과 `.py`만 본다. 6단계에서 params, remap yaml이 생기면 범위를 다시 본다.
+- 이 PR이 손대지 않은 `.github/workflows/build.yml`, `build-images.yml`, `tools/ci/image_keys.py`, `tools/ci/build_images.py`에 음차("키", "잡")가 남아 있다. 다음에 고칠 때 바꾼다.
+- px4-engineer가 이 프로젝트 작업에서 안전장치 오류로 반복 중단된다(이번 3회, 설계 토론 때 architect와 reviewer 포함 3회). PX4 접점 작업의 운용 방법이 필요하다.
 - clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다. tidy 대상은 `src/`의 소스이고 헤더는 소스가 include할 때만 검사되는데 `src/`가 이 두 헤더를 include하지 않기 때문이다. 헤더 전용 검사를 둘지, `test/`를 tidy 대상에 넣을지 정해야 한다(ros2-engineer와 devops-engineer).
 - `tools/ros_ws.sh tidy`는 대상이 0개이면 PASS-NO-TARGETS로 통과한다. 디렉터리 구조가 바뀌면 검사가 조용히 빠질 수 있으니 `ci`에서는 경고나 실패로 바꿀지 검토한다(test-engineer 제안, devops-engineer).
-- unit job은 GHCR에 새 ros-ws key(1d6b08eb3f6efc06)가 없으면 load 모드로 ros-base부터 다시 빌드한다. main 머지 뒤 build job이 이미지를 올리면 해소된다.
+- unit job은 GHCR에 새 ros-ws key(a0f1847b30f3b76f)가 없으면 load 모드로 ros-base부터 다시 빌드한다. main 머지 뒤 build job이 이미지를 올리면 해소된다.
 - ros-ws 이미지가 계획 예상(297MB)보다 많은 약 410MB 늘었다. 줄여야 하면 clang-tidy를 별도 도구 이미지로 빼는 안이 있다(사용자 알림 항목).
 - unit job의 첫 실행과 머지 뒤 3회의 단계별 시간 기록(devops-engineer, CI 실행 뒤).
 - (2026-11-10, 3단계 C에서 올라온 항목)
