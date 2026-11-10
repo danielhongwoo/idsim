@@ -38,7 +38,7 @@ import xml.etree.ElementTree as ET
 
 # ---------------------------------------------------------------- 기준값(생성기 상수)
 SCHEMA = 1
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 GENERATOR_SCRIPT = "tools/gen_compose.py"
 
 STACK_MIN, STACK_MAX = 0, 9
@@ -431,7 +431,7 @@ def build(fleet_norm, ctx):
     """정규화된 fleet(validate_fleet 결과)와 생성 인자 ctx에서 (compose dict, stack dict, 경고 목록).
 
     ctx 키: k, variant, uid, gid, run_id, host_repo_root, host_run_dir, images{xrce-agent, sim-base, px4,
-    ros-ws}, generated_at, git_commit, git_dirty, inputs{fleet, px4_params_file, versions_env: {path, sha256}},
+    ros-ws}, generated_at, git_commit, git_dirty, inputs{fleet, px4_params_file, versions_env, cyclonedds_xml: {path, sha256}},
     params_env{이름: 값}, participant_index_max.
     """
     warnings = []
@@ -452,6 +452,10 @@ def build(fleet_norm, ctx):
     run_rel = os.path.relpath(run_dir, repo)
     if run_rel == "." or run_rel.startswith(".."):
         raise FleetError(f"run-dir({run_dir})는 저장소({repo}) 안에 있어야 한다(ros-ws의 /opt/idsim 마운트로 보인다)")
+    if os.path.dirname(run_dir) != f"{repo}/artifacts/runs":
+        raise FleetError(f"run-dir({run_dir})의 부모는 저장소 아래 {repo}/artifacts/runs여야 한다")
+    if os.path.basename(run_dir) != ctx["run_id"]:
+        raise FleetError(f"run-dir의 마지막 요소({os.path.basename(run_dir)})가 run id({ctx['run_id']})와 다르다")
     pmax = ctx["participant_index_max"]
     check_port_plan(pmax)
 
@@ -714,7 +718,7 @@ def build(fleet_norm, ctx):
             "profiles": profiles,
         },
         "startup": {
-            "stages": [["xrce-agent", "gazebo"], px4_services + ["bridge"]] if standalone
+            "stages": [["xrce-agent", "gazebo"], px4_services, ["bridge"]] if standalone
             else [["xrce-agent"], px4_services],
             "model_precheck": standalone,
         },
@@ -820,6 +824,16 @@ def assert_invariants(compose, stack):
     for name in ("gazebo", "bridge"):
         if name in services and services[name]["environment"].get("GZ_PARTITION") != st["gz_partition"]:
             problems.append(f"{name}: GZ_PARTITION이 stack.json과 다르다")
+    if os.path.basename(stack["run"]["host_dir"]) != stack["run"]["id"]:
+        problems.append("run.host_dir의 마지막 요소가 run.id와 다르다")
+    for v in stack["vehicles"]:
+        if v["host_rootfs_dir"] != f"{stack['run']['host_dir']}/{v['rootfs_dir']}" or v["rootfs_dir"] != f"px4-{v['instance']}":
+            problems.append(f"{v['service']}: host_rootfs_dir이 run.host_dir/px4-N이 아니다")
+    cyc = stack["inputs"].get("cyclonedds_xml")
+    if not isinstance(cyc, dict) or not cyc.get("path") or not cyc.get("sha256"):
+        problems.append("inputs.cyclonedds_xml {path, sha256}가 없다")
+    elif CYCLONEDDS_URI != f"file://{REPO_IN_CONTAINER}/{cyc['path']}":
+        problems.append("inputs.cyclonedds_xml.path가 CYCLONEDDS_URI와 다르다")
     for stage in stack["startup"]["stages"]:
         for name in stage:
             if name not in services or service_profiles(services[name]):
@@ -932,8 +946,13 @@ def generate(args, environ=os.environ):
     generated_at = args.generated_at or now.strftime("%Y-%m-%dT%H:%M:%SZ")
     if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", generated_at):
         raise FleetError(f"--generated-at은 RFC 3339 UTC 초 단위(...Z): {generated_at!r}")
-    run_id = args.run_id or f"{now.strftime('%Y%m%d-%H%M%S')}-k{k}"
     host_repo = os.path.normpath(args.host_repo_root)
+    if args.run_id:
+        run_id = args.run_id
+    elif args.run_dir:
+        run_id = os.path.basename(os.path.normpath(args.run_dir))
+    else:
+        run_id = f"{now.strftime('%Y%m%d-%H%M%S')}-k{k}"
     host_run = os.path.normpath(args.run_dir) if args.run_dir else f"{host_repo}/artifacts/runs/{run_id}"
     git_dirty = {"true": True, "false": False, None: None}[args.git_dirty]
     ctx = {
@@ -952,6 +971,7 @@ def generate(args, environ=os.environ):
             "fleet": {"path": fleet_rel, "sha256": _sha256_file(fleet_abs)},
             "px4_params_file": {"path": params_rel, "sha256": _sha256_file(params_abs)},
             "versions_env": {"path": VERSIONS_ENV_REL, "sha256": _sha256_file(versions_abs)},
+            "cyclonedds_xml": {"path": CYCLONEDDS_REL, "sha256": _sha256_file(os.path.join(repo_root, CYCLONEDDS_REL))},
         },
         "params_env": params_env,
         "participant_index_max": pmax,
@@ -986,9 +1006,9 @@ def parse_args(argv):
     p.add_argument("--fleet", default="config/fleet.yaml", help="저장소 기준 fleet 파일")
     p.add_argument("--stack", help="스택 번호 k 0-9 (없으면 IDSIM_STACK_INDEX, 없으면 0)")
     p.add_argument("--variant", choices=VARIANTS, default="standalone")
-    p.add_argument("--run-id", help="실행 id (기본 <UTC YYYYmmdd-HHMMSS>-k<k>)")
+    p.add_argument("--run-id", help="실행 id (기본: --run-dir의 마지막 요소, 둘 다 없으면 <UTC YYYYmmdd-HHMMSS>-k<k>)")
     p.add_argument("--host-repo-root", help="호스트에서 본 저장소 절대 경로(compose 바인드 마운트 원본)")
-    p.add_argument("--run-dir", help="호스트에서 본 실행 디렉터리(기본 <host-repo-root>/artifacts/runs/<run-id>)")
+    p.add_argument("--run-dir", help="호스트에서 본 실행 디렉터리, <host-repo-root>/artifacts/runs/<run-id>여야 한다(기본 <host-repo-root>/artifacts/runs/<run-id>)")
     p.add_argument("--out-dir", help="이 프로세스가 파일을 쓸 경로(기본 --run-dir). 컨테이너에서는 /out")
     p.add_argument("--uid", type=int)
     p.add_argument("--gid", type=int)

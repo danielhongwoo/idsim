@@ -4,7 +4,7 @@
     "git_commit": "0000000000000000000000000000000000000000",
     "git_dirty": false,
     "script": "tools/gen_compose.py",
-    "version": 1
+    "version": 2
   },
   "images": {
     "lichtblick": null,
@@ -14,6 +14,10 @@
     "xrce_agent": "idsim/xrce-agent:local"
   },
   "inputs": {
+    "cyclonedds_xml": {
+      "path": "config/cyclonedds.xml",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
     "fleet": {
       "path": "tests/fixtures/gen_compose/embedded/fleet.yaml",
       "sha256": "fa6ef8da59cead6cabd0413fb83ce2b1b208b0af89767767fac53b5261627784"
