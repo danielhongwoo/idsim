@@ -30,7 +30,7 @@
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
   2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
   2b. (완료 2026-11-09, 브랜치 docs/readme-check-host) 새 PC 재구성 지원: 저장소 루트 `README.md`와 `tools/check_host.sh`. 남은 것: apt 미러를 빌드 인자로 바꿀 수 있게 할지와 GHCR 이미지를 받아 쓰는 `--mode pull`(devops-engineer 판단, 아래 미해결 항목). README의 "알려진 제약" 절은 미러 문제가 풀리거나 GHCR가 공개되면 함께 고친다.
-  3. CI 후속 PR: Dockerfile.px4의 pip 고정과 PX4_OPTICAL_FLOW_REF 반영, `ls | grep` 정리(px4-engineer). Dockerfile.sim-base의 GZ_APT_KEY_FPR 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 키 재료와 KEY_<이미지> 설명 갱신(architect). image_keys.py가 bake 블록의 tags와 공백까지 해시하는 것 정리, lint가 같은 저장소 PR에서 두 번 도는 것(devops-engineer).
+  3. CI 후속 PR: Dockerfile.px4의 pip 고정과 PX4_OPTICAL_FLOW_REF 반영, `ls | grep` 정리(px4-engineer). Dockerfile.sim-base의 GZ_APT_KEY_FPR 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 키 재료와 KEY_<이미지> 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 키에서 제외한 것이 "같은 키는 같은 바이트" 의미의 예외라는 점도 확인). image_keys.py가 bake 블록의 tags와 공백까지 해시하는 것 정리, lint가 같은 저장소 PR에서 두 번 도는 것(devops-engineer).
   4. roadmap 1a 3단계 구현(E, A, B, C 완료, 아래는 계획 당시 기록). 설계 결정은 결정 기록 2026-11-09 참조. 순서 E -> A, B 병렬 -> C -> 검증.
      - E (architect, 완료 2026-11-09, 브랜치 `docs/phase1a-step3-design`): architecture.md, roadmap.md, smoke-test-phase1a.md, progress.md, file-ownership.md 반영. 검토 reviewer.
      - 첫 작업(ros2-engineer, A와 B와 같은 시점): `stack.json` 스키마 초안 확정(k, domain, gz_partition, agent_port, world, foxglove_port, lichtblick_port, mavlink_offset, vehicles[{id, ns, px4_ns, sysid, key, instance, model, pose, mavlink_ports}]). A, B, C가 이 스키마를 기준으로 한다. 검토 devops, test-engineer.
@@ -156,7 +156,7 @@
 - 2026-11-10: 사용자 결정, 이미지 빌드 apt 미러를 kr로 (devops-engineer 구현, 브랜치 `chore/apt-kr-mirror`). archive.ubuntu.com이 이 호스트에서 다시 응답하지 않아(2026-11-09, 11-10 실측) 결정했다.
   - 미러 값은 `versions.env`의 `UBUNTU_APT_MIRROR=http://kr.archive.ubuntu.com/ubuntu`, 빌드 인자로 전달한다. `ros-base`와 `xrce-agent` build 단계의 첫 `apt-get update` 앞에서 `ubuntu.sources`를 sed로 바꾸고 바뀌었는지 grep으로 검사한다. sim-base, px4, ros-ws는 ros-base를 상속하므로 손대지 않았다.
   - archive와 security를 둘 다 바꾼다. kr 미러가 noble, noble-updates, noble-security InRelease를 제공함을 실측했고, 같은 호스트에서 security.ubuntu.com도 응답하지 않는 날이 있었다. 서드파티(packages.ros.org, packages.osrfoundation.org)는 그대로다.
-  - 이미지 키에서 제외한다(`image_keys.py`의 `KEY_EXCLUDED_ARGS`). 미러는 수송 경로이고, 키는 원래 apt 패키지 버전을 고정하지 않는다. 미러 동기화 시차로 패키지 버전이 달라질 수 있는 위험은 같은 키의 이미지가 어느 미러에서 빌드됐든 같은 것으로 보는 것으로 받아들인다. 이번 변경은 Dockerfile 바이트가 바뀌어 5종 키가 한 번 바뀐다.
+  - 이미지 키에서 제외한다(`image_keys.py`의 `KEY_EXCLUDED_ARGS`). `ubuntu.sources`는 이미지에 남아 미러별로 바이트가 다르지만 런타임이 apt를 쓰지 않으므로 같은 이미지로 보며, 키는 원래 apt 패키지 버전을 고정하지 않는다. 미러 동기화 시차로 패키지 버전이 달라질 수 있는 위험은 같은 키의 이미지가 어느 미러에서 빌드됐든 같은 것으로 보는 것으로 받아들인다. 이번 변경은 Dockerfile 바이트가 바뀌어 5종 키가 한 번 바뀐다.
   - CI는 `build-images.yml`의 환경변수로 기본 미러(archive.ubuntu.com)를 쓰도록 덮어쓴다. `build_images.py`는 미리 설정된 `UBUNTU_APT_MIRROR` 환경변수를 versions.env보다 우선한다. 키가 같으므로 GHCR 키와 충돌하지 않고, CI의 레이어 캐시는 항상 같은 미러값이라 맞는다.
   - `tools/check_host.sh` (l) 항목은 같은 값을 읽는다.
 

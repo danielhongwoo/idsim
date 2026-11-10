@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 150
     env:
       MODE: ${{ inputs.push && 'push' || 'pr' }}
-      # 러너(미국)에서는 kr 미러가 느리고 불안정할 수 있으므로 우분투 기본 미러로 덮어쓴다.
+      # 러너(미국)에서는 kr 미러가 느리거나 불안정할 것으로 추정되므로(미실측) 우분투 기본 미러로 덮어쓴다.
       # versions.env의 UBUNTU_APT_MIRROR(호스트 로컬 빌드용)보다 이 환경변수가 우선한다(build_images.py).
       # 미러는 이미지 키에 들어가지 않으므로 GHCR 키와 캐시에 영향이 없다.
       UBUNTU_APT_MIRROR: http://archive.ubuntu.com/ubuntu

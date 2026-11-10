@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 SCHEME = "idsim-image-key-v1"
 KEY_LEN = 16
 
-# Dockerfile이 ARG로 선언해도 키에 넣지 않는 versions.env 이름. 이미지 내용이 아니라 수송 경로(apt 미러)다.
+# Dockerfile이 ARG로 선언해도 키에 넣지 않는 versions.env 이름. apt 미러다. ubuntu.sources가 이미지에 남아 바이트가 달라지나 런타임이 apt를 쓰지 않아 같은 이미지로 본다.
 KEY_EXCLUDED_ARGS = {"UBUNTU_APT_MIRROR"}
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
