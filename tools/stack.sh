@@ -12,11 +12,12 @@
 #   1. 같은 프로젝트(idsim-<k>)가 떠 있으면 먼저 내린다(항상 down 뒤 up. 옛 모델이 남은 Gazebo에 px4가
 #      다시 붙는 조용한 실패를 막는다).
 #   2. tools/gen_compose.sh로 artifacts/runs/<실행 id>/에 compose.yaml과 stack.json을 만든다.
-#   3. stack.json의 startup.stages를 차례로 `up -d --wait`한다. standalone은 1단계(에이전트, gazebo) 뒤
+#   3. stack.json의 startup.stages를 차례로 `up -d --wait`한다. 세 단계(standalone): 1단계(에이전트, gazebo),
+#      2단계(px4-N), 3단계(bridge). embedded는 두 단계(에이전트, px4-1). standalone은 1단계 뒤
 #      sim-base 1회성 컨테이너로 같은 GZ_PARTITION의 `gz model --list`에 이 스택의 모델(<모델>_N)이 없는지
-#      확인하고(startup.model_precheck) 2단계(px4-N, bridge)를 올린다.
+#      확인한다(startup.model_precheck). bridge는 px4-N이 healthy가 된 뒤에만 시작하므로 실패한 단계 번호가 원인을 가른다.
 #   4. --viz면 viz 프로필(gz-gui)을 `up -d`로 붙인다(기다리지 않는다. healthcheck 없음).
-#   5. 실패하면 에이전트 로그의 "bind error"와 px4 로그의 "bind failed"를 찾아 보고하고 종료 코드 1.
+#   5. 실패하면 unhealthy 또는 exited 서비스 이름을 한 줄로 찍고, 에이전트 로그의 "bind error"와 px4 로그의 "bind failed"를 찾아 보고하고 종료 코드 1.
 #      스택은 조사할 수 있게 그대로 두며 `tools/stack.sh down`으로 내린다.
 #   성공하면 실행 디렉터리의 절대 경로 한 줄을 stdout에 쓴다(안내는 stderr).
 #
@@ -144,6 +145,24 @@ gz_unique_check() { # stack.json
   fi
 }
 
+# unhealthy 또는 exited 서비스 이름을 한 줄로 찍는다
+report_bad_services() { # compose파일
+  local bad
+  bad="$(docker compose -f "$1" ps -a --format json 2>/dev/null | python3 -c '
+import json, sys
+bad = []
+for line in sys.stdin.read().splitlines():
+    line = line.strip()
+    if not line:
+        continue
+    items = json.loads(line)
+    for d in items if isinstance(items, list) else [items]:
+        if d.get("State") == "exited" or d.get("Health") == "unhealthy":
+            bad.append("%s(%s)" % (d.get("Service"), d.get("Health") or d.get("State")))
+print(" ".join(bad))' 2>/dev/null)" || bad=""
+  if [ -n "$bad" ]; then say "문제 서비스: ${bad}"; else say "unhealthy 또는 exited 서비스는 없다(시간 초과일 수 있다)"; fi
+}
+
 do_up() {
   local existing sf f stage i n_stages
   existing="$(docker ps -a -q --filter "label=com.docker.compose.project=${project}")"
@@ -165,7 +184,8 @@ do_up() {
     stage=($(sj "$sf" "startup.stages.${i}"))
     say "단계 $((i + 1))/${n_stages}: up --wait ${stage[*]}"
     if ! docker compose -f "$f" up -d --wait --wait-timeout "$up_timeout" "${stage[@]}" >&2; then
-      say "단계 $((i + 1)) 실패"
+      say "단계 $((i + 1))/${n_stages} 실패(${stage[*]})"
+      report_bad_services "$f"
       report_bind_errors "$f" "$sf"
       docker compose -f "$f" ps -a >&2 || true
       say "스택은 그대로 두었다. 내리려면: tools/stack.sh down --stack ${stack}"
