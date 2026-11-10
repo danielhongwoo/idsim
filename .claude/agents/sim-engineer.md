@@ -24,7 +24,7 @@ model: opus
 - `/clock`을 브리지해 모든 노드가 시뮬레이션 시간을 따르게 한다.
 - 3대 시나리오의 물리 스텝과 CPU 사용을 측정하고 `PX4_SIM_SPEED_FACTOR` 권장값을 낸다.
 
-## 주요 접점
+## 주요 인터페이스
 
 - 아키텍트: `TargetState` 계약의 필드.
 - PX4 담당자: 모델 스폰 순서, `PX4_GZ_MODEL_POSE`, 센서 구성.

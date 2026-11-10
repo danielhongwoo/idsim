@@ -31,12 +31,12 @@ grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git .
 
 ## 담당자 에이전트
 
-`.claude/agents/`에 아홉 명을 정의한다. 각자 소유 영역이 있고, 접점에서 서로 검토한다.
+`.claude/agents/`에 아홉 명을 정의한다. 각자 소유 영역이 있고, 인터페이스에서 서로 검토한다.
 
 | 이름 | 역할 | 소유 영역 |
 | --- | --- | --- |
 | architect | 레이어 경계, 인터페이스 계약, 식별 규칙의 최종 결정. 토론 주재와 결정 기록 | `docs/architecture.md`, `docs/interface.md`, `idsim_interfaces`, `proto/` 스키마 |
-| px4-engineer | SITL, Offboard 절차, 파라미터, px4_msgs 버전, ULog | `Dockerfile.px4`, SITL 파라미터, `idsim_mission`의 PX4 접점 |
+| px4-engineer | SITL, Offboard 절차, 파라미터, px4_msgs 버전, ULog | `Dockerfile.px4`, SITL 파라미터, `idsim_mission`의 PX4 인터페이스 |
 | ros2-engineer | CycloneDDS, QoS, 네임스페이스, 좌표 변환, 토픽 매핑, 노드 구조 | `idsim_common`, `config/cyclonedds.xml` |
 | sim-engineer | Gazebo 월드, 표적 Actor, 브리지, 표적 어댑터, 성능 | `idsim_sim`, `Dockerfile.sim-base` |
 | ops-service-engineer | Fleet Manager, 수집기, gRPC, proto 변환, Rust 게이트웨이 | `idsim_fleet`, `idsim_telemetry`, `proto/` 구현, `gateway/` |
@@ -48,8 +48,8 @@ grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git .
 소통 방식 세 가지.
 
 - 설계 토론: 질문을 관련 담당자 둘셋에게 동시에 보내 답을 받고, architect가 충돌 지점을 짚어 재질문한 뒤 결정한다. reviewer가 근거를 검증하고, 결과는 `docs-for-agent/progress.md` 결정 기록에 남긴다.
-- 구현: 담당자가 소유 영역을 구현하고, 접점 담당자와 reviewer가 검토한다. 접점 담당자의 승인 없이 머지하지 않는다.
-- 장애 분석: 증상을 가진 담당자가 가설을 내고, 접점 담당자가 각자 영역에서 반증 실험을 돌린 뒤 결과를 모은다.
+- 구현: 담당자가 소유 영역을 구현하고, 관련 owner와 reviewer가 검토한다. 관련 owner의 승인 없이 머지하지 않는다.
+- 장애 분석: 증상을 가진 담당자가 가설을 내고, 관련 owner가 각자 영역에서 반증 실험을 돌린 뒤 결과를 모은다.
 
 사용자만 정할 수 있는 사항(범위, 언어 선택, 비용)은 담당자가 결정하지 않고 `docs-for-agent/progress.md`의 미해결 사항에 올린다.
 

@@ -43,7 +43,7 @@
 | A. SITL 시간 기준 | px4-engineer | `config/px4/sitl_params.env`에 `UXRCE_DDS_SYNCT=0`과 근거 주석. `tests/smoke/check_px4_pxh.py`의 `DEFAULT_EXPECT`에 `UXRCE_DDS_SYNCT=0`(param show 저장값 판정). 생성기 골든이 바뀌면 `--update-golden`으로 갱신. 스택에서 S2-S5 회귀(S4 `--check` 일치) | 없음 |
 | B. idsim_common 패키지 | ros2-engineer | 하위 작업 B1-B8(아래) | 없음. ros-ws 기존 이미지로 colcon 빌드 가능 |
 | C. 빌드 도구와 CI | devops-engineer | ros-ws 이미지에 `clang-tidy-18`, `clang-format-18`, `versions.env`에 `LLVM_MAJOR=18`과 `LINT_CLANG_FORMAT_VERSION=18.1.3`, bake, `tools/ros_ws.sh`(build, test, tidy, ci, clean, shell), `.github/workflows/unit.yml`, lint job에 clang-format 연결, lint의 clang-tidy와 ament-lint 항목 삭제, `ros_ws/src`의 fmu 문자열과 `detail` 사용 검사 | 없음(PR #11 머지됨) |
-| D. 부속 정리 | ros2-engineer, test-engineer | `tests/smoke/capture.sh`의 hz 목록에서 `timesync_status` 제외(ros2). `docs-for-agent/file-ownership.md`에 골든 경로 규칙이 Python과 CMake 두 곳에 있다는 접점 기록(test) | 없음 |
+| D. 부속 정리 | ros2-engineer, test-engineer | `tests/smoke/capture.sh`의 hz 목록에서 `timesync_status` 제외(ros2). `docs-for-agent/file-ownership.md`에 골든 경로 규칙이 Python과 CMake 두 곳에 있다는 인터페이스 기록(test) | 없음 |
 | E. 문서 | architect | `decisions.md` 쟁점 10의 문서 수정 목록(roadmap, architecture, smoke-test). `progress.md` 결정 기록과 미해결 갱신 | B 마무리 무렵 |
 
 B의 하위 작업(세부는 `decisions.md`의 해당 쟁점).
@@ -65,13 +65,13 @@ B의 하위 작업(세부는 `decisions.md`의 해당 쟁점).
 2. C도 같이 시작한다(PR #11 머지됨).
 3. B와 C가 만나면 `tools/ros_ws.sh ci`로 로컬에서 먼저 돌리고, unit job에서 패키지 빌드, 테스트, clang-tidy를 처음 돌린다.
 4. D와 E를 마무리한다.
-5. 접점 검토와 reviewer 검토, PR, CI 통과, 사용자 머지.
+5. 인터페이스 검토와 reviewer 검토, PR, CI 통과, 사용자 머지.
 
 ## 검토
 
 - px4-engineer: VehicleCommand 필드 표, 공개 /fmu/in 허용 목록과 차단 분류.
 - devops-engineer: B8의 CMake 골든 블록이 `tools/ros_ws.sh`와 맞는지.
-- test-engineer: 종료 코드 규칙(`colcon test --return-code-on-test-failure`와 테스트 수 0 초과 단정), 아티팩트 범위, 골든 경로 접점.
+- test-engineer: 종료 코드 규칙(`colcon test --return-code-on-test-failure`와 테스트 수 0 초과 단정), 아티팩트 범위, 골든 경로 인터페이스.
 - reviewer: 전체(규칙, 결정과의 일치, 근거).
 
 ## 완료 기준
@@ -99,4 +99,4 @@ B의 하위 작업(세부는 `decisions.md`의 해당 쟁점).
 - 이 설계 토론에서 Fable로 부른 architect와 reviewer가 모델 안전장치 오류(`[general_harms]`)로 세 번 중단되었다. 재호출하면 통과한 경우가 있었다.
 - 사용자 결정: architect는 이번 설계 결정 한 번만 Opus로 불렀다. reviewer는 Fable을 유지한다.
 - 구현 중 px4-engineer 호출이 같은 모델 안전장치 오류(`[general_harms]`)로 두 번 중단되었다. 그래서 `UXRCE_DDS_SYNCT=0` 스모크 S2-S5 회귀는 사용자가 호스트에서 직접 돌리기로 했다.
-- 세 번째 중단은 읽기 전용 검토 세 항목(공개 /fmu/in 허용과 차단 분류, 빌더 필드 표, `Px4Timestamp` 거부)만 맡긴 px4-engineer 호출에서 났다. 그래서 이 접점 검토는 사용자가 직접 확인하기로 했고 상태는 사용자 확인 대기다.
+- 세 번째 중단은 읽기 전용 검토 세 항목(공개 /fmu/in 허용과 차단 분류, 빌더 필드 표, `Px4Timestamp` 거부)만 맡긴 px4-engineer 호출에서 났다. 그래서 이 인터페이스 검토는 사용자가 직접 확인하기로 했고 상태는 사용자 확인 대기다.
