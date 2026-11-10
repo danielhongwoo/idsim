@@ -162,6 +162,10 @@
   - 이미지 키에서 제외한다(`image_keys.py`의 `KEY_EXCLUDED_ARGS`). `ubuntu.sources`는 이미지에 남아 미러별로 바이트가 다르지만 런타임이 apt를 쓰지 않으므로 같은 이미지로 보며, 키는 원래 apt 패키지 버전을 고정하지 않는다. 미러 동기화 시차로 패키지 버전이 달라질 수 있는 위험은 같은 키의 이미지가 어느 미러에서 빌드됐든 같은 것으로 보는 것으로 받아들인다. 이번 변경은 Dockerfile 바이트가 바뀌어 5종 키가 한 번 바뀐다.
   - CI는 `build-images.yml`의 환경변수로 기본 미러(archive.ubuntu.com)를 쓰도록 덮어쓴다. `build_images.py`는 미리 설정된 `UBUNTU_APT_MIRROR` 환경변수를 versions.env보다 우선한다. 키가 같으므로 GHCR 키와 충돌하지 않고, CI의 레이어 캐시는 항상 같은 미러값이라 맞는다.
   - `tools/check_host.sh` (l) 항목은 같은 값을 읽는다.
+- 2026-11-10: apt security 미러 분리(`UBUNTU_APT_SECURITY_MIRROR`). main build run 42766199344, 42767107796이 ros-ws 빌드의 `apt-get install`에서 perl 5.38.2-3.2ubuntu0.7(noble-security) pool 파일 404로 실패했다. archive.ubuntu.com 노드 중 91.189.91.81, 91.189.91.82만 파일이 없었고 나머지 노드와 security.ubuntu.com, kr 미러는 200이었다(실측). 위 결정대로 security도 archive 미러로 바꾼 탓에 security 포켓이 archive 노드의 동기화 시차에 묶였다.
+  - archive와 security 주소를 별도 빌드 인자로 바꾼다. 로컬 기본은 둘 다 kr(이 호스트에서 security.ubuntu.com이 막히는 날이 있었다는 앞 결정 유지), CI는 archive.ubuntu.com과 security.ubuntu.com.
+  - 검사는 URIs 줄이 정확히 두 줄이고 순서대로 두 값과 같은지 본다. 새 인자도 이미지 키에서 제외한다. Dockerfile 바이트가 바뀌어 5종 키가 한 번 바뀐다.
+  - `tests/tools/test_apt_mirror.py`가 미러 RUN 단계를 Docker 없이 셸로 돌려 versions.env 값과 build-images.yml 값 모두에서 검사한다(run 42765345017 같은 CI 전용 실패를 lint에서 잡는다).
 - 2026-11-10 (1a 4번 작업 `idsim_common`. 원문과 근거는 `docs-for-agent/plan-1a-4-idsim-common/decisions.md`)
   - (q) 좌표 변환은 직접 구현하고 px4_ros_com은 단위 테스트 비교 기준으로만 쓴다(공분산 변환 2개 오류, 템플릿 링크 실패, NaN 번짐 실측). 미해결의 frame_transforms 호환 항목은 이 결정으로 닫는다.
   - (r) 토픽 매핑은 골든 65개 전부를 기술자 목록 하나에 두고 key는 (방향, 논리 이름)이다. 2026-11-06의 "키는 논리 이름과 타입의 쌍"을 갱신한다. 접미사는 여전히 `MESSAGE_VERSION`에서 파생한다. /fmu/in 발행은 `offboard_control_mode`, `trajectory_setpoint`, `vehicle_command`만 허용하며 이 차단은 실수 방지 수준이지 보안 경계가 아니다.
@@ -186,7 +190,7 @@
 - Phase 3 주기 하한 계약이 필요한 토픽 목록(px4-engineer, Phase 3 전에).
 - `COM_RC_IN_MODE`=4라 QGC 수동 모드와 가상 조이스틱은 쓸 수 없다. ARM, TAKEOFF(2.5m, `MIS_TAKEOFF_ALT` 기본), LAND, 자동 disarm은 pymavlink로 확인. `docs/interface.md`의 SITL 파라미터 절에 적을 것(ros2-engineer 초안, px4-engineer 확인).
 - Lichtblick 2.5.2 공식 이미지의 브라우저 실접속은 미확인. 두 서브프로토콜(foxglove.websocket.v1, foxglove.sdk.v1)을 제시하는 것만 확인했고 foxglove_bridge 3.6.0과의 실제 접속은 1a 6단계에서 확인한다.
-- apt 미러 고정 리스크(2026-11-09 실측). 2026-11-10에 `UBUNTU_APT_MIRROR` 빌드 인자(kr 기본, CI는 기본 미러)로 완화했다. 남은 것: 지정 미러가 막히면 콜드 빌드가 실패한다는 점, apt `Acquire::Retries` 미적용, GHCR 공개 이미지를 받아 태그하는 `build_images.py --mode pull` 미구현.
+- apt 미러 고정 리스크(2026-11-09 실측). 2026-11-10에 `UBUNTU_APT_MIRROR` 빌드 인자(kr 기본, CI는 기본 미러)로 완화했다. 남은 것: 지정 미러가 막히면 콜드 빌드가 실패한다는 점, `check_host.sh`가 `UBUNTU_APT_SECURITY_MIRROR`의 응답은 검사하지 않는 점, apt `Acquire::Retries` 미적용, GHCR 공개 이미지를 받아 태그하는 `build_images.py --mode pull` 미구현.
 - `qgc.sh`의 sha256 불일치 시 종료 코드 1 경로는 코드만 있고 실행으로 확인하지 않았다(손상 캐시 재다운로드 경로는 같은 함수를 쓰며 확인됨).
 - Gazebo GUI 깜빡임(사용자 관측 2026-11-09, VMware 3D 가속 켠 상태). `QSG_RENDER_LOOP=basic`과 `vblank_mode=1`은 효과 미확인. 3D 가속을 끈 소프트웨어 렌더링(llvmpipe, GUI 컨테이너 CPU 약 2.7코어)에서는 깜빡임 여부를 사용자가 다시 본다. 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
 - (2026-11-10, 3단계 C에서 올라온 항목)

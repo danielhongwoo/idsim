@@ -8,12 +8,18 @@ ARG XRCE_FASTDDS_REF
 RUN test -n "${XRCE_AGENT_TAG}" && test -n "${XRCE_FASTCDR_REF}" && test -n "${XRCE_FASTDDS_REF}" \
  || { echo "XRCE_AGENT_TAG, XRCE_FASTCDR_REF, XRCE_FASTDDS_REF 빌드 인자가 비어 있다" >&2; exit 1; }
 ENV DEBIAN_FRONTEND=noninteractive
-# 우분투 apt 미러 (versions.env의 UBUNTU_APT_MIRROR). 최종 단계는 apt를 쓰지 않으므로 build 단계에만 적용한다.
+# 우분투 apt 미러 (versions.env의 UBUNTU_APT_MIRROR, UBUNTU_APT_SECURITY_MIRROR). 최종 단계는 apt를 쓰지 않으므로 build 단계에만 적용한다.
+# 검사: URIs 줄이 정확히 두 줄이고, 순서대로 archive 미러와 security 미러여야 한다.
 ARG UBUNTU_APT_MIRROR
-RUN test -n "${UBUNTU_APT_MIRROR}" || { echo "UBUNTU_APT_MIRROR 빌드 인자가 비어 있다 (versions.env 확인)" >&2; exit 1; } \
- && sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#${UBUNTU_APT_MIRROR%/}/#" /etc/apt/sources.list.d/ubuntu.sources \
- && test "$(grep -c "^URIs: ${UBUNTU_APT_MIRROR%/}/\$" /etc/apt/sources.list.d/ubuntu.sources)" = 2 \
- && test "$(grep -c '^URIs:' /etc/apt/sources.list.d/ubuntu.sources)" = 2
+ARG UBUNTU_APT_SECURITY_MIRROR
+RUN test -n "${UBUNTU_APT_MIRROR}" && test -n "${UBUNTU_APT_SECURITY_MIRROR}" \
+ || { echo "UBUNTU_APT_MIRROR, UBUNTU_APT_SECURITY_MIRROR 빌드 인자가 비어 있다 (versions.env 확인)" >&2; exit 1; } \
+ && sed -i -E \
+      -e "s#^URIs: https?://archive\.ubuntu\.com/ubuntu/?\$#URIs: ${UBUNTU_APT_MIRROR%/}/#" \
+      -e "s#^URIs: https?://security\.ubuntu\.com/ubuntu/?\$#URIs: ${UBUNTU_APT_SECURITY_MIRROR%/}/#" \
+      /etc/apt/sources.list.d/ubuntu.sources \
+ && test "$(grep '^URIs:' /etc/apt/sources.list.d/ubuntu.sources)" \
+      = "$(printf 'URIs: %s/\nURIs: %s/' "${UBUNTU_APT_MIRROR%/}" "${UBUNTU_APT_SECURITY_MIRROR%/}")"
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates git cmake build-essential \

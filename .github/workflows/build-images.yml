@@ -30,6 +30,9 @@ jobs:
       # versions.env의 UBUNTU_APT_MIRROR(호스트 로컬 빌드용)보다 이 환경변수가 우선한다(build_images.py).
       # 미러는 이미지 키에 들어가지 않으므로 GHCR 키와 캐시에 영향이 없다.
       UBUNTU_APT_MIRROR: http://archive.ubuntu.com/ubuntu
+      # security 포켓은 security.ubuntu.com에서 받는다. archive.ubuntu.com 일부 노드는 새 보안 업데이트의 pool 파일이
+      # 늦게 들어와 404가 난다(2026-11-10 run 42766199344, 42767107796에서 perl 5.38.2-3.2ubuntu0.7).
+      UBUNTU_APT_SECURITY_MIRROR: http://security.ubuntu.com/ubuntu
     steps:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

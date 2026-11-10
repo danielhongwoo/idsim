@@ -11,7 +11,7 @@
 베이스 키가 5번 전에 6번으로 들어가므로 ros-base가 바뀌면 sim-base, px4, ros-ws 키가 모두 바뀐다.
 xrce-agent는 베이스 target이 없어 독립이다.
 
-키에 들어가지 않는 것: UBUNTU_APT_MIRROR(KEY_EXCLUDED_ARGS).
+키에 들어가지 않는 것: UBUNTU_APT_MIRROR, UBUNTU_APT_SECURITY_MIRROR(KEY_EXCLUDED_ARGS).
 키에 들어가지 않는 것(빌드 시점 외부 상태): apt 저장소의 패키지 버전, pip 인덱스, 브랜치 이름으로
 받는 소스. 이것들이 바뀌어도 키는 그대로이며, 같은 키의 이미지는 레지스트리에 한 번만 올라간다.
 
@@ -37,7 +37,7 @@ SCHEME = "idsim-image-key-v1"
 KEY_LEN = 16
 
 # Dockerfile이 ARG로 선언해도 키에 넣지 않는 versions.env 이름. apt 미러다. ubuntu.sources가 이미지에 남아 바이트가 달라지나 런타임이 apt를 쓰지 않아 같은 이미지로 본다.
-KEY_EXCLUDED_ARGS = {"UBUNTU_APT_MIRROR"}
+KEY_EXCLUDED_ARGS = {"UBUNTU_APT_MIRROR", "UBUNTU_APT_SECURITY_MIRROR"}
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DOCKER_DIR = os.path.join(REPO_ROOT, "docker")

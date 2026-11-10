@@ -26,6 +26,13 @@ def test_mirror_is_excluded_from_keys():
     assert _keys(v) == _keys(changed)
 
 
+def test_security_mirror_is_excluded_from_keys():
+    v = _versions()
+    assert "UBUNTU_APT_SECURITY_MIRROR" in v
+    changed = dict(v, UBUNTU_APT_SECURITY_MIRROR="http://security.ubuntu.com/ubuntu")
+    assert _keys(v) == _keys(changed)
+
+
 def test_other_versions_still_change_keys():
     v = _versions()
     changed = dict(v, ROS_DISTRO="other")

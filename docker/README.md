@@ -112,9 +112,11 @@ python3 tools/ci/image_keys.py --explain px4
 
 ### apt 미러
 
-이미지 빌드의 우분투 apt 미러는 `versions.env`의 `UBUNTU_APT_MIRROR`(기본 `http://kr.archive.ubuntu.com/ubuntu`)이다. `ros-base`와 `xrce-agent`(build 단계)가 첫 `apt-get update` 앞에서 `/etc/apt/sources.list.d/ubuntu.sources`의 archive와 security 주소를 이 값으로 바꾸고, `sim-base`, `px4`, `ros-ws`는 `ros-base`를 상속한다. packages.ros.org와 packages.osrfoundation.org는 바꾸지 않는다. kr 미러는 noble, noble-updates, noble-security를 모두 제공한다.
+이미지 빌드의 우분투 apt 미러는 `versions.env`의 두 값이다. `UBUNTU_APT_MIRROR`는 archive 주소(noble, noble-updates, noble-backports), `UBUNTU_APT_SECURITY_MIRROR`는 security 주소(noble-security)를 바꾸며, 둘 다 기본 `http://kr.archive.ubuntu.com/ubuntu`이다. `ros-base`와 `xrce-agent`(build 단계)가 첫 `apt-get update` 앞에서 `/etc/apt/sources.list.d/ubuntu.sources`의 두 주소를 바꾸고 결과를 검사하며, `sim-base`, `px4`, `ros-ws`는 `ros-base`를 상속한다. packages.ros.org와 packages.osrfoundation.org는 바꾸지 않는다. kr 미러는 noble, noble-updates, noble-security를 모두 제공한다.
 
-이 값은 이미지 키에 들어가지 않는다(`tools/ci/image_keys.py`의 `KEY_EXCLUDED_ARGS`). `ubuntu.sources`는 이미지에 남아 미러별로 바이트가 다르지만 런타임이 apt를 쓰지 않으므로 같은 이미지로 본다. 미러 동기화 시차로 패키지 버전이 조금 다를 수 있으나, 이미지 키는 원래 apt 패키지 버전을 고정하지 않는다.
+CI(`build-images.yml`)는 archive를 `http://archive.ubuntu.com/ubuntu`, security를 `http://security.ubuntu.com/ubuntu`로 덮어쓴다. security까지 archive.ubuntu.com으로 받으면, 새 보안 업데이트의 pool 파일이 아직 없는 archive 노드에 걸려 404로 실패할 수 있다(2026-11-10 실측).
+
+이 값들은 이미지 키에 들어가지 않는다(`tools/ci/image_keys.py`의 `KEY_EXCLUDED_ARGS`). `ubuntu.sources`는 이미지에 남아 미러별로 바이트가 다르지만 런타임이 apt를 쓰지 않으므로 같은 이미지로 본다. 미러 동기화 시차로 패키지 버전이 조금 다를 수 있으나, 이미지 키는 원래 apt 패키지 버전을 고정하지 않는다.
 
 다른 미러를 쓰려면 같은 이름의 환경변수를 주고 빌드한다. 환경변수가 `versions.env`보다 우선한다(`build_images.py` 경로에 한함. `versions.env`를 source하는 직접 bake 경로에서는 `versions.env`가 이긴다). 값을 바꿔도 이미 캐시된 `apt` 레이어는 인자가 달라진 단계부터 다시 만들어진다.
 
