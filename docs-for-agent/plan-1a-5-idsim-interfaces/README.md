@@ -1,16 +1,18 @@
 # Phase 1a 5번 작업 idsim_interfaces 작업 계획
 
-작성 2026-11-10, 같은 날 확정 개정. 설계 결정은 `decisions.md`에 있고 확정본이다(reviewer 검증, ros2-engineer 추가 실측, 사용자 결정 2건 반영). 패키지 파일은 만들었고(A, B) `docs/`는 아직 고치지 않았다(D). 브랜치는 `feat/1a-5-idsim-interfaces`다.
+작성 2026-11-10, 같은 날 확정 개정. 설계 결정은 `decisions.md`에 있고 확정본이다(reviewer 검증, ros2-engineer 추가 실측, 사용자 결정 2건 반영). 패키지 파일(A, B), 테스트 수 단정(C), owner 검토 반영, 문서 반영(D)까지 끝났다. 남은 것은 reviewer의 문서 확인, PR, CI, 사용자 머지다. 브랜치는 `feat/1a-5-idsim-interfaces`다.
 
 ## 진행 상태 (2026-11-10)
 
 | 단위 | 상태 |
 | --- | --- |
 | 설계 결정 | 확정(`decisions.md`). reviewer 재확인 완료(구현 착수 가능). 비차단 6건을 `decisions.md`에 반영했다 |
-| A | 구현 완료. 정의 11개가 `decisions.md` 쟁점 8과 직접 정의 단위로 같다. ros2-engineer 검토 대기 |
-| B | 구현 완료. 결함 주입 네 가지 확인(architect). test-engineer 승인 대기 |
-| C | 시작 전 |
-| D | 시작 전. A-C와 owner 검토 뒤 |
+| A | 완료. 정의 11개가 `decisions.md` 쟁점 8과 직접 정의 단위로 같다. ros2-engineer 승인 |
+| B | 완료. 결함 주입 네 가지 확인(architect). test-engineer 승인. 검토 뒤 가드(펼친 정의의 최상위 줄 == 직접 정의)와 갱신 모드 경고를 더했다 |
+| C | 완료(devops-engineer). 패키지마다 테스트 결과 1건 이상을 단정한다. test-engineer 승인 |
+| owner 검토 | 완료. ros2 승인(권고 4), test 승인(권고 2), sim 승인(문서 조건 1, 보완 2), ops 조건부(조건 1), logging 조건부(조건 3). 조건은 모두 반영했고 권고는 반영하거나 넘김 목록으로 보냈다(받지 않은 것 없음). 필드와 상수는 바뀌지 않았고 golden 세 종류도 그대로다. 처리 표는 `decisions.md`의 "5단계 PR owner 검토 반영" |
+| D | 완료. `docs/architecture.md`(인터페이스 계약 절, 기체 식별 절, 테스트 절), `docs/roadmap.md`(16행, 1a 목표, 1a 5-7번, 1b 2번과 완료 기준, Phase 2 1, 3, 5번과 완료 기준, Phase 3 3번, 리스크 표 네 줄), `docs-for-agent/file-ownership.md`(계약 golden의 승인 주체). reviewer 확인 대기 |
+| 검증 | `tools/ros_ws.sh ci` 통과(148 tests: `idsim_common` 109, `idsim_interfaces` 39), `tools/ci/lint.sh all` 통과, 문자 집합 검사 통과 |
 
 ## 이 디렉터리의 파일
 
@@ -47,10 +49,10 @@
 
 1. (완료) reviewer가 `decisions.md`를 검증했다. 필수 5건과 권고 8건을 확정본에 반영했다.
 2. (완료) ros2-engineer가 accept 뒤 abort와 rosbag2의 action 기록을 실측했다. 사용자 결정 2건을 받았다.
-3. A와 C를 병렬로 한다. A 뒤에 B.
-4. `tools/ros_ws.sh ci`를 로컬에서 돌린다. 두 패키지 모두 결과가 1건 이상이어야 한다.
-5. 관련 owner 검토(아래 "검토")와 reviewer 재확인. reviewer는 확정본이 필수 5건을 닫았는지와 구현이 쟁점 8과 같은지를 본다.
-6. D(문서 반영)를 한다. reviewer가 문서 변경을 확인한 뒤 PR, CI 통과, 사용자 머지.
+3. (완료) A와 C를 병렬로 한다. A 뒤에 B.
+4. (완료) `tools/ros_ws.sh ci`를 로컬에서 돌린다. 두 패키지 모두 결과가 1건 이상이어야 한다.
+5. (완료) 관련 owner 검토(아래 "검토")와 reviewer 재확인. reviewer는 확정본이 필수 5건을 닫았는지와 구현이 쟁점 8과 같은지를 본다.
+6. (D 완료) D(문서 반영)를 한다. reviewer가 문서 변경을 확인한 뒤 PR, CI 통과, 사용자 머지.
 
 PR은 하나로 하고 커밋은 담당자 소유 단위로 나눈다. 스택을 올리는 작업은 없다.
 

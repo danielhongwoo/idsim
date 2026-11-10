@@ -1,6 +1,6 @@
 # 1a 5단계 idsim_interfaces 설계 결정 (architect, 2026-11-10 확정)
 
-입력: `opinion-ros2.md`, `opinion-sim.md`, `opinion-ops.md`, 충돌 지점 재질문 답 네 건(ros2, ops, sim, px4. 아래 "재질문 결과 요약"), reviewer 검증 보고(필수 5건, 권고 8건)와 재확인 보고(비차단 6건), ros2-engineer 추가 실측(accept 뒤 abort, rosbag2의 action 기록), 사용자 결정 2건(2026-11-10). 뒤의 셋이 이 문서를 어떻게 바꿨는지는 "확정 개정 요약"에 있다. 이 문서는 확정본이고 구현은 이 문서를 따른다. 패키지 파일, `docs/`, `progress.md`는 아직 고치지 않았다.
+입력: `opinion-ros2.md`, `opinion-sim.md`, `opinion-ops.md`, 충돌 지점 재질문 답 네 건(ros2, ops, sim, px4. 아래 "재질문 결과 요약"), reviewer 검증 보고(필수 5건, 권고 8건)와 재확인 보고(비차단 6건), ros2-engineer 추가 실측(accept 뒤 abort, rosbag2의 action 기록), 사용자 결정 2건(2026-11-10). 뒤의 셋이 이 문서를 어떻게 바꿨는지는 "확정 개정 요약"에 있다. 이 문서는 확정본이고 구현은 이 문서를 따른다. 패키지 파일을 만든 뒤 5단계 PR에서 owner 다섯의 검토를 받았고 그 반영은 "5단계 PR owner 검토 반영"에 있다(필드와 상수는 바뀌지 않았다). `docs/` 반영(D)도 끝났다. `progress.md`는 호출한 쪽이 갱신한다.
 
 표기: [실측]은 담당자가 이미지에서 직접 확인한 것(reviewer의 재현과 ros2-engineer의 2026-11-10 추가 실측 포함), [소스]는 PX4 v1.17.0 원문(reviewer가 사본의 commit과 blob hash를 v1.17.0 태그와 대조했다), [문서]는 공식 문서나 저장소 문서, [추정]은 확인하지 않은 판단이다. [추정]에 기대는 결정은 해당 쟁점에 따로 적었다.
 
@@ -34,6 +34,28 @@ reviewer 권고 8건의 처리
 | 8 | opinion 파일의 음차 표기. `idsim_sim`이 패키지가 되면 패키지별 단정에 걸린다 | 수용. opinion 세 파일의 표기를 고쳤다(내용은 그대로). 뒤의 것은 devops 1b 항목 |
 
 필드 목록의 변경: `MissionEvent.msg` 추가, 이름 상수 하나(`MissionEvent.TOPIC_NAME`)뿐이다. 기존 9개 메시지와 action의 필드, 상수는 reviewer 검증 전과 같다.
+
+## 5단계 PR owner 검토 반영 (2026-11-10)
+
+결과: ros2-engineer 승인(권고 4), test-engineer 승인(권고 2), sim-engineer 승인(문서 조건 1, 보완 2), ops-service-engineer 조건부 승인(조건 1), logging-engineer 조건부 승인(조건 3). 필드와 상수의 변경 요구는 없었다. 조건은 모두 반영했고, 권고 가운데 받지 않은 것은 없다(이번 PR에서 하지 않은 것은 넘김 목록으로 보냈다). 주석만 바뀌었으므로 golden 세 종류는 그대로다(계약 테스트 통과로 확인).
+
+| 출처 | 항목 | 처리 | 위치 |
+| --- | --- | --- | --- |
+| ops 조건 | `VehicleState.msg` 머리 주석이 묵은 값을 덮지 못한다 | 반영. "원천이 신선도 임계보다 묵어도 해당 `*_valid`는 false, 발행 중단은 `vehicle_status`만 본다" 두 줄을 더했다 | `VehicleState.msg`, 쟁점 8 |
+| ops 비차단 | 소비자 조건 넷, 즉시 abort되는 goal은 feedback 0건이고 Fleet은 feedback 수신을 수락 확인으로 쓰지 않는다, `ACCEPT_AND_EXECUTE`만 쓰는 것은 구현 규칙 | 앞의 둘은 7단계 `docs/interface.md`로, 뒤의 것은 6단계 Executor 설계 노트로 넘겼다. `.action` 주석에는 넣지 않는다 | 넘김 목록 |
+| logging 조건 1 | `MissionEvent.stamp`의 시간 기준 | 반영. "Executor 노드 clock의 ROS 시각(`use_sim_time`이면 `/clock`)이고 벽시계가 아니다". 제안 문구의 "시뮬레이션 시간"은 쓰지 않았다(메시지는 시뮬레이터 비의존이다. 쟁점 7, sim 조건과 같은 이유) | `MissionEvent.msg`, 쟁점 8 |
+| logging 조건 2 | 기록기와 발행자가 맺어지기 전의 사건 손실은 발행자 수 확인만으로 막히지 않는다. 기록 시작과 기록물 이름 확정의 순서 | 반영. 쟁점 8 `MissionEvent`의 QoS 항과 넘김 목록 logging Phase 2 항목, roadmap Phase 2 3번 | 쟁점 8, 넘김 목록 |
+| logging 조건 3 | 인덱스 쪽 요구(결과 미상의 정의, 기간의 끝, key) | 반영. 쟁점 8 `MissionEvent`의 "인덱스 쪽 요구" 항 | 쟁점 8 |
+| logging 주의 | 필드 변경과 인덱스 prototype은 Phase 2 초반에, 기록기 구독 QoS는 명시 override로 | 넘김 목록 logging Phase 2 항목 | 넘김 목록 |
+| sim 조건 | 문서에 옮길 때 "sim 시각", "sim 시간"은 "ROS 시각(`use_sim_time`이면 `/clock`)"으로 | 반영. `docs/architecture.md`와 `docs/roadmap.md`는 그렇게 썼고, 이 문서의 쟁점 5 계약 문장과 `TargetState` 항도 고쳤다. 이 문서의 다른 "sim 시간" 표현(노드 파라미터의 시간 기준)도 7단계에서 같은 표기로 옮긴다 | 쟁점 5, 쟁점 8, 넘김 목록 |
+| sim 보완 1 | "Actor 엔티티 자체는 `pose/info` 목록에 없다" | 반영 | 쟁점 5 사실 |
+| sim 보완 2 | "`pose/info` 50 Hz, header stamp는 sim 시간 [실측]"을 사실 목록에 | 반영 | 쟁점 5 사실 |
+| ros2 권고 1 | 펼친 정의 출력의 최상위 줄 == 직접 정의 가드 | 반영. golden 비교 전에 단정하고 갱신 모드에서도 한다. 결함 주입("uint8 status  # status")으로 실패를 확인했다 | `test_contract.py`, 쟁점 10 |
+| ros2 권고 2 | 정의 작성 규칙(string 상수와 기본값에 "#" 금지, C++ 상수 사용 규칙) | 7단계 `docs/interface.md`로 넘겼다 | 넘김 목록 |
+| ros2 권고 3 | `direct_definition`의 `"=" in line` 판정은 bounded string이나 공백이 든 기본값에서 어색하다 | 지금은 그런 필드가 없어 고치지 않고 넘김 목록에 적었다(그런 필드를 더하는 PR에서 `_CONSTANT` 정규식 기준으로 바꾼다) | 넘김 목록 |
+| ros2 권고 4 | `<test_depend>ament_index_python</test_depend>` | 반영 | `package.xml`, 쟁점 11 |
+| test 권고 1 | 갱신 모드가 조용히 통과한다 | 반영. 달라진 golden만 쓰고 파일마다 pytest 경고 "golden 갱신됨: <경로>"를 낸다 | `test_contract.py`, 쟁점 10 |
+| test 권고 2 | `opinion-ros2.md`의 갱신 명령 예시는 동작하지 않는다 | 반영. 그 줄에 주석을 달았다 | `opinion-ros2.md` |
 
 ## 재질문 결과 요약
 
@@ -198,7 +220,8 @@ Fleet의 발견 방식을 미루는 이유: ops는 그래프 탐색(자동 발�
 ## 쟁점 5. sim이 실측한 1b 리스크
 
 사실([실측] sim, gz-sim 8.15.0. reviewer가 `idsim/sim-base:local`, `--network none`에서 재현했다)
-- 스크립트 궤적 Actor의 pose는 `/world/<w>/pose/info`에 반영되지 않는다(link pose가 0으로 고정).
+- 스크립트 궤적 Actor의 pose는 `/world/<w>/pose/info`에 반영되지 않는다. Actor 엔티티 자체는 목록에 없고, 그 link만 상대 pose 0으로 고정되어 나온다.
+- `/world/<w>/pose/info`는 50 Hz이고 header stamp는 sim 시간이다. ros_gz_bridge는 이 stamp를 ROS header로 그대로 옮긴다(아래 stamp 계약 문장의 근거).
 - `PosePublisher`는 Actor에 붙지 않는다.
 - Actor가 있는 월드에서 `/world/<w>/dynamic_pose/info`를 구독하면 서버가 `SceneBroadcaster::PoseUpdate`에서 segfault로 죽는다.
 
@@ -206,7 +229,7 @@ Fleet의 발견 방식을 미루는 이유: ops는 그래프 탐색(자동 발�
 
 계약 문장(쟁점 8의 `TargetState`에 반영)
 - `velocity_valid`는 언제든 false일 수 있다(첫 표본에 한정하지 않는다. 차분 방식은 궤적 반복 경계와 표본 누락 뒤에도 false가 된다).
-- `header.stamp`는 "그 상태가 유효한 sim 시각"이다. 발행 시각이 아니다. 주기와 위상은 계약이 아니다.
+- `header.stamp`는 "그 상태가 유효한 ROS 시각(`use_sim_time`이면 `/clock`)"이다. 발행 시각이 아니다. 주기와 위상은 계약이 아니다. "sim 시각"이라고 쓰지 않는다(메시지는 시뮬레이터 비의존이고 실기체 추적기도 생산자가 될 수 있다. sim 검토 조건).
 - 소비자에게 정본은 `TargetState`다.
 
 "Gazebo 화면의 Actor 위치는 참고용이며 보간 차이만큼 어긋날 수 있다"는 문장은 해법 (가)를 전제하므로 지금 계약에 넣지 않는다. 해법 (나)에서는 Gazebo가 원천이다. 1b 해법 선택 뒤에 정한다.
@@ -262,6 +285,10 @@ Fleet의 발견 방식을 미루는 이유: ops는 그래프 탐색(자동 발�
 
 ```
 # 기체 요약 상태. Telemetry Collector가 기체마다 발행한다. 토픽 /<vehicle_id>/vehicle_state
+# 발행자는 vehicle_status와의 식별 대조가 맞고 vehicle_status가 신선한 동안에만 발행한다.
+# NaN과 무한대는 어떤 필드에도 넣지 않는다. 값이 없으면 *_valid가 false이고 값은 0이다.
+# 위치, 자세, 측지 좌표, 배터리, 지상 판정의 원천이 신선도 임계보다 묵어도 해당 *_valid는 false이고 값은 0이다.
+# 발행 중단은 vehicle_status만 본다.
 string TOPIC_NAME = "vehicle_state"
 string FRAME_ID = "world"
 
@@ -337,7 +364,7 @@ geometry_msgs/Vector3 velocity  # world ENU, m/s
 ```
 
 - stamp는 0이 아니고 같은 `target_id`에서 단조 증가한다. 소비자는 증가하지 않는 표본을 버린다.
-- 소실 플래그와 종료 메시지는 없다. 소실은 발행 중단으로 표현하고 소비자가 `now - header.stamp > T`(노드 파라미터, sim 시간)로 판정한다. 한 번도 오지 않은 경우도 같은 규칙이다.
+- 소실 플래그와 종료 메시지는 없다. 소실은 발행 중단으로 표현하고 소비자가 `now - header.stamp > T`(T는 노드 파라미터. `now`는 ROS 시각이고 `use_sim_time`이면 `/clock`)로 판정한다. 한 번도 오지 않은 경우도 같은 규칙이다.
 - 소비자는 `target_id`가 토픽 토큰과 다르면 버린다.
 - 넣지 않은 것과 이유: 자세(점 표적이다. 추적기가 주지 못하는 값을 소비자가 믿게 된다), 공분산(Phase 3까지 읽는 소비자가 없고 sim이 재질문에서 수용. 불확실도 표현은 `docs/architecture.md`의 "다루지 않는 것"에 가깝다), 신뢰도 스칼라, 위경도(생산자가 world 원점을 받아 변환한다), 원점(쟁점 3).
 
@@ -484,7 +511,7 @@ uint8 STATUS_SUCCEEDED = 4
 uint8 STATUS_CANCELED = 5
 uint8 STATUS_ABORTED = 6
 
-builtin_interfaces/Time stamp   # 이 사건이 일어난 시각
+builtin_interfaces/Time stamp   # 이 사건이 일어난 시각. Executor 노드 clock의 ROS 시각(use_sim_time이면 /clock)이고 벽시계가 아니다
 string vehicle_id               # 발행한 Executor의 vehicle_id. 토픽 네임스페이스와 같다
 string mission_id               # goal에 적힌 값 그대로. 검증에 실패한 값일 수 있다
 uint8[16] goal_id               # action goal의 UUID. _action/status, _action/feedback의 goal_id와 같다
@@ -503,9 +530,15 @@ string detail                   # 접수 때는 빈 문자열. 종료 때는 res
 - `goal_id`를 `unique_identifier_msgs/UUID`가 아니라 `uint8[16]`으로 둔 이유: 쟁점 7의 의존 목록을 늘리지 않고 JSON과 proto로 옮기기 쉽다. 바이트 순서는 UUID의 `uuid` 필드와 같다.
 - Header가 아니라 `stamp`인 이유: 좌표가 없어 `frame_id`가 뜻이 없다. feedback과 같은 모양이다.
 - `vehicle_id` 불일치로 끝난 goal에서 이 필드는 goal에 적힌 값이 아니라 Executor 자신의 값이다. goal에 적힌 값은 `detail`에 적는다.
-- QoS 계약: 발행 RELIABLE, VOLATILE. 구독 RELIABLE, VOLATILE. 사건 토픽이라 구독이 BEST_EFFORT이면 사건을 잃는다(상태 토픽과 다른 점). history와 depth는 계약 밖이고 구현 기본값은 KEEP_LAST 10이며 Phase 2에서 logging-engineer와 확정한다. TRANSIENT_LOCAL은 쓰지 않는다(지난 실행의 사건이 새 구독자에게 현재 사건으로 보인다). 따라서 기록과 테스트는 구독이 발행자와 맺어진 것을 확인한 뒤에 goal을 보낸다. 구독을 만든 것만으로는 부족하다(맺어지기 전에 나간 ACCEPTED 사건은 잃는다). 확인은 발행자 수 조회로 하고 벽시계 대기나 재시도로 덮지 않는다.
+- QoS 계약: 발행 RELIABLE, VOLATILE. 구독 RELIABLE, VOLATILE. 사건 토픽이라 구독이 BEST_EFFORT이면 사건을 잃는다(상태 토픽과 다른 점). history와 depth는 계약 밖이고 구현 기본값은 KEEP_LAST 10이며 Phase 2에서 logging-engineer와 확정한다. TRANSIENT_LOCAL은 쓰지 않는다(지난 실행의 사건이 새 구독자에게 현재 사건으로 보인다). 따라서 기록과 테스트는 구독이 발행자와 맺어진 것을 확인한 뒤에 goal을 보낸다. 구독을 만든 것만으로는 부족하다(맺어지기 전에 나간 ACCEPTED 사건은 잃는다). 테스트처럼 goal을 보내는 프로세스가 구독도 가진 경우의 확인은 자기 구독의 발행자 수 조회로 하고 벽시계 대기나 재시도로 덮지 않는다. 기록기는 다르다(logging 검토 조건 2). rosbag2 recorder는 토픽을 주기적으로 탐색해 늦게 구독하므로, goal을 보내는 쪽이 발행자 수를 확인해도 기록기의 구독이 맺어졌다는 보장이 없다. Phase 2에서는 기록기의 구독이 생겼다는 신호(logger의 ready 서비스나 토픽, 또는 Executor 쪽 `get_subscription_count() >= 1` 게이트)가 있어야 goal을 보낸다. 방식은 Phase 2에서 정한다. 기록기의 구독은 RELIABLE, VOLATILE을 명시 QoS override로 고정한다.
+- 인덱스 쪽 요구(logging 검토 조건 3. Phase 2 기록물 인덱스가 지킨다)
+  - 실행 단위의 key는 (`vehicle_id`, `goal_id`)다. `mission_id`는 재사용될 수 있어 key로 쓰지 않는다. `item_count`, `items_completed`, `last_item_index`, `detail`은 `idsim-log show`의 표시용이다.
+  - 종료 사건이 없는 접수는 결과 미상이다(실패가 아니다). 그 실행의 기간의 끝은 기록물의 마지막 메시지 시각으로 둔다.
+  - 같은 기체에서 앞 접수의 종료 사건 없이 뒤의 ACCEPTED가 나오면 앞 접수도 결과 미상이다(Executor가 재시작한 경우다. BUSY로 끝나는 둘째 goal은 자기 종료 사건을 가지므로 이 경우와 `goal_id`로 구분된다).
+  - 인덱스의 결과와 종료 시각 column은 미상(unknown) 값을 허용한다.
+  - 필드를 바꾸면 type hash가 바뀌어 이전 fixture 기록물과 맞지 않는다. 필드 변경이 필요하면 Phase 2 초반에 하고, 그러려면 인덱스 prototype을 Phase 2 초반에 만든다.
 - 넣지 않은 것과 이유: 항목별 진행 사건(feedback이 있고 `--include-hidden-topics` 없이도 필요하다는 소비자가 없다), `attempt`(Fleet 내부 상태), 미션 내용의 사본(goal 전체를 싣는 것은 기록 크기와 두 번째 출처 문제가 있다. 인덱스에는 id와 결과면 된다).
-- logging-engineer는 이 메시지의 첫 소비자인데 5단계 토론에 들어오지 않았다. 5단계 PR에서 검토를 받고, Phase 2에서 인덱스 구현이 드러낸 문제는 고정 전 변경으로 받는다.
+- logging-engineer는 이 메시지의 첫 소비자인데 5단계 토론에 들어오지 않았다. 5단계 PR에서 검토를 받았다(조건부 승인. 필드 구성에 이견이 없고 고정 시점 Phase 2 완료에 동의했다. 조건 셋은 위에 반영했다). Phase 2에서 인덱스 구현이 드러낸 문제는 고정 전 변경으로 받는다.
 
 ## 쟁점 9. ExecuteMission의 의미 (취소 포함)
 
@@ -557,10 +590,10 @@ feedback 주기는 계약이 아니다. 참고값은 전이 시점과 2 Hz 이�
 - 메시지 안에 버전 필드나 버전 상수를 두지 않는다. `package.xml` 버전을 계약 식별에 쓰지 않는다. 타입 식별은 RIHS01 type hash가 한다. 근거: 단일 저장소, 단일 빌드라 실행 중 협상이 필요 없고, [실측] 상수는 hash에 들어가지 않아 버전 상수는 식별자가 되지 못한다.
 - 계약 테스트(pytest, `idsim_interfaces/test/`)에 golden 셋과 상수 검사를 둔다.
   1. type hash golden `test/golden/type_hashes.txt`: 설치된 `share/idsim_interfaces/{msg,action}/*.json`의 RIHS01을 타입별 한 줄로. 중첩 타입의 변경이 상위 타입에 번진다.
-  2. 펼친 정의 golden `test/golden/<msg|action>/<Type>.txt`: `ros2 interface show --no-comments`의 출력. hash가 잡지 못하는 상수 값 변경, 상수 추가, 기본값 변경을 잡는다. 중첩 타입을 펼치므로 `ros-base`를 올려 geometry_msgs가 바뀌는 것도 드러난다.
+  2. 펼친 정의 golden `test/golden/<msg|action>/<Type>.txt`: `ros2 interface show --no-comments`의 출력. hash가 잡지 못하는 상수 값 변경, 상수 추가, 기본값 변경을 잡는다. 중첩 타입을 펼치므로 `ros-base`를 올려 geometry_msgs가 바뀌는 것도 드러난다. 가드: [실측] ros2. `ros2 interface show`는 줄 끝 주석과 같은 문자열이 그 줄 앞부분에 다시 나오면 그 자리에서 줄을 자른다("uint8 status  # status"가 "uint8"이 된다). 잘린 출력이 golden에 굳으면 이후 변경을 놓치므로, 출력의 최상위 줄(들여쓰기 없는 줄을 직접 정의와 같은 방식으로 정규화한 것)이 직접 정의와 같다는 것을 golden 비교 전에 단정한다. 갱신 모드에서도 단정한다.
   3. 직접 정의 golden `test/golden/direct/<msg|action>/<Type>.txt`: 그 파일의 직접 필드와 상수만(원문에서 주석과 빈 줄을 빼고 공백을 정규화한 것. 중첩 타입은 타입 이름만 남는다). "고정"의 판정 단위다. 고정된 파일의 이 golden이 바뀌면 고정된 계약의 변경이고, 1번과 2번만 바뀌면 중첩 타입에서 온 전파다. [실측] 원문은 설치된 `share/idsim_interfaces/{msg,action}/`에 `.msg`, `.action`으로 들어 있고 계약 테스트는 거기서 읽는다(reviewer가 `action_msgs`에서, architect가 구현 때 자기 패키지에서 확인했다).
   4. 상수 검사: `MissionItem`의 `TYPE_*` 집합 == 기대 집합, 모든 enum에서 값 0을 가진 상수는 `*_UNKNOWN` 또는 `*_NONE`뿐이거나 없다, 이름 상수 값이 쟁점 4의 규칙과 맞다(`TOPIC_NAME`은 ROS 이름 토큰), `VehicleState.FRAME_ID` == `TargetState.FRAME_ID`, `MissionEvent`의 `STATUS_*` 값이 `action_msgs.msg.GoalStatus`의 같은 이름 상수와 같다.
-- golden이 다르면 테스트가 diff와 갱신 방법(`IDSIM_UPDATE_GOLDEN=1`)을 출력하고 실패한다. 자동 갱신은 하지 않는다. 실패 메시지는 어느 종류의 golden이 다른지 적는다(직접 정의인지 전파인지가 PR에서 바로 보인다).
+- golden이 다르면 테스트가 diff와 갱신 방법(`IDSIM_UPDATE_GOLDEN=1`)을 출력하고 실패한다. 자동 갱신은 하지 않는다. 갱신은 `tools/ros_ws.sh shell` 안에서 `IDSIM_UPDATE_GOLDEN=1 colcon test --packages-select idsim_interfaces`로만 된다(`tools/ros_ws.sh test`와 `ci`는 이 변수를 컨테이너에 넘기지 않는다). 갱신 모드는 달라진 golden만 쓰고 파일마다 pytest 경고 "golden 갱신됨: <경로>"를 낸다(조용히 통과하지 않는다). 실패 메시지는 어느 종류의 golden이 다른지 적는다(직접 정의인지 전파인지가 PR에서 바로 보인다).
 - 변경 규칙
   - 필드는 끝에 추가만 한다. 기존 필드의 이름, 타입, 의미, 단위를 바꾸지 않는다. 고정 전인 파일에서는 첫 소비자의 구현에서 드러난 문제에 한해 바꿀 수 있다. 고정 여부는 파일 단위이고 판정은 직접 정의 golden으로 한다("고정 시점과 범위 구분").
   - 상수 값은 재사용하지 않는다. enum 값과 비트는 추가만 한다.
@@ -581,7 +614,7 @@ feedback 주기는 계약이 아니다. 참고값은 전이 시점과 2 Hz 이�
 ## 쟁점 11. 패키지 골격
 
 결정
-- `ament_cmake` + `rosidl_generate_interfaces(... DEPENDENCIES builtin_interfaces std_msgs geometry_msgs)`. `package.xml`: `buildtool_depend` `ament_cmake`, `rosidl_default_generators`. `depend` `builtin_interfaces`, `std_msgs`, `geometry_msgs`, `action_msgs`. `exec_depend` `rosidl_default_runtime`. `test_depend` `ament_lint_auto`, `ament_cmake_xmllint`, `ament_cmake_lint_cmake`, `ament_cmake_copyright`, `ament_cmake_pytest`, `ros2cli`, `ros2interface`(계약 테스트가 `ros2 interface show`를 부른다. 이미지에 이미 있지만 선언한다). `member_of_group` `rosidl_interface_packages`. xml-model 줄은 뺀다(unit job은 네트워크가 없다). license `Apache-2.0`, maintainer는 `idsim_common`과 같다.
+- `ament_cmake` + `rosidl_generate_interfaces(... DEPENDENCIES builtin_interfaces std_msgs geometry_msgs)`. `package.xml`: `buildtool_depend` `ament_cmake`, `rosidl_default_generators`. `depend` `builtin_interfaces`, `std_msgs`, `geometry_msgs`, `action_msgs`. `exec_depend` `rosidl_default_runtime`. `test_depend` `ament_lint_auto`, `ament_cmake_xmllint`, `ament_cmake_lint_cmake`, `ament_cmake_copyright`, `ament_cmake_pytest`, `ament_index_python`(계약 테스트가 직접 import한다), `ros2cli`, `ros2interface`(계약 테스트가 `ros2 interface show`를 부른다. 이미지에 이미 있지만 선언한다). `member_of_group` `rosidl_interface_packages`. xml-model 줄은 뺀다(unit job은 네트워크가 없다). license `Apache-2.0`, maintainer는 `idsim_common`과 같다.
 - 생성기는 기본값 그대로 둔다(C, C++, Python, introspection, type description).
 - 이 패키지에는 `-Werror` 같은 컴파일 옵션을 넣지 않는다(대상이 생성 코드뿐이다). 코드를 넣지 않는다(rosidl 전용).
 - lint: `ament_lint_auto` + `ament_cmake_xmllint`, `ament_cmake_lint_cmake`, `ament_cmake_copyright`. cpplint는 넣지 않는다(대상 0개의 의미 없는 테스트가 된다). 저작권 머리말은 `CMakeLists.txt`와 테스트 `.py`에 넣는다.
@@ -598,12 +631,12 @@ feedback 주기는 계약이 아니다. 참고값은 전이 시점과 2 Hz 이�
 | px4-engineer | 1b 첫 작업 | EKF 원점과 스폰 지점의 오차 실측(표적 접근 임계값을 이 결과로 정한다), `ref_timestamp`가 비행 중 바뀌는 조건, navsat 고도와 `ref_alt` 대조, 실행 중 `EKF2_HGT_REF` 실제 값 확인 |
 | px4-engineer | Phase 2 | `nav_state` -> `MODE_*` 전체 대응표와 Collector 단위 테스트 입력, `failsafe_flags` -> `WARN_*` 비트 대응, `vehicle_status` 최대 발행 간격 실측(uXRCE-DDS를 거친 뒤) |
 | sim-engineer | 1b 착수 | 표적 생산 방식((가), (나), (다)) 실측과 선택, `dynamic_pose/info` 금지, Actor 월드에서 `gz-gui` 확인, wrapper의 원점 항상 적용과 `heading_deg: 0`, 커스텀 월드의 `<plugin>` 조건, `targets` 스키마(devops와), 표적과 기체 스폰 위치 겹침 검사, "Gazebo 화면은 참고용" 문장과 architecture.md 범위 문구의 처리 |
-| ros2-engineer | 6단계 | 네임스페이스와 `vehicle_id`의 대조 함수(다중 토큰 거부 단위 테스트), action 서버 구현(`ACCEPT_AND_EXECUTE`만, `handle_accepted` 안의 mutex 판정. [실측]으로 확인된 방식), `MissionEvent` 발행 |
+| ros2-engineer | 6단계 | 네임스페이스와 `vehicle_id`의 대조 함수(다중 토큰 거부 단위 테스트), action 서버 구현(`ACCEPT_AND_EXECUTE`만, `handle_accepted` 안의 mutex 판정. [실측]으로 확인된 방식. 이것은 계약 문장이 아니라 구현 규칙이므로 `.action` 주석이 아니라 Executor 설계 노트에 적는다), `MissionEvent` 발행(`stamp`는 노드 clock의 ROS 시각), 이름 상수를 namespace 범위 static 초기화식에 쓰지 않는 규칙의 검토 |
 | ros2-engineer | 1b | world ENU <-> 로컬 NED 변환 함수, `state_pub_qos()`, `state_sub_qos()`, `TargetId`와 토픽 이름 조립 |
 | ops-service-engineer | Phase 2 | Collector 불변식(쟁점 1. 원천이 묵은 값의 `*_valid` 포함), 임계값 순서, WebSocket JSON의 "끊김" 값은 어댑터가 만든다, JSON key는 msg 필드 이름 |
 | ops-service-engineer | Phase 3 | Fleet의 발견 방식(params 목록 대 그래프 탐색) 설계 토론, `attempt`는 Fleet 내부와 proto에, action 서버 `result_timeout`(기본 10 s) 검토, 미션 의미 검증 함수를 Executor와 Fleet이 같이 쓰는 구조(`idsim_mission`의 ROS 비의존 라이브러리), 취소 뒤 Hold로 남은 기체의 처리, proto 파일 작성 |
-| logging-engineer | 5단계 PR | `MissionEvent.msg` 필드 검토(기록물 인덱스의 요구와 맞는지) |
-| logging-engineer | Phase 2 | 기록 대상에 `/<vehicle_id>/mission_event` 포함과 구독 depth 확정, 인덱스는 이 토픽에서 미션 id와 결과를 읽는다(action의 goal과 result는 기록되지 않는다. [실측]), 종료 사건이 없는 접수는 실패로 처리하지 않고 결과 미상으로 채운다, 기록기의 구독도 VOLATILE이라 발행자와 맺어지기 전에 나간 사건은 기록물에 없다(기록기가 Executor와 맺어진 뒤에 goal이 나가게 하는 순서는 Phase 2에서 정한다), `_action/status`와 feedback을 함께 기록할지(`--include-hidden-topics` 또는 명시 목록. `goal_id`로 잇는다), replay에서 `vehicle_state` 제외 규칙, rosbag2가 발행자 QoS를 기록하고 재생에 쓰는지, 기록물별 type hash 기록 |
+| logging-engineer | 5단계 PR | (완료, 조건부 승인) `MissionEvent.msg` 필드 검토(기록물 인덱스의 요구와 맞는지) |
+| logging-engineer | Phase 2 | 기록 대상에 `/<vehicle_id>/mission_event` 포함과 구독 depth 확정, 인덱스는 이 토픽에서 미션 id와 결과를 읽는다(action의 goal과 result는 기록되지 않는다. [실측]), 종료 사건이 없는 접수는 실패로 처리하지 않고 결과 미상으로 채운다, 기록기의 구독도 VOLATILE이라 발행자와 맺어지기 전에 나간 사건은 기록물에 없다(기록기가 Executor와 맺어진 뒤에 goal이 나가게 하는 순서는 Phase 2에서 정한다), `_action/status`와 feedback을 함께 기록할지(`--include-hidden-topics` 또는 명시 목록. `goal_id`로 잇는다), replay에서 `vehicle_state` 제외 규칙, rosbag2가 발행자 QoS를 기록하고 재생에 쓰는지, 기록물별 type hash 기록. 5단계 PR 검토에서 더한 것: (1) 기록기 구독 생성 신호. recorder는 토픽을 주기 탐색해 늦게 구독하므로 발행자 수 확인만으로 접수 사건의 손실이 막히지 않는다. logger의 ready 서비스나 토픽, 또는 Executor의 `get_subscription_count() >= 1` 게이트 중에서 정하고 그 뒤에 goal이 나가게 한다. (2) roadmap의 "미션 시작/종료에 맞춰 기록 시작"과 기록물 이름 `<시각>_<미션 id>_<기체 id>`의 순서. `mission_id`는 ACCEPTED에서야 알려지므로 미션 전에 기록을 시작하고 이름을 뒤에 확정하는 순서와 `mission_id`의 입력 경로를 정한다. (3) 인덱스 쪽 요구(쟁점 8 `MissionEvent` 항: key는 (`vehicle_id`, `goal_id`), 결과 미상의 정의, 기간의 끝, unknown 허용 column). (4) 기록기 구독은 RELIABLE, VOLATILE을 명시 QoS override로 고정하고 depth는 KEEP_LAST 10으로 충분하다. (5) `MissionEvent`의 필드 변경이 필요하면 Phase 2 초반에 한다(type hash가 바뀌어 fixture 기록물과 어긋난다). 인덱스 prototype을 Phase 2 초반에 만든다 |
 | devops-engineer | 5단계 | `tools/ros_ws.sh`의 패키지별 테스트 수 단정(쟁점 6) |
 | devops-engineer | 6단계 | `stack.json` 기체 항목과 노드 params에 `vehicle_id`(쟁점 1), 생성기 golden 갱신 |
 | devops-engineer | 1b | `world.origin` 필수화와 params 전달, `targets[].id` 정규식과 중복 검사, bridge 설정의 금지 토픽 검사, `idsim_sim`이 colcon 패키지가 되면 패키지별 테스트 수 단정에 걸린다(테스트를 두거나 명시 목록에 적는다) |
@@ -611,9 +644,12 @@ feedback 주기는 계약이 아니다. 참고값은 전이 시점과 2 Hz 이�
 | test-engineer | 6단계 | 통합 테스트가 `MissionEvent`의 접수와 종료 사건을 확인한다. 구독을 만들고 그 토픽의 발행자 수가 1 이상인 것을 확인한 뒤에 goal을 보낸다(sleep이나 재시도로 대신하지 않는다). 취소된 기체의 teardown(착륙과 disarm 확인). fixture의 프로세스 종료 방식: [실측] 비대화형 bash에서 `&`로 띄운 백그라운드 프로세스는 SIGINT를 무시한다. `kill -INT`로 끝나지 않아 실측 스크립트가 한 번 멈췄다. fixture는 SIGTERM으로 끝내거나 `setsid`(또는 `set -m`)로 프로세스 그룹을 만들어 그룹에 신호를 보낸다. `ros2 bag record`처럼 SIGINT로 끝내야 파일이 정리되는 프로세스에 특히 해당한다 |
 | test-engineer | 1b | 상태 토픽 QoS 대조, 이름 상수 사용, 원점 임계 검사, 다대 원점 판정의 pose 보정(기존 미해결 항목과 합친다). 1b에는 `VehicleState` 생산자가 없으므로 world 좌표 판정은 스폰 pose(`stack.json`)를 독립 기준으로 쓴다. Executor가 낸 setpoint와의 거리만으로 판정하지 않는다(원점 변환 오류가 통과한다) |
 | architect | 6단계 | Hold 실험 결과를 쟁점 9, `.action` 주석에 반영. 6단계 구현이 드러낸 문제의 계약 반영(1a 고정 전) |
-| architect | 7단계 | `docs/interface.md`에 이 문서의 계약 문장 전부, 파일별 고정 시점 표, `TYPE_LOITER`와 `MODE_HOLD`의 구분 |
+| architect | 7단계 | `docs/interface.md`에 이 문서의 계약 문장 전부, 파일별 고정 시점 표, `TYPE_LOITER`와 `MODE_HOLD`의 구분. 5단계 PR 검토에서 더한 것: (1) 시각 표기. "sim 시각", "sim 시간"이라고 쓰지 않고 "ROS 시각(`use_sim_time`이면 `/clock`)"으로 쓴다(`TargetState`의 stamp와 소실 판정, 신선도 임계와 timer, 항목 `timeout`, Hold 확인 시간 모두). (2) 정의 작성 규칙(ros2 권고 2). string 상수와 기본값에 "#"을 넣지 않는다(rosidl 파서가 따옴표 안의 "#"도 주석으로 처리한다). 줄 끝 주석에 그 줄 앞부분과 같은 문자열을 쓰지 않는다(`ros2 interface show`가 줄을 자른다. 계약 테스트의 가드가 잡는다). 이름 상수는 C++에서 namespace 범위 static 변수의 초기화식에 쓰지 않는다(쟁점 4). (3) `VehicleState`의 소비자 조건 넷(ops): `msg.vehicle_id`와 토픽 네임스페이스 대조, replay에서 `vehicle_state`를 재생하지 않음, 발행 timer와 신선도 검사는 ROS 시각, 그래프 항목으로 등록이나 이탈을 판정하지 않음. (4) 즉시 abort되는 goal(BUSY, VEHICLE_ID_MISMATCH, INVALID_MISSION, NOT_READY)은 feedback이 0건이다. "Fleet은 feedback 수신을 수락 확인으로 쓰지 않는다"를 적는다(ops) |
+| architect | bounded string이나 공백이 든 기본값을 가진 필드를 더할 때 | `test_contract.py`의 `direct_definition`이 `"=" in line`으로 상수 줄을 가른다. 그런 필드에서는 정규화가 어색해지므로 `_CONSTANT` 정규식 기준으로 바꾼다(ros2 권고 3. 지금은 그런 필드가 없다) |
 
 ## 문서 반영 목록 (5단계 PR 안에서, reviewer 재확인 뒤, architect)
+
+상태(2026-11-10): `docs/architecture.md`, `docs/roadmap.md`, `docs-for-agent/file-ownership.md`는 반영했다. owner 검토에서 더해진 것(roadmap Phase 2 3번의 기록 순서, 5번의 인덱스 key와 결과 미상, architecture.md 테스트 절의 계약 테스트와 패키지별 단정)도 함께 넣었다. `progress.md`는 호출한 쪽이 갱신한다.
 
 - `docs/architecture.md` 인터페이스 계약 절: "Phase 1a 완료 시점에 고정" 문장을 나눈 고정 시점으로(사용자 결정 1), "고정"의 정의, `VehicleState` 토픽과 불변식, `"world"` 프레임 정의, `TargetState`의 시각 의미, `MissionEvent`, 취소 의미, 변경 절차. 표적 생산 경로 문장("ros_gz_bridge로 받은 Gazebo pose를 변환")과 범위 문구("Gazebo 안의 임의 이동 엔티티")는 1b 해법 선택 뒤에 고친다(지금은 리스크만 적는다).
 - `docs/architecture.md` 기체 식별 절: `world.origin`은 1b부터 필수, 노드는 원점과 `vehicle_id`를 params로 받는다.
@@ -650,6 +686,6 @@ feedback 주기는 계약이 아니다. 참고값은 전이 시점과 2 Hz 이�
 
 ## 다음 절차
 
-- 패키지 파일을 만든다(작업 단위 A, B. architect). devops-engineer가 C를 한다. 순서와 검토는 `README.md`에 있다.
-- 문서 반영(D)은 A-C가 끝난 뒤 reviewer가 이 확정본과 구현을 재확인한 다음에 한다.
+- (완료) 패키지 파일(작업 단위 A, B. architect), C(devops-engineer), owner 검토 반영, 문서 반영(D).
+- reviewer가 문서 변경과 검토 반영을 확인한 뒤 PR, CI 통과, 사용자 머지.
 - 6단계에서 Hold 실험과 구현이 드러낸 문제를 1a 고정 전에 이 문서의 계약 문장에 반영한다.

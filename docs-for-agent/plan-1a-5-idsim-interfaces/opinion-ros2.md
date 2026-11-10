@@ -287,7 +287,7 @@ float64 distance_remaining_m
 3. 상수 분류 검사: 3-2. 분류 함수가 `idsim_mission`에 있으므로 이 검사는 1b에서 `idsim_mission` 테스트로 옮기거나, 5단계에서는 "상수 집합 == 기대 집합"만 단정한다.
 
 변경 규칙
-- golden이 다르면 테스트가 diff와 갱신 명령(예: `IDSIM_UPDATE_GOLDEN=1 tools/ros_ws.sh test --packages-select idsim_interfaces`)을 출력하고 실패한다. 4단계 PX4 golden처럼 자동 갱신은 하지 않는다.
+- golden이 다르면 테스트가 diff와 갱신 명령(예: `IDSIM_UPDATE_GOLDEN=1 tools/ros_ws.sh test --packages-select idsim_interfaces`)을 출력하고 실패한다. (뒤에 붙인 주석: 이 예시 명령은 동작하지 않는다. `tools/ros_ws.sh`는 이 변수를 컨테이너에 넘기지 않는다. 갱신은 `decisions.md` 쟁점 10의 절차(`tools/ros_ws.sh shell` 안에서 `IDSIM_UPDATE_GOLDEN=1 colcon test --packages-select idsim_interfaces`)를 따른다.) 4단계 PX4 golden처럼 자동 갱신은 하지 않는다.
 - 계약 변경 PR에는 golden 갱신, `docs/interface.md`, 결정 기록, (Phase 3 이후) proto와 왕복 테스트, 영향받는 replay fixture 갱신이 함께 들어간다. architect 승인 필수.
 - 메시지 안에 버전 필드나 버전 상수를 두지 않는다. 단일 저장소, 단일 빌드라 런타임 협상이 필요 없고, 타입 식별은 RIHS01이 이미 한다. 버전 상수는 hash에 들어가지 않아(실측) 식별자로도 쓸모가 없다.
 - 기록물 호환: 계약이 바뀌면 이전 MCAP을 새 타입으로 읽을 수 없다. 기록물 인덱스 CLI가 기록물마다 type hash를 남겨 replay 전에 대조하는 것을 logging-engineer에게 제안한다(rosbag2 Jazzy가 MCAP에 type hash를 남긴다는 것은 추정, 확인 필요).
