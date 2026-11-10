@@ -100,18 +100,30 @@ TEST(VehicleCommandBuilder, FieldTable)
 {
   const auto b = builder();
   const auto ts = timestamp();
-  SCOPED_TRACE("arm");
-  expect_command(b.arm(ts), {400, 1.0F, 0.0F, 0.0F, 0.0F, 0.0, 0.0, 0.0F});
-  SCOPED_TRACE("disarm");
-  expect_command(b.disarm(ts), {400, 0.0F, 0.0F, 0.0F, 0.0F, 0.0, 0.0, 0.0F});
-  SCOPED_TRACE("set_mode_offboard");
-  expect_command(b.set_mode_offboard(ts), {176, 1.0F, 6.0F, 0.0F, 0.0F, 0.0, 0.0, 0.0F});
-  SCOPED_TRACE("set_mode_hold");
-  expect_command(b.set_mode_hold(ts), {176, 1.0F, 4.0F, 3.0F, 0.0F, 0.0, 0.0, 0.0F});
-  SCOPED_TRACE("land");
-  expect_command(b.land(ts), {21, 0.0F, 0.0F, 0.0F, kNaNf, kNaN, kNaN, kNaNf});
-  SCOPED_TRACE("rtl");
-  expect_command(b.rtl(ts), {20, 0.0F, 0.0F, 0.0F, 0.0F, 0.0, 0.0, 0.0F});
+  {
+    SCOPED_TRACE("arm");
+    expect_command(b.arm(ts), {400, 1.0F, 0.0F, 0.0F, 0.0F, 0.0, 0.0, 0.0F});
+  }
+  {
+    SCOPED_TRACE("disarm");
+    expect_command(b.disarm(ts), {400, 0.0F, 0.0F, 0.0F, 0.0F, 0.0, 0.0, 0.0F});
+  }
+  {
+    SCOPED_TRACE("set_mode_offboard");
+    expect_command(b.set_mode_offboard(ts), {176, 1.0F, 6.0F, 0.0F, 0.0F, 0.0, 0.0, 0.0F});
+  }
+  {
+    SCOPED_TRACE("set_mode_hold");
+    expect_command(b.set_mode_hold(ts), {176, 1.0F, 4.0F, 3.0F, 0.0F, 0.0, 0.0, 0.0F});
+  }
+  {
+    SCOPED_TRACE("land");
+    expect_command(b.land(ts), {21, 0.0F, 0.0F, 0.0F, kNaNf, kNaN, kNaN, kNaNf});
+  }
+  {
+    SCOPED_TRACE("rtl");
+    expect_command(b.rtl(ts), {20, 0.0F, 0.0F, 0.0F, 0.0F, 0.0, 0.0, 0.0F});
+  }
 }
 
 TEST(VehicleCommandBuilder, CommandIdsMatchPx4Msgs)

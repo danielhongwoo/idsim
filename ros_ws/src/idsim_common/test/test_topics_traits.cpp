@@ -41,10 +41,6 @@ struct VersionThree
 static_assert(px4::detail::msg_version_v<NoVersion> == 0);
 static_assert(px4::detail::msg_version_v<VersionZero> == 0);
 static_assert(px4::detail::msg_version_v<VersionThree> == 3);
-// px4_msgs 고정 커밋의 실제 값(opinion-px4.md P1).
-static_assert(px4::detail::msg_version_v<px4_msgs::msg::VehicleStatus> == 1);
-static_assert(px4::detail::msg_version_v<px4_msgs::msg::OffboardControlMode> == 0);
-static_assert(px4::detail::msg_version_v<px4_msgs::msg::VehicleCommand> == 0);
 
 static_assert(px4::detail::has_version_suffix("vehicle_status_v1"));
 static_assert(px4::detail::has_version_suffix("x_v12"));
@@ -142,10 +138,13 @@ TEST(TopicsTraits, PublicTopicNames)
   const auto ns2 = idsim_common::VehicleNamespace::parse("/px4_2");
   ASSERT_TRUE(ns1.has_value());
   ASSERT_TRUE(ns2.has_value());
-  EXPECT_EQ(px4::topic_name<topics::VehicleStatus>(*ns1), "/px4_1/fmu/out/vehicle_status_v1");
+  // 버전 접미사는 px4_msgs 태그에 따라 바뀐다. 값은 골든 테스트가 대조한다.
   EXPECT_EQ(
-    px4::topic_name<topics::VehicleLocalPosition>(*ns1),
-    "/px4_1/fmu/out/vehicle_local_position_v1");
+    px4::topic_name<topics::VehicleStatus>(*ns1).rfind("/px4_1/fmu/out/vehicle_status", 0), 0U);
+  EXPECT_EQ(
+    px4::topic_name<topics::VehicleLocalPosition>(*ns1).rfind(
+      "/px4_1/fmu/out/vehicle_local_position", 0),
+    0U);
   EXPECT_EQ(px4::topic_name<topics::VehicleCommandAck>(*ns1), "/px4_1/fmu/out/vehicle_command_ack");
   EXPECT_EQ(
     px4::topic_name<topics::VehicleGpsPosition>(*ns1), "/px4_1/fmu/out/vehicle_gps_position");

@@ -6,7 +6,7 @@
 //   접미사는 타입의 MESSAGE_VERSION에서 컴파일 시점에 파생한다(_v<N>을 여기에 쓰면 컴파일 오류).
 // - 논리 이름과 타입 이름이 다른 항목이 있다(vehicle_gps_position은 SensorGps). 타입에서 이름을
 //   만들지 않는다. 같은 타입을 여러 토픽이 쓰므로 타입 -> 이름 역조회도 없다.
-// - 키는 (방향, 논리 이름)이다. mode_completed는 in과 out 양쪽에 있다.
+// - key는 (방향, 논리 이름)이다. mode_completed는 in과 out 양쪽에 있다.
 // - 골든 tests/fixtures/px4/<PX4_TAG>/topics.txt와 양방향으로 일치해야 한다(test_topics_golden).
 //
 // /fmu/in 발행 허용(Allowed)은 1a에서 offboard_control_mode, trajectory_setpoint,

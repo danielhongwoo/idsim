@@ -240,9 +240,8 @@ TEST(Frames, DiagonalVariance)
 {
   expect_vec_near(fr::ned_to_enu_variance({1, 4, 9}), {4, 1, 9});
   expect_vec_near(fr::enu_to_ned_variance({4, 1, 9}), {1, 4, 9});
-  // px4_ros_com의 정적 공분산 변환은 음의 분산을 낸다(결정 1 근거). 우리 쪽은 부호를 바꾸지 않는다.
-  const auto v = fr::ned_to_enu_variance({0.5, 0.25, 0.125});
-  EXPECT_GE(v.minCoeff(), 0.0);
+  // 축 치환만 하고 부호는 바꾸지 않는다.
+  expect_vec_near(fr::ned_to_enu_variance({0.5, 0.25, 0.125}), {0.25, 0.5, 0.125});
 }
 
 TEST(Frames, ArrayAdapters)
