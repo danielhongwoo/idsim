@@ -2,7 +2,7 @@
 
 idsim의 실행 환경을 이루는 Docker 이미지와 compose 구성이다. 모든 구성 요소는 VM이 아니라 컨테이너로 돈다. 컨테이너는 호스트 커널을 공유하는 프로세스 격리 단위이므로, 기체 여러 대와 시뮬레이터를 PC 한 대에서 가볍게 띄울 수 있다.
 
-지원 호스트는 x86_64 Linux뿐이다. 설계 배경은 [../docs/architecture.md](../docs/architecture.md)의 "Docker Compose 실행 환경 설계" 절, 스모크 테스트 절차는 [../docs/smoke-test-phase1a.md](../docs/smoke-test-phase1a.md)에 있다.
+지원 호스트는 x86_64 Linux뿐이다. 설계 배경은 [../docs/architecture.md](../docs/architecture.md)의 "Docker Compose 실행 환경 설계" 절, 스모크 테스트 절차는 [../docs/smoke-test.md](../docs/smoke-test.md)에 있다.
 
 ## 파일
 

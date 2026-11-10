@@ -6,7 +6,7 @@
 
 - 저장소: 원격 github.com/danielhongwoo/idsim. main에 PR #1 CI 골격, #2 큰 그림 다이어그램, #3 시각 도구 로드맵, #4 인계용 진행 기록이 합쳐져 있다. 2b단계(PR #5)와 루트 README, `check_host.sh`(PR #6)도 합쳐졌다.
 - 첫 개발 호스트(2026-11-06까지): VMware VM, x86_64 Ubuntu 24.04, 16 vCPU, 31GB, NVIDIA 없음, GNOME Wayland. 이 호스트에는 다른 compose 프로젝트(`docker`: open_manipulator, zenoh_daemon, cyclo_manager 등)가 host 네트워크로 떠 있었다. 아래 실측값(빌드 시간, 이미지 크기, Gazebo GUI fps)은 이 호스트 기준이다.
-- Phase 1a 1단계 환경 스모크 테스트 S0부터 S5까지 로컬에서 모두 통과(스택 번호 0, 도메인 20). 설계는 `docs/smoke-test-phase1a.md`.
+- Phase 1a 1단계 환경 스모크 테스트 S0부터 S5까지 로컬에서 모두 통과(스택 번호 0, 도메인 20). 설계는 `docs/smoke-test.md`(2026-11-10에 `smoke-test-phase1a.md`에서 이름 변경).
 - 이미지 5종 빌드 완료: ros-base 838MB, sim-base 2.97GB, px4 3.06GB(builder 단계 7.7GB), ros-ws 1.57GB, xrce-agent 153MB. 전체 재빌드는 부분 캐시로 약 2분 30초, PX4 첫 빌드는 이 호스트(16 vCPU)에서 163초.
 - 골든 첫 생성: `tests/fixtures/px4/v1.17.0/`(토픽 65, qos 27, env 4키). 재실행 `--check` 일치.
 - 산출물: 스모크 실행 기록 `artifacts/smoke/`는 git에 추적되지 않으므로 다른 PC로 옮겨지지 않는다. 판정에 필요한 골든은 `tests/fixtures/`에 추적된다.
@@ -61,7 +61,7 @@
 
 | Phase | 상태 | 마지막 갱신 | 비고 |
 | --- | --- | --- | --- |
-| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계 완료(PR #10, 사용자 육안 확인 2건 남음). 4단계 설계 확정, 구현 시작 전(`docs-for-agent/plan-1a-4-idsim-common/`) | 2026-11-10 | 스모크 설계는 `docs/smoke-test-phase1a.md` |
+| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계 완료(PR #10, 사용자 육안 확인 2건 남음). 4단계 설계 확정, 구현 시작 전(`docs-for-agent/plan-1a-4-idsim-common/`) | 2026-11-10 | 스모크 설계는 `docs/smoke-test.md` |
 | 1b | 시작 전 | 2026-11-06 | |
 | 2 | 시작 전 | 2026-11-06 | |
 | 3 | 시작 전 | 2026-11-06 | |
@@ -169,6 +169,7 @@
   - (t) SITL에 `UXRCE_DDS_SYNCT=0`을 넣어 PX4 timestamp를 sim 시간으로 통일한다. /fmu/in timestamp는 `Px4Timestamp::now(rclcpp::Clock &)`로만 만들며 ROS 시간이 활성이고 값이 0보다 클 때만 성공한다.
   - (u) 노드는 sysid를 params로 받고 vehicle_status와 대조한다. N+1 공식은 코드에 두지 않는다. VehicleCommand 빌더에 "ACCEPTED = 성공" 헬퍼와 raw()를 두지 않는다.
   - (v) 패키지는 SHARED, C++17, `-Werror`. CI는 새 unit job(`tools/ros_ws.sh ci`)에서 colcon build와 test, clang-tidy, ament linter를 돌리고 clang-format은 lint job에 둔다. ros-ws 이미지에 clang 18 도구를 더한다.
+- 2026-11-10: 사용자 결정, `docs/smoke-test-phase1a.md`를 `docs/smoke-test.md`로 이름을 바꾼다. 이 문서는 1a 전용이 아니라 이미지, PX4 파라미터, PX4 태그가 바뀔 때마다 돌리는 회귀 검사의 설계이고 골든 형식의 기준 문서이므로 다른 문서처럼 주제 이름을 붙인다. 문서와 주석의 경로 참조를 함께 고쳤다. 이 파일과 `opinion-*.md`의 과거 기록 문장은 당시 이름 그대로 둔다. `docker/Dockerfile.px4` 주석은 고치지 않았다(미해결 사항 참조).
 
 ## 미해결 사항
 
@@ -179,6 +180,7 @@
 
 아직 열린 항목.
 
+- `docker/Dockerfile.px4` 132행 주석에 옛 문서 이름 `smoke-test-phase1a.md`가 남아 있다(2026-11-10). 이미지 key가 Dockerfile 바이트 해시라 주석만 고쳐도 px4 이미지가 다시 빌드되므로, 다음에 그 파일을 바꿀 때 `smoke-test.md`로 함께 고친다(px4-engineer).
 - 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정. 2단계 CI 캐시 키를 정할 때 처리.
 - 이미지 ENV와 `versions.env` 대조가 S0에서만 일어난다. S1-S5를 단독 실행하면 대조가 없다.
 - `GZ_IP=127.0.0.1`을 빼면 gz-transport 디스커버리가 불안정한지(추측). 지금은 명시하고 가며 제거 비교는 하지 않았다.

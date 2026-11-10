@@ -1,8 +1,8 @@
-# Phase 1a 환경 스모크 테스트 설계
+# 환경 스모크 테스트 설계
 
 2026-11-06, Daniel
 
-이 문서는 [roadmap.md](roadmap.md) Phase 1a 1단계의 설계다. 목적은 Ubuntu 24.04 + ROS 2 Jazzy + Gazebo Harmonic + PX4 v1.17.0 + uXRCE-DDS Agent v2.4.3 + CycloneDDS 조합이 컨테이너 구성에서 동작하는지 확인하고, 토픽 이름의 버전 접미사와 발행자 QoS 실측값을 골든 파일로 고정하는 것이다. 버전과 경로의 단일 출처는 `docker/versions.env`이며, 이 문서의 값은 그 파일을 설명한 것이다.
+이 문서는 환경 스모크 테스트의 설계다. [roadmap.md](roadmap.md) Phase 1a 1단계에서 처음 도입했고, 그 뒤로는 이미지, PX4 파라미터, PX4 태그가 바뀔 때마다 돌리는 회귀 검사이며 골든 파일 형식의 기준 문서다. 목적은 Ubuntu 24.04 + ROS 2 Jazzy + Gazebo Harmonic + PX4 v1.17.0 + uXRCE-DDS Agent v2.4.3 + CycloneDDS 조합이 컨테이너 구성에서 동작하는지 확인하고, 토픽 이름의 버전 접미사와 발행자 QoS 실측값을 골든 파일로 고정하는 것이다. 버전과 경로의 단일 출처는 `docker/versions.env`이며, 이 문서의 값은 그 파일을 설명한 것이다.
 
 ## 원칙
 

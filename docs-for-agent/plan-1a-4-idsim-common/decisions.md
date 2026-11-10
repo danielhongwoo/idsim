@@ -172,7 +172,7 @@
   - 기체 식별 절: 노드는 sysid를 params로 받고 vehicle_status.system_id와 대조하며 공식을 재계산하지 않는다.
   - CI 파이프라인 문단: (1) lint는 clang-format, ruff, cargo fmt와 clippy, 문자 집합 등. clang-tidy와 ament_lint는 (3) unit으로.
   - 기술 스택에 C++17.
-- `docs/smoke-test-phase1a.md` 골든 파일 단위 테스트 절: `px4_topic<T>(ns, dir, base)` 문구를 기술자 목록과 집합 일치 검사로, 이미지 ENV 대조 추가. 가정 절의 frame_transforms 문장을 결론으로 교체.
+- `docs/smoke-test.md` 골든 파일 단위 테스트 절: `px4_topic<T>(ns, dir, base)` 문구를 기술자 목록과 집합 일치 검사로, 이미지 ENV 대조 추가. 가정 절의 frame_transforms 문장을 결론으로 교체.
 - `docs/interface.md`(7단계로 넘김): QoS 표(reliability, durability 계약, depth 비계약), 좌표계, timestamp 기준(SYNCT=0, Px4Timestamp 규칙, timesync_status는 DDS timesync 데이터 없음), sysid 대조 규칙, 공개 /fmu/in 목록과 해제 절차, "발행 차단은 실수 방지 수준이며 보안 경계가 아님".
 - `docs-for-agent/progress.md` 결정 기록: 이 문서의 결정을 2026-11-10 항목으로, 2026-11-06 "키는 논리 이름과 타입의 쌍" 결정의 갱신을 명시. 미해결의 "frame_transforms 호환" 항목은 닫는다.
 

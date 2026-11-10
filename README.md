@@ -69,7 +69,7 @@ idsim은 스택 번호 k(0-9, 기본 0. `--stack k` 또는 환경 변수 `IDSIM_
 | --- | --- |
 | `docs/architecture.md` | 설계 |
 | `docs/roadmap.md` | Phase별 계획 |
-| `docs/smoke-test-phase1a.md` | 환경 스모크 설계 |
+| `docs/smoke-test.md` | 환경 스모크 설계 |
 | `docker/README.md` | 이미지와 compose |
 | `CLAUDE.md` | 작업 규칙 |
 
