@@ -1,0 +1,3 @@
+string ACTION_NAME = "execute_mission"
+string mission_id
+MissionItem[] items

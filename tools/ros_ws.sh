@@ -4,7 +4,7 @@
 #
 # 사용법: tools/ros_ws.sh <명령> [--image-tag t | --registry r] [colcon 인자...]
 #   build   colcon build (RelWithDebInfo, compile_commands.json 생성)
-#   test    build 뒤 colcon test --return-code-on-test-failure, colcon test-result, 테스트 수 > 0 단정
+#   test    build 뒤 colcon test --return-code-on-test-failure, colcon test-result, ament 패키지마다 테스트 1건 이상 단정
 #   tidy    build 뒤 clang-tidy (.clang-tidy, 각 패키지의 src/ 아래 C++ 소스가 대상)
 #   ci      build -> test -> tidy 를 한 번씩 (CI와 같은 순서)
 #   clean   ros_ws/build, install, log 삭제
@@ -66,6 +66,9 @@ image="${image_prefix}/ros-ws:${image_tag}"
 
 ros_ws_dir="${repo_root}/ros_ws"
 
+# 테스트를 일부러 두지 않는 ament 패키지(공백 구분). test의 패키지별 1건 이상 단정에서 빠진다. 지금은 비어 있다.
+no_test_packages=()
+
 warn_running_stack() {
   # 스택이 떠 있는 동안 install을 바꾸면 실행 중인 노드의 .so가 바뀐다(경고만 한다)
   if command -v docker >/dev/null 2>&1 \
@@ -125,6 +128,7 @@ ros_in() {
     -e CYCLONEDDS_URI= \
     -e ROS_DOMAIN_ID=99 \
     -e IDSIM_JOBS="$jobs" \
+    -e IDSIM_NO_TEST_PACKAGES="${no_test_packages[*]}" \
     -v "${repo_root}:/opt/idsim" \
     -w /opt/idsim/ros_ws \
     "$image" \
@@ -191,7 +195,7 @@ do_build() {
 do_test() {
   # 함정 둘(opinion-devops E6, E7)
   #  1. colcon test는 테스트가 실패해도 0을 돌려준다 -> --return-code-on-test-failure
-  #  2. colcon test-result는 빌드가 실패했거나 패키지가 하나도 없어도 "0 tests"로 0을 돌려준다 -> 테스트 수 > 0 단정
+  #  2. colcon test-result는 빌드가 실패했거나 패키지가 하나도 없어도 "0 tests"로 0을 돌려준다 -> ament 패키지별 1건 이상 단정(검사할 패키지가 0개여도 실패)
   #     colcon test-result는 build/ 전체의 결과 XML을 읽는다. 이전 실행의 결과가 남아 있으면 이번에 0건이 돌아도
   #     그 수가 잡히므로(--packages-select 오타로 확인), 테스트 전에 이전 결과를 지운다.
   # 재시도는 두지 않는다(단위 층은 결정적이어야 한다).
@@ -205,10 +209,29 @@ do_test() {
     printf "%s\n" "$result"
     total="$(sed -n "s/^Summary: \([0-9][0-9]*\) tests.*/\1/p" <<<"$result" | tail -n 1)"
     if [ -z "$total" ]; then echo "colcon test-result 요약 줄을 읽지 못했다" >&2; exit 1; fi
-    if [ "$total" -le 0 ]; then
-      echo "테스트 수가 0이다. 빌드 실패, package.xml 오류, COLCON_IGNORE 실수를 확인하라" >&2
-      exit 1
-    fi
+    # 패키지마다 결과 1건 이상. 대상은 colcon list가 정한다(--packages-* 선택 인자를 그대로 넘긴다).
+    sel=(); grab=0
+    for a in "$@"; do
+      case "$a" in
+        --packages-select|--packages-skip|--packages-up-to|--packages-above|--packages-select-regex|--packages-skip-regex|--packages-select-build-failed|--packages-skip-build-finished|--packages-skip-test-passed|--packages-select-test-failures|--packages-skip-up-to|--packages-skip-by-dep|--packages-ignore|--packages-ignore-regex) sel+=("$a"); grab=1 ;;
+        --*) grab=0 ;;
+        *) if [ "$grab" -eq 1 ]; then sel+=("$a"); fi ;;
+      esac
+    done
+    bad=0; npkg=0
+    while IFS=$(printf "\t") read -r pkg _ ptype; do
+      case "$ptype" in "(ros.ament_"*) ;; *) continue ;; esac
+      for skip in $IDSIM_NO_TEST_PACKAGES; do [ "$skip" = "$pkg" ] && continue 2; done
+      npkg=$((npkg + 1))
+      n="$(colcon test-result --test-result-base "build/${pkg}" 2>/dev/null | sed -n "s/^Summary: \([0-9][0-9]*\) tests.*/\1/p" | tail -n 1 || true)"
+      echo "tests ${pkg}: ${n:-0}"
+      if [ "${n:-0}" -le 0 ]; then
+        echo "패키지 ${pkg}의 테스트 결과가 0건이다. 테스트 누락, 수집 실패, package.xml 오류를 확인하라(의도한 것이면 ros_ws.sh의 no_test_packages에 적는다)" >&2
+        bad=1
+      fi
+    done < <(colcon list "${sel[@]}")
+    if [ "$npkg" -eq 0 ]; then echo "검사할 ament 패키지가 없다(선택 인자 또는 COLCON_IGNORE 확인)" >&2; exit 1; fi
+    if [ "$bad" -ne 0 ]; then exit 1; fi
     echo "tests: ${total}"' "${pass[@]}"
 }
 

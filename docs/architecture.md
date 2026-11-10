@@ -88,6 +88,8 @@ flowchart TB
 - `config/fleet.yaml`에는 사람이 고르는 값만 적는다: 기체 목록(번호 `id`, `airframe`, 초기 `pose` {x, y, z, yaw}(Gazebo 월드 좌표 ENU, m, rad), 기체별 SITL 파라미터 `px4_params`), 월드(`world.name`, `world.file`, 원점 `world.origin` {lat, lon, alt}, `world.speed_factor`), 표적 목록 `targets`, 공통 SITL 파라미터 파일 `px4.params_file`, 기동 방식 `px4.start`(parallel 또는 sequential). `airframe`(예: `4001_gz_x500`) 하나에서 `SYS_AUTOSTART`, `PX4_SIM_MODEL`, Gazebo 모델 이름이 파생된다. 파생값(포트, 네임스페이스, `MAV_SYS_ID`, `UXRCE_DDS_KEY`, 모델 이름, 서비스 이름)은 적을 수 없고 생성 스크립트가 거부한다. `px4_params`에서도 식별 파라미터(`MAV_SYS_ID`, `UXRCE_DDS_KEY`, `UXRCE_DDS_DOM_ID`, `UXRCE_DDS_AG_IP`, `SYS_AUTOSTART`)는 거부한다. 1a에서는 `targets`가 비어 있어야 하고 `world.speed_factor`는 null이어야 한다(배속 기제는 Phase 3에서 정한다). 기체 번호는 1-9, 기체 간격은 2 m 미만이면 거부하고 4 m 미만이면 경고한다. 스택 번호 k(0-9)는 추적 파일에 두지 않고 생성 인자(`--stack`, 없으면 `IDSIM_STACK_INDEX`, 없으면 0)로 준다. `GZ_PARTITION`은 gz-transport 디스커버리를 스택 단위로 격리한다.
 - 생성 스크립트 `tools/gen_compose.py`가 이 파일에서 compose 파일과 `stack.json`을 `artifacts/runs/<실행 id>/`에 만든다. `stack.json`은 실행 시점의 단일 출처이며, 스크립트와 테스트 fixture는 식별자를 다시 계산하지 않고 이 파일만 읽는다(경로는 `IDSIM_STACK_FILE`). launch 파일은 생성하지 않고 노드 파라미터 파일만 생성한다(1a 6단계부터). 생성 스크립트는 `ros-ws` 컨테이너 안에서 실행하고(PyYAML을 호스트에 요구하지 않는다) 호스트 진입점은 `tools/gen_compose.sh`, 생성과 compose 호출을 묶은 편의 스크립트는 `tools/stack.sh`다. Phase 1에서 기체 1대짜리로 시작하고 Phase 3에서 같은 스크립트로 3대를 만든다.
 - 노드는 네임스페이스와 sysid를 params(`stack.json`에서 생성)로 받고, 수신한 `vehicle_status`의 `system_id`, `component_id`와 대조한다. 위 파생 규칙(N+1 등)을 노드 코드에서 다시 계산하지 않는다. 빈 네임스페이스와 `target_system` 0은 `idsim_common`의 타입이 만들지 못하게 막는다. 대조가 어긋나면 오류이고, `vehicle_status`를 아직 받지 못한 동안은 명령만 보류한다(이 게이트는 6단계에서 `idsim_mission`에 둔다).
+- 계약 메시지에 실리는 기체 식별자 `vehicle_id`는 기체 네임스페이스에서 앞의 "/"를 뗀 문자열이다(`px4_N`). 생성 스크립트가 `stack.json`의 기체 항목과 노드 params에 직접 싣고(1a 6단계부터), 노드와 테스트는 계산하지 않고 읽는다. `idsim_common`의 함수는 변환이 아니라 대조를 한다(노드의 네임스페이스가 "/" + `vehicle_id`인지, 토큰이 하나인지). 소비자는 `vehicle_id`의 내용을 해석하지 않는다(N을 뽑거나 sysid를 계산하지 않는다).
+- `world.origin`은 1a에서는 선택 항목이고(원점을 읽는 노드가 없다) 1b부터 필수이며 원점의 유일한 출처다. 1b부터는 커스텀 월드에서도 gazebo wrapper가 항상 이 값을 적용하고, 운용 노드와 표적 어댑터는 같은 값을 params(`stack.json`에서 생성)로 받는다. 원점은 메시지에 싣지 않는다. 기체의 스폰 pose는 운용 노드에 주지 않고 통합 테스트의 교차 검증에만 쓴다(Gazebo에만 있는 지식이다).
 
 ## 기술 스택 선정 근거
 
@@ -134,11 +136,36 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 
 ## 인터페이스 계약
 
-운용 서비스와 시뮬레이션 레이어 사이의 계약은 `idsim_interfaces`와 `docs/interface.md`가 정의하고, Phase 1a 완료 시점에 고정한다.
+운용 서비스와 시뮬레이션 레이어 사이의 계약은 `idsim_interfaces`와 `docs/interface.md`가 정의한다. 정의 파일(msg 10개, action 1개)은 Phase 1a에서 전부 만들고, 고정은 한 시점이 아니라 첫 소비자가 생기는 Phase의 완료에 맞춰 나눈다. 소비자 없이 고정하면 틀린 정의를 계약으로 굳히게 되기 때문이다.
 
-- `VehicleState.msg`: 기체 요약 상태. Telemetry Collector가 만들고 Fleet Manager, WebSocket, 테스트가 소비한다. Protobuf의 `VehicleState`와 1:1 대응하며, 변환은 `idsim_fleet`의 변환 모듈 한 곳에서만 하고 양방향 왕복 단위 테스트를 둔다.
-- `TargetState.msg`: 표적 id, ENU 위치와 속도, 시각. 시뮬레이터 비의존 계약.
-- `Mission.msg`와 `ExecuteMission.action`: 미션 항목은 두 부류로 나뉜다. Offboard setpoint로 처리하는 항목(takeoff, goto, track_entity, loiter)과 PX4 고유 모드로 전환하는 명령 항목(rtl, land). 명령 항목은 Offboard를 벗어나므로 상태기가 `vehicle_status.nav_state`로 전이를 추적하고, 다음 setpoint 항목에서 Offboard 재진입 절차를 다시 밟는다.
+| 묶음 | 고정되는 것 | 고정 시점 |
+| --- | --- | --- |
+| 공통 규칙 | 단위, 좌표계, 시각, NaN 금지, 이름 규칙, QoS 계약, 변경 절차 | 1a 완료 |
+| 미션 실행(1a 부분) | `ExecuteMission.action`, `Mission`, `MissionItem`, `TakeoffItem`, `LoiterItem`, `YawSetpoint`의 직접 필드와 상수. TAKEOFF, LOITER, LAND 항목의 의미, 수락 정책, 취소 의미, `reason` 값의 의미(1b 부분 제외) | 1a 완료 |
+| 미션 실행(1b 부분) | `GoToItem`, `TrackEntityItem`의 직접 필드. GOTO, TRACK_ENTITY, RTL 항목의 의미, `REASON_TARGET_LOST`의 의미 | 1b 완료 |
+| 표적 | `TargetState` | 1b 완료 |
+| 기체 요약 | `VehicleState` | Phase 2 완료(WebSocket JSON 스키마 고정과 함께) |
+| 미션 기록 | `MissionEvent` | Phase 2 완료(기록물 인덱스가 필드를 검증한 뒤) |
+
+"고정"의 정의.
+
+- 고정의 단위는 타입이 아니라 파일이다. 한 파일이 고정되면 그 파일의 직접 필드(이름, 타입, 순서, 기본값)와 상수(이름, 값), 그리고 `docs/interface.md`에 적힌 그 필드의 의미가 고정된다. 중첩된 타입의 내용은 그 타입의 파일이 고정될 때 고정된다.
+- 중첩 타입이 바뀌면 그것을 담은 타입의 type hash(RIHS01)와 `ros2 interface show` 출력도 바뀐다. 이 전파는 상위 타입의 변경으로 보지 않는다. 전파가 허용되는 것은 그 중첩 타입이 고정되기 전까지다.
+- 판정은 `idsim_interfaces`의 계약 테스트가 한다. golden은 세 종류다. type hash, 펼친 정의(`ros2 interface show` 출력. hash가 잡지 못하는 상수 값과 기본값 변경을 잡는다), 직접 정의(그 파일의 직접 필드와 상수만). 고정된 파일의 직접 정의 golden이 바뀌면 고정된 계약의 변경이고, 앞의 둘만 바뀌면 중첩 타입에서 온 전파다.
+- 상수(enum 값, 비트, 이름)는 고정 전후 모두 추가만 한다. 상수의 의미는 그 상수를 처음 쓰는 소비자가 생기는 묶음과 함께 고정된다.
+- 고정 전인 파일은 첫 소비자의 구현에서 드러난 문제에 한해 바꿀 수 있고, 고정 뒤에는 새 요구가 있어야 한다. 어느 쪽이든 아래 변경 절차를 따른다.
+
+정의별 계약의 요지. 필드 단위의 전체 계약은 `docs/interface.md`에 둔다.
+
+- 공통 규칙: 단위는 SI이고 스칼라 필드 이름에 단위 접미사를 붙인다. 계약 프레임은 `"world"` 하나다. 원점은 `config/fleet.yaml`의 `world.origin`이 가리키는 점(Gazebo 월드 (0, 0, 0))이고, 축은 x 동, y 북, z 위(ENU), yaw는 ENU yaw(동 0, 반시계 양, `[-pi, pi)`)다. 기체 로컬 NED와 위경도는 미션과 표적 계약에 나오지 않는다(`VehicleState`만 지도 표시용으로 WGS84를 함께 싣는다). world ENU <-> 기체 로컬 NED 변환은 `idsim_common` 한 곳에 두고(1b), PX4가 실제로 쓰는 원점(`vehicle_local_position`의 기준점)과 params로 받은 `world.origin`을 입력으로 한다. NaN과 무한대는 어떤 필드에도 넣지 않고, 값이 없으면 `*_valid`가 false이고 값은 0이다. enum은 uint8 상수이고 0은 "모름 또는 무효"다. PX4의 enum 값과 PX4 timestamp는 계약에 넣지 않는다. 이름의 고정 부분(토픽, action, 프레임 이름)은 메시지의 string 상수로 두어 C++ 노드와 Python 판정 코드가 같은 출처를 쓴다.
+- `VehicleState.msg`: 기체 요약 상태. 토픽은 기체별 `/<vehicle_id>/vehicle_state`이고 공통 토픽은 두지 않는다(ROS 2 메시지에는 key가 없어 한 토픽의 발행자들이 구독자의 history depth를 나눠 쓴다). Telemetry Collector가 만들고 Fleet Manager, WebSocket, 테스트가 소비한다. 불변식: 발행자는 `vehicle_status`와의 식별 대조가 맞고 `vehicle_status`가 신선한 동안에만 발행한다. 따라서 메시지가 오면 비행제어 상태(arm, 모드, failsafe)는 신선하고, 이탈 판정은 소비자의 미수신 타임아웃 한 경로다. 발행 중단은 `vehicle_status`만 본다. 위치, 자세, 측지 좌표, 배터리, 지상 판정의 원천이 묵으면 해당 `*_valid`를 false로 하고 묵은 값을 valid로 내보내지 않는다. 소비자는 메시지의 `vehicle_id`를 토픽 네임스페이스와 대조하고, 그래프 항목의 생성과 소멸로 등록이나 이탈을 판정하지 않는다. 발행 timer와 신선도 검사는 ROS 시각 기준이다. replay에서는 기록물 안의 `vehicle_state`를 재생하지 않는다(Collector가 다시 만든다). Protobuf의 `VehicleState`와 중첩 타입까지 멤버 단위로 1:1 대응하며, 변환은 `idsim_fleet`의 변환 모듈 한 곳에서만 하고 양방향 왕복 단위 테스트를 둔다.
+- `TargetState.msg`: 표적 id, world ENU 위치와 속도, 시각. 시뮬레이터 비의존 계약이고 토픽은 `/targets/<target_id>/state`다. `header.stamp`는 발행 시각이 아니라 그 상태가 유효한 ROS 시각(`use_sim_time`이면 `/clock`)이며, 같은 표적에서 단조 증가한다. `velocity_valid`는 언제든 false일 수 있다. 소실 플래그는 없고, 소실은 발행 중단으로 표현하며 소비자가 stamp의 나이로 판정한다. 소비자에게 정본은 `TargetState`다.
+- `Mission.msg`, `MissionItem.msg`와 `ExecuteMission.action`: 미션은 항목의 목록이고 항목은 type과 그 type의 서브메시지 하나로 이뤄진다. 항목은 두 부류로 나뉜다. Offboard setpoint로 처리하는 항목(takeoff, goto, track_entity, loiter)과 PX4 고유 모드로 전환하는 명령 항목(rtl, land). 이 구분은 필드로 두지 않고 type에서 파생한다. 명령 항목은 Offboard를 벗어나므로 상태기가 `vehicle_status.nav_state`로 전이를 추적하고, 다음 setpoint 항목에서 Offboard 재진입 절차를 다시 밟는다. action 이름은 `/<vehicle_id>/execute_mission`이다.
+  - 수락 정책: Executor는 판단할 수 있는 goal을 모두 수락하고, 받을 수 없으면(미션 무효, `vehicle_id` 불일치, 실행 중, 준비 안 됨) 즉시 ABORTED로 끝내며 result의 `reason`에 이유를 싣는다. 거절은 쓰지 않는다(ROS 2 action의 거절은 이유를 실을 수 없다). 실행 중인 goal은 선점하지 않는다. 성공, 중단, 취소의 정본은 action의 GoalStatus다.
+  - 취소: 공중에서 취소되면 Executor는 setpoint 발행을 유지한 채 Hold 모드 명령을 보내고, 모드가 Hold로 바뀐 것을 확인한 뒤 CANCELED로 끝낸다. 정해진 시간 안에 확인되지 않으면 Land 명령을 보내고 ABORTED로 끝낸다. 지상에서 arm 상태로 취소되면 강제가 아닌 disarm을 확인한 뒤 CANCELED로 끝낸다. CANCELED로 끝난 기체는 공중에 Hold로 남고, 그 기체를 내리는 것은 취소를 요청한 쪽의 책임이다. 취소의 분기는 1a 6단계의 Hold 실험 결과를 반영해 1a 완료에 고정한다.
+- `MissionEvent.msg`: 미션 실행의 접수와 종료 기록. 토픽은 `/<vehicle_id>/mission_event`다. rosbag2(Jazzy)는 action의 goal과 result를 기록하지 않으므로, 기록물에서 미션 id와 결과를 읽을 일반 토픽을 따로 둔다. Executor가 goal마다 접수 때 한 번, 종료 때 한 번 발행한다. 정본은 action이고 이 메시지는 기록과 관찰을 위한 사본이며, Fleet Manager는 배분 판단에 쓰지 않는다. 사건 시각은 ROS 시각이다. 종료 사건 없이 접수만 남을 수 있고(Executor가 실행 중에 죽은 경우) 읽는 쪽은 결과 미상으로 다룬다.
+- QoS: 계약은 reliability와 durability 둘뿐이고 history와 depth는 구현 값이다. 상태 토픽(`VehicleState`, `TargetState`)은 발행 RELIABLE, VOLATILE, 구독 BEST_EFFORT, VOLATILE이다. 구독이 BEST_EFFORT라 라이브와 rosbag2 재생의 어느 발행자와도 맞는다. 사건 토픽(`MissionEvent`)은 발행과 구독 모두 RELIABLE, VOLATILE이다. 그래서 기록과 테스트는 구독이 발행자와 맺어진 것을 확인한 뒤에 goal을 보낸다. DDS deadline과 liveliness로 신선도를 판정하지 않는다(벽시계 기준이다). 상태 토픽의 발행 주기는 계약이 아니다.
+- 변경 절차: 메시지 안에 버전 필드나 버전 상수를 두지 않고, 타입 식별은 type hash가 한다. 필드는 끝에 추가만 하고 기존 필드의 이름, 타입, 의미, 단위를 바꾸지 않는다. 상수 값은 재사용하지 않는다. 예약 필드를 미리 두지 않는다. golden이 다르면 계약 테스트가 실패하고 자동 갱신은 하지 않는다. 계약 변경 PR에는 golden 갱신, `docs/interface.md`, (Phase 3 뒤) proto와 왕복 테스트, 영향받는 replay fixture 갱신이 함께 들어간다.
 - PX4 토픽 이름과 QoS, 좌표 변환, 네임스페이스 검증과 sysid 대조는 `idsim_common`이 유일한 접근 경로이고, 네임스페이스와 sysid 값은 params로 받는다.
 - 시간의 정식 기준은 ROS 시각(`/clock`, 시뮬레이션 시간)이다. 판정, 집계, 기록물 타임스탬프는 모두 이 시각을 쓴다. PX4 메시지의 timestamp 필드는 SITL에서 공통 SITL 파라미터 `UXRCE_DDS_SYNCT=0` 때문에 시뮬레이션 시간(us)이며 `/clock`, ULog와 같은 축이다. 노드가 /fmu/in에 넣는 timestamp도 노드 시계의 시뮬레이션 시간(us)이고, 0과 벽시계 값은 보내지 않는다(`idsim_common`의 timestamp 타입이 시계에서만 값을 만든다). 그래도 판정 기준은 여전히 ROS 시각이고, PX4 timestamp는 ULog와의 정렬과 PX4 쪽의 묵은 setpoint 판정에 쓰인다. 실기체에서는 이 파라미터를 되돌리며, 이것은 파라미터 한 줄이라 운용 노드는 그 차이를 모른다. `/clock`의 공급 주체는 `bridge` 서비스의 ros_gz_bridge이며 Phase 1a에서 `/clock`만 브리지하고 Phase 1b에서 표적 pose를 더한다. 1a 1단계 스모크 테스트만 `/clock`이 올라오기 전이라 벽시계 타임아웃을 쓴다.
 - PX4 토픽의 측정 주기는 계약이 아니라 참고값이다. 수신 판정은 "T초 안에 1회 이상"으로 정의하고 주기에 묶지 않는다. 주기 하한 계약은 Fleet 레지스트리 타임아웃을 정하는 Phase 3에서 필요한 토픽에만 넣는다.
@@ -219,7 +246,7 @@ idsim/
     to_interface.py  # 스모크 산출물 -> docs/interface.md 표
     qgc.sh           # QGroundControl AppImage 내려받기(버전, sha256 고정), 캐시, 호스트 실행. --stack k로 GCS 포트 선택
   ros_ws/src/
-    idsim_interfaces/ # 커스텀 msg/srv/action (미션, 기체 상태, 표적 상태)
+    idsim_interfaces/ # 커스텀 msg/action (미션, 미션 기록 사건, 기체 상태, 표적 상태)와 계약 테스트(golden)
     idsim_common/     # QoS 프로필, 좌표 변환, 토픽 이름 매핑, 네임스페이스 유틸 (C++ 라이브러리)
     idsim_mission/    # 미션 실행 노드 (Offboard 제어). 상태기는 ROS 비의존 순수 C++ 클래스
     idsim_telemetry/  # 수집기, WebSocket 발행
@@ -246,14 +273,14 @@ idsim/
 
 | 층 | 도구 | 대상 | 실행 시간 목표 | 트리거 |
 | --- | --- | --- | --- | --- |
-| 단위 | GoogleTest (C++), pytest (Python) | `idsim_common` 좌표 변환, 토픽 매핑, 네임스페이스, 커맨드 빌더. 미션 상태기(ROS 없이 시계와 입출력 포트를 주입한 순수 클래스). Fleet 배분 규칙. msg/proto 왕복 변환 | 1분 이내 | 모든 push |
+| 단위 | GoogleTest (C++), pytest (Python) | `idsim_common` 좌표 변환, 토픽 매핑, 네임스페이스, 커맨드 빌더. `idsim_interfaces` 계약 테스트(type hash, 펼친 정의, 직접 정의 golden과 상수 검사). 미션 상태기(ROS 없이 시계와 입출력 포트를 주입한 순수 클래스). Fleet 배분 규칙. msg/proto 왕복 변환 | 1분 이내 | 모든 push |
 | 리플레이 통합 | pytest + rosbag2 play | 기록된 MCAP으로 수집기, Fleet Manager의 레지스트리와 집계, WebSocket 어댑터, 판정 코드를 검증. 시뮬레이터, PX4 불필요. 배분 결정처럼 Executor의 반응이 필요한 경로는 리플레이로 검증되지 않는다 | 3분 이내 | 모든 push |
 | SITL 통합 | pytest + Docker Compose (gz 서버 전용, GUI 없음) | 단일 기체 시나리오(이륙과 착륙, 미션 순회, 표적 추종) | 15분 이내 | PR과 main 머지 |
 | SITL 통합 (멀티) | 위와 동일 | 3대 배분, 재배분 | 30분 이내 | nightly |
 
 통합 테스트 구조. launch_testing은 ROS launch 파일용이라 compose 스택과 맞지 않으므로 쓰지 않는다. pytest fixture가 `docker compose up --wait`로 스택을 올리고, 테스트 프로세스 안의 rclpy 노드가 토픽을 구독해 판정한다. pytest는 `ros-ws` 컨테이너 안에서 실행해 호스트와 컨테이너의 환경 차이를 없앤다. Executor와 Collector는 lifecycle 노드로 만들어 fixture가 active 전이를 기다릴 수 있게 한다.
 
-파이프라인 구성. (1) `lint`: clang-format, ruff, shellcheck, hadolint, actionlint, yamllint, 문자 집합 검사, 생성기 단위 테스트와 `compose config`, `idsim_common` 밖에서 /fmu 토픽 문자열을 쓰는지 보는 검사, cargo fmt와 clippy(Phase 3). ROS 환경이 필요 없는 검사만 둔다. (2) `build`: `ros-base` -> `sim-base` -> `px4`, `ros-ws`와 독립적인 `xrce-agent` 이미지를 GitHub Container Registry에 푸시하고 레이어 캐시. 이미지마다 Dockerfile과 `versions.env` 해당 줄의 해시를 key로 삼아 레지스트리에 있으면 빌드를 건너뛴다. PX4 빌드는 `versions.env`의 PX4 태그가 바뀔 때만 다시. (3) `unit` + `replay`: `ros-ws` 이미지 안에서 `tools/ros_ws.sh ci`가 colcon build, colcon test(GoogleTest와 ament_lint의 xmllint, lint_cmake, cpplint), clang-tidy를 차례로 돌린다. clang-tidy와 ament_lint는 compile_commands.json과 ROS 헤더가 필요해 `lint`가 아니라 여기에 둔다. 테스트가 실패하거나 테스트 수가 0이면 실패한다. 로컬에서도 같은 명령을 쓴다. `replay`의 pytest는 Phase 2에서 더한다. (4) `sitl`: compose 스택을 올리고 시나리오 실행, 실패 시 MCAP 기록물과 ULog를 아티팩트로 업로드해 Lichtblick으로 사후 분석.
+파이프라인 구성. (1) `lint`: clang-format, ruff, shellcheck, hadolint, actionlint, yamllint, 문자 집합 검사, 생성기 단위 테스트와 `compose config`, `idsim_common` 밖에서 /fmu 토픽 문자열을 쓰는지 보는 검사, cargo fmt와 clippy(Phase 3). ROS 환경이 필요 없는 검사만 둔다. (2) `build`: `ros-base` -> `sim-base` -> `px4`, `ros-ws`와 독립적인 `xrce-agent` 이미지를 GitHub Container Registry에 푸시하고 레이어 캐시. 이미지마다 Dockerfile과 `versions.env` 해당 줄의 해시를 key로 삼아 레지스트리에 있으면 빌드를 건너뛴다. PX4 빌드는 `versions.env`의 PX4 태그가 바뀔 때만 다시. (3) `unit` + `replay`: `ros-ws` 이미지 안에서 `tools/ros_ws.sh ci`가 colcon build, colcon test(GoogleTest, `idsim_interfaces`의 pytest 계약 테스트, ament_lint의 xmllint, lint_cmake, cpplint), clang-tidy를 차례로 돌린다. clang-tidy와 ament_lint는 compile_commands.json과 ROS 헤더가 필요해 `lint`가 아니라 여기에 둔다. 테스트가 실패하거나 테스트 결과가 0건인 패키지가 있으면 실패한다. 로컬에서도 같은 명령을 쓴다. `replay`의 pytest는 Phase 2에서 더한다. (4) `sitl`: compose 스택을 올리고 시나리오 실행, 실패 시 MCAP 기록물과 ULog를 아티팩트로 업로드해 Lichtblick으로 사후 분석.
 
 테스트 판정 기준은 토픽에서만 읽는다. "도달"은 `vehicle_local_position`과 setpoint 거리, "arm/disarm"은 `vehicle_status.arming_state`, "미션 완료"는 `ExecuteMission` 액션 결과. 타임아웃은 `/clock` 기준. 이렇게 해야 라이브와 리플레이가 같은 판정 코드를 공유한다.
 

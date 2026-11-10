@@ -1,0 +1,44 @@
+# goal. action 이름 /<vehicle_id>/execute_mission
+# 받는 쪽은 판단할 수 있는 goal을 모두 수락하고, 받을 수 없으면 즉시 ABORTED로 끝내며 reason을 싣는다(거절은 쓰지 않는다).
+# 실행 중인 goal은 선점하지 않는다. 두 번째 goal은 REASON_BUSY로 끝난다.
+# 취소: 공중이면 Hold 모드로 바꾸고 확인한 뒤 CANCELED. 정해진 시간 안에 확인되지 않으면 Land 명령을 보내고
+# ABORTED(REASON_MODE_SWITCH_FAILED). 지상에서 arm 상태이면 disarm을 확인한 뒤 CANCELED.
+# (취소의 분기는 1a 고정 전까지 잠정이다.)
+string vehicle_id      # 받는 쪽이 자기 vehicle_id와 다르면 VEHICLE_ID_MISMATCH로 중단한다
+Mission mission
+---
+# result. 성공, 중단, 취소의 정본은 action의 GoalStatus다
+# SUCCEEDED와 CANCELED이면 reason은 REASON_NONE, ABORTED이면 REASON_NONE이 아니다.
+uint8 REASON_NONE = 0
+uint8 REASON_INVALID_MISSION = 1
+uint8 REASON_VEHICLE_ID_MISMATCH = 2
+uint8 REASON_BUSY = 3
+uint8 REASON_NOT_READY = 4            # 항목을 시작하기 전에 기체가 준비되지 않음
+uint8 REASON_ARM_REJECTED = 5
+uint8 REASON_MODE_SWITCH_FAILED = 6
+uint8 REASON_ITEM_TIMEOUT = 7
+uint8 REASON_FAILSAFE = 8
+uint8 REASON_EXTERNAL_MODE_CHANGE = 9
+uint8 REASON_TARGET_LOST = 10
+uint8 REASON_LINK_LOST = 11
+uint8 REASON_PRECONDITION_FAILED = 12 # 항목을 시작할 때 그 항목의 시작 조건이 맞지 않음
+uint8 REASON_INTERNAL = 255
+
+uint8 reason               # REASON_*
+uint32 items_completed     # 완료한 항목 수
+uint32 last_item_index     # 끝날 때 실행 중이던 항목(0부터). 항목을 시작하기 전에 끝났으면 0
+string detail              # 사람이 읽는 설명. 판정에 쓰지 않는다
+---
+# feedback
+uint8 PHASE_PREPARING = 1      # 식별 대조, arm, Offboard 진입
+uint8 PHASE_EXECUTING = 2
+uint8 PHASE_WAITING_MODE = 3   # 모드 명령 항목에서 모드 전이 확인 대기
+uint8 PHASE_CANCELING = 4      # 취소 요청 뒤 정리 중
+
+builtin_interfaces/Time stamp
+uint32 item_index              # 0부터
+uint32 item_count
+uint8 item_type                # MissionItem.TYPE_*
+uint8 phase                    # PHASE_*
+bool distance_valid
+float64 distance_remaining_m   # takeoff는 남은 높이, goto와 track_entity는 setpoint 점까지

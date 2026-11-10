@@ -1,0 +1,33 @@
+string vehicle_id
+Mission mission
+---
+uint8 REASON_NONE = 0
+uint8 REASON_INVALID_MISSION = 1
+uint8 REASON_VEHICLE_ID_MISMATCH = 2
+uint8 REASON_BUSY = 3
+uint8 REASON_NOT_READY = 4
+uint8 REASON_ARM_REJECTED = 5
+uint8 REASON_MODE_SWITCH_FAILED = 6
+uint8 REASON_ITEM_TIMEOUT = 7
+uint8 REASON_FAILSAFE = 8
+uint8 REASON_EXTERNAL_MODE_CHANGE = 9
+uint8 REASON_TARGET_LOST = 10
+uint8 REASON_LINK_LOST = 11
+uint8 REASON_PRECONDITION_FAILED = 12
+uint8 REASON_INTERNAL = 255
+uint8 reason
+uint32 items_completed
+uint32 last_item_index
+string detail
+---
+uint8 PHASE_PREPARING = 1
+uint8 PHASE_EXECUTING = 2
+uint8 PHASE_WAITING_MODE = 3
+uint8 PHASE_CANCELING = 4
+builtin_interfaces/Time stamp
+uint32 item_index
+uint32 item_count
+uint8 item_type
+uint8 phase
+bool distance_valid
+float64 distance_remaining_m

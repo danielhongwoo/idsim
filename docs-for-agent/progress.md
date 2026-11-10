@@ -36,6 +36,11 @@
   - test-engineer 검증: 테스트 실패를 주입하면 종료 코드 1, 테스트가 0건이면 종료 코드 1(`colcon test-result` 자체는 0을 반환), tidy 위반이면 종료 코드 1. 종료 코드 규칙과 아티팩트 범위 승인.
   - 설계 문서 반영(E): `docs/roadmap.md`, `docs/architecture.md`, `docs/smoke-test.md`. `docs/interface.md`는 7단계 몫이라 만들지 않았다.
 - 2026-11-10: 사용자 결정으로 `docs/smoke-test-phase1a.md`를 `docs/smoke-test.md`로 이름을 바꿨다(결정 기록 참조).
+- 2026-11-10: 1a 5번 작업 `idsim_interfaces` 구현 완료(브랜치 `feat/1a-5-idsim-interfaces`). 계획과 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/`(README.md, decisions.md).
+  - 산출물: `ros_ws/src/idsim_interfaces/`(msg 10개: VehicleState, TargetState, Mission, MissionItem, YawSetpoint, TakeoffItem, LoiterItem, GoToItem, TrackEntityItem, MissionEvent. action 1개: ExecuteMission), 계약 테스트(type hash, 펼친 정의, 직접 정의 golden과 상수 검사, `ros2 interface show` 잘림 가드), `tools/ros_ws.sh test`의 ament 패키지별 테스트 1건 이상 단정(`no_test_packages` 예외 배열, 지금은 비어 있음), `docs/architecture.md`와 `docs/roadmap.md`의 고정 시점 분리 반영.
+  - `tools/ros_ws.sh ci`: 148 tests(idsim_common 109, idsim_interfaces 39), clang-tidy PASS. 결함 주입 4가지(필드 타입, 상수 값, `TYPE_*` 추가, 중첩 타입 변경의 전파와 직접 변경 구분) 확인.
+  - 관련 owner 검토: ros2, test, sim 승인. ops, logging 조건부 -> 반영. reviewer 최종 검토 PR 가능(PX4 읽기 검토 포함: Hold의 위치 요구, NAV_LAND force, 지상 아닌 disarm 거부, 자동 disarm 조건이 v1.17.0 원문과 모순 없음). 비차단 지적은 반영.
+  - `MissionEvent` 고정 시점은 사용자 결정 1의 기준(첫 소비자가 생기는 Phase 완료)의 예외로 Phase 2 완료다(architect 결정, logging-engineer 동의). 이유는 decisions.md. 1a 완료로 당길 수 있다.
 - 다음 작업:
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
   2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
@@ -184,10 +189,14 @@
 - 2026-11-10: 사용자 결정, ros-ws 이미지 크기(clang 도구로 약 410MB 증가, 1.99GB)는 그대로 둔다. clang-tidy를 별도 도구 이미지로 빼지 않는다.
 - 2026-11-10: 사용자 결정, `tools/qgc.sh`에 `--restore` 옵션을 두지 않는다. 바꾼 `udpListenPort`는 되돌리지 않고, 기본 포트로 돌리려면 `--stack 0`을 쓴다는 안내만 둔다.
 - 2026-11-10: 1a 4번 작업의 PX4 인터페이스 검토 완료. 16개 항목(공개 /fmu/in 허용 3개와 차단 35개의 분류, VehicleCommand 빌더 필드 표와 `CommandSource` 범위와 `is_ack_for`, `Px4Timestamp`의 0과 1 us 미만 거부) 모두 승인, 수정 요구 없음. 근거는 PX4 원문(Commander.cpp, dds_topics.yaml, ucdr_msg.h.em, uxrce_dds_client.cpp)과 `opinion-px4.md` 실측이다. 원문 사본이 v1.17.0 태그인지는 직접 확인하지 않았다(인용 행 번호와 골든 토픽 목록 일치가 간접 근거). 6단계 실측으로 남는 것: NAV_LAND의 공중 착륙 동작과 param 사용, `vehicle_command.hpp`의 "`from_external=false`면 MAVLink로 재송출" 주석의 소스 근거, sim 시간 timestamp 경로의 failsafe 회귀 판정.
+- 2026-11-10: 1a 5번 작업 `idsim_interfaces` 사용자 결정 2건(둘 다 권고안). 1) 계약 고정 시점을 나눈다. 1a 완료 시 공통 규칙, `ExecuteMission`, TAKEOFF/LOITER/LAND. 1b 완료 시 `TargetState`, GOTO/TRACK/RTL. Phase 2 완료 시 `VehicleState`. 2) 6단계 이륙-호버-착륙 노드는 `ExecuteMission` action server로 미션 [TAKEOFF, LOITER, LAND]를 받는다. 그래서 취소 시 Hold 동작 실험을 6단계로 당기고 1a 고정 전에 결과를 반영한다. 근거와 확정 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md`.
+- 2026-11-10: 1a 5번 작업 ros2-engineer 실측 2건(Jazzy, rclcpp_action, rosbag2 0.26.11). 1) `ACCEPT_AND_EXECUTE`로 받은 뒤 사유를 실어 abort하는 방식은 동작한다(BUSY와 VEHICLE_ID_MISMATCH 사유 전달, 실행 중인 첫 goal 무영향, cancel과 abort 혼합 5가지 정상). `ACCEPT_AND_DEFER` 뒤 abort는 예외를 던지므로 Executor는 `ACCEPT_AND_EXECUTE`만 쓴다. 2) rosbag2는 action goal과 result를 기록하지 않는다(`--include-hidden-topics`로 feedback과 status만). Jazzy action에는 introspection이 없다. 그래서 기록물 인덱스용으로 일반 토픽 `MissionEvent.msg`를 둔다.
 
 ## 미해결 사항
 
 사용자 결정이 필요한 항목.
+
+- (2026-11-10) PR #14(apt security 미러 분리) 처리. devops-engineer 분석: PR 자신의 build 실패(run 42770470337, sim-base apt install)는 `security.ubuntu.com`의 91.189.91.82가 noble-security 신규 패키지(perl-base 5.38.2-3.2ubuntu0.7 등)에 404를 준 것이라, "security를 archive 미러로 바꾼 탓"이라는 PR 가설이 반증됐다. Canonical 노드 풀 일부의 동기화 시차이고 DNS가 주는 노드에 따라 성패가 갈린다(같은 코드의 앞선 run 42767888913은 통과). 권고: #14 close, 필요하면 미러 RUN 단계 테스트만 작은 PR로. CI 안정성 대안 (a) apt 단계 재시도(가장 쌈, 확률적), (b) CI에서 archive와 security 모두 `azure.archive.ubuntu.com`(noble-security 반영 시차는 미검증). 사용자 결정 대기.
 
 - 없음(2026-11-10 기준).
 

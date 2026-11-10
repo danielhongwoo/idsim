@@ -1,0 +1,8 @@
+string TOPIC_PREFIX = "/targets"
+string TOPIC_SUFFIX = "state"
+string FRAME_ID = "world"
+std_msgs/Header header
+string target_id
+geometry_msgs/Point position
+bool velocity_valid
+geometry_msgs/Vector3 velocity
