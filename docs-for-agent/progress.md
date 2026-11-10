@@ -212,7 +212,7 @@
 - PX4 timestamp와 `/clock`이 같은 축이라는 주장은 1회 실측과 구조 논증만 있고 회귀 판정은 6단계 failsafe 테스트까지 없다. S5에 `vehicle_status.timestamp`와 `/clock`의 차이 상한 판정을 넣을지 px4-engineer와 test-engineer가 검토한다.
 - px4-api 검사는 C++과 `.py`만 본다. 6단계에서 params, remap yaml이 생기면 범위를 다시 본다.
 - 이 PR이 손대지 않은 `.github/workflows/build.yml`, `build-images.yml`, `tools/ci/image_keys.py`, `tools/ci/build_images.py`에 음차("키", "잡")가 남아 있다. 다음에 고칠 때 바꾼다.
-- px4-engineer가 이 프로젝트 작업에서 안전장치 오류로 반복 중단된다(이번 3회, 설계 토론 때 architect와 reviewer 포함 3회). PX4 접점 작업의 운용 방법이 필요하다. 사용자가 오탐으로 신고하기로 했다(Request ID req_011CgtyuPphfbHiy5z6LYHwa, req_011Cgu1vZ83zmpEFgTFRgHSX, req_011Cgu4CY2zeGbKJuHzw7Gf4). 6단계 전에 결과를 보고 운용 방법을 다시 정한다.
+- px4-engineer가 이 프로젝트 작업에서 안전장치 오류로 반복 중단된다(이번 3회, 설계 토론 때 architect와 reviewer 포함 3회). PX4 인터페이스 작업의 운용 방법이 필요하다. 사용자가 오탐으로 신고하기로 했다(Request ID req_011CgtyuPphfbHiy5z6LYHwa, req_011Cgu1vZ83zmpEFgTFRgHSX, req_011Cgu4CY2zeGbKJuHzw7Gf4). 6단계 전에 결과를 보고 운용 방법을 다시 정한다.
 - clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다. tidy 대상은 `src/`의 소스이고 헤더는 소스가 include할 때만 검사되는데 `src/`가 이 두 헤더를 include하지 않기 때문이다. 헤더 전용 검사를 둘지, `test/`를 tidy 대상에 넣을지 정해야 한다(ros2-engineer와 devops-engineer).
 - `tools/ros_ws.sh tidy`는 대상이 0개이면 PASS-NO-TARGETS로 통과한다. 디렉터리 구조가 바뀌면 검사가 조용히 빠질 수 있으니 `ci`에서는 경고나 실패로 바꿀지 검토한다(test-engineer 제안, devops-engineer).
 - unit job은 GHCR에 새 ros-ws key(a0f1847b30f3b76f)가 없으면 load 모드로 ros-base부터 다시 빌드한다. main 머지 뒤 build job이 이미지를 올리면 해소된다.

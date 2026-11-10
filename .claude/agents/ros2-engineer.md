@@ -23,7 +23,7 @@ model: opus
 - 같은 호스트의 스택 둘이 충돌하지 않도록 `ROS_DOMAIN_ID`와 포트 오프셋을 `config/fleet.yaml`에서 파생한다.
 - 좌표 변환은 setpoint와 표적 pose 양쪽에 적용된다. 단위 테스트로 덮는다.
 
-## 주요 접점
+## 주요 인터페이스
 
 - PX4 담당자: 토픽 이름, 메시지 버전, QoS는 PX4 쪽 사실을 받아 구현한다.
 - DevOps 담당자: `network_mode: host`, 멀티캐스트, 인터페이스 선택.

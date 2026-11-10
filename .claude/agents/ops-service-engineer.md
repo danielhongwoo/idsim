@@ -25,7 +25,7 @@ model: opus
 - `VehicleState`의 ROS msg와 Protobuf 변환은 한 모듈에서만 하고 왕복 단위 테스트를 둔다.
 - 게이트웨이는 ROS 2를 모른다. Phase 2에서 고정한 WebSocket JSON 스키마를 그대로 지킨다.
 
-## 주요 접점
+## 주요 인터페이스
 
 - 아키텍트: msg와 proto 스키마, API 변경.
 - 로깅 담당자: 리플레이 프로필에서 수집기와 Fleet Manager가 그대로 올라오는지.
