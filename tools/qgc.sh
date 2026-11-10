@@ -5,13 +5,20 @@
 # ${XDG_CACHE_HOME:-$HOME/.cache}/idsim/qgc/<버전>/QGroundControl-x86_64.AppImage 에 받아 두고 실행한다.
 # 없거나 sha256이 다르면 다시 받는다. 검증에 실패하면 파일을 지우고 종료 코드 1로 끝난다.
 #
-# 연결: PX4 SITL은 GCS 포트 14550(UDP, 모든 PX4 인스턴스 공통)으로 MAVLink를 보내고 QGC가 그 포트를 듣는다.
+# 연결: 스택 k의 PX4 SITL은 GCS 포트 14550 + 1000k(UDP, 스택 안 모든 인스턴스 공통)로 MAVLink를 보낸다.
+#   실행 전에 QGC 설정 파일(${XDG_CONFIG_HOME:-$HOME/.config}/QGroundControl/QGroundControl.ini)의
+#   [AutoConnect] udpListenPort를 그 포트로 고친다. QGC v5의 자동 연결 UDP 링크가 이 값으로 듣는다
+#   (v5.1.5 소스 src/Settings/AutoConnect.SettingsGroup.json의 udpListenPort, 기본 14550). 포트 식은
+#   tools/gen_compose.py의 상수가 유일한 출처이며 --print-gcs-port로 받는다(호스트 python3 표준 라이브러리).
+#   --stack을 주지 않아도 k(IDSIM_STACK_INDEX, 없으면 0)의 포트로 맞춘다. MAV_SYS_ID가 스택 간에 같으므로
+#   QGC 하나는 한 번에 한 스택만 본다.
 # 주의: COM_RC_IN_MODE=4라 QGC의 수동 모드와 가상 조이스틱은 쓸 수 없다. 모니터링과 ARM/TAKEOFF/LAND 명령용이다.
 # 종료: Ctrl-C(INT)나 TERM을 받으면 QGC에 TERM을 보내 정상 종료(설정 저장)를 기다리고, 5초 안에 끝나지 않으면
 #       SIGKILL로 끝낸다. 기체가 연결된 상태에서는 QGC가 종료 확인 대화상자를 띄워 멈출 수 있어 유예 뒤 KILL이 필요하다.
 # AppImage는 static type2 런타임이라 libfuse2가 없어도 실행된다.
 #
-# 사용법: tools/qgc.sh [--download-only | --print-path | --help] [QGC 인자...]
+# 사용법: tools/qgc.sh [--stack k] [--download-only | --print-path | --help] [QGC 인자...]
+#   --stack k        스택 k(0-9)의 GCS 포트로 QGC 자동 연결 UDP 포트를 맞춘다
 #   --download-only  내려받아 검증만 하고 끝낸다
 #   --print-path     캐시된 AppImage 경로를 출력한다(없으면 먼저 받는다)
 #   그 외 인자는 QGC에 그대로 전달한다
@@ -32,11 +39,16 @@ read_key() {
 }
 
 mode="run"
-case "${1:-}" in
-  --help|-h) usage; exit 0 ;;
-  --download-only) mode="download"; shift ;;
-  --print-path) mode="path"; shift ;;
-esac
+stack="${IDSIM_STACK_INDEX:-0}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --help|-h) usage; exit 0 ;;
+    --download-only) mode="download"; shift ;;
+    --print-path) mode="path"; shift ;;
+    --stack) stack="${2:-}"; shift 2 || { echo "qgc.sh: --stack 값이 없다" >&2; exit 2; } ;;
+    *) break ;;
+  esac
+done
 
 version="$(read_key QGC_VERSION)"
 want_sha="$(read_key QGC_APPIMAGE_SHA256)"
@@ -79,6 +91,45 @@ case "$mode" in
   download) echo "qgc.sh: 준비됨 ${app}" >&2; exit 0 ;;
   path) printf '%s\n' "$app"; exit 0 ;;
 esac
+
+# QGC 자동 연결 UDP 포트를 스택 k의 GCS 포트로 맞춘다. 설정 파일의 다른 줄은 건드리지 않는다.
+gcs_port="$(python3 "${repo_root}/tools/gen_compose.py" --print-gcs-port "$stack")" \
+  || { echo "qgc.sh: 스택 번호는 0-9: '${stack}'" >&2; exit 2; }
+ini="${XDG_CONFIG_HOME:-$HOME/.config}/QGroundControl/QGroundControl.ini"
+mkdir -p "$(dirname "$ini")"
+python3 - "$ini" "$gcs_port" <<'PY'
+import os
+import sys
+
+path, port = sys.argv[1], sys.argv[2]
+lines = open(path, encoding="utf-8").read().splitlines() if os.path.exists(path) else []
+out, in_sec, seen_sec, done = [], False, False, False
+for line in lines:
+    s = line.strip()
+    if s.startswith("[") and s.endswith("]"):
+        if in_sec and not done:
+            out.append("udpListenPort=" + port)
+            done = True
+        in_sec = s == "[AutoConnect]"
+        seen_sec = seen_sec or in_sec
+    elif in_sec and s.split("=", 1)[0].strip() == "udpListenPort":
+        if not done:
+            out.append("udpListenPort=" + port)
+            done = True
+        continue
+    out.append(line)
+if not done:
+    if not seen_sec:
+        if out and out[-1].strip():
+            out.append("")
+        out.append("[AutoConnect]")
+    out.append("udpListenPort=" + port)
+tmp = path + ".idsim-tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")
+os.replace(tmp, path)
+PY
+echo "qgc.sh: 스택 ${stack}, GCS UDP ${gcs_port}를 듣는다 (${ini} [AutoConnect] udpListenPort)" >&2
 
 # exec 대신 자식으로 띄운다. 신호 처리기에서 QGC에 TERM을 보내고 유예 뒤 KILL로 끝내기 위해서다.
 # AppRun이 QGC 바이너리를 exec하므로 $child가 QGC 본체 PID다.
