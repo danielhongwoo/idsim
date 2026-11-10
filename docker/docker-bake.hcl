@@ -15,8 +15,8 @@ variable "XRCE_AGENT_TAG" {}
 variable "XRCE_FASTCDR_REF" {}
 variable "XRCE_FASTDDS_REF" {}
 variable "REGISTRY" {}
-# 레지스트리 태그의 <키>. 이미지마다 다르다. tools/ci/image_keys.py --format env 가 계산한다
-# (Dockerfile, 이 파일의 해당 target 블록, COPY 하는 파일, 그 이미지가 ARG로 쓰는 versions.env 줄, 베이스 키의 해시).
+# 레지스트리 태그의 <key>. 이미지마다 다르다. tools/ci/image_keys.py --format env 가 계산한다
+# (Dockerfile, 이 파일의 해당 target 블록, COPY 하는 파일, 그 이미지가 ARG로 쓰는 versions.env 줄, 베이스 key의 해시).
 # 로컬 기본은 local. CI(tools/ci/build_images.py)는 --set 으로 태그를 직접 넣는다.
 variable "KEY_ROS_BASE" { default = "local" }
 variable "KEY_SIM_BASE" { default = "local" }

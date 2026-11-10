@@ -154,6 +154,8 @@ step() {
   local t0 t1 rc=0
   echo "==== ros_ws ${name}"
   t0="$(date +%s)"
+  # 주의: "$@" || rc=$? 문맥에서는 do_* 함수 안의 errexit(set -e)가 꺼진다.
+  # 그러므로 do_* 안의 명령은 실패가 다음 명령으로 넘어가지 않게 &&로 잇거나 명시적으로 return/exit 한다.
   "$@" || rc=$?
   t1="$(date +%s)"
   timing_names+=("$name")
@@ -190,10 +192,13 @@ do_test() {
   # 함정 둘(opinion-devops E6, E7)
   #  1. colcon test는 테스트가 실패해도 0을 돌려준다 -> --return-code-on-test-failure
   #  2. colcon test-result는 빌드가 실패했거나 패키지가 하나도 없어도 "0 tests"로 0을 돌려준다 -> 테스트 수 > 0 단정
+  #     colcon test-result는 build/ 전체의 결과 XML을 읽는다. 이전 실행의 결과가 남아 있으면 이번에 0건이 돌아도
+  #     그 수가 잡히므로(--packages-select 오타로 확인), 테스트 전에 이전 결과를 지운다.
   # 재시도는 두지 않는다(단위 층은 결정적이어야 한다).
   # 작은따옴표 안의 $는 컨테이너 안 bash가 펼친다(의도된 것)
   # shellcheck disable=SC2016
   ros_in '
+    rm -rf build/*/test_results build/*/Testing
     colcon test --return-code-on-test-failure --event-handlers console_cohesion+ \
       --parallel-workers "$IDSIM_JOBS" "$@"
     result="$(colcon test-result --verbose)" || { printf "%s\n" "$result"; echo "colcon test-result: 실패 또는 오류가 있다" >&2; exit 1; }

@@ -1,7 +1,7 @@
 # unit: ros-ws 이미지 안에서 ROS 2 패키지를 빌드하고 GoogleTest/ament_lint 테스트와 clang-tidy를 돌린다.
 # 실제 단계는 tools/ros_ws.sh ci 한 곳에 있고 로컬에서도 같은 명령을 쓴다.
 #
-# ros-ws 이미지는 build 워크플로가 main에서 GHCR에 올린 <REGISTRY>/ros-ws:<키>를 받는다. 키가 없으면
+# ros-ws 이미지는 build 워크플로가 main에서 GHCR에 올린 <REGISTRY>/ros-ws:<key>를 받는다. key가 없으면
 # (Dockerfile.ros-ws나 versions.env를 바꾸는 PR, 또는 패키지가 비공개라 받지 못하는 경우) 러너에서
 # tools/ci/build_images.py --mode load ros-ws 로 직접 빌드한다. 이 분기는 ros-base부터 다시 빌드한다.
 #
@@ -43,7 +43,10 @@ jobs:
         id: pull
         run: |
           t0=$(date +%s)
-          eval "$(tools/ci/image_keys.py --format env)"
+          # eval "$(...)"는 스크립트가 실패해도 0을 돌려주므로 출력을 먼저 받아 실패를 검사한다
+          keys_env="$(tools/ci/image_keys.py --format env)" || { echo "image_keys.py 실패" >&2; exit 1; }
+          eval "$keys_env"
+          : "${KEY_ROS_WS:?image_keys.py가 KEY_ROS_WS를 내지 않았다}"
           registry="$(sed -n 's/^REGISTRY=//p' docker/versions.env)"
           ref="${registry}/ros-ws:${KEY_ROS_WS}"
           if docker pull --quiet "$ref"; then
@@ -68,7 +71,7 @@ jobs:
       - name: build ros-ws image (no key in registry)
         if: steps.pull.outputs.pulled != 'true'
         env:
-          # build-images.yml과 같은 이유로 러너(미국)는 우분투 기본 미러를 쓴다. 미러는 이미지 키에 들어가지 않는다.
+          # build-images.yml과 같은 이유로 러너(미국)는 우분투 기본 미러를 쓴다. 미러는 이미지 key에 들어가지 않는다.
           UBUNTU_APT_MIRROR: http://archive.ubuntu.com/ubuntu
         run: |
           t0=$(date +%s)

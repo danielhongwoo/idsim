@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# lint 잡의 검사를 실행한다. GitHub Actions의 lint 워크플로와 로컬이 같은 명령을 쓴다.
+# lint job의 검사를 실행한다. GitHub Actions의 lint 워크플로와 로컬이 같은 명령을 쓴다.
 #
 # 사용법: tools/ci/lint.sh <검사>... | all
 #   검사: charset shellcheck ruff hadolint actionlint yamllint pytest compose-config
 #         clang-format px4-api cargo
-#   clang-tidy와 ament_lint는 compile_commands.json과 ROS 헤더가 필요해서 여기에 없다. unit 잡의 tools/ros_ws.sh ci 안에서 돈다.
+#   clang-tidy와 ament_lint는 compile_commands.json과 ROS 헤더가 필요해서 여기에 없다. unit job의 tools/ros_ws.sh ci 안에서 돈다.
 #
 # 대상 파일은 git이 추적하거나 무시 목록에 없는 새 파일이다(git ls-files -co --exclude-standard).
 # 그래서 로컬의 artifacts/, __pycache__/ 같은 무시 대상은 보지 않고 CI 체크아웃과 같은 파일을 본다.
@@ -152,7 +152,7 @@ check_yamllint() {
 
 check_pytest() {
   # rclpy 없이 도는 단위 테스트만(tests/support, tests/tools). rclpy가 필요한 테스트는 ros-ws 이미지 안의
-  # unit 잡(이후 단계) 몫이다. 생성기 테스트를 위해 ros-ws와 같은 PyYAML(LINT_PYYAML_VERSION, S0이 대조)을 설치한다.
+  # unit job(이후 단계) 몫이다. 생성기 테스트를 위해 ros-ws와 같은 PyYAML(LINT_PYYAML_VERSION, S0이 대조)을 설치한다.
   local files
   mapfile -t files < <(list_files 'tests/support/test_*.py' 'tests/tools/test_*.py')
   if [ "${#files[@]}" -eq 0 ]; then result pytest PASS-NO-TARGETS "(0 files)"; return 0; fi
@@ -234,10 +234,11 @@ check_px4_api() {
   done < <(list_files 'ros_ws/src/*.py' "${cpp_specs[@]/#/ros_ws/src/}")
   if [ "${#files[@]}" -eq 0 ]; then result px4-api PASS-NO-TARGETS "(0 files)"; return 0; fi
   local out rc=0
-  out="$(grep -nF -e 'fmu/in/' -e 'fmu/out/' -e 'detail::topic_name' -e 'idsim_common::px4::detail' -- "${files[@]}")" || rc=$?
+  out="$(grep -nF -e 'fmu/in/' -e 'fmu/out/' -e 'detail::topic_name' -e 'idsim_common::px4::detail' \
+    -e 'px4::detail::' -e 'detail::relative_topic_name' -e 'detail::for_each_topic' -- "${files[@]}")" || rc=$?
   if [ "$rc" -eq 1 ]; then result px4-api PASS "(${#files[@]} files)"; return 0; fi
   [ -n "$out" ] && printf '%s\n' "$out"
-  result px4-api FAIL "idsim_common 밖에서 /fmu 토픽 문자열 또는 idsim_common::px4::detail 사용 (grep exit ${rc})"
+  result px4-api FAIL "idsim_common 밖에서 /fmu 토픽 문자열 또는 px4 detail 이름(px4::detail, detail::relative_topic_name, detail::for_each_topic) 사용 (grep exit ${rc})"
   return 1
 }
 

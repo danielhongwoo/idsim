@@ -92,7 +92,7 @@ xrce-agent --> gazebo --> px4-1..N --> bridge      (본 스택, up --wait 대상
 
 ## 사용법
 
-이미지 빌드. 저장소 루트에서 실행한다. docker buildx가 필요하다. 빌드 스크립트가 `versions.env`를 읽고 이미지마다 키를 계산해 bake를 의존 순서대로 부른다. CI도 같은 스크립트를 쓴다.
+이미지 빌드. 저장소 루트에서 실행한다. docker buildx가 필요하다. 빌드 스크립트가 `versions.env`를 읽고 이미지마다 key를 계산해 bake를 의존 순서대로 부른다. CI도 같은 스크립트를 쓴다.
 
 ```
 python3 tools/ci/build_images.py --mode load
@@ -104,7 +104,7 @@ python3 tools/ci/build_images.py --mode load
 python3 tools/ci/build_images.py --mode load px4
 ```
 
-이미지 키는 그 이미지의 Dockerfile, bake 정의, COPY하는 파일, `versions.env` 중 그 Dockerfile이 쓰는 줄, 베이스 이미지의 키에서 계산한다. 키가 같으면 같은 이미지로 보고, CI는 레지스트리(`ghcr.io/danielhongwoo/idsim/<이미지>:<키>`)에 같은 키가 있으면 빌드를 건너뛴다. 계산 근거는 아래 명령으로 볼 수 있다.
+이미지 key는 그 이미지의 Dockerfile, bake 정의, COPY하는 파일, `versions.env` 중 그 Dockerfile이 쓰는 줄, 베이스 이미지의 key에서 계산한다. key가 같으면 같은 이미지로 보고, CI는 레지스트리(`ghcr.io/danielhongwoo/idsim/<이미지>:<key>`)에 같은 key가 있으면 빌드를 건너뛴다. 계산 근거는 아래 명령으로 볼 수 있다.
 
 ```
 python3 tools/ci/image_keys.py --explain px4
@@ -119,7 +119,7 @@ python3 tools/ci/image_keys.py --explain px4
 | `tools/ros_ws.sh build [colcon 인자...]` | `colcon build`(RelWithDebInfo, `compile_commands.json` 생성) |
 | `tools/ros_ws.sh test [colcon 인자...]` | build 뒤 `colcon test --return-code-on-test-failure`, `colcon test-result`, 테스트 수 > 0 단정 |
 | `tools/ros_ws.sh tidy` | build 뒤 `run-clang-tidy-18`(저장소 루트 `.clang-tidy`, 각 패키지 `src/`의 C++ 소스) |
-| `tools/ros_ws.sh ci` | build, test, tidy를 한 번씩. CI의 unit 잡이 이것만 부른다 |
+| `tools/ros_ws.sh ci` | build, test, tidy를 한 번씩. CI의 unit job이 이것만 부른다 |
 | `tools/ros_ws.sh clean` | `ros_ws/build`, `install`, `log` 삭제 |
 | `tools/ros_ws.sh shell` | 같은 조건의 대화형 bash |
 
@@ -127,13 +127,13 @@ python3 tools/ci/image_keys.py --explain px4
 
 `colcon test`는 테스트가 실패해도 0을 돌려주고 `colcon test-result`는 빌드가 실패해도 "0 tests"로 0을 돌려준다. 그래서 `test`는 `--return-code-on-test-failure`를 쓰고 테스트 수가 0이면 실패시킨다. 단위 층에는 재시도를 두지 않는다.
 
-clang-format 검사는 CI lint 잡이 `LINT_PYTHON_IMAGE`에 pip `clang-format==$LINT_CLANG_FORMAT_VERSION`을 설치해 돌린다(`tools/ci/lint.sh clang-format`). ros-ws의 `clang-format-18`은 컨테이너 안에서 손으로 쓰는 같은 major이며, 두 값의 major가 `LLVM_MAJOR`와 같은지 lint.sh가 단정한다. clang-tidy와 ament_lint는 `compile_commands.json`과 ROS 헤더가 필요해 lint 잡이 아니라 `tools/ros_ws.sh ci`(unit 잡)에서 돈다.
+clang-format 검사는 CI lint job이 `LINT_PYTHON_IMAGE`에 pip `clang-format==$LINT_CLANG_FORMAT_VERSION`을 설치해 돌린다(`tools/ci/lint.sh clang-format`). ros-ws의 `clang-format-18`은 컨테이너 안에서 손으로 쓰는 같은 major이며, 두 값의 major가 `LLVM_MAJOR`와 같은지 lint.sh가 단정한다. clang-tidy와 ament_lint는 `compile_commands.json`과 ROS 헤더가 필요해 lint job이 아니라 `tools/ros_ws.sh ci`(unit job)에서 돈다.
 
 ### apt 미러
 
 이미지 빌드의 우분투 apt 미러는 `versions.env`의 `UBUNTU_APT_MIRROR`(기본 `http://kr.archive.ubuntu.com/ubuntu`)이다. `ros-base`와 `xrce-agent`(build 단계)가 첫 `apt-get update` 앞에서 `/etc/apt/sources.list.d/ubuntu.sources`의 archive와 security 주소를 이 값으로 바꾸고, `sim-base`, `px4`, `ros-ws`는 `ros-base`를 상속한다. packages.ros.org와 packages.osrfoundation.org는 바꾸지 않는다. kr 미러는 noble, noble-updates, noble-security를 모두 제공한다.
 
-이 값은 이미지 키에 들어가지 않는다(`tools/ci/image_keys.py`의 `KEY_EXCLUDED_ARGS`). `ubuntu.sources`는 이미지에 남아 미러별로 바이트가 다르지만 런타임이 apt를 쓰지 않으므로 같은 이미지로 본다. 미러 동기화 시차로 패키지 버전이 조금 다를 수 있으나, 이미지 키는 원래 apt 패키지 버전을 고정하지 않는다.
+이 값은 이미지 key에 들어가지 않는다(`tools/ci/image_keys.py`의 `KEY_EXCLUDED_ARGS`). `ubuntu.sources`는 이미지에 남아 미러별로 바이트가 다르지만 런타임이 apt를 쓰지 않으므로 같은 이미지로 본다. 미러 동기화 시차로 패키지 버전이 조금 다를 수 있으나, 이미지 key는 원래 apt 패키지 버전을 고정하지 않는다.
 
 다른 미러를 쓰려면 같은 이름의 환경변수를 주고 빌드한다. 환경변수가 `versions.env`보다 우선한다(`build_images.py` 경로에 한함. `versions.env`를 source하는 직접 bake 경로에서는 `versions.env`가 이긴다). 값을 바꿔도 이미 캐시된 `apt` 레이어는 인자가 달라진 단계부터 다시 만들어진다.
 

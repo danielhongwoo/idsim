@@ -39,7 +39,7 @@ tools/stack.sh up
 | `tests/smoke/run_smoke.sh S0` | 이미지 버전과 `docker/versions.env`의 일치 |
 | `tests/smoke/run_smoke.sh S2` | PX4와 Gazebo 연동, 파라미터 저장값 |
 | `tools/ci/lint.sh all` | CI와 같은 린트 전체 (호스트에 린터 설치가 필요 없다) |
-| `tools/ros_ws.sh ci` | `ros_ws/src`의 ROS 2 패키지를 ros-ws 컨테이너에서 빌드하고 테스트(ament_lint 포함)와 clang-tidy를 돌린다. CI의 unit 잡과 같은 명령 |
+| `tools/ros_ws.sh ci` | `ros_ws/src`의 ROS 2 패키지를 ros-ws 컨테이너에서 빌드하고 테스트(ament_lint 포함)와 clang-tidy를 돌린다. CI의 unit job과 같은 명령 |
 | `tools/stack.sh up` | `config/fleet.yaml`로 스택(에이전트, Gazebo, 기체, `/clock` 브리지)을 생성하고 올린다. 실행 디렉터리 `artifacts/runs/<실행 id>/`를 출력한다. 내리기는 `tools/stack.sh down` |
 
 ## 화면으로 보기
