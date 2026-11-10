@@ -185,11 +185,13 @@ pending() {
 
 # 원점 판정 인자 --expect-origin LAT LON ALT. 원점이 없으면(embedded이거나 fleet.yaml에 origin이 없음) 넘기지 않는다.
 origin_args() {
-  local lat lon alt
-  lat="$(sj world.origin.lat 2>/dev/null || true)"
-  [ -n "$lat" ] || return 0
-  lon="$(sj world.origin.lon)"
-  alt="$(sj world.origin.alt)"
+  # world.origin 키 자체가 없으면 sj가 실패하므로 실패로 끝낸다. null만 빈 값(sj가 빈 문자열로 출력)으로 받는다.
+  local o lat lon alt
+  o="$(sj world.origin)" || return 1
+  [ -n "$o" ] || return 0
+  lat="$(sj world.origin.lat)" || return 1
+  lon="$(sj world.origin.lon)" || return 1
+  alt="$(sj world.origin.alt)" || return 1
   echo "--expect-origin ${lat} ${lon} ${alt}"
 }
 
@@ -202,14 +204,16 @@ topic_info() {
 check_pxh() {
   # 기대 파라미터는 stack.json의 vehicles[0].expected_params(공통 파일 + 기체별 값을 생성기가 합친 것)와
   # derived_params(MAV_SYS_ID, UXRCE_DDS_KEY, UXRCE_DDS_DOM_ID, SYS_AUTOSTART. 1대에서는 간접 판정이 없다)
-  local expect=() kv
-  for kv in $(sj vehicles.0.expected_params) $(sj vehicles.0.derived_params); do
-    expect+=(--expect-param "$kv")
-  done
-  if [ "${#expect[@]}" -eq 0 ]; then
-    echo "stack.json에 expected_params가 없다" >&2
+  local expect=() kv exp_p der_p
+  exp_p="$(sj vehicles.0.expected_params)" || return 1  # fleet에 따라 비어 있을 수 있다
+  der_p="$(sj vehicles.0.derived_params)" || return 1
+  if [ -z "$der_p" ]; then
+    echo "stack.json에 derived_params가 없다(항상 4개여야 한다)" >&2
     return 1
   fi
+  for kv in $exp_p $der_p; do
+    expect+=(--expect-param "$kv")
+  done
   compose exec -T "$px4_svc" python3 - --instance "$instance" "${expect[@]}" <tests/smoke/check_px4_pxh.py \
     >"${out_dir}/pxh_${instance}.json"
 }
