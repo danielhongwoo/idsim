@@ -137,7 +137,8 @@ gz_unique_check() { # stack.json
     "$(sj "$sf" images.sim_base)" gz topic -i -t /clock 2>&1)" || true
   printf '%s\n---\n%s\n' "$svc_out" "$clk_out" > "$(dirname "$sf")/model_precheck_gz.txt"
   n_prov="$(printf '%s\n' "$svc_out" | grep -c 'tcp://' || true)"
-  n_pub="$(printf '%s\n' "$clk_out" | grep -c 'tcp://' || true)"
+  # Publishers 절 아래 tcp:// 줄만 센다(Subscribers 절은 제외)
+  n_pub="$(printf '%s\n' "$clk_out" | awk '/Publishers/{p=1;next} /Subscribers/{p=0} p&&/tcp:\/\//{n++} END{print n+0}')"
   if [ "$n_prov" -ne 1 ] || [ "$n_pub" -ne 1 ]; then
     say "gz 서버 검사 실패: scene/info provider ${n_prov}개, /clock 발행자 ${n_pub}개(각각 정확히 1이어야 한다)"
     say "같은 파티션 idsim-${k}에 다른 gz 서버가 있다. idsim-smoke 프로젝트나 수동 docker run을 내려라(응답: $(dirname "$sf")/model_precheck_gz.txt)"

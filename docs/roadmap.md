@@ -88,7 +88,7 @@ PC 한 대에서 Gazebo + PX4 3대 + 노드들을 돌리면 CPU가 부족할 수
 | Jazzy + 24.04 + PX4 조합의 문서 부족 | 공식 예제가 Humble 기준이라 초기 시행착오 증가 | Phase 1a 첫머리에 스모크 테스트를 두고, 막히면 `ros-ws`만 Humble 컨테이너로 내려 비교(DDS 도메인은 배포판 간에도 통함) |
 | 컨테이너 간 DDS 데이터 미수신 | 토픽은 보이나 데이터가 안 오거나 간헐적으로 끊김 | rmw를 CycloneDDS로 고정해 공유 메모리 전송 경로를 없애고, `network_mode: host`, `config/cyclonedds.xml`에 유니캐스트 피어 명시(인터페이스는 고정하지 않음. 에이전트가 호스트 인터페이스 주소만 광고한다) |
 | 같은 호스트의 스택 충돌 | 개발자 둘 또는 병렬 CI 잡이 서로의 토픽과 포트를 봄 | 생성 인자 k로 `ROS_DOMAIN_ID`, 에이전트 포트, MAVLink 포트 분리 |
-| 스택 둘의 MAVLink 포트 충돌 | 스택 k가 달라도 같은 N의 PX4가 같은 로컬 포트(18570+N, 14580+N)에 bind해 두 번째 스택이 `bind failed` 경고를 낸다(실측). GCS 14550도 공유되고 `MAV_SYS_ID`도 같다 | 3단계에서 해결: PATH 앞의 idsim용 `px4-rc.mavlink`로 스택 오프셋 1000k를 적용(충돌 실측, PATH 대체는 px4-engineer의 1회 실험, 오프셋 적용 효과는 3단계 A에서 확인). `MAV_SYS_ID`가 같아 QGC 하나는 한 번에 한 스택만 본다는 제약만 `docs/interface.md`에 적는다 |
+| 스택 둘의 MAVLink 포트 충돌 | 스택 k가 달라도 같은 N의 PX4가 같은 로컬 포트(18570+N, 14580+N)에 bind해 두 번째 스택이 `bind failed` 경고를 낸다(실측). GCS 14550도 공유되고 `MAV_SYS_ID`도 같다 | 3단계에서 해결: PATH 앞의 idsim용 `px4-rc.mavlink`로 스택 오프셋 1000k를 적용(충돌 실측, PATH 대체는 1회 실험으로 확인, 오프셋 적용 효과는 3단계 A에서 확인). `MAV_SYS_ID`가 같아 QGC 하나는 한 번에 한 스택만 본다는 제약만 `docs/interface.md`에 적는다 |
 | 시작 순서 | gazebo 전에 px4가 스폰을 시도해 실패, 테스트 플래키 | healthcheck + `depends_on` 조건 + `compose up --wait` |
 | 시간 기준 불일치 | 라이브와 리플레이의 판정이 다름 | 정식 기준은 `/clock`, 기록은 `--use-sim-time`, `/clock` 미기록 |
 | PC 성능 | 3대 시나리오에서 Gazebo 물리 스텝 드롭, PX4 타이밍 경고 | headless 기본, `PX4_SIM_SPEED_FACTOR` 조절, 카메라와 라이다 없는 기본 x500 모델 사용, 표적은 Actor |

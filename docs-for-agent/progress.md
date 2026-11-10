@@ -18,7 +18,7 @@
 - 2026-11-09: Phase 1a 2b단계 시각 도구 준비 구현(브랜치 `feat/phase1a-viz-tools`). `tools/qgc.sh`(QGC v5.1.5 AppImage, `versions.env`의 `QGC_VERSION`과 `QGC_APPIMAGE_SHA256`으로 내려받아 `${XDG_CACHE_HOME:-$HOME/.cache}/idsim/qgc/<버전>/`에 캐시, INT/TERM에 TERM 후 5초 유예, 그다음 SIGKILL), sim-base에 `libqt5svg5`, `ros_ws/src/idsim_sim/config/gui.config`(gz-sim8 기본에서 WorldControl만 제외, 플러그인 17개), `docker/README.md` 시각 도구 절. 로컬 검증: QGC 다운로드, 캐시 재사용, 손상 재다운로드, INT와 TERM 종료 통과. Gazebo GUI는 standalone 스택 위에서 50초 생존, SVG 경고 29건에서 0건, 창 `Gazebo Sim` 존재, `Loaded plugin` 17개에 WorldControl 없음, GUI를 붙여도 서버 RTF 1.0. lint 11종 통과.
 - 2026-11-09: 이 호스트에서 archive.ubuntu.com이 IPv4, IPv6 모두 타임아웃(security.ubuntu.com, kr.archive.ubuntu.com, mirror.kakao.com은 정상). 로컬 sim-base와 px4 이미지는 저장소 Dockerfile을 바꾸지 않고 scratch 복사본에 kr 미러 sed 한 줄을 넣어 빌드했다. 따라서 이 호스트의 `idsim/sim-base:local`, `idsim/px4:local`의 apt sources는 kr 미러다. 정식 이미지는 CI가 원본 Dockerfile로 빌드한다.
 - 2026-11-09: 1a 3단계 설계 토론 완료. architect 주재, devops/px4/ros2/sim 의견, reviewer가 가정 10건을 실측 검증, 사용자 결정 4건. 결정은 아래 결정 기록, 설계 문서 반영은 브랜치 `docs/phase1a-step3-design`. 구현(A, B, C)은 시작 전.
-- 2026-11-10: Phase 1a 3단계 C 완료(브랜치 `feat/step3-compose`, HEAD 1347e6d, origin/main 병합 e0ab940 이후 커밋 15개. devops-engineer 구현, test-engineer와 px4-engineer 참여). PR 생성 전.
+- 2026-11-10: Phase 1a 3단계 C 완료(`feat/step3-compose` 브랜치. devops-engineer 구현, test-engineer와 px4-engineer 참여). PR 생성 전.
   - 산출물 구조: `artifacts/runs/<run_id>/{compose.yaml, stack.json, px4-N/, ros_log/, smoke/}`. 기본 run_id는 `<UTC>-k<k>`, 스모크는 `<UTC>-k<k>-<단계>`.
   - 진입점: `tools/stack.sh`(`up`, `down`, `ps`, 옵션 `--stack`, `--fleet`, `--variant`, `--viz`)와 `tools/gen_compose.sh`(ros-ws 컨테이너에서 생성기 실행). `runner` 서비스(프로필 `tools`)가 판정 명령을 돌린다. `config/fleet.yaml`(1대, 서울시청 원점), `tools/gen_compose.py`, `tests/tools/test_gen_compose.py`와 골든 4종(`tests/fixtures/gen_compose/{1대-k0, 1대-k3, 3대-k0, embedded}`), lint 잡의 pytest와 `compose config -q`, `LINT_PYYAML_VERSION=6.0.1`.
   - `tools/qgc.sh --stack k`: QGC 설정 `~/.config/QGroundControl/QGroundControl.ini`의 `[AutoConnect] udpListenPort`를 14550 + 1000k로 바꾼다. 실행이 끝나도 되돌리지 않는다(되돌림 옵션은 미해결 사항).
@@ -158,7 +158,7 @@
 
 사용자 결정이 필요한 항목.
 
-- `tools/qgc.sh`가 바꾼 `udpListenPort`를 되돌리는 옵션(`--restore`)을 둘지. 지금은 `--stack k`가 설정을 바꾸고 되돌리지 않으며, `--stack`을 생략하면 14550으로 돌아가지 않는다는 점을 안내로만 둔다(2026-11-10).
+- `tools/qgc.sh`가 바꾼 `udpListenPort`를 되돌리는 옵션(`--restore`)을 둘지. 지금은 `--stack k`가 설정을 바꾸고 되돌리지 않으며, `--stack`을 생략하면 `IDSIM_STACK_INDEX`(기본 0)의 포트를 쓰므로, 그 변수가 없으면 14550으로 돌아가고 설정된 셸에서는 그 스택 포트가 된다는 점과 기본으로 돌리려면 `--stack 0`을 쓴다는 점을 안내로만 둔다(2026-11-10).
 
 아직 열린 항목.
 

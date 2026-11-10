@@ -134,7 +134,7 @@ with open(tmp, "w", encoding="utf-8") as f:
 os.replace(tmp, path)
 PY
 echo "qgc.sh: 스택 ${stack}, GCS UDP ${gcs_port}를 듣는다 (${ini} [AutoConnect] udpListenPort)" >&2
-echo "qgc.sh: QGC 설정의 udpListenPort를 ${gcs_port}로 바꿨다. 스크립트가 끝나도 되돌리지 않는다. 기본으로 돌리려면 --stack 없이 다시 실행" >&2
+echo "qgc.sh: QGC 설정의 udpListenPort를 ${gcs_port}로 바꿨다. 스크립트가 끝나도 되돌리지 않는다. 기본(14550)으로 돌리려면 --stack 0으로 다시 실행" >&2
 
 # exec 대신 자식으로 띄운다. 신호 처리기에서 QGC에 TERM을 보내고 유예 뒤 KILL로 끝내기 위해서다.
 # AppRun이 QGC 바이너리를 exec하므로 $child가 QGC 본체 PID다.
