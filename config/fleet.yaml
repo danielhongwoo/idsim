@@ -1,0 +1,51 @@
+# idsim 기체 레지스트리(단일 출처). 담당: devops-engineer, 접점 검토 px4-engineer, sim-engineer, ros2-engineer.
+#
+# 사람이 고르는 값만 적는다. tools/gen_compose.py(호스트에서는 tools/gen_compose.sh)가 이 파일에서
+# artifacts/runs/<실행 id>/{compose.yaml, stack.json}을 만든다. 실행 시점의 식별자와 포트는 stack.json을 본다.
+#
+# 적을 수 없는 것(생성기가 거부한다)
+#   - 파생값: 포트, 네임스페이스, MAV_SYS_ID, UXRCE_DDS_KEY, 모델 이름, 서비스 이름. 모르는 키는 모두 실패다.
+#   - 스택 번호 k(0-9): 생성 인자 --stack, 없으면 IDSIM_STACK_INDEX, 없으면 0.
+#   - px4_params의 식별 파라미터: MAV_SYS_ID, UXRCE_DDS_KEY, UXRCE_DDS_DOM_ID, UXRCE_DDS_AG_IP, SYS_AUTOSTART.
+
+# 파일 형식 번호. 1만 받는다.
+schema: 1
+
+world:
+  # 월드 이름. SDF의 <world name>과 같아야 한다(gazebo wrapper가 검사). PX4_GZ_WORLD와 healthcheck 경로가 된다.
+  name: default
+  # 월드 SDF의 컨테이너 안 절대 경로(sim-base 이미지의 /opt/px4-gz/worlds).
+  file: /opt/px4-gz/worlds/default.sdf
+  # 월드 원점(WGS84 위도와 경도는 도, 고도는 m). 셋을 모두 적거나 origin을 통째로 뺀다.
+  # gazebo wrapper가 월드 로드 직후 한 번 set_spherical_coordinates로 적용한다. 기본값은 서울시청.
+  # 빼면 월드 SDF의 <spherical_coordinates>가 그대로 쓰인다(PX4 기본 월드는 취리히).
+  origin:
+    lat: 37.5665
+    lon: 126.9780
+    alt: 38
+  # 시뮬레이션 배속. 1a, 1b에서는 null만 허용한다(Phase 3에서 정한다).
+  speed_factor: null
+
+# 기체 목록. 기체 한 대가 px4 컨테이너 하나(compose 서비스 px4-<id>)다.
+vehicles:
+  # id: 기체 번호 N(1-9, 중복 금지). 인스턴스 -i N, 네임스페이스 /px4_N, MAV_SYS_ID N+1이 여기서 나온다.
+  # airframe: PX4 airframe 이름. 1a 허용 목록은 4001_gz_x500 하나. SYS_AUTOSTART(4001), PX4_SIM_MODEL(gz_x500),
+  #   Gazebo 모델 이름(x500_N)이 여기서 나온다.
+  # pose: 초기 위치. Gazebo 월드 좌표 ENU, x, y, z는 m, yaw는 rad(x축에서 반시계).
+  #   기체 간 수평 간격 2 m 미만은 거부, 4 m 미만은 경고. 여러 대면 예: y 0, 4, 8.
+  # px4_params: 이 기체에만 주는 SITL 파라미터 {이름: 값}. 공통 파일 값을 덮는다(경고).
+  #   이름은 ^[A-Z0-9_]{1,16}$, 값은 숫자 또는 공백 없는 문자열(bool 불가).
+  - id: 1
+    airframe: 4001_gz_x500
+    pose: {x: 0.0, y: 0.0, z: 0.0, yaw: 0.0}
+    px4_params: {}
+
+# 이동 표적 목록. 1a에서는 비어 있어야 한다(1b에서 정의한다).
+targets: []
+
+px4:
+  # 모든 기체에 공통인 SITL 파라미터 파일(저장소 기준, PX4_PARAM_<이름>=<값>). 담당 px4-engineer.
+  params_file: config/px4/sitl_params.env
+  # 기체 기동 방식. parallel: 모든 px4가 gazebo healthy 뒤 함께 뜬다.
+  # sequential: px4-(N+1)이 px4-N healthy를 기다린다.
+  start: parallel
