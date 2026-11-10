@@ -7,6 +7,7 @@
 ## 원칙
 
 - 한 단계에서 한 변수만 바꾼다. 앞 단계가 실패하면 뒤 단계는 보지 않는다.
+- 3단계부터 S2-S5는 운영 스택과 같은 구성으로 올린다(standalone은 bridge 포함). 변수 분리는 스모크 단계가 아니라 기동 단계가 맡는다: `startup.stages`는 에이전트와 gazebo, px4-N, bridge의 세 단계이고 `up --wait`가 어느 단계에서 실패했는지로 원인을 가른다. bridge는 px4-N이 healthy가 된 뒤에만 시작되므로 px4 실패와 bridge 실패는 섞이지 않는다.
 - ROS 2 CLI는 항상 `--no-daemon`으로 실행한다. 데몬 캐시로 오판하지 않기 위함이다.
 - 토픽 수신 판정은 "벽시계 T초 안에 1회 이상 수신, timestamp 필드가 0이 아님"으로 정의하고 주기에 묶지 않는다. 상태 전이는 에지가 아니라 "최신 상태가 N회 연속 유지"로 판정한다.
 - echo와 판정 노드의 QoS는 `sensor_data` 프로필 하나로 통일한다. `reliable`로 echo해 수신 0을 확인하는 반증 실험은 진단 절차로만 쓴다.
@@ -26,7 +27,7 @@ S3 in 방향 왕복. `/px4_1/fmu/in/vehicle_command`로 arm(`target_system` 2) �
 
 S4 기록. `tests/smoke/capture.sh`가 골든 파일과 원시 산출물을 만든다. 원시 산출물은 `ros2 topic list -t`, 토픽별 `info -v` 원문, 30초 `hz`, `pxh param show`, `pxh ver all`, compose logs, ULog.
 
-S5 와이어 호환 실측. `bridge` 서비스는 여기서 처음 올라오고 6단계부터 노드들의 `/clock` 공급원이 된다. `ros-ws` 이미지에 `ros-jazzy-ros-gz-bridge`(vendor gz-transport)를 넣은 `bridge` 서비스가 `gazebo` 서비스(OSRF gz-transport13)의 `/clock`을 ROS 2로 브리지한다. 같은 `GZ_PARTITION`과 `GZ_IP`. 통과: `ros2 topic echo /clock`의 sim 시각이 증가. 양쪽 gz-transport 버전을 artifacts에 기록. 실패하면 `bridge`를 sim-base 계열 이미지(ros_gz 소스 빌드)로 바꾸는 대안으로 간다.
+S5 /clock 판정. `bridge` 서비스(ros-ws의 ros_gz_bridge, vendor gz-transport)가 `gazebo` 서비스(OSRF gz-transport13)의 `/clock`을 ROS 2로 브리지하며 6단계부터 노드들의 시간 기준이 된다. 와이어 호환은 1단계에서 양쪽 13.6.0으로 실측 통과했고 이 단계는 이미지 재빌드 때의 회귀를 잡는다. bridge healthcheck는 `/clock` 1회 수신만 보므로 여기서 품질을 본다. 통과: `ros2 topic info -v /clock`의 Publisher count가 정확히 1, `ros2 topic echo /clock`의 sim 시각이 증가. 양쪽 gz-transport 버전을 artifacts에 기록. 실패하면 `bridge`를 sim-base 계열 이미지(ros_gz 소스 빌드)로 바꾸는 대안으로 간다.
 
 ## 서비스별 환경변수
 
@@ -55,7 +56,7 @@ compose 프로젝트 이름. 모든 compose 파일은 `name:`을 명시한다(�
 | px4 | `px4-uxrce_dds_client --instance 1 status \| grep -q 'Running, connected'`. 명령의 종료 코드는 연결 상태를 반영하지 않으므로(v1.17.0 `src/modules/uxrce_dds_client/uxrce_dds_client.cpp`의 `print_status`가 항상 0을 돌려준다) 문자열로 판정. S1b부터 판정에 쓴다. S1에서도 같은 서비스라 healthcheck가 돌지만 `run_smoke.sh`는 그 결과를 기다리지 않고 PX4 로그와 status 출력으로 직접 판정한다. `px4-gz_bridge status`는 연결 상태를 출력하지 않고 Gazebo가 멈춰도 종료 코드 0이라 healthcheck에 쓰지 않는다(2026-11-09 실측). 옛 모델 잔존은 운영 스크립트의 down 뒤 up과 `gz model --list` 사전 검사로 막는다 | 5s / 5s / 6 / 90s(embedded), 45s(standalone) |
 | bridge | `/clock` 1회 수신 | 5s / 5s / 6 / 20s |
 
-`depends_on`은 xrce-agent -> gazebo -> px4 -> bridge 순으로 `service_healthy`이며, 판정 명령은 상주 서비스가 아닌 `runner`(프로필 `tools`)에서 `compose run`으로 실행한다. `docker compose up --wait --wait-timeout 240`. `restart`는 모든 서비스에서 `no`다. px4-rc.gzsim(v1.17.0, standalone 분기)은 `/world/<월드>/scene/info` 서비스를 1초 간격 30회 기다리다 초과하거나 gz_bridge 시작에 실패하면 exit 1로 끝나며, 그러면 `up --wait`가 즉시 실패하고 `run_smoke.sh`가 compose logs와 ULog를 artifacts에 모은 뒤 실패한다. 자동 재시작은 플래키를 가리고 standalone에서 `x500_1`이 남아 재스폰이 반복 실패할 수 있어 쓰지 않는다.
+`depends_on`은 xrce-agent -> gazebo -> px4 -> bridge 순으로 `service_healthy`이며, 판정 명령은 상주 서비스가 아닌 `runner`(프로필 `tools`)에서 `compose run`으로 실행한다. `up --wait`는 `startup.stages`의 세 단계로 나눠 부른다. `docker compose up --wait --wait-timeout 240`. `restart`는 모든 서비스에서 `no`다. px4-rc.gzsim(v1.17.0, standalone 분기)은 `/world/<월드>/scene/info` 서비스를 1초 간격 30회 기다리다 초과하거나 gz_bridge 시작에 실패하면 exit 1로 끝나며, 그러면 `up --wait`가 즉시 실패하고 `run_smoke.sh`가 compose logs와 ULog를 artifacts에 모은 뒤 실패한다. 자동 재시작은 플래키를 가리고 standalone에서 `x500_1`이 남아 재스폰이 반복 실패할 수 있어 쓰지 않는다.
 
 ## 산출물 위치와 골든 파일 형식
 
@@ -67,7 +68,7 @@ compose 프로젝트 이름. 모든 compose 파일은 `name:`을 명시한다(�
 
 이미지의 빌드 버전 ENV. 각 Dockerfile은 자기가 받은 버전 ARG를 `IDSIM_BUILD_<키>` ENV로 남긴다. px4는 `IDSIM_BUILD_PX4_TAG`, ros-ws는 `IDSIM_BUILD_PX4_MSGS_REF`와 `IDSIM_BUILD_PX4_ROS_COM_REF`, xrce-agent는 `IDSIM_BUILD_XRCE_AGENT_TAG`, sim-base는 `IDSIM_BUILD_GZ_RELEASE`와 `IDSIM_BUILD_PX4_GZ_MODELS_REF`. `run_smoke.sh`는 S0 전에 각 컨테이너의 이 값을 `versions.env`와 대조해 하나라도 다르면 실패한다. `versions.env`만 올리고 이미지를 다시 빌드하지 않은 채 옛 이미지의 측정값이 새 태그의 골든으로 저장되는 것을 막기 위해서다.
 
-원시(비추적): `artifacts/runs/<실행 id>/smoke/`(같은 디렉터리에 생성된 `compose.yaml`, `stack.json`, `px4-N/log/`의 ULog가 있다. 스모크의 실행 id는 `<UTC 시각>-k<k>-<단계>`). `hz` 측정값은 골든이 아니라 여기와 `docs/interface.md`의 참고 범위값에만 적고, 측정 조건(태그, 속도 배수, 벽시계 여부)을 병기한다. CI에서는 이 디렉터리를 잡 아티팩트로 올린다.
+원시(비추적): `artifacts/runs/<실행 id>/smoke/`(같은 디렉터리에 생성된 `compose.yaml`, `stack.json`, `px4-N/log/`의 ULog가 있다. 실행 id는 `--run-id`, 없으면 `--run-dir`의 basename, 둘 다 없으면 `<UTC YYYYmmdd-HHMMSS>-k<k>`이고 스모크는 `<UTC>-k<k>-<단계>`). `hz` 측정값은 골든이 아니라 여기와 `docs/interface.md`의 참고 범위값에만 적고, 측정 조건(태그, 속도 배수, 벽시계 여부)을 병기한다. CI에서는 이 디렉터리를 잡 아티팩트로 올린다.
 
 사람이 읽는 요약(토픽 표, QoS, 파라미터, 주기 참고값)은 `tools/to_interface.py`가 골든과 원시 산출물에서 만들어 `docs/interface.md` 초안으로 넘긴다.
 
