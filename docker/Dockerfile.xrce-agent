@@ -13,7 +13,7 @@ ARG UBUNTU_APT_MIRROR
 RUN test -n "${UBUNTU_APT_MIRROR}" || { echo "UBUNTU_APT_MIRROR 빌드 인자가 비어 있다 (versions.env 확인)" >&2; exit 1; } \
  && sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#${UBUNTU_APT_MIRROR%/}/#" /etc/apt/sources.list.d/ubuntu.sources \
  && test "$(grep -c "^URIs: ${UBUNTU_APT_MIRROR%/}/\$" /etc/apt/sources.list.d/ubuntu.sources)" = 2 \
- && ! grep -Eq '://(archive|security)\.ubuntu\.com' /etc/apt/sources.list.d/ubuntu.sources
+ && test "$(grep -c '^URIs:' /etc/apt/sources.list.d/ubuntu.sources)" = 2
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates git cmake build-essential \
