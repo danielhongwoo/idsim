@@ -30,6 +30,12 @@ golden 갱신(자동으로 하지 않는다. 계약 변경 절차를 거친 뒤�
     tools/ros_ws.sh shell
     colcon build --packages-select idsim_interfaces
     IDSIM_UPDATE_GOLDEN=1 colcon test --packages-select idsim_interfaces
+갱신 모드는 내용이 달라진 golden만 다시 쓰고, 쓴 파일마다 pytest 경고("golden 갱신됨: <경로>")를 남긴다.
+`tools/ros_ws.sh test`는 이 변수를 컨테이너에 넘기지 않으므로 갱신은 shell 안에서만 된다.
+
+펼친 정의의 가드: `ros2 interface show`는 줄 끝 주석과 같은 문자열이 그 줄 앞부분에 다시 나오면 그 자리에서
+줄을 자른다(예: "uint8 status  # status"가 "uint8"이 된다). 잘린 출력이 golden에 굳지 않도록, 출력의 최상위
+줄이 직접 정의와 같다는 것을 golden 비교 전에 단정한다(갱신 모드에서도 한다).
 """
 import difflib
 import importlib
@@ -38,6 +44,7 @@ import os
 import pathlib
 import re
 import subprocess
+import warnings
 
 import pytest
 from ament_index_python.packages import get_package_share_directory
@@ -85,8 +92,11 @@ def check_golden(kind, relpath, actual):
     """golden과 비교한다. 다르면 종류, diff, 갱신 방법을 적어 실패한다."""
     path = GOLDEN_DIR / relpath
     if UPDATE:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual, encoding="utf-8")
+        # 조용히 통과하지 않는다. 달라진 파일만 쓰고 무엇을 썼는지 경고로 남긴다.
+        if not path.exists() or path.read_text(encoding="utf-8") != actual:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(actual, encoding="utf-8")
+            warnings.warn(f"golden 갱신됨: test/golden/{relpath} ({kind})", stacklevel=2)
         return
     if not path.exists():
         pytest.fail(f"{kind} golden이 없다: test/golden/{relpath}\n{UPDATE_HINT}", pytrace=False)
@@ -118,20 +128,19 @@ def _strip_comment(line):
     return line
 
 
+def _normalize(line):
+    """주석을 지우고 공백을 정규화한 한 줄. 내용이 없으면 빈 문자열이다."""
+    line = _strip_comment(line).strip()
+    if "=" in line:
+        left, right = line.split("=", 1)
+        return " ".join(left.split()) + " = " + right.strip()
+    return " ".join(line.split())
+
+
 def direct_definition(kind, name):
     """설치된 원문에서 주석과 빈 줄을 빼고 공백을 정규화한 직접 정의."""
     source = (share_dir() / kind / f"{name}.{kind}").read_text(encoding="utf-8")
-    lines = []
-    for raw in source.splitlines():
-        line = _strip_comment(raw).strip()
-        if not line:
-            continue
-        if "=" in line:
-            left, right = line.split("=", 1)
-            line = " ".join(left.split()) + " = " + right.strip()
-        else:
-            line = " ".join(line.split())
-        lines.append(line)
+    lines = [line for line in map(_normalize, source.splitlines()) if line]
     return "\n".join(lines) + "\n"
 
 
@@ -205,6 +214,12 @@ def test_expanded_definition_golden(kind, name):
         timeout=60,
     ).stdout
     assert out.strip(), "ros2 interface show 출력이 비었다"
+    # 가드: 들여쓰기 없는 줄(최상위 줄)은 이 파일의 직접 필드와 상수다. 직접 정의와 다르면 show가 줄을 자른 것이다.
+    top_level = [n for n in (_normalize(line) for line in out.splitlines() if not line[:1].isspace()) if n]
+    assert top_level == direct_definition(kind, name).splitlines(), (
+        "ros2 interface show 출력의 최상위 줄이 직접 정의와 다르다. "
+        "줄 끝 주석과 같은 문자열이 그 줄 앞부분에 나오면 show가 줄을 자른다. 주석의 표현을 바꾼다"
+    )
     # --no-comments는 줄 끝 주석의 '#'과 그 앞의 정렬 공백을 남긴다. 주석의 정렬이 golden을 바꾸지 않게 지운다.
     # 들여쓰기(중첩 깊이)는 그대로 둔다.
     lines = [_strip_comment(line).rstrip() for line in out.splitlines()]

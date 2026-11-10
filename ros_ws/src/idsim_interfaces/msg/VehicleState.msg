@@ -1,6 +1,8 @@
 # 기체 요약 상태. Telemetry Collector가 기체마다 발행한다. 토픽 /<vehicle_id>/vehicle_state
 # 발행자는 vehicle_status와의 식별 대조가 맞고 vehicle_status가 신선한 동안에만 발행한다.
 # NaN과 무한대는 어떤 필드에도 넣지 않는다. 값이 없으면 *_valid가 false이고 값은 0이다.
+# 위치, 자세, 측지 좌표, 배터리, 지상 판정의 원천이 신선도 임계보다 묵어도 해당 *_valid는 false이고 값은 0이다.
+# 발행 중단은 vehicle_status만 본다.
 string TOPIC_NAME = "vehicle_state"
 string FRAME_ID = "world"
 

@@ -9,7 +9,7 @@ uint8 STATUS_SUCCEEDED = 4
 uint8 STATUS_CANCELED = 5
 uint8 STATUS_ABORTED = 6
 
-builtin_interfaces/Time stamp   # 이 사건이 일어난 시각
+builtin_interfaces/Time stamp   # 이 사건이 일어난 시각. Executor 노드 clock의 ROS 시각(use_sim_time이면 /clock)이고 벽시계가 아니다
 string vehicle_id               # 발행한 Executor의 vehicle_id. 토픽 네임스페이스와 같다
 string mission_id               # goal에 적힌 값 그대로. 검증에 실패한 값일 수 있다
 uint8[16] goal_id               # action goal의 UUID. _action/status, _action/feedback의 goal_id와 같다

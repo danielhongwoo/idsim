@@ -20,6 +20,7 @@
   <test_depend>ament_cmake_lint_cmake</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>ament_cmake_xmllint</test_depend>
+  <test_depend>ament_index_python</test_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ros2cli</test_depend>
   <test_depend>ros2interface</test_depend>
