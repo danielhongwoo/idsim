@@ -13,6 +13,8 @@
 
 골든 파일(`tests/fixtures/px4/<태그>/`)의 내용 변경은 px4-engineer와 ros2-engineer가 diff를 승인한다.
 
+계약 golden(`ros_ws/src/idsim_interfaces/test/golden/`)의 내용 변경은 계약 변경이므로 architect가 diff를 승인한다. 고정된 파일의 직접 정의 golden(`golden/direct/`)이 바뀌는 PR에는 `docs/interface.md`와 `docs-for-agent/progress.md` 결정 기록이 함께 들어가야 한다. 갱신 절차(`IDSIM_UPDATE_GOLDEN=1`은 `tools/ros_ws.sh shell` 안에서만, 자동 갱신 없음)와 `test/test_contract.py`의 구조는 test-engineer가 승인한다.
+
 ## 인터페이스: 골든 경로 규칙
 
 골든 디렉터리 경로 규칙(`docker/versions.env`의 `PX4_TAG` -> `tests/fixtures/px4/<PX4_TAG>/`)이 두 곳에 구현되어 있다. 규칙을 바꾸면 둘 다 고친다.
