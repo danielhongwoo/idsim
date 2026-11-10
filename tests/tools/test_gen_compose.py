@@ -139,14 +139,20 @@ def test_golden(case, request):
     assert os.path.isfile(os.path.join(case_dir, "fleet.yaml")), f"골든 입력 없음: {case_dir}/fleet.yaml"
     compose_text, stack_text = _golden_outputs(case)
     update = request.config.getoption("--update-golden", default=False)
+    changed = []
     for name, text in (("compose.yaml", compose_text), ("stack.json", stack_text)):
         path = os.path.join(case_dir, name)
         if update:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(text)
+            # 내용이 바뀐 파일만 쓴다(git diff가 실제 변경만 보이게). 쓴 사례는 통과가 아니라 skip으로 표시한다
+            if not os.path.isfile(path) or _read(path) != text:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text)
+                changed.append(name)
             continue
         assert os.path.isfile(path), f"골든 없음: {path} (--update-golden으로 만든다)"
         assert _read(path) == text, f"골든 불일치: {path} (의도한 변경이면 --update-golden)"
+    if changed:
+        pytest.skip(f"골든 갱신: {case}/{', '.join(changed)} (git diff로 검토한다)")
 
 
 @pytest.mark.parametrize("case", sorted(GOLDEN_CASES))
@@ -158,6 +164,18 @@ def test_golden_stack_loads_with_support_loader(case):
     assert s.stack_index == k and s.variant == variant
     assert s.compose_project == f"idsim-{k}"
     assert [v.service for v in s.vehicles] == s.services["px4"]
+    assert s.run_id == s.raw["run"]["id"] and s.compose_file.name == "compose.yaml"
+    assert s.startup_stages == s.raw["startup"]["stages"]
+    assert s.vehicle_by_ns(s.vehicles[0].ns) is s.vehicles[0]
+    assert s.vehicles[0].ns == "/" + s.vehicles[0].px4_ns
+    assert s.service("agent") == "xrce-agent" and s.service("runner") == "runner"
+    for role in ("gazebo", "bridge", "gz_gui"):
+        if variant == "embedded":
+            with pytest.raises(stk.StackError):
+                s.service(role)
+        else:
+            assert s.service(role)
+    assert s.world_origin is None if variant == "embedded" else s.world_origin is not None
     for v in s.vehicles:
         assert all(isinstance(x, float) for x in v.pose.values())
     if s.world_origin is not None:

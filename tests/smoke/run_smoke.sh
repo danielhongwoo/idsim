@@ -16,6 +16,8 @@
 #   3. 단계별 판정. S1b, S2, S3은 ros-ws 안의 check_px4.py(S3만 --arm), S2는 모델 유일성, pxh 판정,
 #      PX4 로그(gz_bridge 오류, MAVLink bind failed), S4는 capture.sh와 tests.support.normalize
 #      (--update-golden이면 --update, 아니면 --check), S5는 /clock 증가. 모든 타임아웃은 벽시계다.
+#      run_checks는 || 문맥에서 불리므로 set -e가 꺼져 있다. 판정 명령은 반드시 &&로 잇는다(빠뜨리면 실패가 삼켜진다).
+#      아직 판정할 수 없는 항목은 pending()으로 남기고, 마지막 줄에 "통과 (미판정 N건 PENDING)"으로 나타난다.
 #   4. 산출물(판정 JSON, compose 로그, ULog)은 실행 디렉터리 artifacts/runs/<실행 id>/ 아래에 남는다.
 #      판정 결과와 로그는 그 안의 smoke/, ULog는 px4-N/log/다. 모든 파일은 호스트 사용자 소유다.
 #   5. 성공과 실패 모두 마지막에 스택을 내린다.
@@ -174,6 +176,13 @@ check_px4() {
   in_ros "cd /opt/idsim && python3 tests/smoke/check_px4.py ${args}" | tee "${out_dir}/check_px4.json"
 }
 
+# 아직 판정하지 못한 항목을 남긴다. stderr, 산출물(pending.txt), 마지막 줄 세 곳에 나타나므로 조용히 지나가지 않는다.
+# origin_args가 $(...) 안에서 불리므로 변수 대신 파일에 쌓는다.
+pending() {
+  echo "PENDING $*" >&2
+  echo "$*" >>"${out_dir}/pending.txt"
+}
+
 # 원점 판정 인자. px4-engineer의 check_px4.py가 --expect-origin LAT LON ALT를 받으면 넘긴다.
 # 원점이 없으면(embedded이거나 fleet.yaml에 origin이 없음) 넘기지 않는다.
 origin_args() {
@@ -185,7 +194,7 @@ origin_args() {
   if grep -q -- '--expect-origin' tests/smoke/check_px4.py; then
     echo "--expect-origin ${lat} ${lon} ${alt}"
   else
-    echo "PENDING sensor_gps 원점 판정: check_px4.py에 --expect-origin이 아직 없다(px4-engineer). 원점 ${lat} ${lon} ${alt}" >&2
+    pending "sensor_gps 원점 판정: check_px4.py에 --expect-origin이 아직 없다(px4-engineer). 원점 ${lat} ${lon} ${alt}"
   fi
 }
 
@@ -236,8 +245,8 @@ check_clock() {
 run_checks() {
   case "$stage" in
     S1b)
-      check_px4
-      topic_info "--regex '^/${px4_ns}/fmu/out/vehicle_status(_v[0-9]+)?\$' --expect-publishers 1 --expect-type px4_msgs/msg/VehicleStatus --save ${out_rel}/s1b_topic_info" ;;
+      check_px4 \
+        && topic_info "--regex '^/${px4_ns}/fmu/out/vehicle_status(_v[0-9]+)?\$' --expect-publishers 1 --expect-type px4_msgs/msg/VehicleStatus --save ${out_rel}/s1b_topic_info" ;;
     S2)
       local origin
       origin="$(origin_args)"
@@ -245,8 +254,8 @@ run_checks() {
       check_model_unique && check_px4 $origin && check_pxh && check_px4_log ;;
     S3)
       check_timeout=90
-      check_px4 --arm
-      topic_info "--regex '^/${px4_ns}/fmu/in/trajectory_setpoint(_v[0-9]+)?\$' --expect-subscriptions 1 --save ${out_rel}/s3_topic_info" ;;
+      check_px4 --arm \
+        && topic_info "--regex '^/${px4_ns}/fmu/in/trajectory_setpoint(_v[0-9]+)?\$' --expect-subscriptions 1 --save ${out_rel}/s3_topic_info" ;;
     S4)
       local mode="--check"
       [ "$update_golden" -eq 1 ] && mode="--update"
@@ -256,9 +265,10 @@ run_checks() {
         && in_ros "cd /opt/idsim && tests/smoke/capture.sh --ns ${px4_ns} ${out_rel}/ros" \
         && in_ros "cd /opt/idsim && python3 -m tests.support.normalize --raw ${out_rel}/ros --ns ${px4_ns} ${mode}" ;;
     S5)
-      check_clock
+      # 정보 수집(gz-transport 버전)은 실패해도 판정에 넣지 않으므로 먼저 하고, 마지막 명령이 판정이 되게 한다
       in_ros 'dpkg -l | grep gz-transport' >"${out_dir}/gz_transport_ros_ws.txt" || true
-      compose exec -T "$gazebo_svc" bash -c 'dpkg -l | grep gz-transport' >"${out_dir}/gz_transport_gazebo.txt" || true ;;
+      compose exec -T "$gazebo_svc" bash -c 'dpkg -l | grep gz-transport' >"${out_dir}/gz_transport_gazebo.txt" || true
+      check_clock ;;
   esac
 }
 
@@ -307,4 +317,8 @@ if [ "$status" -ne 0 ]; then
   exit 1
 fi
 collect
-echo "${stage}: 통과"
+if [ -s "${out_dir}/pending.txt" ]; then
+  echo "${stage}: 통과 (미판정 $(wc -l <"${out_dir}/pending.txt")건 PENDING, ${out_rel}/pending.txt)"
+else
+  echo "${stage}: 통과"
+fi
