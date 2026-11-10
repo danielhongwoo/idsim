@@ -1,0 +1,3 @@
+float64 height_m
+float64 acceptance_m
+YawSetpoint yaw

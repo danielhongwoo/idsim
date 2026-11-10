@@ -1,0 +1,4 @@
+uint8 MODE_KEEP = 1
+uint8 MODE_FIXED = 2
+uint8 mode
+float64 yaw_rad

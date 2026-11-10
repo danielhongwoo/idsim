@@ -1,0 +1,12 @@
+uint8 TYPE_TAKEOFF = 1
+uint8 TYPE_GOTO = 2
+uint8 TYPE_TRACK_ENTITY = 3
+uint8 TYPE_LOITER = 4
+uint8 TYPE_RTL = 5
+uint8 TYPE_LAND = 6
+uint8 type
+builtin_interfaces/Duration timeout
+TakeoffItem takeoff
+GoToItem go_to
+TrackEntityItem track_entity
+LoiterItem loiter

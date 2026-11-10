@@ -1,0 +1,16 @@
+string TOPIC_NAME = "mission_event"
+uint8 STATUS_UNKNOWN = 0
+uint8 STATUS_ACCEPTED = 1
+uint8 STATUS_SUCCEEDED = 4
+uint8 STATUS_CANCELED = 5
+uint8 STATUS_ABORTED = 6
+builtin_interfaces/Time stamp
+string vehicle_id
+string mission_id
+uint8[16] goal_id
+uint8 status
+uint8 reason
+uint32 item_count
+uint32 items_completed
+uint32 last_item_index
+string detail

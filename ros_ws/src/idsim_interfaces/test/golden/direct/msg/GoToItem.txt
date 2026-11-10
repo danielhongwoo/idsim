@@ -1,0 +1,3 @@
+geometry_msgs/Point position
+float64 acceptance_radius_m
+YawSetpoint yaw

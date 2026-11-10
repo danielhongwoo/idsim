@@ -1,0 +1,52 @@
+string TOPIC_NAME = "vehicle_state"
+string FRAME_ID = "world"
+uint8 ARMING_UNKNOWN = 0
+uint8 ARMING_DISARMED = 1
+uint8 ARMING_ARMED = 2
+uint8 MODE_UNKNOWN = 0
+uint8 MODE_MANUAL = 1
+uint8 MODE_HOLD = 2
+uint8 MODE_OFFBOARD = 3
+uint8 MODE_TAKEOFF = 4
+uint8 MODE_LAND = 5
+uint8 MODE_RTL = 6
+uint8 MODE_AUTO_OTHER = 7
+uint8 MODE_TERMINATION = 8
+uint8 MODE_OTHER = 255
+uint32 WARN_LOCAL_POSITION_INVALID = 1
+uint32 WARN_GLOBAL_POSITION_INVALID = 2
+uint32 WARN_BATTERY_LOW = 4
+uint32 WARN_BATTERY_CRITICAL = 8
+uint32 WARN_OFFBOARD_SIGNAL_LOST = 16
+uint32 WARN_PREFLIGHT_CHECK_FAILED = 32
+std_msgs/Header header
+	builtin_interfaces/Time stamp
+		int32 sec
+		uint32 nanosec
+	string frame_id
+string vehicle_id
+uint8 system_id
+uint8 arming_state
+uint8 flight_mode
+bool failsafe
+uint32 warnings
+bool landed_valid
+bool landed
+bool position_valid
+geometry_msgs/Point position
+	float64 x
+	float64 y
+	float64 z
+bool yaw_valid
+float64 yaw_rad
+bool velocity_valid
+geometry_msgs/Vector3 velocity
+	float64 x
+	float64 y
+	float64 z
+bool geodetic_valid
+float64 latitude_deg
+float64 longitude_deg
+float64 altitude_amsl_m
+bool battery_valid
+float32 battery_remaining

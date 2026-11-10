@@ -1,0 +1,4 @@
+string target_id
+geometry_msgs/Vector3 offset
+float64 acceptance_radius_m
+YawSetpoint yaw

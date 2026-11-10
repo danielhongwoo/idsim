@@ -1,0 +1,11 @@
+string target_id
+geometry_msgs/Vector3 offset
+	float64 x
+	float64 y
+	float64 z
+float64 acceptance_radius_m
+YawSetpoint yaw
+	uint8 MODE_KEEP = 1
+	uint8 MODE_FIXED = 2
+	uint8 mode
+	float64 yaw_rad
