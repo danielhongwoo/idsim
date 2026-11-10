@@ -36,8 +36,8 @@ grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git .
 | 이름 | 역할 | 소유 영역 |
 | --- | --- | --- |
 | architect | 레이어 경계, 인터페이스 계약, 식별 규칙의 최종 결정. 토론 주재와 결정 기록 | `docs/architecture.md`, `docs/interface.md`, `idsim_interfaces`, `proto/` 스키마 |
-| px4-engineer | SITL, Offboard 절차, 파라미터, px4_msgs 버전, ULog | `Dockerfile.px4`, SITL 파라미터, `idsim_mission`의 PX4 인터페이스 |
-| ros2-engineer | CycloneDDS, QoS, 네임스페이스, 좌표 변환, 토픽 매핑, 노드 구조 | `idsim_common`, `config/cyclonedds.xml` |
+| px4-engineer | SITL, Offboard 절차, 파라미터, px4_msgs 버전, ULog | `Dockerfile.px4`, SITL 파라미터, `idsim_mission`의 PX4 절차 상태기 |
+| ros2-engineer | CycloneDDS, QoS, 네임스페이스, 좌표 변환, 토픽 매핑, 노드 구조 | `idsim_common`, `config/cyclonedds.xml`, `idsim_mission`(PX4 절차 상태기 제외) |
 | sim-engineer | Gazebo 월드, 표적 Actor, 브리지, 표적 어댑터, 성능 | `idsim_sim`, `Dockerfile.sim-base` |
 | ops-service-engineer | Fleet Manager, 수집기, gRPC, proto 변환, Rust 게이트웨이 | `idsim_fleet`, `idsim_telemetry`, `proto/` 구현, `gateway/` |
 | logging-engineer | rosbag2 정책, MCAP, ULog 정렬, replay 프로필, 인덱스 CLI | `idsim_logger`, `replay` 프로필 |
