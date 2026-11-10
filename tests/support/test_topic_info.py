@@ -39,3 +39,14 @@ def test_run_codes(tmp_path):
     assert (tmp_path / "fmu/out/vehicle_status_v4.txt").read_text() == INFO_V
     assert topic_info.run(_args(expect_publishers=2), runner=_runner, out=out) == 1
     assert topic_info.run(_args(regex="nomatch"), runner=_runner, out=out) == 2
+
+
+def test_global_topic_without_ns_prefix(tmp_path):
+    """/clock처럼 네임스페이스 밖 토픽도 --ns가 있어도 저장 경로가 이름 그대로가 된다."""
+    clock_list = "/clock [rosgraph_msgs/msg/Clock]\n"
+    clock_info = INFO_V.replace("px4_msgs/msg/VehicleStatus", "rosgraph_msgs/msg/Clock")
+    runner = lambda cmd: clock_list if cmd[2] == "list" else clock_info  # noqa: E731
+    out = io.StringIO()
+    args = _args(regex="^/clock$", expect_type="rosgraph_msgs/msg/Clock", save=str(tmp_path), ns="px4_1")
+    assert topic_info.run(args, runner=runner, out=out) == 0
+    assert (tmp_path / "clock.txt").read_text() == clock_info

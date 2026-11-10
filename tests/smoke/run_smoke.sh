@@ -9,13 +9,13 @@
 # 하는 일
 #   1. 스택 번호 k(--stack, 없으면 IDSIM_STACK_INDEX, 없으면 0)와 변형(S1b는 embedded, 나머지 standalone)으로
 #      tools/stack.sh up을 부른다. stack.sh가 tools/gen_compose.sh로 artifacts/runs/<실행 id>/에 compose.yaml과
-#      stack.json을 만들고, 떠 있는 idsim-<k>를 내린 뒤 두 단계로 up --wait 하며(standalone은 그 사이에 모델
-#      잔존 사전 검사), 실패하면 에이전트 bind error와 px4 bind failed를 보고한다. S0은 스택을 올리지 않는다.
+#      stack.json을 만들고, 떠 있는 idsim-<k>를 내린 뒤 세 단계(에이전트와 gazebo, px4-N, bridge)로 up --wait 하며(standalone은 1단계 뒤에
+#      모델 잔존 사전 검사와 gz 서버 유일성 검사), 실패하면 에이전트 bind error와 px4 bind failed를 보고한다. S0은 스택을 올리지 않는다.
 #   2. 판정에 쓰는 식별자(네임스페이스, system id, 모델 이름, 원점, 기대 파라미터, 서비스 이름)는 모두
 #      stack.json에서 읽는다(python3 표준 라이브러리). 이 스크립트는 식별자를 계산하지 않는다.
 #   3. 단계별 판정. S1b, S2, S3은 ros-ws 안의 check_px4.py(S3만 --arm), S2는 모델 유일성, gz 서버 유일성, pxh 판정,
 #      PX4 로그(gz_bridge 오류, MAVLink bind failed), S4는 capture.sh와 tests.support.normalize
-#      (--update-golden이면 --update, 아니면 --check), S5는 /clock 증가. 모든 타임아웃은 벽시계다.
+#      (--update-golden이면 --update, 아니면 --check), S5는 /clock 발행자 1과 증가. 모든 타임아웃은 벽시계다.
 #      run_checks는 || 문맥에서 불리므로 set -e가 꺼져 있다. 판정 명령은 반드시 &&로 잇는다(빠뜨리면 실패가 삼켜진다).
 #      아직 판정할 수 없는 항목은 pending()으로 남기고, 마지막 줄에 "통과 (미판정 N건 PENDING)"으로 나타난다.
 #   4. 산출물(판정 JSON, compose 로그, ULog)은 실행 디렉터리 artifacts/runs/<실행 id>/ 아래에 남는다.
@@ -246,6 +246,17 @@ check_single_gz_server() {
   fi
 }
 
+# 생성 시점의 cyclonedds.xml 해시(stack.json inputs.cyclonedds_xml.sha256)와 지금 파일을 대조한다.
+# 런타임 컨테이너는 /opt/idsim 마운트의 현재 파일을 읽으므로 다르면 참가자 간 DDS 설정이 섞인 상태다.
+# 다르면 0을 돌려주고 보고 줄을 stdout에 쓴다(두 호출처가 같은 줄을 쓴다).
+dds_config_changed() {
+  local want have
+  want="$(sj inputs.cyclonedds_xml.sha256)"
+  have="$(python3 -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "${repo_root}/config/cyclonedds.xml")"
+  [ "$want" != "$have" ] || return 1
+  echo "생성 뒤 cyclonedds.xml이 바뀌었다. bridge와 판정 참가자의 DDS 설정이 다르다"
+}
+
 check_clock() {
   local a b
   a="$(in_ros 'timeout 15 ros2 topic echo --once --no-daemon /clock' | grep -E '^ *sec:' | head -1 | tr -dc '0-9')"
@@ -281,12 +292,16 @@ run_checks() {
       # 정보 수집(gz-transport 버전)은 실패해도 판정에 넣지 않으므로 먼저 하고, 마지막 명령이 판정이 되게 한다
       in_ros 'dpkg -l | grep gz-transport' >"${out_dir}/gz_transport_ros_ws.txt" || true
       compose exec -T "$gazebo_svc" bash -c 'dpkg -l | grep gz-transport' >"${out_dir}/gz_transport_gazebo.txt" || true
-      check_clock ;;
+      topic_info "--regex '^/clock\$' --expect-publishers 1 --expect-type rosgraph_msgs/msg/Clock --save ${out_rel}/s5_topic_info" \
+        && check_clock ;;
   esac
 }
 
 collect() {
   [ -f "${run_dir}/compose.yaml" ] || return 0
+  if [ "$stage" != "S0" ] && [ -f "${run_dir}/stack.json" ]; then
+    dds_config_changed >&2 || true
+  fi
   compose logs --no-color >"${out_dir}/compose.log" 2>&1 || true
   if grep -i "bind error" "${out_dir}/compose.log" | grep -i "xrce-agent" >/dev/null 2>&1; then
     echo "에이전트 bind error: $(grep -i 'bind error' "${out_dir}/compose.log" | head -1)" >&2
@@ -317,7 +332,11 @@ else
     instance="$(sj vehicles.0.instance)"
     sysid="$(sj vehicles.0.sysid)"
     model="$(sj vehicles.0.gz_model_name)"
-    run_checks || status=1
+    if dds_config_changed >&2; then
+      status=1
+    else
+      run_checks || status=1
+    fi
   else
     mkdir -p "$out_dir"
     status=1
