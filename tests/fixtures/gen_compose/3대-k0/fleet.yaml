@@ -1,0 +1,27 @@
+# 생성기 골든 입력: 3대, 직렬 기동, 기체 2의 파라미터 덮어쓰기. 형식은 config/fleet.yaml 주석을 따른다.
+schema: 1
+world:
+  name: default
+  file: /opt/px4-gz/worlds/default.sdf
+  origin:
+    lat: 37.5665
+    lon: 126.9780
+    alt: 38
+  speed_factor: null
+vehicles:
+  - id: 1
+    airframe: 4001_gz_x500
+    pose: {x: 0.0, y: 0.0, z: 0.0, yaw: 0.0}
+  - id: 2
+    airframe: 4001_gz_x500
+    pose: {x: 0.0, y: 4.0, z: 0.0, yaw: 1.5708}
+    px4_params:
+      MPC_XY_VEL_MAX: 7.5
+  - id: 3
+    airframe: 4001_gz_x500
+    pose: {x: 0.0, y: 8.0, z: 0.0, yaw: 0.0}
+    px4_params: {}
+targets: []
+px4:
+  params_file: config/px4/sitl_params.env
+  start: sequential
