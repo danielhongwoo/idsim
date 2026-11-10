@@ -4,13 +4,15 @@
 # 사용법:
 #   capture.sh [--ns NS] [--hz-seconds N] [--spin-time S] OUT_DIR
 #
-#   --ns NS          PX4 네임스페이스. 없으면 접두사 없음(S1), S1b 이후는 px4_1.
+#   --ns NS          PX4 네임스페이스(빗금 없음, stack.json vehicles[].px4_ns, 예: px4_1).
+#                    없으면 접두사 없음(인스턴스 0. 3단계부터 스모크는 쓰지 않는다).
 #   --hz-seconds N   ros2 topic hz 측정 시간(초, 벽시계). 기본 30.
 #   --spin-time S    --no-daemon 디스커버리 대기 시간(초). 기본 5.
-#   OUT_DIR          원문을 쓸 디렉터리. 보통 artifacts/smoke/<실행 id>/ros.
+#   OUT_DIR          원문을 쓸 디렉터리. run_smoke.sh S4는 artifacts/runs/<run_id>/smoke/ros
+#                    (저장소 상대, 컨테이너 cwd /opt/idsim 기준).
 #
 # 하는 일은 원문 수집뿐이다. 골든 형식(topics.txt, qos/, env.txt) 생성은
-# test-engineer 의 tests/support 정규화 모듈이 맡는다(맨 아래 주석 참조).
+# test-engineer 의 tests/support/normalize.py 가 맡고, run_smoke.sh 가 이 스크립트 뒤에 부른다.
 #
 # 출력(OUT_DIR 아래):
 #   topic_list.txt            ros2 topic list -t --no-daemon 원문(전체 토픽)
@@ -195,13 +197,10 @@ for pid in "${pids[@]}"; do
 done
 log "hz 측정 끝"
 
-# 5. 정규화(골든 형식 생성) 자리. test-engineer 의 tests/support 모듈이 정해지면 여기서 호출한다.
-#    예상 형태(가정, 모듈 이름과 인자는 test-engineer 와 맞출 것):
-#      python3 -m tests.support.normalize \
-#        --raw "$out_dir" --ns "$ns" \
-#        --out "/opt/idsim/tests/fixtures/px4/${px4_tag}"
-#    입력: topic_list.txt, topic_info/<rel>.txt, env_raw.txt
-#    출력: topics.txt, qos/<rel>.txt, env.txt (docs/smoke-test-phase1a.md 골든 형식)
+# 5. 정규화(골든 형식 생성)는 여기서 하지 않는다. run_smoke.sh S4가 이 스크립트 다음에
+#      python3 -m tests.support.normalize --raw <OUT_DIR> --ns <ns> --check|--update
+#    를 부른다(입력: topic_list.txt, topic_info/<rel>.txt, env_raw.txt.
+#    출력: tests/fixtures/px4/<PX4_TAG>/ 의 topics.txt, qos/<rel>.txt, env.txt).
 #    골든 갱신은 run_smoke.sh --update-golden 일 때만 한다.
 
 log "완료: $out_dir"
