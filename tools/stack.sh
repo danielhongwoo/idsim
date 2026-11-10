@@ -15,7 +15,7 @@
 #   3. stack.json의 startup.stages를 차례로 `up -d --wait`한다. 세 단계(standalone): 1단계(에이전트, gazebo),
 #      2단계(px4-N), 3단계(bridge). embedded는 두 단계(에이전트, px4-1). standalone은 1단계 뒤
 #      sim-base 1회성 컨테이너로 같은 GZ_PARTITION의 `gz model --list`에 이 스택의 모델(<모델>_N)이 없는지
-#      확인한다(startup.model_precheck). bridge는 px4-N이 healthy가 된 뒤에만 시작하므로 실패한 단계 번호가 원인을 가른다.
+#      확인하고(startup.model_precheck) 같은 파티션의 gz 서버가 하나뿐인지도 본다(scene/info 제공자 1, /clock 발행자 1). bridge는 px4-N이 healthy가 된 뒤에만 시작하므로 실패한 단계 번호가 원인을 가른다.
 #   4. --viz면 viz 프로필(gz-gui)을 `up -d`로 붙인다(기다리지 않는다. healthcheck 없음).
 #   5. 실패하면 unhealthy 또는 exited 서비스 이름을 한 줄로 찍고, 에이전트 로그의 "bind error"와 px4 로그의 "bind failed"를 찾아 보고하고 종료 코드 1.
 #      스택은 조사할 수 있게 그대로 두며 `tools/stack.sh down`으로 내린다.
@@ -140,7 +140,7 @@ gz_unique_check() { # stack.json
   n_pub="$(printf '%s\n' "$clk_out" | grep -c 'tcp://' || true)"
   if [ "$n_prov" -ne 1 ] || [ "$n_pub" -ne 1 ]; then
     say "gz 서버 검사 실패: scene/info provider ${n_prov}개, /clock 발행자 ${n_pub}개(각각 정확히 1이어야 한다)"
-    say "같은 파티션 idsim-${k}에 다른 gz 서버가 있다. 구 compose.smoke.yaml의 idsim-smoke 프로젝트나 수동 docker run을 내려라(응답: $(dirname "$sf")/model_precheck_gz.txt)"
+    say "같은 파티션 idsim-${k}에 다른 gz 서버가 있다. idsim-smoke 프로젝트나 수동 docker run을 내려라(응답: $(dirname "$sf")/model_precheck_gz.txt)"
     return 1
   fi
 }
