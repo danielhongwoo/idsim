@@ -5,6 +5,7 @@ variable "UBUNTU_IMAGE" {}
 variable "UBUNTU_APT_MIRROR" {}
 variable "ROS_DISTRO" {}
 variable "ROS_APT_KEY_FPR" {}
+variable "LLVM_MAJOR" {}
 variable "GZ_RELEASE" {}
 variable "PX4_TAG" {}
 variable "PX4_MSGS_REF" {}
@@ -78,6 +79,7 @@ target "ros-ws" {
     BASE_IMAGE      = "idsim-ros-base"
     PX4_MSGS_REF    = PX4_MSGS_REF
     PX4_ROS_COM_REF = PX4_ROS_COM_REF
+    LLVM_MAJOR      = LLVM_MAJOR
   }
   tags = ["idsim/ros-ws:local", "${REGISTRY}/ros-ws:${KEY_ROS_WS}"]
 }

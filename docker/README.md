@@ -33,12 +33,12 @@ ubuntu:24.04 -> xrce-agent
 | `ros-base` | Ubuntu 24.04 (digest 고정) | ROS 2 Jazzy, CycloneDDS rmw, 공통 도구. `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` 고정 | 838MB |
 | `sim-base` | `ros-base` | OSRF 저장소의 Gazebo Harmonic, PX4-gazebo-models의 모델과 월드, 센서 설정 파일(`/opt/px4-gz`) | 2.97GB |
 | `px4` | `sim-base` | PX4 SITL 빌드 결과물(`px4` 바이너리, 시작 스크립트), idsim용 `px4-rc.mavlink`와 airframe `.post` 훅. 빌드 도구와 소스는 최종 이미지에 없다 | 3.06GB |
-| `ros-ws` | `ros-base` | px4_msgs, px4_ros_com, ros_gz_bridge. 이 프로젝트의 소스는 이미지에 넣지 않고 실행 시 `/opt/idsim`에 마운트한다. Gazebo 서버는 없다 | 1.57GB |
+| `ros-ws` | `ros-base` | px4_msgs, px4_ros_com, ros_gz_bridge, colcon, clang-tidy-18, clang-format-18. 이 프로젝트의 소스는 이미지에 넣지 않고 실행 시 `/opt/idsim`에 마운트한다. Gazebo 서버는 없다 | 1.99GB (clang 도구 추가 전 1.58GB, 추가분 약 410MB 실측) |
 | `xrce-agent` | Ubuntu 24.04 (digest 고정) | Micro XRCE-DDS Agent. ROS 없음 | 153MB |
 
 이렇게 나눈 이유는 다음과 같다.
 
-- `ros-ws`는 프로젝트 코드가 바뀔 때마다 다시 빌드되므로 Gazebo가 없는 `ros-base`에서 가볍게 갈라진다.
+- `ros-ws`는 Gazebo가 없는 `ros-base`에서 가볍게 갈라진다. 프로젝트 소스는 이미지에 굽지 않으므로(굽으면 커밋마다 이미지 key가 바뀐다) `ros_ws/src`의 패키지는 아래 "ROS 2 패키지 빌드" 절의 `tools/ros_ws.sh`로 빌드한다.
 - 모델 파일은 `sim-base` 한 곳에만 둔다. Gazebo 서버와 PX4가 같은 절대 경로로 모델을 열어야 하는데, 둘 다 `sim-base` 위에 있으면 경로가 저절로 일치한다.
 - `xrce-agent`는 자체 Fast-DDS를 소스 빌드하므로, ROS가 가져오는 다른 Fast-DDS와 섞이지 않게 ROS 없는 베이스에 둔다.
 
@@ -109,6 +109,25 @@ python3 tools/ci/build_images.py --mode load px4
 ```
 python3 tools/ci/image_keys.py --explain px4
 ```
+
+### ROS 2 패키지 빌드 (tools/ros_ws.sh)
+
+`ros_ws/src`의 패키지는 호스트가 아니라 ros-ws 컨테이너 안에서 빌드한다. install의 setup 스크립트와 CMake 경로가 `/opt/idsim/...` 절대 경로라 호스트에서는 쓸 수 없고, 스택의 노드 서비스도 같은 마운트 경로에서 `ros_ws/install`을 읽는다. 산출물은 저장소의 `ros_ws/build`, `ros_ws/install`, `ros_ws/log`(git 무시)에 호스트 uid:gid 소유로 생긴다.
+
+| 명령 | 하는 일 |
+| --- | --- |
+| `tools/ros_ws.sh build [colcon 인자...]` | `colcon build`(RelWithDebInfo, `compile_commands.json` 생성) |
+| `tools/ros_ws.sh test [colcon 인자...]` | build 뒤 `colcon test --return-code-on-test-failure`, `colcon test-result`, 테스트 수 > 0 단정 |
+| `tools/ros_ws.sh tidy` | build 뒤 `run-clang-tidy-18`(저장소 루트 `.clang-tidy`, 각 패키지 `src/`의 C++ 소스) |
+| `tools/ros_ws.sh ci` | build, test, tidy를 한 번씩. CI의 unit 잡이 이것만 부른다 |
+| `tools/ros_ws.sh clean` | `ros_ws/build`, `install`, `log` 삭제 |
+| `tools/ros_ws.sh shell` | 같은 조건의 대화형 bash |
+
+컨테이너는 `--user <호스트 uid:gid>`, `--network none`, `HOME=/tmp/idsim-home`, `CYCLONEDDS_URI=` 비움, `ROS_DOMAIN_ID=99`로 돈다. 단위 테스트가 같은 호스트의 개발 스택(도메인 20 + k)과 섞이지 않게 하는 조건이다. 실행 전에 이미지의 `IDSIM_BUILD_*`(`PX4_MSGS_REF`, `PX4_ROS_COM_REF`, `LLVM_MAJOR`)를 `versions.env`와 대조해 다르면 중단하므로, `versions.env`를 올린 뒤에는 `python3 tools/ci/build_images.py --mode load ros-ws`로 이미지를 다시 빌드한다. 병렬 수는 `IDSIM_JOBS`(기본 min(코어 수, 4))로 바꾼다. 스택이 떠 있을 때 다시 빌드하면 실행 중인 노드의 `.so`가 바뀌므로 경고가 나온다.
+
+`colcon test`는 테스트가 실패해도 0을 돌려주고 `colcon test-result`는 빌드가 실패해도 "0 tests"로 0을 돌려준다. 그래서 `test`는 `--return-code-on-test-failure`를 쓰고 테스트 수가 0이면 실패시킨다. 단위 층에는 재시도를 두지 않는다.
+
+clang-format 검사는 CI lint 잡이 `LINT_PYTHON_IMAGE`에 pip `clang-format==$LINT_CLANG_FORMAT_VERSION`을 설치해 돌린다(`tools/ci/lint.sh clang-format`). ros-ws의 `clang-format-18`은 컨테이너 안에서 손으로 쓰는 같은 major이며, 두 값의 major가 `LLVM_MAJOR`와 같은지 lint.sh가 단정한다. clang-tidy와 ament_lint는 `compile_commands.json`과 ROS 헤더가 필요해 lint 잡이 아니라 `tools/ros_ws.sh ci`(unit 잡)에서 돈다.
 
 ### apt 미러
 

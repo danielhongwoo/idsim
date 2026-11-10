@@ -3,7 +3,8 @@
 #
 # 사용법: tools/ci/lint.sh <검사>... | all
 #   검사: charset shellcheck ruff hadolint actionlint yamllint pytest compose-config
-#         clang-format clang-tidy ament-lint cargo
+#         clang-format px4-api cargo
+#   clang-tidy와 ament_lint는 compile_commands.json과 ROS 헤더가 필요해서 여기에 없다. unit 잡의 tools/ros_ws.sh ci 안에서 돈다.
 #
 # 대상 파일은 git이 추적하거나 무시 목록에 없는 새 파일이다(git ls-files -co --exclude-standard).
 # 그래서 로컬의 artifacts/, __pycache__/ 같은 무시 대상은 보지 않고 CI 체크아웃과 같은 파일을 본다.
@@ -192,6 +193,54 @@ check_compose_config() {
   fi
 }
 
+cpp_specs=('*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx')
+
+check_clang_format() {
+  # 스타일은 저장소 루트 .clang-format 하나다. 파일이 없으면 clang-format이 조용히 LLVM 기본 스타일을 쓰므로
+  # --style=file:<경로>로 명시하고, 대상이 있는데 설정이 없으면 실패시킨다.
+  local files
+  mapfile -t files < <(list_files "${cpp_specs[@]}")
+  if [ "${#files[@]}" -eq 0 ]; then result clang-format PASS-NO-TARGETS "(0 files)"; return 0; fi
+  if [ ! -f .clang-format ]; then
+    printf '  %s\n' "${files[@]}"
+    result clang-format FAIL "C++ 파일이 있는데 저장소 루트에 .clang-format이 없다"
+    return 1
+  fi
+  # ros-ws에 설치되는 clang-format-<LLVM_MAJOR>과 major가 같아야 로컬 컨테이너와 CI의 결과가 일치한다
+  if [ "${LINT_CLANG_FORMAT_VERSION%%.*}" != "$LLVM_MAJOR" ]; then
+    result clang-format FAIL "LINT_CLANG_FORMAT_VERSION(${LINT_CLANG_FORMAT_VERSION})의 major가 LLVM_MAJOR(${LLVM_MAJOR})와 다르다"
+    return 1
+  fi
+  # 작은따옴표 안의 $0, $@는 컨테이너 안 sh가 펼친다(의도된 것)
+  # shellcheck disable=SC2016
+  if drun "$LINT_PYTHON_IMAGE" -e PIP_DISABLE_PIP_VERSION_CHECK=1 -- sh -c \
+      'pip install --no-cache-dir -q --root-user-action=ignore "clang-format==$0" \
+        && clang-format --version \
+        && clang-format --dry-run --Werror --style=file:/src/.clang-format "$@"' \
+      "$LINT_CLANG_FORMAT_VERSION" "${files[@]}"; then
+    result clang-format PASS "(${#files[@]} files)"
+  else
+    result clang-format FAIL "clang-format 위반 또는 설치 실패"; return 1
+  fi
+}
+
+check_px4_api() {
+  # /fmu 토픽 이름과 idsim_common 내부 이름은 idsim_common 안에서만 쓴다(결정 2026-11-10 쟁점 2).
+  # 다른 패키지가 문자열을 직접 쓰면 공개 API의 발행 허용 목록을 우회한다. 실수 방지 수준이며 보안 경계가 아니다.
+  # 대상은 ros_ws/src 아래 idsim_common 밖의 C++ 파일과 .py 파일이다(tests/의 Python 판정 코드는 대상 아님).
+  local files=() f
+  while IFS= read -r f; do
+    case "$f" in ros_ws/src/idsim_common/*) ;; *) files+=("$f") ;; esac
+  done < <(list_files 'ros_ws/src/*.py' "${cpp_specs[@]/#/ros_ws/src/}")
+  if [ "${#files[@]}" -eq 0 ]; then result px4-api PASS-NO-TARGETS "(0 files)"; return 0; fi
+  local out rc=0
+  out="$(grep -nF -e 'fmu/in/' -e 'fmu/out/' -e 'detail::topic_name' -e 'idsim_common::px4::detail' -- "${files[@]}")" || rc=$?
+  if [ "$rc" -eq 1 ]; then result px4-api PASS "(${#files[@]} files)"; return 0; fi
+  [ -n "$out" ] && printf '%s\n' "$out"
+  result px4-api FAIL "idsim_common 밖에서 /fmu 토픽 문자열 또는 idsim_common::px4::detail 사용 (grep exit ${rc})"
+  return 1
+}
+
 # 아직 대상 코드가 없는 검사. 대상이 0개면 PASS-NO-TARGETS, 생기면 FAIL-NOT-WIRED로 연결을 강제한다.
 not_wired() {
   local name="$1"; shift
@@ -203,17 +252,10 @@ not_wired() {
   return 1
 }
 
-cpp_specs=('*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx')
-# clang-format: .clang-format 스타일 결정(ros2-engineer)과 함께 연결
-check_clang_format() { not_wired clang-format "${cpp_specs[@]}"; }
-# clang-tidy: compile_commands.json이 필요하므로 ros-ws 이미지 안 colcon 빌드 뒤에 연결
-check_clang_tidy() { not_wired clang-tidy "${cpp_specs[@]}"; }
-# ament_lint(ament_lint_auto): ROS 패키지가 생기면 ros-ws 이미지 안 colcon test로 연결
-check_ament_lint() { not_wired ament-lint 'package.xml'; }
 # cargo fmt --check, cargo clippy -D warnings: gateway/ 크레이트가 생기면 연결
 check_cargo() { not_wired cargo 'Cargo.toml'; }
 
-all_checks=(charset shellcheck ruff hadolint actionlint yamllint pytest compose-config clang-format clang-tidy ament-lint cargo)
+all_checks=(charset shellcheck ruff hadolint actionlint yamllint pytest compose-config clang-format px4-api cargo)
 
 run_check() {
   case "$1" in
@@ -226,8 +268,7 @@ run_check() {
     pytest) check_pytest ;;
     compose-config) check_compose_config ;;
     clang-format) check_clang_format ;;
-    clang-tidy) check_clang_tidy ;;
-    ament-lint) check_ament_lint ;;
+    px4-api) check_px4_api ;;
     cargo) check_cargo ;;
     *) echo "모르는 검사: $1 (가능: ${all_checks[*]} all)" >&2; return 2 ;;
   esac

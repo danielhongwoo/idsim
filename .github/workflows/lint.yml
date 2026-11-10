@@ -4,8 +4,9 @@
 # 결과 표시: 검사마다 로그 마지막 줄이 "RESULT <검사>: <상태>" 이다.
 #   PASS             대상이 있었고 통과
 #   PASS-NO-TARGETS  대상 파일 0개라 검사 없이 통과 (notice 주석이 함께 남는다. 건너뜀이 아니다)
-#   FAIL-NOT-WIRED   대상 파일이 생겼는데 검사가 아직 연결되지 않음 (clang-format, clang-tidy,
-#                    ament-lint, cargo). 연결할 때까지 실패한다
+#   FAIL-NOT-WIRED   대상 파일이 생겼는데 검사가 아직 연결되지 않음 (cargo). 연결할 때까지 실패한다
+# clang-tidy와 ament_lint는 이 워크플로에 없다. compile_commands.json과 ROS 헤더가 필요해서 unit 워크플로
+# (tools/ros_ws.sh ci)의 ros-ws 컨테이너 안에서 돈다. 이 워크플로에서 "통과"로 보이는 가짜 항목을 두지 않는다.
 # 매트릭스 잡은 if 조건으로 건너뛰지 않는다. GitHub UI에서 "skipped"로 보이는 lint 잡은 없어야 한다.
 name: lint
 
@@ -38,8 +39,7 @@ jobs:
           - pytest
           - compose-config
           - clang-format
-          - clang-tidy
-          - ament-lint
+          - px4-api
           - cargo
     steps:
       - name: checkout
