@@ -30,7 +30,7 @@
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
   2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
   2b. (완료 2026-11-09, 브랜치 docs/readme-check-host) 새 PC 재구성 지원: 저장소 루트 `README.md`와 `tools/check_host.sh`. 남은 것: apt 미러를 빌드 인자로 바꿀 수 있게 할지와 GHCR 이미지를 받아 쓰는 `--mode pull`(devops-engineer 판단, 아래 미해결 항목). README의 "알려진 제약" 절은 미러 문제가 풀리거나 GHCR가 공개되면 함께 고친다.
-  3. CI 후속 PR: Dockerfile.px4의 pip 고정과 PX4_OPTICAL_FLOW_REF 반영, `ls | grep` 정리(px4-engineer). Dockerfile.sim-base의 GZ_APT_KEY_FPR 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 키 재료와 KEY_<이미지> 설명 갱신(architect). image_keys.py가 bake 블록의 tags와 공백까지 해시하는 것 정리, lint가 같은 저장소 PR에서 두 번 도는 것(devops-engineer).
+  3. CI 후속 PR: Dockerfile.px4의 pip 고정과 PX4_OPTICAL_FLOW_REF 반영, `ls | grep` 정리(px4-engineer). Dockerfile.sim-base의 GZ_APT_KEY_FPR 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 키 재료와 KEY_<이미지> 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 키에서 제외한 것이 "같은 키는 같은 바이트" 의미의 예외라는 점도 확인). image_keys.py가 bake 블록의 tags와 공백까지 해시하는 것 정리, lint가 같은 저장소 PR에서 두 번 도는 것(devops-engineer).
   4. roadmap 1a 3단계 구현(E, A, B, C 완료, 아래는 계획 당시 기록). 설계 결정은 결정 기록 2026-11-09 참조. 순서 E -> A, B 병렬 -> C -> 검증.
      - E (architect, 완료 2026-11-09, 브랜치 `docs/phase1a-step3-design`): architecture.md, roadmap.md, smoke-test-phase1a.md, progress.md, file-ownership.md 반영. 검토 reviewer.
      - 첫 작업(ros2-engineer, A와 B와 같은 시점): `stack.json` 스키마 초안 확정(k, domain, gz_partition, agent_port, world, foxglove_port, lichtblick_port, mavlink_offset, vehicles[{id, ns, px4_ns, sysid, key, instance, model, pose, mavlink_ports}]). A, B, C가 이 스키마를 기준으로 한다. 검토 devops, test-engineer.
@@ -153,6 +153,12 @@
   - (n) 같은 `GZ_PARTITION`의 다른 gz 서버 검사(`scene/info` 제공자 1, `/clock` 발행자 1)를 `stack.sh` 사전 검사와 `run_smoke.sh` S2 양쪽에 둔다. 근거: sim-engineer가 재현한 사례(같은 파티션에 서버가 둘이면 모델 유일성 판정만으로는 못 잡는 경로가 있음).
   - (o) 설계와 달라진 구현 결정. 1) compose 안 경로는 절대 경로(`<host-repo-root>/...`). compose.yaml이 run 디렉터리에 있기 때문. 2) 바인드 마운트는 긴 형식에 `create_host_path: false`. 3) bridge/runner는 저장소를 `/opt/idsim`에 rw 하나만 마운트하고 `cyclonedds.xml` 중첩 마운트를 없앴다. 4) YAML 앵커 미사용(PyYAML가 merge 키를 출력하지 못하고 자동 앵커를 끔). 5) Docker Engine 25.0 하한은 문서 근거이며 `check_host.sh`가 WARN(실측 아님). 6) `lint.sh`에 `core.quotepath=off` 적용(한글 경로 파일이 검사에서 빠지던 버그). 7) lint의 `compose config -q`는 골든 compose를 `/work/idsim` 치환 후 `--profile viz --profile tools`, DISPLAY/XAUTHORITY 미설정으로 검사.
   - (p) `check_px4.py --expect-origin`은 `vehicle_gps_position`(SensorGps) 기준, 수평 0.5 m, 수직 1.0 m. 실측 최대 오차 수평 0.07 m, 수직 0.34 m. pose 보정은 하지 않는다(1대 기준). `derived_params`도 S2에서 `pxh`로 판정한다.
+- 2026-11-10: 사용자 결정, 이미지 빌드 apt 미러를 kr로 (devops-engineer 구현, 브랜치 `chore/apt-kr-mirror`). archive.ubuntu.com이 이 호스트에서 다시 응답하지 않아(2026-11-09, 11-10 실측) 결정했다.
+  - 미러 값은 `versions.env`의 `UBUNTU_APT_MIRROR=http://kr.archive.ubuntu.com/ubuntu`, 빌드 인자로 전달한다. `ros-base`와 `xrce-agent` build 단계의 첫 `apt-get update` 앞에서 `ubuntu.sources`를 sed로 바꾸고 바뀌었는지 grep으로 검사한다. sim-base, px4, ros-ws는 ros-base를 상속하므로 손대지 않았다.
+  - archive와 security를 둘 다 바꾼다. kr 미러가 noble, noble-updates, noble-security InRelease를 제공함을 실측했고, 같은 호스트에서 security.ubuntu.com도 응답하지 않는 날이 있었다. 서드파티(packages.ros.org, packages.osrfoundation.org)는 그대로다.
+  - 이미지 키에서 제외한다(`image_keys.py`의 `KEY_EXCLUDED_ARGS`). `ubuntu.sources`는 이미지에 남아 미러별로 바이트가 다르지만 런타임이 apt를 쓰지 않으므로 같은 이미지로 보며, 키는 원래 apt 패키지 버전을 고정하지 않는다. 미러 동기화 시차로 패키지 버전이 달라질 수 있는 위험은 같은 키의 이미지가 어느 미러에서 빌드됐든 같은 것으로 보는 것으로 받아들인다. 이번 변경은 Dockerfile 바이트가 바뀌어 5종 키가 한 번 바뀐다.
+  - CI는 `build-images.yml`의 환경변수로 기본 미러(archive.ubuntu.com)를 쓰도록 덮어쓴다. `build_images.py`는 미리 설정된 `UBUNTU_APT_MIRROR` 환경변수를 versions.env보다 우선한다. 키가 같으므로 GHCR 키와 충돌하지 않고, CI의 레이어 캐시는 항상 같은 미러값이라 맞는다.
+  - `tools/check_host.sh` (l) 항목은 같은 값을 읽는다.
 
 ## 미해결 사항
 
@@ -170,7 +176,7 @@
 - Phase 3 주기 하한 계약이 필요한 토픽 목록(px4-engineer, Phase 3 전에).
 - `COM_RC_IN_MODE`=4라 QGC 수동 모드와 가상 조이스틱은 쓸 수 없다. ARM, TAKEOFF(2.5m, `MIS_TAKEOFF_ALT` 기본), LAND, 자동 disarm은 pymavlink로 확인. `docs/interface.md`의 SITL 파라미터 절에 적을 것(ros2-engineer 초안, px4-engineer 확인).
 - Lichtblick 2.5.2 공식 이미지의 브라우저 실접속은 미확인. 두 서브프로토콜(foxglove.websocket.v1, foxglove.sdk.v1)을 제시하는 것만 확인했고 foxglove_bridge 3.6.0과의 실제 접속은 1a 6단계에서 확인한다.
-- apt 미러 고정 리스크(2026-11-09 실측). Dockerfile이 ubuntu 베이스의 archive.ubuntu.com에 묶여 있어 그 미러가 막히면 새 PC 콜드 빌드가 실패한다. 선택지: 빌드 인자로 미러 지정(이미지 키에 들어가지 않게 할 방법 포함), apt `Acquire::Retries`, GHCR 공개 이미지를 받아 `idsim/<이미지>:local`로 태그하는 `build_images.py --mode pull`. devops-engineer가 2b 다음 PR에서 제안한다.
+- apt 미러 고정 리스크(2026-11-09 실측). 2026-11-10에 `UBUNTU_APT_MIRROR` 빌드 인자(kr 기본, CI는 기본 미러)로 완화했다. 남은 것: 지정 미러가 막히면 콜드 빌드가 실패한다는 점, apt `Acquire::Retries` 미적용, GHCR 공개 이미지를 받아 태그하는 `build_images.py --mode pull` 미구현.
 - `qgc.sh`의 sha256 불일치 시 종료 코드 1 경로는 코드만 있고 실행으로 확인하지 않았다(손상 캐시 재다운로드 경로는 같은 함수를 쓰며 확인됨).
 - Gazebo GUI 깜빡임(사용자 관측 2026-11-09, VMware 3D 가속 켠 상태). `QSG_RENDER_LOOP=basic`과 `vblank_mode=1`은 효과 미확인. 3D 가속을 끈 소프트웨어 렌더링(llvmpipe, GUI 컨테이너 CPU 약 2.7코어)에서는 깜빡임 여부를 사용자가 다시 본다. 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
 - (2026-11-10, 3단계 C에서 올라온 항목)

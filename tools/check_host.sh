@@ -2,7 +2,7 @@
 # 호스트 조건 점검: idsim을 빌드하고 돌릴 수 있는 호스트인지 읽기 전용으로 확인한다.
 #
 # 사용법: tools/check_host.sh [--offline] [--help]
-#   --offline  외부 네트워크 검사(archive.ubuntu.com)를 건너뛴다
+#   --offline  외부 네트워크 검사(versions.env의 UBUNTU_APT_MIRROR)를 건너뛴다
 #
 # 항목마다 OK, FAIL, WARN 접두사로 한 줄씩 출력한다.
 #   FAIL: 고쳐야 빌드나 실행이 된다. 하나라도 있으면 종료 코드 1
@@ -15,7 +15,13 @@ set -uo pipefail
 # 메모리: 개발 VM 31GB와 CI 러너 16GB에서 확인했다. 그 아래는 미실측이라 16GB 미만을 WARN으로 둔다.
 MIN_DISK_GB=30
 MIN_MEM_GB=16
-MIRROR_URL="http://archive.ubuntu.com/ubuntu/dists/noble/Release"
+VERSIONS_ENV="$(dirname "$0")/../docker/versions.env"
+# 이미지 빌드가 쓰는 apt 미러 (환경변수가 있으면 그 값, 없으면 versions.env)
+MIRROR_BASE="${UBUNTU_APT_MIRROR:-$(sed -n 's/^UBUNTU_APT_MIRROR=//p' "$VERSIONS_ENV" 2> /dev/null | head -n 1)}"
+MIRROR_BASE="${MIRROR_BASE%/}"
+MIRROR_URL="${MIRROR_BASE}/dists/noble/Release"
+MIRROR_HOST="${MIRROR_BASE#*://}"
+MIRROR_HOST="${MIRROR_HOST%%/*}"
 
 offline=0
 for arg in "$@"; do
@@ -204,15 +210,15 @@ if [ "$docker_ok" -eq 1 ]; then
   fi
 fi
 
-# (l) archive.ubuntu.com
+# (l) apt 미러
 if [ "$offline" -eq 1 ]; then
-  echo "INFO --offline: archive.ubuntu.com 검사를 건너뜀"
+  echo "INFO --offline: apt 미러(${MIRROR_HOST}) 검사를 건너뜀"
 elif command -v curl > /dev/null 2>&1; then
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$MIRROR_URL" 2> /dev/null || true)"
   if [ "$code" = "200" ]; then
-    ok "archive.ubuntu.com 응답 200"
+    ok "apt 미러 ${MIRROR_HOST} 응답 200"
   else
-    warn "archive.ubuntu.com 응답 ${code:-없음}: 콜드 빌드가 막힐 수 있다"
+    warn "apt 미러 ${MIRROR_HOST} 응답 ${code:-없음}: 콜드 빌드가 막힐 수 있다"
   fi
 fi
 
