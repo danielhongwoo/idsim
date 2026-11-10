@@ -60,7 +60,7 @@ idsim은 스택 번호 k(0-9, 기본 0. `--stack k` 또는 환경 변수 `IDSIM_
 
 ## 알려진 제약
 
-- apt 미러가 archive.ubuntu.com에 고정되어 있어, 미러 장애 시 콜드 빌드가 실패한다 (2026-11-09 실측, 미해결).
+- 이미지 빌드의 apt 미러는 `docker/versions.env`의 `UBUNTU_APT_MIRROR`(기본 kr 미러)이다. 다른 호스트에서 바꾸는 방법은 `docker/README.md`의 "apt 미러" 절을 본다. 해당 미러가 막히면 콜드 빌드가 실패한다.
 - GHCR 이미지가 공개되면 빌드 없이 받아 쓰는 경로를 검토 중이다.
 
 ## 문서 지도

@@ -10,7 +10,7 @@
 | `decisions.md` | architect 설계 결정 10건과 담당자별 구현 지시. reviewer 검증 조건 4건과 권고 5건 반영본 | 계약. 구현은 이 문서를 따른다 |
 | `opinion-ros2.md` | ros2-engineer 초안과 실측(frame_transforms 결함, MESSAGE_VERSION 규칙, QoS, 패키지 구조, clang-format 설정 원문) | 근거 |
 | `opinion-px4.md` | px4-engineer 의견과 실측(토픽 접미사 규칙, VehicleCommand 필드와 DO_SET_MODE 값, timestamp 동작, 좌표 관례, 공개 /fmu/in 허용과 차단 목록) | 근거 |
-| `opinion-devops.md` | devops-engineer 의견과 실측(colcon 종료 코드 함정, 빌드 위치, unit 잡, lint 연결, `tools/ros_ws.sh`, 골든 경로 전달) | 근거 |
+| `opinion-devops.md` | devops-engineer 의견과 실측(colcon 종료 코드 함정, 빌드 위치, unit job, lint 연결, `tools/ros_ws.sh`, 골든 경로 전달) | 근거 |
 | `prototypes.md` | 토픽 기술자와 음성 컴파일 테스트 원형 코드, `.clang-format` 시안 | 참고. 그대로 옮기지 않는다 |
 
 근거 파일에 나오는 `/tmp/...scratchpad...` 경로와 실험 디렉터리는 당시 환경의 임시 파일이라 저장소에 없다. 결론과 인용된 실측값만 쓴다.
@@ -19,7 +19,7 @@
 
 1. `docs-for-agent/progress.md`의 "새 개발 PC에서 시작할 때"를 따른다(`tools/check_host.sh`, 이미지 빌드, 스모크 S0과 S2).
 2. 이 문서와 `decisions.md`를 읽는다. 담당자를 부를 때는 자기 몫의 "구현 지시" 절과 관련 근거 파일을 함께 넘긴다.
-3. PR #11(이미지 빌드 apt 미러를 `UBUNTU_APT_MIRROR`로 지정, 기본 kr)이 main에 들어갔는지 확인한다. 들어가지 않았으면 작업 단위 C는 기다린다.
+3. PR #11(이미지 빌드 apt 미러를 `UBUNTU_APT_MIRROR`로 지정, 기본 kr)은 2026-11-10 main에 들어갔다. 작업 단위 C도 바로 시작할 수 있다.
 4. main에서 브랜치 `feat/1a-4-idsim-common`을 만든다. PR은 하나로 하고 커밋은 담당자 소유 단위로 나눈다.
 
 도커 스택을 올리는 실험은 담당자마다 스택 번호를 나눠 쓴다(예: px4 5, ros2 4). 사용자가 화면 확인용으로 띄운 스택(보통 0)은 건드리지 않는다.
@@ -30,7 +30,7 @@
 | --- | --- | --- | --- |
 | A. SITL 시간 기준 | px4-engineer | `config/px4/sitl_params.env`에 `UXRCE_DDS_SYNCT=0`과 근거 주석. `tests/smoke/check_px4_pxh.py`의 `DEFAULT_EXPECT`에 `UXRCE_DDS_SYNCT=0`(param show 저장값 판정). 생성기 골든이 바뀌면 `--update-golden`으로 갱신. 스택에서 S2-S5 회귀(S4 `--check` 일치) | 없음 |
 | B. idsim_common 패키지 | ros2-engineer | 하위 작업 B1-B8(아래) | 없음. ros-ws 기존 이미지로 colcon 빌드 가능 |
-| C. 빌드 도구와 CI | devops-engineer | ros-ws 이미지에 `clang-tidy-18`, `clang-format-18`, `versions.env`에 `LLVM_MAJOR=18`과 `LINT_CLANG_FORMAT_VERSION=18.1.3`, bake, `tools/ros_ws.sh`(build, test, tidy, ci, clean, shell), `.github/workflows/unit.yml`, lint 잡에 clang-format 연결, lint의 clang-tidy와 ament-lint 항목 삭제, `ros_ws/src`의 fmu 문자열과 `detail` 사용 검사 | PR #11 머지 |
+| C. 빌드 도구와 CI | devops-engineer | ros-ws 이미지에 `clang-tidy-18`, `clang-format-18`, `versions.env`에 `LLVM_MAJOR=18`과 `LINT_CLANG_FORMAT_VERSION=18.1.3`, bake, `tools/ros_ws.sh`(build, test, tidy, ci, clean, shell), `.github/workflows/unit.yml`, lint job에 clang-format 연결, lint의 clang-tidy와 ament-lint 항목 삭제, `ros_ws/src`의 fmu 문자열과 `detail` 사용 검사 | 없음(PR #11 머지됨) |
 | D. 부속 정리 | ros2-engineer, test-engineer | `tests/smoke/capture.sh`의 hz 목록에서 `timesync_status` 제외(ros2). `docs-for-agent/file-ownership.md`에 골든 경로 규칙이 Python과 CMake 두 곳에 있다는 접점 기록(test) | 없음 |
 | E. 문서 | architect | `decisions.md` 쟁점 10의 문서 수정 목록(roadmap, architecture, smoke-test). `progress.md` 결정 기록과 미해결 갱신 | B 마무리 무렵 |
 
@@ -40,7 +40,7 @@ B의 하위 작업(세부는 `decisions.md`의 해당 쟁점).
 | --- | --- | --- |
 | B1 | 패키지 골격(ament_cmake, SHARED, C++17, `-Werror`), `.clang-format`, `.clang-tidy`, ament 린터 xmllint, lint_cmake, cpplint(copyright 끔) | 7 |
 | B2 | 좌표 변환 직접 구현(NED/ENU, FRD/FLU, 쿼터니언, yaw, 대각 분산), px4_ros_com과 차등 비교 테스트 | 1 |
-| B3 | 골든 토픽 65개 기술자, 키는 (방향, 논리 이름), 발행 허용 3개, `is_registered`와 `#undef`, 음성 컴파일 테스트 4건, 골든 양방향 일치 | 2 |
+| B3 | 골든 토픽 65개 기술자, key는 (방향, 논리 이름), 발행 허용 3개, `is_registered`와 `#undef`, 음성 컴파일 테스트 4건, 골든 양방향 일치 | 2 |
 | B4 | QoS 프로필 두 개와 골든 writer 27개 대조 | 3 |
 | B5 | `Px4Timestamp::now(rclcpp::Clock &)`와 거부 테스트 4종 | 4 |
 | B6 | 기체 식별 타입과 vehicle_status 대조 함수 | 5 |
@@ -50,8 +50,8 @@ B의 하위 작업(세부는 `decisions.md`의 해당 쟁점).
 ## 진행 순서
 
 1. A와 B를 병렬로 시작한다.
-2. PR #11이 머지되면 C를 시작한다. C는 main 위에서 시작하거나 브랜치를 main 위로 맞춘 뒤 한다.
-3. B와 C가 만나면 `tools/ros_ws.sh ci`로 로컬에서 먼저 돌리고, unit 잡에서 패키지 빌드, 테스트, clang-tidy를 처음 돌린다.
+2. C도 같이 시작한다(PR #11 머지됨).
+3. B와 C가 만나면 `tools/ros_ws.sh ci`로 로컬에서 먼저 돌리고, unit job에서 패키지 빌드, 테스트, clang-tidy를 처음 돌린다.
 4. D와 E를 마무리한다.
 5. 접점 검토와 reviewer 검토, PR, CI 통과, 사용자 머지.
 
@@ -64,7 +64,7 @@ B의 하위 작업(세부는 `decisions.md`의 해당 쟁점).
 
 ## 완료 기준
 
-- unit 잡이 CI에서 통과하고 테스트 수가 0보다 크다.
+- unit job이 CI에서 통과하고 테스트 수가 0보다 크다.
 - `decisions.md`가 요구한 테스트가 모두 있다: 좌표 변환 차등 비교와 NaN 보존, 골든 65개 양방향 일치, 허용 목록 3개 명시 비교, 음성 컴파일 4건, QoS 대조, `Px4Timestamp` 거부 4종, 식별 검사, 빌더 필드 표, PX4_MSGS_REF 3곳 일치.
 - `UXRCE_DDS_SYNCT=0`에서 스모크 S2-S5 통과, S2의 pxh 판정에 `UXRCE_DDS_SYNCT=0`.
 - `tools/ci/lint.sh all`과 clang-format 통과.

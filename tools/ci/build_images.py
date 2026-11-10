@@ -121,6 +121,17 @@ def oci_labels() -> dict[str, str]:
     return labels
 
 
+def make_env(environ, versions: dict, keys: dict) -> dict:
+    """bake에 넘길 환경. versions.env가 환경변수를 덮되, 키에서 제외된 값(미러)만 미리 설정된 환경변수가 이긴다."""
+    env = dict(environ)
+    env.update(versions)
+    for k in image_keys.KEY_EXCLUDED_ARGS:
+        if environ.get(k):
+            env[k] = environ[k]
+    env.update(keys)
+    return env
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="이미지 키 순서대로 bake 빌드")
     p.add_argument("--mode", choices=["load", "pr", "push"], required=True)
@@ -156,9 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     def ref(n: str) -> str:
         return f"{registry}/{n}:{images[n].key}"
 
-    env = dict(os.environ)
-    env.update(versions)
-    env.update({images[n].env_name: images[n].key for n in order})
+    env = make_env(os.environ, versions, {images[n].env_name: images[n].key for n in order})
 
     log(f"mode={mode} registry={registry}")
     for n in targets:

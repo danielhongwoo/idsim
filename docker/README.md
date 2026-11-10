@@ -110,6 +110,22 @@ python3 tools/ci/build_images.py --mode load px4
 python3 tools/ci/image_keys.py --explain px4
 ```
 
+### apt 미러
+
+이미지 빌드의 우분투 apt 미러는 `versions.env`의 `UBUNTU_APT_MIRROR`(기본 `http://kr.archive.ubuntu.com/ubuntu`)이다. `ros-base`와 `xrce-agent`(build 단계)가 첫 `apt-get update` 앞에서 `/etc/apt/sources.list.d/ubuntu.sources`의 archive와 security 주소를 이 값으로 바꾸고, `sim-base`, `px4`, `ros-ws`는 `ros-base`를 상속한다. packages.ros.org와 packages.osrfoundation.org는 바꾸지 않는다. kr 미러는 noble, noble-updates, noble-security를 모두 제공한다.
+
+이 값은 이미지 키에 들어가지 않는다(`tools/ci/image_keys.py`의 `KEY_EXCLUDED_ARGS`). `ubuntu.sources`는 이미지에 남아 미러별로 바이트가 다르지만 런타임이 apt를 쓰지 않으므로 같은 이미지로 본다. 미러 동기화 시차로 패키지 버전이 조금 다를 수 있으나, 이미지 키는 원래 apt 패키지 버전을 고정하지 않는다.
+
+다른 미러를 쓰려면 같은 이름의 환경변수를 주고 빌드한다. 환경변수가 `versions.env`보다 우선한다(`build_images.py` 경로에 한함. `versions.env`를 source하는 직접 bake 경로에서는 `versions.env`가 이긴다). 값을 바꿔도 이미 캐시된 `apt` 레이어는 인자가 달라진 단계부터 다시 만들어진다.
+
+http 미러만 가능하다(베이스 이미지에 CA 인증서가 없어 https 미러는 첫 apt 단계에서 인증서 오류).
+
+```
+UBUNTU_APT_MIRROR=http://archive.ubuntu.com/ubuntu python3 tools/ci/build_images.py --mode load
+```
+
+CI(`build-images.yml`)는 러너가 미국에 있어 위 방식으로 우분투 기본 미러를 쓴다. `tools/check_host.sh`의 미러 검사도 같은 값을 읽는다.
+
 스택 올리기와 내리기. 저장소 루트에서 실행한다. `up` 한 번이 생성, 떠 있던 같은 스택 내리기, 두 단계 `up --wait`(gazebo까지 올린 뒤 이 스택의 모델이 Gazebo에 남아 있지 않은지 확인하고 나머지를 올린다)를 모두 한다. 실패하면 에이전트의 `bind error`와 px4의 `bind failed`를 찾아 알려 준다.
 
 ```

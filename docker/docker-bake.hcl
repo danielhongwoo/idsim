@@ -1,6 +1,8 @@
 # 사용: set -a; . docker/versions.env; set +a; docker buildx bake -f docker/docker-bake.hcl <타깃> --load
 # 변수는 versions.env를 export한 환경변수에서 읽는다. 기본값을 두지 않는다.
+# UBUNTU_APT_MIRROR를 환경변수로 덮어쓰는 것은 build_images.py 경로에 한한다 (versions.env를 source하는 직접 bake에서는 versions.env가 이긴다).
 variable "UBUNTU_IMAGE" {}
+variable "UBUNTU_APT_MIRROR" {}
 variable "ROS_DISTRO" {}
 variable "ROS_APT_KEY_FPR" {}
 variable "GZ_RELEASE" {}
@@ -35,6 +37,7 @@ target "ros-base" {
   dockerfile = "Dockerfile.ros-base"
   args = {
     UBUNTU_IMAGE    = UBUNTU_IMAGE
+    UBUNTU_APT_MIRROR = UBUNTU_APT_MIRROR
     ROS_DISTRO      = ROS_DISTRO
     ROS_APT_KEY_FPR = ROS_APT_KEY_FPR
   }
@@ -84,6 +87,7 @@ target "xrce-agent" {
   dockerfile = "Dockerfile.xrce-agent"
   args = {
     UBUNTU_IMAGE     = UBUNTU_IMAGE
+    UBUNTU_APT_MIRROR = UBUNTU_APT_MIRROR
     XRCE_AGENT_TAG   = XRCE_AGENT_TAG
     XRCE_FASTCDR_REF = XRCE_FASTCDR_REF
     XRCE_FASTDDS_REF = XRCE_FASTDDS_REF
