@@ -13,7 +13,7 @@
 #      잔존 사전 검사), 실패하면 에이전트 bind error와 px4 bind failed를 보고한다. S0은 스택을 올리지 않는다.
 #   2. 판정에 쓰는 식별자(네임스페이스, system id, 모델 이름, 원점, 기대 파라미터, 서비스 이름)는 모두
 #      stack.json에서 읽는다(python3 표준 라이브러리). 이 스크립트는 식별자를 계산하지 않는다.
-#   3. 단계별 판정. S1b, S2, S3은 ros-ws 안의 check_px4.py(S3만 --arm), S2는 모델 유일성, pxh 판정,
+#   3. 단계별 판정. S1b, S2, S3은 ros-ws 안의 check_px4.py(S3만 --arm), S2는 모델 유일성, gz 서버 유일성, pxh 판정,
 #      PX4 로그(gz_bridge 오류, MAVLink bind failed), S4는 capture.sh와 tests.support.normalize
 #      (--update-golden이면 --update, 아니면 --check), S5는 /clock 증가. 모든 타임아웃은 벽시계다.
 #      run_checks는 || 문맥에서 불리므로 set -e가 꺼져 있다. 판정 명령은 반드시 &&로 잇는다(빠뜨리면 실패가 삼켜진다).
@@ -183,19 +183,14 @@ pending() {
   echo "$*" >>"${out_dir}/pending.txt"
 }
 
-# 원점 판정 인자. px4-engineer의 check_px4.py가 --expect-origin LAT LON ALT를 받으면 넘긴다.
-# 원점이 없으면(embedded이거나 fleet.yaml에 origin이 없음) 넘기지 않는다.
+# 원점 판정 인자 --expect-origin LAT LON ALT. 원점이 없으면(embedded이거나 fleet.yaml에 origin이 없음) 넘기지 않는다.
 origin_args() {
   local lat lon alt
   lat="$(sj world.origin.lat 2>/dev/null || true)"
   [ -n "$lat" ] || return 0
   lon="$(sj world.origin.lon)"
   alt="$(sj world.origin.alt)"
-  if grep -q -- '--expect-origin' tests/smoke/check_px4.py; then
-    echo "--expect-origin ${lat} ${lon} ${alt}"
-  else
-    pending "sensor_gps 원점 판정: check_px4.py에 --expect-origin이 아직 없다(px4-engineer). 원점 ${lat} ${lon} ${alt}"
-  fi
+  echo "--expect-origin ${lat} ${lon} ${alt}"
 }
 
 # test-engineer의 tests.support.topic_info 호출. 종료 코드 0 통과, 1 판정 실패, 2 토픽 못 찾음.
@@ -205,9 +200,10 @@ topic_info() {
 
 # px4 컨테이너 안의 pxh 명령 판정 (check_px4_pxh.py, 표준 라이브러리만). JSON은 stdout, 종료 코드 0/1/2.
 check_pxh() {
-  # 기대 파라미터는 stack.json의 vehicles[0].expected_params(공통 파일 + 기체별 값을 생성기가 합친 것)
+  # 기대 파라미터는 stack.json의 vehicles[0].expected_params(공통 파일 + 기체별 값을 생성기가 합친 것)와
+  # derived_params(MAV_SYS_ID, UXRCE_DDS_KEY, UXRCE_DDS_DOM_ID, SYS_AUTOSTART. 1대에서는 간접 판정이 없다)
   local expect=() kv
-  for kv in $(sj vehicles.0.expected_params); do
+  for kv in $(sj vehicles.0.expected_params) $(sj vehicles.0.derived_params); do
     expect+=(--expect-param "$kv")
   done
   if [ "${#expect[@]}" -eq 0 ]; then
@@ -233,6 +229,23 @@ check_model_unique() {
   [ "$n" = "1" ] || { echo "FAIL: gz model --list에 ${model}이 정확히 하나가 아니다(${n}개)" >&2; return 1; }
 }
 
+# 같은 파티션에 다른 gz 서버가 없다: scene/info 서비스 제공자(tcp:// 줄)와 /clock 발행자가 각각 정확히 하나
+check_single_gz_server() {
+  local world part n_svc n_pub
+  world="$(sj world.name)"
+  part="$(sj stack.gz_partition)"
+  compose exec -T "$gazebo_svc" gz service -i --service "/world/${world}/scene/info" >"${out_dir}/gz_scene_info.txt" 2>&1 || true
+  compose exec -T "$gazebo_svc" gz topic -i -t /clock >"${out_dir}/gz_clock_info.txt" 2>&1 || true
+  n_svc="$(grep -c 'tcp://' "${out_dir}/gz_scene_info.txt" || true)"
+  # Publishers 절 아래 tcp:// 줄만 센다(Subscribers 절은 제외)
+  n_pub="$(awk '/Publishers/{p=1;next} /Subscribers/{p=0} p&&/tcp:\/\//{n++} END{print n+0}' "${out_dir}/gz_clock_info.txt")"
+  echo "gz 서버: scene/info 제공자 ${n_svc}, /clock 발행자 ${n_pub}" | tee "${out_dir}/gz_single_server.txt"
+  if [ "$n_svc" != "1" ] || [ "$n_pub" != "1" ]; then
+    echo "FAIL: 같은 파티션 ${part}에 다른 gz 서버가 있다. idsim-smoke 프로젝트나 수동 docker run을 내려라" >&2
+    return 1
+  fi
+}
+
 check_clock() {
   local a b
   a="$(in_ros 'timeout 15 ros2 topic echo --once --no-daemon /clock' | grep -E '^ *sec:' | head -1 | tr -dc '0-9')"
@@ -251,7 +264,7 @@ run_checks() {
       local origin
       origin="$(origin_args)"
       # shellcheck disable=SC2086  # origin은 공백으로 나뉜 인자 넷이다
-      check_model_unique && check_px4 $origin && check_pxh && check_px4_log ;;
+      check_model_unique && check_single_gz_server && check_px4 $origin && check_pxh && check_px4_log ;;
     S3)
       check_timeout=90
       check_px4 --arm \
