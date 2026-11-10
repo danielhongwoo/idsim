@@ -36,6 +36,7 @@ jobs:
           - actionlint
           - yamllint
           - pytest
+          - compose-config
           - clang-format
           - clang-tidy
           - ament-lint

@@ -1,0 +1,159 @@
+{
+  "generated_at": "2026-11-09T09:00:00Z",
+  "generator": {
+    "git_commit": "0000000000000000000000000000000000000000",
+    "git_dirty": false,
+    "script": "tools/gen_compose.py",
+    "version": 2
+  },
+  "images": {
+    "lichtblick": null,
+    "px4": "idsim/px4:local",
+    "ros_ws": "idsim/ros-ws:local",
+    "sim_base": "idsim/sim-base:local",
+    "xrce_agent": "idsim/xrce-agent:local"
+  },
+  "inputs": {
+    "cyclonedds_xml": {
+      "path": "config/cyclonedds.xml",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "fleet": {
+      "path": "tests/fixtures/gen_compose/1\ub300-k3/fleet.yaml",
+      "sha256": "fa6ef8da59cead6cabd0413fb83ce2b1b208b0af89767767fac53b5261627784"
+    },
+    "px4_params_file": {
+      "path": "config/px4/sitl_params.env",
+      "sha256": "20f48202767f80e6126fc0548dd7effa3d4197a27c894f772ba6c46dac9ff31a"
+    },
+    "versions_env": {
+      "path": "docker/versions.env",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "px4": {
+    "start": "parallel"
+  },
+  "run": {
+    "compose_file": "compose.yaml",
+    "host_dir": "/work/idsim/artifacts/runs/20261109-090000-k3",
+    "id": "20261109-090000-k3",
+    "ros_log_dir": "ros_log"
+  },
+  "schema": 1,
+  "services": {
+    "agent": "xrce-agent",
+    "bridge": "bridge",
+    "foxglove": null,
+    "gazebo": "gazebo",
+    "gz_gui": "gz-gui",
+    "lichtblick": null,
+    "profiles": {
+      "tools": [
+        "runner"
+      ],
+      "viz": [
+        "gz-gui"
+      ]
+    },
+    "px4": [
+      "px4-1"
+    ],
+    "runner": "runner"
+  },
+  "stack": {
+    "agent_port": 8891,
+    "agent_port_hex": "22BB",
+    "compose_project": "idsim-3",
+    "dds": {
+      "cyclonedds_uri": "file:///opt/idsim/config/cyclonedds.xml",
+      "participant_index_max": 50,
+      "port_base": 13150,
+      "port_last": 13399,
+      "rmw_implementation": "rmw_cyclonedds_cpp"
+    },
+    "foxglove_port": 8768,
+    "gz_ip": "127.0.0.1",
+    "gz_partition": "idsim-3",
+    "index": 3,
+    "lichtblick_port": 18083,
+    "mavlink_gcs_remote": 17550,
+    "mavlink_offset": 3000,
+    "ros_domain_id": 23,
+    "viz_bind": "127.0.0.1"
+  },
+  "startup": {
+    "model_precheck": true,
+    "stages": [
+      [
+        "xrce-agent",
+        "gazebo"
+      ],
+      [
+        "px4-1"
+      ],
+      [
+        "bridge"
+      ]
+    ]
+  },
+  "user": {
+    "gid": 1000,
+    "uid": 1000
+  },
+  "variant": "standalone",
+  "vehicles": [
+    {
+      "airframe": "4001_gz_x500",
+      "autostart": 4001,
+      "derived_params": {
+        "MAV_SYS_ID": "2",
+        "SYS_AUTOSTART": "4001",
+        "UXRCE_DDS_DOM_ID": "23",
+        "UXRCE_DDS_KEY": "2"
+      },
+      "expected_params": {
+        "COM_DISARM_PRFLT": "-1.0",
+        "COM_OBL_RC_ACT": "4",
+        "COM_OF_LOSS_T": "1.0",
+        "COM_RC_IN_MODE": "4",
+        "NAV_DLL_ACT": "0",
+        "SDLOG_MODE": "2"
+      },
+      "gz_model_name": "x500_1",
+      "host_rootfs_dir": "/work/idsim/artifacts/runs/20261109-090000-k3/px4-1",
+      "id": 1,
+      "instance": 1,
+      "mavlink": {
+        "api_local": 17581,
+        "api_remote": 17541,
+        "gcs_local": 21571,
+        "gcs_remote": 17550
+      },
+      "ns": "/px4_1",
+      "pose": {
+        "x": 0.0,
+        "y": 0.0,
+        "yaw": 0.0,
+        "z": 0.0
+      },
+      "px4_ns": "px4_1",
+      "rootfs_dir": "px4-1",
+      "service": "px4-1",
+      "sim_model": "gz_x500",
+      "sysid": 2,
+      "ulog_dir": "px4-1/log",
+      "uxrce_key": 2
+    }
+  ],
+  "world": {
+    "file": "/opt/px4-gz/worlds/default.sdf",
+    "name": "default",
+    "origin": {
+      "alt": 38.0,
+      "lat": 37.5665,
+      "lon": 126.978
+    },
+    "speed_factor": null
+  }
+}

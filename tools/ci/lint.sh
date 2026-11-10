@@ -2,7 +2,7 @@
 # lint 잡의 검사를 실행한다. GitHub Actions의 lint 워크플로와 로컬이 같은 명령을 쓴다.
 #
 # 사용법: tools/ci/lint.sh <검사>... | all
-#   검사: charset shellcheck ruff hadolint actionlint yamllint pytest
+#   검사: charset shellcheck ruff hadolint actionlint yamllint pytest compose-config
 #         clang-format clang-tidy ament-lint cargo
 #
 # 대상 파일은 git이 추적하거나 무시 목록에 없는 새 파일이다(git ls-files -co --exclude-standard).
@@ -42,7 +42,8 @@ result() {
 
 # list_files <pathspec>... : 대상 파일을 NUL 없이 줄 단위로 출력 (경로에 줄바꿈이 없다고 가정)
 list_files() {
-  git ls-files -co --exclude-standard -- "$@" | sort -u | while IFS= read -r f; do
+  # core.quotepath=off: 한글 경로를 8진수 이스케이프 없이 그대로 받는다(아니면 [ -f ]에서 빠진다)
+  git -c core.quotepath=off ls-files -co --exclude-standard -- "$@" | sort -u | while IFS= read -r f; do
     [ -f "$f" ] && printf '%s\n' "$f"
   done
 }
@@ -71,7 +72,8 @@ check_charset() {
 
 check_shellcheck() {
   local files
-  mapfile -t files < <(list_files '*.sh')
+  # *.sh와 확장자 없는 셸 스크립트(명시 목록). px4-rc.mavlink는 px4 rcS가 source하는 sh 파일이다
+  mapfile -t files < <(list_files '*.sh' 'docker/px4/px4-rc.mavlink')
   if [ "${#files[@]}" -eq 0 ]; then result shellcheck PASS-NO-TARGETS "(0 files)"; return 0; fi
   if drun "$LINT_SHELLCHECK_IMAGE" --network none -- "${files[@]}"; then
     result shellcheck PASS "(${#files[@]} files)"
@@ -148,18 +150,45 @@ check_yamllint() {
 }
 
 check_pytest() {
-  # rclpy 없이 도는 단위 테스트만. rclpy가 필요한 테스트는 ros-ws 이미지 안의 unit 잡(이후 단계) 몫이다.
+  # rclpy 없이 도는 단위 테스트만(tests/support, tests/tools). rclpy가 필요한 테스트는 ros-ws 이미지 안의
+  # unit 잡(이후 단계) 몫이다. 생성기 테스트를 위해 ros-ws와 같은 PyYAML(LINT_PYYAML_VERSION, S0이 대조)을 설치한다.
   local files
-  mapfile -t files < <(list_files 'tests/support/test_*.py')
+  mapfile -t files < <(list_files 'tests/support/test_*.py' 'tests/tools/test_*.py')
   if [ "${#files[@]}" -eq 0 ]; then result pytest PASS-NO-TARGETS "(0 files)"; return 0; fi
   # 저장소는 읽기 전용으로 마운트하므로 캐시와 바이트코드를 쓰지 않는다
   # shellcheck disable=SC2016
   if drun "$LINT_PYTHON_IMAGE" -e PIP_DISABLE_PIP_VERSION_CHECK=1 -e PYTHONDONTWRITEBYTECODE=1 -- sh -c \
-      'pip install --no-cache-dir -q --root-user-action=ignore "pytest==$0" && python3 -m pytest tests/support -q -p no:cacheprovider' \
-      "$LINT_PYTEST_VERSION"; then
+      'pip install --no-cache-dir -q --root-user-action=ignore "pytest==$0" "pyyaml==$1" && python3 -m pytest tests/support tests/tools -q -p no:cacheprovider' \
+      "$LINT_PYTEST_VERSION" "$LINT_PYYAML_VERSION"; then
     result pytest PASS "(${#files[@]} files)"
   else
     result pytest FAIL "pytest 실패"; return 1
+  fi
+}
+
+check_compose_config() {
+  # 생성기 골든 compose를 docker compose config -q로 검사한다(viz, tools 프로필 포함, DISPLAY와 XAUTHORITY 미설정).
+  # 꺼진 프로필도 보간되므로 viz 서비스의 ${X:?} 같은 실수가 여기서 잡힌다. 골든의 호스트 저장소 경로
+  # /work/idsim을 이 체크아웃 경로로 바꿔 env_file이 실제로 있게 한다(바인드 원본 존재는 config가 보지 않는다).
+  local files
+  mapfile -t files < <(list_files 'tests/fixtures/gen_compose/*/compose.yaml')
+  if [ "${#files[@]}" -eq 0 ]; then result compose-config PASS-NO-TARGETS "(0 files)"; return 0; fi
+  local tmp f failed=0
+  tmp="$(mktemp -d)"
+  for f in "${files[@]}"; do
+    sed "s#/work/idsim#${repo_root}#g" "$f" > "${tmp}/compose.yaml"
+    if env -u DISPLAY -u XAUTHORITY docker compose -f "${tmp}/compose.yaml" --profile viz --profile tools config -q; then
+      echo "ok   ${f}"
+    else
+      echo "FAIL ${f}"
+      failed=1
+    fi
+  done
+  rm -rf "$tmp"
+  if [ "$failed" -eq 0 ]; then
+    result compose-config PASS "(${#files[@]} files)"
+  else
+    result compose-config FAIL "docker compose config 실패"; return 1
   fi
 }
 
@@ -184,7 +213,7 @@ check_ament_lint() { not_wired ament-lint 'package.xml'; }
 # cargo fmt --check, cargo clippy -D warnings: gateway/ 크레이트가 생기면 연결
 check_cargo() { not_wired cargo 'Cargo.toml'; }
 
-all_checks=(charset shellcheck ruff hadolint actionlint yamllint pytest clang-format clang-tidy ament-lint cargo)
+all_checks=(charset shellcheck ruff hadolint actionlint yamllint pytest compose-config clang-format clang-tidy ament-lint cargo)
 
 run_check() {
   case "$1" in
@@ -195,6 +224,7 @@ run_check() {
     actionlint) check_actionlint ;;
     yamllint) check_yamllint ;;
     pytest) check_pytest ;;
+    compose-config) check_compose_config ;;
     clang-format) check_clang_format ;;
     clang-tidy) check_clang_tidy ;;
     ament-lint) check_ament_lint ;;
