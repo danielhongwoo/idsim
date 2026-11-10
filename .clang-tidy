@@ -1,0 +1,48 @@
+---
+# idsim C++ clang-tidy 설정. 대상은 ros_ws/src/<패키지>/src와 include다(test는 처음에는 대상에서 뺀다).
+# 실행은 tools/ros_ws.sh tidy(colcon 빌드의 compile_commands.json 사용).
+#
+# 끈 검사와 이유
+# - bugprone-easily-swappable-parameters: 좌표, 범위 인자처럼 같은 타입 인자가 자연스러운 API가 많다.
+# - bugprone-macro-parentheses: 기술자 매크로(IDSIM_PX4_TOPIC)가 타입과 식별자를 인자로 받아 괄호를 칠 수 없다.
+# - misc-include-cleaner: ROS 메시지 헤더와 rclcpp 우산 헤더에서 오탐이 많다.
+# - misc-non-private-member-variables-in-classes: 값 묶음 struct(VehicleIdentity 등)를 쓴다.
+# - modernize-use-trailing-return-type, modernize-use-nodiscard: 스타일 취향이며 ROS 코드 관례와 다르다.
+# - readability-magic-numbers, readability-identifier-length: 좌표 변환과 MAVLink 상수에서 잡음이 크다.
+#
+# 검사 옵션
+# - bugprone-reserved-identifier: 헤더 가드는 ROS 2 관례(<PKG>__<FILE>_HPP_, 이중 밑줄)를 쓴다. cpplint
+#   build/header_guard가 이 이름을 요구하므로 검사는 켜 두고 헤더 가드 모양만 AllowedIdentifiers로 뺀다.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-macro-parentheses,
+  clang-analyzer-*,
+  cppcoreguidelines-init-variables,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-slicing,
+  misc-*,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -modernize-use-nodiscard,
+  performance-*,
+  readability-braces-around-statements,
+  readability-const-return-type,
+  readability-container-size-empty,
+  readability-else-after-return,
+  readability-implicit-bool-conversion,
+  readability-inconsistent-declaration-parameter-name,
+  readability-make-member-function-const,
+  readability-misleading-indentation,
+  readability-redundant-*,
+  readability-simplify-boolean-expr
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/ros_ws/src/idsim_[a-z_]+/include/.*'
+FormatStyle: file
+CheckOptions:
+  - key: bugprone-reserved-identifier.AllowedIdentifiers
+    value: '^[A-Z][A-Z0-9_]*__[A-Z0-9_]+_HPP_$'
+...

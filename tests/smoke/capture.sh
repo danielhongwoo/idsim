@@ -32,7 +32,7 @@ set -euo pipefail
 
 readonly DEFAULT_HZ_BASES="vehicle_status vehicle_local_position vehicle_global_position \
 vehicle_attitude vehicle_odometry sensor_combined vehicle_land_detected vehicle_control_mode \
-battery_status failsafe_flags timesync_status vehicle_gps_position"
+battery_status failsafe_flags vehicle_gps_position"
 
 usage() {
   sed -n '2,13p' "$0" >&2

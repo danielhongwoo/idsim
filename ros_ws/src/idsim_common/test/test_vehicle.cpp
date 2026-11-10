@@ -1,0 +1,90 @@
+// 기체 식별 타입과 vehicle_status 대조. 순수 함수만 시험한다.
+// 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 5.
+
+#include <gtest/gtest.h>
+
+#include <cstdint>
+#include <string>
+#include <type_traits>
+
+#include "idsim_common/vehicle.hpp"
+#include "px4_msgs/msg/vehicle_status.hpp"
+
+using idsim_common::IdentityCheck;
+using idsim_common::SystemId;
+using idsim_common::VehicleIdentity;
+using idsim_common::VehicleNamespace;
+
+static_assert(!std::is_default_constructible_v<VehicleNamespace>);
+static_assert(!std::is_constructible_v<VehicleNamespace, std::string>);
+static_assert(!std::is_default_constructible_v<SystemId>);
+static_assert(!std::is_constructible_v<SystemId, int>);
+static_assert(!std::is_constructible_v<SystemId, std::uint8_t>);
+static_assert(!std::is_default_constructible_v<VehicleIdentity>);
+
+TEST(VehicleNamespace, AcceptsAbsoluteNamespaces)
+{
+  for (const std::string ok : {"/px4_1", "/px4_9", "/fleet/px4_3", "/a"}) {
+    std::string error;
+    const auto ns = VehicleNamespace::parse(ok, &error);
+    ASSERT_TRUE(ns.has_value()) << ok << ": " << error;
+    EXPECT_EQ(ns->str(), ok);
+  }
+}
+
+TEST(VehicleNamespace, RejectsInvalid)
+{
+  // 빈 문자열과 "/"(N=0 미지원), 상대 경로, 끝 빗금, rmw 규칙 위반.
+  for (const std::string bad :
+       {"", "/", "px4_1", "/px4_1/", "//px4_1", "/1px4", "/px4-1", "/px4 1", "/px4_1//x"}) {
+    std::string error;
+    EXPECT_FALSE(VehicleNamespace::parse(bad, &error).has_value()) << "'" << bad << "'";
+    EXPECT_FALSE(error.empty()) << "'" << bad << "'";
+  }
+  // error 인자는 생략할 수 있다.
+  EXPECT_FALSE(VehicleNamespace::parse("/").has_value());
+}
+
+TEST(SystemId, Range)
+{
+  EXPECT_FALSE(SystemId::make(0).has_value());
+  EXPECT_FALSE(SystemId::make(-1).has_value());
+  EXPECT_FALSE(SystemId::make(256).has_value());
+  ASSERT_TRUE(SystemId::make(1).has_value());
+  ASSERT_TRUE(SystemId::make(255).has_value());
+  EXPECT_EQ(SystemId::make(1)->value(), 1);
+  EXPECT_EQ(SystemId::make(255)->value(), 255);
+}
+
+namespace
+{
+
+VehicleIdentity identity(const char * ns, int sysid)
+{
+  return VehicleIdentity{*VehicleNamespace::parse(ns), *SystemId::make(sysid)};
+}
+
+px4_msgs::msg::VehicleStatus status(int system_id, int component_id)
+{
+  px4_msgs::msg::VehicleStatus s;
+  s.system_id = static_cast<std::uint8_t>(system_id);
+  s.component_id = static_cast<std::uint8_t>(component_id);
+  return s;
+}
+
+}  // namespace
+
+TEST(VehicleIdentity, Verify)
+{
+  const auto id = identity("/px4_1", 2);
+  EXPECT_EQ(idsim_common::verify(id, status(2, 1)), IdentityCheck::Match);
+  EXPECT_EQ(idsim_common::verify(id, status(3, 1)), IdentityCheck::SystemIdMismatch);
+  EXPECT_EQ(idsim_common::verify(id, status(0, 1)), IdentityCheck::SystemIdMismatch);
+  EXPECT_EQ(idsim_common::verify(id, status(2, 0)), IdentityCheck::ComponentIdMismatch);
+  EXPECT_EQ(idsim_common::verify(id, status(2, 191)), IdentityCheck::ComponentIdMismatch);
+  // 둘 다 틀리면 system id를 먼저 보고한다.
+  EXPECT_EQ(idsim_common::verify(id, status(5, 7)), IdentityCheck::SystemIdMismatch);
+  EXPECT_STREQ(idsim_common::to_string(IdentityCheck::Match), "Match");
+  EXPECT_STREQ(idsim_common::to_string(IdentityCheck::SystemIdMismatch), "SystemIdMismatch");
+  EXPECT_STREQ(idsim_common::to_string(IdentityCheck::ComponentIdMismatch), "ComponentIdMismatch");
+}
