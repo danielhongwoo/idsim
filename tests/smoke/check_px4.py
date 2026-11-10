@@ -8,6 +8,8 @@ docs/smoke-test-phase1a.md를 따른다.
   check_px4.py --system-id 1 --timeout 30              # S1 (네임스페이스 없음)
   check_px4.py --ns px4_1 --system-id 2 --timeout 30   # S1b, S2
   check_px4.py --ns px4_1 --system-id 2 --timeout 60 --arm   # S3
+  check_px4.py --ns px4_1 --system-id 2 --timeout 60 \
+      --expect-origin 37.5665 126.978 38.0                     # S2 (원점 판정 추가)
 
 판정 항목
   status_topic     ros2 topic list에서 ^/(<ns>/)?fmu/out/vehicle_status(_v[0-9]+)?$
@@ -15,6 +17,11 @@ docs/smoke-test-phase1a.md를 따른다.
   status_received  sensor_data QoS로 1회 이상 수신, timestamp가 0이 아님
   timestamp_rises  다시 받은 메시지의 timestamp가 앞의 것보다 큼
   system_id        vehicle_status.system_id가 기대값과 같음
+  (--expect-origin일 때 S2)
+  gps_topic        ^/(<ns>/)?fmu/out/vehicle_gps_position(_v[0-9]+)?$ 에 맞는 토픽이
+                   정확히 하나, 타입 px4_msgs/msg/SensorGps
+  gps_origin       fix_type >= 3(3D)인 메시지 ORIGIN_SAMPLES개의 위도/경도/고도가
+                   기대 원점과 수평 ORIGIN_TOL_H_M, 수직 ORIGIN_TOL_V_M 안(최대 오차로 판정)
   (--arm일 때 S3)
   arm_ack          VEHICLE_CMD_COMPONENT_ARM_DISARM(param1 1.0) 발행 후
                    vehicle_command_ack.result 0(ACCEPTED)
@@ -37,9 +44,18 @@ PX4 쪽 사실 (v1.17.0 소스 기준)
 - 시동은 사전 점검(EKF 수렴, home 등)이 끝나기 전에는
   VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED(1)로 거부된다. 그래서 시간 안에서 재시도한다.
 - 부팅 직후 모드는 Hold(AUTO_LOITER)이며 수동 조종 입력 없이 시동된다.
+- 원점 판정 토픽. uORB sensor_gps는 DDS로 나가지 않고, 센서 모듈이 고른(단일 수신기면
+  그대로 통과시킨) vehicle_gps_position이 fmu/out/vehicle_gps_position(SensorGps)으로
+  나간다(tests/fixtures/px4/v1.17.0/topics.txt). gz 경로에서 이 값은 gz navsat 센서
+  값을 gz_bridge가 옮긴 것이며 EKF를 거치지 않는다. vehicle_global_position(EKF 추정)과
+  home_position(시동 등에서 다시 설정됨)보다 "월드 원점이 적용되었는가"에 직접적이다.
+- 원점 판정은 기체가 월드 원점 위에 있다고 가정한다. 기체 pose(x, y, z)가 0이 아니면
+  GPS는 원점에서 그만큼 떨어지며(ENU, x는 동쪽, y는 북쪽), 이 스크립트는 그것을 보정하지
+  않는다. 수직 오차에는 기체가 바닥에 놓였을 때의 navsat 센서 높이(base_link)가 들어간다.
 """
 import argparse
 import json
+import math
 import re
 import sys
 import time
@@ -50,7 +66,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import rclpy  # noqa: E402
 from rclpy.qos import qos_profile_sensor_data  # noqa: E402
 
-from px4_msgs.msg import VehicleCommand, VehicleCommandAck, VehicleStatus  # noqa: E402
+from px4_msgs.msg import (  # noqa: E402
+    SensorGps,
+    VehicleCommand,
+    VehicleCommandAck,
+    VehicleStatus,
+)
 
 from tests.support.receive import (  # noqa: E402
     SpinThread,
@@ -62,6 +83,7 @@ from tests.support.receive import (  # noqa: E402
 STATUS_TYPE = "px4_msgs/msg/VehicleStatus"
 COMMAND_TYPE = "px4_msgs/msg/VehicleCommand"
 ACK_TYPE = "px4_msgs/msg/VehicleCommandAck"
+GPS_TYPE = "px4_msgs/msg/SensorGps"
 
 # 명령 재전송 간격(초, 벽시계). ack를 기다리는 동안 이 간격으로 다시 보낸다.
 RESEND_S = 0.5
@@ -70,6 +92,20 @@ TARGET_COMPONENT = 1
 # 명령 발신자 식별. GCS 관례값(255, 190)과 겹치지 않게 임의로 둔다.
 SOURCE_SYSTEM = 254
 SOURCE_COMPONENT = 1
+
+# 원점 판정 허용 오차. 2026-11-10 실측(v1.17.0, x500, 바닥에 놓인 상태, 90초 2666개, 약 30 Hz):
+# 수평 오차 최대 0.070 m(평균 0.025), 고도 38.098-38.338(평균 38.222, 원점 38.0). 고도 평균의
+# 0.22 m는 navsat가 붙은 base_link 높이, 나머지는 시간에 따라 커지지 않는 잡음이다(사분위별
+# 최대가 일정). x500 model.sdf의 navsat에는 noise 요소가 없으므로 잡음은 PX4 gz_bridge 쪽에서
+# 더해지는 것으로 추정한다(소스 미확인). 수평 0.5 m는 실측 최대의 약 7배이면서 원점 소수
+# 다섯째 자리(약 1.1 m) 차이를 잡고, 수직 1.0 m는 base_link 높이와 잡음을 합한 0.34 m의 약 3배다.
+# 원점이 아예 적용되지 않으면 기본 월드(취리히, 47.398, 8.546) 값이 나와 수천 km 차이다.
+ORIGIN_TOL_H_M = 0.5
+ORIGIN_TOL_V_M = 1.0
+# 판정에 쓰는 3D fix 메시지 수. 최대 오차로 판정한다.
+ORIGIN_SAMPLES = 10
+# WGS84 장반경(m). 오차가 작을 때의 국소 평면 근사에 쓴다.
+EARTH_RADIUS_M = 6378137.0
 
 
 def topic_regex(ns, direction, base):
@@ -101,6 +137,10 @@ class Report:
             "topics": {},
             "checks": [],
         }
+        # 인자가 없을 때 출력이 이전과 같도록 키를 넣지 않는다
+        if args.expect_origin is not None:
+            lat, lon, alt = args.expect_origin
+            self.data["expected_origin"] = {"lat": lat, "lon": lon, "alt": alt}
 
     def check(self, name, ok, **detail):
         self.data["checks"].append({"name": name, "ok": bool(ok), "detail": detail})
@@ -212,6 +252,77 @@ def run_status_checks(node, args, deadline, report):
     return status_topic if ok else None
 
 
+def origin_error_m(lat, lon, alt, exp_lat, exp_lon, exp_alt):
+    """(수평 오차 m, 수직 오차 m). 수평은 기대 위도 기준 국소 평면 근사."""
+    dn = math.radians(lat - exp_lat) * EARTH_RADIUS_M
+    de = math.radians(lon - exp_lon) * EARTH_RADIUS_M * math.cos(math.radians(exp_lat))
+    return math.hypot(dn, de), abs(alt - exp_alt)
+
+
+def collect_gps_fixes(node, topic, n, timeout_s):
+    """fix_type >= 3D인 SensorGps를 n개까지 모은다. (모은 목록, 받은 전체 수)."""
+    fixes = []
+    total = {"n": 0}
+
+    def cb(msg):
+        total["n"] += 1
+        if len(fixes) < n and msg.fix_type >= SensorGps.FIX_TYPE_3D:
+            fixes.append((float(msg.latitude_deg), float(msg.longitude_deg),
+                          float(msg.altitude_msl_m), int(msg.fix_type)))
+
+    sub = node.create_subscription(SensorGps, topic, cb, qos_profile_sensor_data)
+    try:
+        with SpinThread(node):
+            end = time.monotonic() + timeout_s
+            while len(fixes) < n and time.monotonic() < end:
+                time.sleep(0.05)
+    finally:
+        node.destroy_subscription(sub)
+    return list(fixes), total["n"]
+
+
+def run_origin_checks(node, args, deadline, report):
+    """S2. vehicle_gps_position이 기대 월드 원점을 보고하는지."""
+    gps_topic = find_unique_topic(
+        node, topic_regex(args.ns, "out", "vehicle_gps_position"), GPS_TYPE,
+        deadline, report, "gps_topic")
+    report.data["topics"]["vehicle_gps_position"] = gps_topic
+    if gps_topic is None:
+        report.skip("gps_origin")
+        return
+
+    exp_lat, exp_lon, exp_alt = args.expect_origin
+    fixes, received = collect_gps_fixes(node, gps_topic, ORIGIN_SAMPLES, deadline.left())
+    detail = {
+        "expected": {"lat": exp_lat, "lon": exp_lon, "alt": exp_alt},
+        "tol_horizontal_m": ORIGIN_TOL_H_M,
+        "tol_vertical_m": ORIGIN_TOL_V_M,
+        "samples_wanted": ORIGIN_SAMPLES,
+        "samples_3d_fix": len(fixes),
+        "messages_received": received,
+    }
+    if len(fixes) < ORIGIN_SAMPLES:
+        detail["reason"] = "not enough 3D fix messages"
+        if fixes:
+            lat, lon, alt, _ = fixes[-1]
+            detail["last"] = {"lat": lat, "lon": lon, "alt_msl": alt}
+        report.check("gps_origin", False, **detail)
+        return
+
+    errs = [origin_error_m(lat, lon, alt, exp_lat, exp_lon, exp_alt)
+            for lat, lon, alt, _ in fixes]
+    worst_h = max(e[0] for e in errs)
+    worst_v = max(e[1] for e in errs)
+    lat, lon, alt, fix_type = fixes[-1]
+    detail.update({
+        "last": {"lat": lat, "lon": lon, "alt_msl": alt, "fix_type": fix_type},
+        "max_horizontal_m": round(worst_h, 3),
+        "max_vertical_m": round(worst_v, 3),
+    })
+    report.check("gps_origin", worst_h <= ORIGIN_TOL_H_M and worst_v <= ORIGIN_TOL_V_M,
+                 **detail)
+
+
 def run_arm_checks(node, args, deadline, report, status_topic):
     """S3. 시동, 유지 확인, 시동 끄기, 복귀 확인."""
     names = ("command_topic", "ack_topic", "arm_ack", "armed_hold", "disarm_ack", "disarmed_hold")
@@ -275,6 +386,10 @@ def parse_args(argv):
                    help="상태 유지 판정의 연속 수신 횟수. 기본 3")
     p.add_argument("--disarm-grace", type=float, default=10.0,
                    help="예산이 바닥나도 시동 끄기에 주는 최소 시간(초). 기본 10")
+    p.add_argument("--expect-origin", type=float, nargs=3, metavar=("LAT", "LON", "ALT"),
+                   default=None,
+                   help="S2 원점 판정. stack.json world.origin(도, 도, m). "
+                        "기체 pose가 0이라고 가정한다")
     args = p.parse_args(argv)
     args.ns = args.ns.strip("/")
     return args
@@ -289,6 +404,11 @@ def main(argv=None):
     node = rclpy.create_node("idsim_check_px4")
     try:
         status_topic = run_status_checks(node, args, deadline, report)
+        if args.expect_origin is not None:
+            if status_topic is None:
+                report.skip("gps_topic", "gps_origin")
+            else:
+                run_origin_checks(node, args, deadline, report)
         if args.arm:
             if status_topic is None:
                 report.skip("command_topic", "ack_topic", "arm_ack", "armed_hold",
