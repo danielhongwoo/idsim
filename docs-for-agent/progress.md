@@ -129,6 +129,9 @@
 - 2026-11-09: 사용자 결정 4건(3단계). (1) `world.origin` 기본값은 서울시청(37.5665, 126.9780, 38). (2) 파서는 ros-ws 컨테이너 안에서 실행, 호스트 조건 불변. (3) S1(인스턴스 0) 재현 포기, embedded(S1b) 유지. (4) 편의 스크립트 `tools/stack.sh`(up|down|logs)와 `tools/qgc.sh --stack k`(다른 k의 GCS 포트) 둘 다 3단계에 추가, devops-engineer 범위. `qgc.sh --stack`은 QGC Comm Link 설정 방법(설정 파일 또는 명령행 인자) 조사가 필요하다.
 
 - 2026-11-09: 3단계 A 완료(px4-engineer, reviewer와 devops 접점 검토 반영). `docker/px4/px4-rc.mavlink`가 PATH 맨 앞에서 상류를 대체하고 `IDSIM_MAVLINK_OFFSET`(0 또는 앞자리 0 없는 십진수, 최대 9000)을 GCS/API 포트에 더한다. 실측: 오프셋 1000, -i 1에서 15550에 sysid 2 패킷 4809개, 15541에 5256개, 14550과 14541에 0개. 오프셋 0은 기존과 동일. reviewer 재현(오프셋 2000, -i 3): 16550에 5433개, 16543에 5993개. 추가 결정: 상류에 `.post`가 이미 있는 gz airframe이 생기면 빌드를 실패시킨다(훅이 조용히 빠지거나 덮어쓰는 것 방지. v1.17.0에는 없음). N=0은 수동 실행용으로 거부하지 않는다. px4 이미지 키 변경(builder 단계 캐시 유지). `docker/px4/px4-rc.mavlink`는 `*.sh`가 아니라 lint.sh shellcheck 대상 밖이며 C에서 devops가 명시 경로로 추가한다.
+- 2026-11-09: 3단계 B 완료(sim-engineer, reviewer 검토 반영). `ros_ws/src/idsim_sim/scripts/gz_server.sh`(월드 이름 검사, 서버 자식 실행, scene/info 대기 60초, 원점 1회 호출과 `data: true` 확인, 표시 파일, TERM 뒤 5초 유예 후 KILL, INT 130/TERM 143)와 `gz_gui.sh`(DISPLAY, Xauthority, GUI 설정 점검, HOME 대체, XAUTHORITY=/tmp/.Xauthority를 스스로 export). 실측: wrapper가 원점을 적용한 뒤 PX4_HOME_* 없이 붙인 px4의 `sensor_gps`가 37.566500, 126.978000(서울시청). healthcheck 창 없음(표시 파일은 원점 응답 뒤에만 생기고 시작 시 삭제, reviewer 실측).
+- 2026-11-09: 준비 파일 단일화(결정 (j) 보완). wrapper는 원점 단계가 끝나면 원점 유무와 무관하게 `/tmp/idsim/ready`를 쓰고, 원점을 적용한 경우에만 `/tmp/idsim/origin_set`을 더 쓴다. gazebo healthcheck는 한 가지: `gz service -i --service /world/<이름>/scene/info | grep -q "Service providers" && test -f /tmp/idsim/ready`. 근거: 원점이 있을 때 생성기가 표시 파일 항을 빠뜨리면 "스폰은 원점 설정 뒤"가 조용히 깨지는 경로를 없앤다. gz-gui 기본 설정 경로는 `/opt/idsim/sim/config/gui.config`(패키지 전체를 `/opt/idsim/sim`에 마운트).
+- 2026-11-09: `--render-engine-gui ogre`는 gui.config의 `<engine>ogre2</engine>`을 덮는다(sim-engineer 실측: OGRE 1.9 라이브러리 로드, GridConfig 격자 렌더링 정상). 미해결 항목 닫힘.
 
 ## 미해결 사항
 
@@ -153,7 +156,6 @@
 - 스모크는 호스트당 하나만 돌린다(`compose.smoke.yaml`의 이름이 `idsim-smoke` 고정). 3단계 C가 `compose.smoke.yaml`을 삭제하고 스모크가 생성된 compose(`idsim-<k>`)를 쓰게 되면 닫힌다.
 - MAVLink bind에 실패한 PX4 인스턴스의 동작(GCS 링크 없이 계속 뜨는지, uXRCE 영향)은 미실측. 3단계 이후에는 오프셋으로 충돌 자체가 없어야 하므로 check_px4_log의 `bind failed` 판정이 회귀를 잡는다.
 - lockstep 반대 방향(PX4가 느릴 때 Gazebo가 기다리는지)은 미실측. Phase 3 CPU 포화 해석의 전제.
-- `--render-engine-gui` 플래그가 `gui.config`의 engine을 덮는지, ogre1 + GridConfig 조합은 미확인(sim-engineer).
 - compose healthcheck `start_interval`의 Docker 하한은 미실측(Docker 29.1.3, Compose 2.40.3에서 수용). `check_host.sh`에 넣을 값은 devops-engineer가 정한다.
 - 1b 전 결정: 기체별 EKF 원점은 월드 원점이 아니라 스폰 지점이라 월드 ENU `TargetState`를 기체 NED setpoint로 바꾸려면 스폰 pose 또는 `VehicleLocalPosition`의 ref_lat/lon/alt가 필요하다(px4, sim, ros2 제기). 1b 커스텀 월드에서 `world.origin`과 SDF `<spherical_coordinates>` 일치 검사 주체도 1b 착수 때 정한다. 월드 SDF에 `<plugin>`이 하나라도 있으면 서버 설정 파일이 무시된다(sim).
 
