@@ -3,7 +3,8 @@
 #
 # 사용법: tools/gen_compose.sh [--stack k] [--fleet f] [--variant standalone|embedded] [--run-id id]
 #                              [--run-dir 경로] [--image-tag t | --registry r] [그 밖의 gen_compose.py 인자...]
-#   --run-dir를 주지 않으면 <저장소>/artifacts/runs/<run-id>. 실행 디렉터리는 저장소 안이어야 한다.
+#   --run-dir를 주지 않으면 <저장소>/artifacts/runs/<run-id>. 실행 디렉터리는 <저장소>/artifacts/runs/<run-id>여야 한다.
+#   --run-dir만 주면 run-id는 그 마지막 요소가 된다(어긋나면 생성기가 거부한다).
 #   성공하면 실행 디렉터리의 호스트 절대 경로 한 줄을 stdout에 쓴다(경고는 stderr).
 #
 # 컨테이너 조건
@@ -42,7 +43,7 @@ while [ "$i" -lt "${#args[@]}" ]; do
     --run-dir) run_dir="$next"; i=$((i + 2)); continue ;;
     --image-tag) image_tag="$next"; i=$((i + 2)); continue ;;
     --registry) registry="$next"; i=$((i + 2)); continue ;;
-    -h|--help) sed -n '2,7p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
   esac
   pass+=("$a")
   i=$((i + 1))
@@ -52,7 +53,9 @@ case "$stack" in
   [0-9]) ;;
   *) echo "gen_compose.sh: 스택 번호는 0-9: '${stack}'" >&2; exit 2 ;;
 esac
-if [ -z "$run_id" ]; then
+if [ -z "$run_id" ] && [ -n "$run_dir" ]; then
+  run_id="$(basename "$run_dir")"
+elif [ -z "$run_id" ]; then
   run_id="$(date -u +%Y%m%d-%H%M%S)-k${stack}"
 fi
 if [ -z "$run_dir" ]; then
