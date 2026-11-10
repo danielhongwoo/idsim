@@ -12,7 +12,7 @@
 | D | 완료 |
 | E | 완료 |
 
-남은 것: px4 접점 검토(사용자 확인 대기), PR과 CI unit job 첫 통과. 실측값과 열린 항목은 `docs-for-agent/progress.md`에 있다.
+남은 것: PR과 CI unit job 첫 통과. PX4 인터페이스 검토와 reviewer 검토는 끝났다. 실측값과 열린 항목은 `docs-for-agent/progress.md`에 있다.
 
 ## 이 디렉터리의 파일
 
@@ -91,8 +91,8 @@ B의 하위 작업(세부는 `decisions.md`의 해당 쟁점).
 
 ## 사용자 결정과 알림
 
-- 결정 필요: 저장소 라이선스와 소스 파일 저작권 머리말 정책. 정해질 때까지 `ament_copyright`와 cpplint `legal/copyright`를 끈다.
-- 알림: ros-ws 이미지가 clang 18 도구로 약 297MB 커지고 재빌드가 한 번 생긴다(공개 저장소의 무료 러너 안이라 금전 비용 없음으로 판단). 크기를 줄여야 하면 clang-tidy를 별도 도구 이미지로 빼는 안이 있다.
+- 결정됨(2026-11-10): 저장소 라이선스는 Apache-2.0. `ament_copyright`와 cpplint `legal/copyright`를 켰다.
+- 결정됨(2026-11-10): ros-ws 이미지는 clang 18 도구로 약 410MB 커졌고(예상 297MB) 그대로 둔다.
 
 ## 모델 운용 메모(2026-11-10)
 
