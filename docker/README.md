@@ -123,7 +123,7 @@ python3 tools/ci/image_keys.py --explain px4
 | `tools/ros_ws.sh clean` | `ros_ws/build`, `install`, `log` 삭제 |
 | `tools/ros_ws.sh shell` | 같은 조건의 대화형 bash |
 
-컨테이너는 `--user <호스트 uid:gid>`, `--network none`, `HOME=/tmp/idsim-home`, `CYCLONEDDS_URI=` 비움, `ROS_DOMAIN_ID=99`로 돈다. 단위 테스트가 같은 호스트의 개발 스택(도메인 20 + k)과 섞이지 않게 하는 조건이다. 실행 전에 이미지의 `IDSIM_BUILD_*`(`PX4_MSGS_REF`, `PX4_ROS_COM_REF`, `LLVM_MAJOR`)를 `versions.env`와 대조해 다르면 중단하므로, `versions.env`를 올린 뒤에는 `python3 tools/ci/build_images.py --mode load ros-ws`로 이미지를 다시 빌드한다. 병렬 수는 `IDSIM_JOBS`(기본 min(코어 수, 4))로 바꾼다. 스택이 떠 있을 때 다시 빌드하면 실행 중인 노드의 `.so`가 바뀌므로 경고가 나온다.
+컨테이너는 `--user <호스트 uid:gid>`, `--network none`, `HOME=/tmp/idsim-home`, `CYCLONEDDS_URI=` 비움, `ROS_DOMAIN_ID=99`로 돈다. 단위 테스트가 같은 호스트의 개발 스택(도메인 20 + k)과 섞이지 않게 하는 조건이다. 실행 전에 이미지에 있는 `IDSIM_BUILD_*` 값만(ENV가 없는 옛 이미지는 통과한다)(`PX4_MSGS_REF`, `PX4_ROS_COM_REF`, `LLVM_MAJOR`, `FOXGLOVE_BRIDGE_VERSION`)를 `versions.env`와 대조해 다르면 중단하므로, `versions.env`를 올린 뒤에는 `python3 tools/ci/build_images.py --mode load ros-ws`로 이미지를 다시 빌드한다. foxglove_bridge는 ROS apt가 최신 빌드 하나만 남겨 정확한 판을 pin할 수 없어, 설치한 dpkg 판이 `FOXGLOVE_BRIDGE_VERSION-` 접두로 시작하는지 빌드에서 단정하고 `IDSIM_BUILD_FOXGLOVE_BRIDGE_VERSION`으로 남긴다. 병렬 수는 `IDSIM_JOBS`(기본 min(코어 수, 4))로 바꾼다. 스택이 떠 있을 때 다시 빌드하면 실행 중인 노드의 `.so`가 바뀌므로 경고가 나온다.
 
 `colcon test`는 테스트가 실패해도 0을 돌려주고 `colcon test-result`는 빌드가 실패해도 "0 tests"로 0을 돌려준다. 그래서 `test`는 `--return-code-on-test-failure`를 쓰고 테스트 수가 0이면 실패시킨다. 단위 층에는 재시도를 두지 않는다.
 

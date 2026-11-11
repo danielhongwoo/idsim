@@ -6,6 +6,7 @@ variable "UBUNTU_APT_MIRROR" {}
 variable "ROS_DISTRO" {}
 variable "ROS_APT_KEY_FPR" {}
 variable "LLVM_MAJOR" {}
+variable "FOXGLOVE_BRIDGE_VERSION" {}
 variable "GZ_RELEASE" {}
 variable "PX4_TAG" {}
 variable "PX4_MSGS_REF" {}
@@ -80,6 +81,7 @@ target "ros-ws" {
     PX4_MSGS_REF    = PX4_MSGS_REF
     PX4_ROS_COM_REF = PX4_ROS_COM_REF
     LLVM_MAJOR      = LLVM_MAJOR
+    FOXGLOVE_BRIDGE_VERSION = FOXGLOVE_BRIDGE_VERSION
   }
   tags = ["idsim/ros-ws:local", "${REGISTRY}/ros-ws:${KEY_ROS_WS}"]
 }
