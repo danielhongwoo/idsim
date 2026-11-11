@@ -78,9 +78,9 @@ def test_trailing_padding_is_not_in_file(tmp_path):
 def test_read_logged_messages_l_and_c(tmp_path):
     out = b"ULog\x01\x12\x35" + b"\x01" + struct.pack("<Q", 0) + msg(0x42, b"\x00" * 40)
     out += msg(0x4C, struct.pack("<BQ", 0x36, 1234) + b"[commander] Armed by external command")
-    out += msg(0x43, struct.pack("<H", 7) + struct.pack("<BQ", 0x34, 99) + b"tagged text")
+    out += msg(0x43, struct.pack("<BHQ", 0x34, 7, 99) + b"tagged text")    # level u8, tag u16, timestamp u64
     p = tmp_path / "e.ulg"
     p.write_bytes(out)
     rows = ulog_min.read_logged(str(p))
     assert rows[0] == {"level": 6, "ts": 1234, "msg": "[commander] Armed by external command"}
-    assert rows[1]["ts"] == 99 and rows[1]["msg"] == "tagged text"
+    assert rows[1] == {"level": 4, "ts": 99, "msg": "tagged text"}

@@ -14,7 +14,7 @@
 
 """ULog에서 한 토픽의 표본만 읽는 최소 parser. 표준 라이브러리만 쓴다.
 
-호스트와 ros-ws, px4 이미지에 pyulog가 없어서 둔다. 읽는 것: 헤더, F(형식), A(구독), D(데이터).
+호스트와 ros-ws, px4 이미지에 pyulog가 없어서 둔다. 읽는 것: header, F(형식), A(구독), D(데이터).
 나머지 메시지는 건너뛴다. 파일이 닫히지 않아 마지막 메시지가 잘려 있으면 거기서 멈추고 그때까지
 읽은 표본을 돌려준다. flag bit의 "추가 데이터 첨부"(append) 구간은 읽지 않는다.
 
@@ -84,7 +84,7 @@ def read_topic(path, topic, multi_id=0):
     with open(path, "rb") as fh:
         buf = fh.read()
     if buf[:7] != _MAGIC:
-        raise UlogError("ULog 머리가 아니다: %s" % path)
+        raise UlogError("ULog header가 아니다: %s" % path)
     pos = 16
     formats = {}
     msg_ids = set()
@@ -127,7 +127,7 @@ def read_logged(path):
     with open(path, "rb") as fh:
         buf = fh.read()
     if buf[:7] != _MAGIC:
-        raise UlogError("ULog 머리가 아니다: %s" % path)
+        raise UlogError("ULog header가 아니다: %s" % path)
     pos = 16
     out = []
     while pos + 3 <= len(buf):
@@ -140,8 +140,8 @@ def read_logged(path):
         if mtype == 0x4C and size >= 9:        # 'L'
             level, ts = struct.unpack_from("<BQ", payload, 0)
             text = payload[9:]
-        elif mtype == 0x43 and size >= 11:     # 'C' (tag u16 뒤는 L과 같다)
-            level, ts = struct.unpack_from("<BQ", payload, 2)
+        elif mtype == 0x43 and size >= 11:     # 'C': log_level u8, tag u16, timestamp u64, message
+            level, _tag, ts = struct.unpack_from("<BHQ", payload, 0)
             text = payload[11:]
         else:
             continue

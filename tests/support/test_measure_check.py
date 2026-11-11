@@ -129,8 +129,8 @@ def test_row_status_error_is_two():
 # --- 합산 -----------------------------------------------------------------
 
 
-def entry(item="3", reached=True, ros=0, ulog=0, samples=5, cls=mj.CLASS_DIRECT):
-    return {"item": item, "class": cls, "attempt": 1, "armed3_reached": reached, "ros_count": ros,
+def entry(item="3", reached=True, ros=0, ulog=0, samples=5, cls=mj.CLASS_DIRECT, verdict="PASS"):
+    return {"item": item, "class": cls, "verdict": verdict, "attempt": 1, "armed3_reached": reached, "ros_count": ros,
             "ulog_count": ulog, "ulog_samples": samples}
 
 
@@ -187,8 +187,21 @@ def test_run_status_other_verdicts_are_two_and_fail_wins():
 
 
 def test_run_status_arm_violation_is_one_even_if_all_pass():
-    crit = {"violated": True}
+    crit = {"violated": True, "violated_any_class": True}
     assert mc.run_status([r("3", "PASS")] * 3, 3, crit=crit) == 1
+
+
+def test_run_status_sees_scenario_a_violation_even_when_direct_class_is_clean():
+    crit = {"violated": False, "violated_any_class": True}
+    assert mc.run_status([r("3", "PASS")] * 3, 3, crit=crit) == 1
+    assert mc.run_status([r("3", "PASS")] * 3, 3, crit={"violated": False, "violated_any_class": False}) == 0
+
+
+def test_run_status_m3_contradicted_is_one_and_inconclusive_is_not_valid():
+    assert mc.run_status([r("2b", "M3_CONTRADICTED")] * 3, 3) == 1
+    assert mc.run_status([r("5", "PASS")] * 9 + [r("5", "INCONCLUSIVE")], 10) == 2
+    assert mc.run_status([r("5", "PASS")] * 10 + [r("5", "INCONCLUSIVE")], 10) == 2   # 모두 PASS가 아니다
+    assert mc.run_status([r("5", "INCONCLUSIVE")] * 12, 10) == 2
 
 
 def test_run_status_meta_missing_is_two():
@@ -197,15 +210,19 @@ def test_run_status_meta_missing_is_two():
 
 def test_crosscheck_status_aggregation():
     ok = {"item": "5", "attempt": 1, "ros_missing_in_ulog": 0, "ulog_samples_in_range": 3,
-          "ros_field_mismatch": [], "ulog_armed_non_offboard": 0, "ulog_only": 0}
-    good = {"violated": False, "ulog_total_samples": 3, "enough": True}
+          "ros_field_mismatch": [], "ulog_armed_non_offboard": 0, "ulog_flight_armed_non_offboard": 0,
+          "ulog_only": 0, "evidence_pending": False}
+    good = {"violated": False, "violated_any_class": False, "ulog_total_samples": 3, "enough": True}
     assert mc.crosscheck_status([ok], good) == 0
     assert mc.crosscheck_status([ok], dict(good, enough=False)) == 2
     assert mc.crosscheck_status([ok], dict(good, ulog_total_samples=0)) == 1
-    assert mc.crosscheck_status([ok], dict(good, violated=True)) == 1
+    assert mc.crosscheck_status([ok], dict(good, violated=True, violated_any_class=True)) == 1
+    assert mc.crosscheck_status([ok], dict(good, violated_any_class=True)) == 1       # scenario_a 위반만
     assert mc.crosscheck_status([dict(ok, ulog_samples_in_range=0)], good) == 1
     assert mc.crosscheck_status([{"item": "5", "attempt": 1, "error": "x"}], good) == 2
     assert mc.crosscheck_status([], good) == 2
+    assert mc.crosscheck_status([ok], good, meta=False) == 2
+    assert mc.crosscheck_status([ok], good, done=False) == 2
 
 
 # --- (5) arm 수락 증거: ULog에서 확정 ----------------------------------------
@@ -265,3 +282,94 @@ def test_final_verdict_does_not_touch_other_rows():
                                                   "B_armed_log": True}) == ("FAIL", False)
     r = row(item="3")
     assert mc.final_verdict(r, {"A_armed_sample": False, "B_armed_log": False}) == ("PASS", False)
+
+
+# --- 3차 수정 ---------------------------------------------------------------
+
+
+def test_aggregate_unmeasured_and_unreadable_rows_make_passed_false():
+    c = mc.aggregate_armed([entry() for _ in range(10)])
+    assert c["passed"]
+    c = mc.aggregate_armed([entry() for _ in range(10)] + [entry(ros=None, ulog=None, verdict="ERROR")])
+    assert c["n_unmeasured"] == 1 and not c["passed"] and not c["classes"][mj.CLASS_DIRECT]["passed"]
+    c = mc.aggregate_armed([entry() for _ in range(10)] + [entry(ulog=None)])
+    assert c["n_ulog_unreadable"] == 1 and not c["passed"]
+
+
+def test_aggregate_window_missed_rows_do_not_fill_n_reached():
+    c = mc.aggregate_armed([entry() for _ in range(9)] + [entry(verdict="WINDOW_MISSED")] * 3)
+    assert c["n_reached"] == 9 and not c["passed"]
+
+
+def test_row_status_order_mismatch_before_pending():
+    base = {"item": "5", "attempt": 1, "ros_missing_in_ulog": 0, "ulog_samples_in_range": 3,
+            "ros_field_mismatch": [], "ulog_armed_non_offboard": 0, "ulog_flight_armed_non_offboard": 0,
+            "ulog_only": 0, "evidence_pending": True}
+    assert mc.row_status(base) == 2
+    assert mc.row_status(dict(base, ros_field_mismatch=[{"x": 1}])) == 1
+    assert mc.row_status(dict(base, ulog_flight_armed_non_offboard=1)) == 1
+    assert mc.row_status(dict(base, ros_missing_in_ulog=1)) == 1
+    assert mc.row_status(dict(base, error="x")) == 2
+
+
+def test_inconsistent_row_is_not_upgraded_to_pass_by_evidence():
+    # 증거 A는 있지만 ROS 표본 하나가 ULog에 없다 -> 대조 불일치이므로 PASS로 올리지 않는다
+    u = [ul(1100)]
+    res = mc.check_row(row5(), [ros(1100), ros(1600)], *index(u))
+    assert res["arm_evidence_ulog"]["A_armed_sample"]
+    assert res["final_verdict"] == "INCONCLUSIVE" and res["evidence_pending"]
+    assert mc.row_status(res) == 1                       # 불일치(1)가 증거 미확인(2)보다 앞선다
+
+
+def test_flight_window_nav_land_violation_from_ulog_is_counted():
+    f = {"armed_window_ros_us": [1000, 2000], "arm_send": [1000, 1000], "land_send": [5000, 5000]}
+    r = {"item": "armed", "attempt": 1, "verdict": "PASS", "facts": f}
+    u = [ul(1100), ul(1600), ul(2100), ul(3000, nav=LOI), ul(4900, nav=LOI)]
+    samples = [ros(t, nav=n) for t, n in ((1100, OFF), (1600, OFF), (2100, OFF), (3000, LOI), (4900, LOI))]
+    res = mc.check_row(r, samples, *index(u))
+    assert res["ulog_flight_armed_non_offboard"] == 2 and res["ulog_armed_non_offboard"] == 0
+    assert mc.row_status(res) == 1
+    # land_send가 없으면(3, 5, 2a) 구간 뒤 ARMED는 위반이 아니다
+    f2 = {"armed_window_ros_us": [1000, 2000], "arm_send": [1000, 1000], "cleanup_end_ros_us": 5000}
+    res2 = mc.check_row({"item": "3", "attempt": 1, "verdict": "PASS", "facts": f2}, samples, *index(u))
+    assert res2["ulog_flight_armed_non_offboard"] == 0 and res2["ulog_armed_non_offboard_after_window"] == 2
+
+
+def test_final_summary_counts_valid_attempts_and_pass_by_delay():
+    rows = ([{"item": "5", "attempt": i + 1, "verdict": "INCONCLUSIVE",
+              "injection": {"delay_s_nominal": [0.0, 0.1][i % 2]}} for i in range(12)])
+    finals = {("5", i + 1): ("PASS" if i < 10 else "INCONCLUSIVE") for i in range(12)}
+    s = mc.final_summary(rows, finals)["5"]
+    assert s["n"] == 12 and s["n_valid"] == 10 and s["n_pass"] == 10 and s["enough"]
+    assert s["by_delay"]["0.0"]["n_pass"] == 5 and s["by_delay"]["0.1"]["n_pass"] == 5
+    # 최종 판정이 없으면 live verdict를 쓴다(INCONCLUSIVE는 유효가 아니다)
+    s = mc.final_summary(rows, {})["5"]
+    assert s["n_valid"] == 0 and not s["enough"]
+
+
+def test_final_summary_exit1_counts_fail_and_m3_contradicted():
+    rows = [{"item": "2b", "attempt": i, "verdict": "M3_CONTRADICTED", "injection": None} for i in (1, 2, 3)]
+    s = mc.final_summary(rows, {})
+    assert s["2b"]["n_exit1"] == 3 and not s["2b"]["enough"]
+    good = {"violated": False, "violated_any_class": False, "ulog_total_samples": 3, "enough": True}
+    assert mc.crosscheck_status([], good, summary=s) == 1
+
+
+def test_crosscheck_status_summary_not_enough_is_two_but_exit1_wins():
+    good = {"violated": False, "violated_any_class": False, "ulog_total_samples": 3, "enough": True}
+    ok = {"item": "5", "attempt": 1, "ros_missing_in_ulog": 0, "ulog_samples_in_range": 3,
+          "ros_field_mismatch": [], "ulog_armed_non_offboard": 0, "ulog_flight_armed_non_offboard": 0,
+          "ulog_only": 0, "evidence_pending": False}
+    few = {"5": {"n": 3, "n_valid": 3, "n_pass": 3, "n_exit1": 0, "min": 10, "enough": False}}
+    assert mc.crosscheck_status([ok], good, summary=few) == 2
+    many = {"5": {"n": 10, "n_valid": 10, "n_pass": 10, "n_exit1": 0, "min": 10, "enough": True}}
+    assert mc.crosscheck_status([ok], good, summary=many) == 0
+
+
+def test_meta_ok_requires_commit_and_image_keys():
+    good = {"commit": "abc", "image_keys": {"px4": "k"}}
+    assert mc.meta_ok([good])
+    assert not mc.meta_ok([])
+    assert not mc.meta_ok([dict(good, commit="unknown")])
+    assert not mc.meta_ok([dict(good, commit=None)])
+    assert not mc.meta_ok([dict(good, image_keys=None)])

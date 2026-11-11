@@ -16,7 +16,7 @@
 # PX4 재실측 (2), (3), (5)와 ARMED 표본 기록의 호스트 실행기.
 #
 # 사용법: tests/sitl/measure/run_measure.sh [--stack k] [--attempts N] [--keep] <item>...
-#   item: item2 (재실측 2), item3 (재실측 3), item5 (재실측 5), armed (시나리오 A 대응), all
+#   item: item2 (재실측 2), item3 (재실측 3), item5 (재실측 5), armed (PX4 직접 명령, Executor 없음), all
 #   --attempts N   모든 item의 시도 수(기본: item2 3, item3 3, item5 10, armed 10)
 #   --keep         끝나도 스택을 내리지 않는다
 #   스택 번호 기본값은 7(실험용). 0은 사용자 스택이라 IDSIM_MEASURE_ALLOW_STACK0=1 없이는 거부한다.
@@ -88,6 +88,12 @@ git_commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 if [ -n "$(git status --porcelain 2>/dev/null)" ]; then git_dirty=true; else git_dirty=false; fi
 image_keys="$(python3 tools/ci/image_keys.py --format json 2>/dev/null || echo null)"
 
+# 같은 실행 id의 measure/ 디렉터리에 기록이 있으면 스택을 올리기 전에 거부한다(부수 파일 덮어쓰기 방지)
+if [ -n "$(ls -A "$out_dir" 2>/dev/null)" ]; then
+  echo "이미 기록이 있다: ${out_rel}. 다른 IDSIM_RUN_ID를 쓴다" >&2
+  exit 2
+fi
+
 compose() { docker compose -f "${run_dir}/compose.yaml" "$@"; }
 
 # shellcheck disable=SC2329  # trap EXIT로 불린다
@@ -133,9 +139,9 @@ echo "서비스 종료 상태: ${out_rel}/stop_exit.txt" >&2
 python3 tests/sitl/measure/crosscheck.py --measure-dir "$out_dir" --repo-root "$repo_root" | tee "${out_dir}/crosscheck.log"
 rc="${PIPESTATUS[0]}"
 case "$rc" in 0|1|2) ;; *) echo "crosscheck: 예상 밖의 종료 코드 ${rc}를 2로 접는다" >&2; rc=2 ;; esac
-[ "$rc" -eq 1 ] && fail=1
-[ "$rc" -gt "$status" ] && status="$rc"
-[ "$fail" -eq 1 ] && status=1
+# 최종 종료 코드는 crosscheck를 따른다. crosscheck는 ULog 증거로 확정한 최종 판정(예: (5)의 INCONCLUSIVE ->
+# PASS)과 유효 시도 수, 메타, measure.py 완료 기록을 다시 평가한다. measure.py가 1을 낸 항목이 있으면 1이다.
+if [ "$fail" -eq 1 ]; then status=1; else status="$rc"; fi
 
 echo "산출물: ${out_rel} (종료 코드 ${status})" >&2
 exit "$status"

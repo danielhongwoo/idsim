@@ -266,7 +266,7 @@ def test_cleanup_end_stops_publishing():
 
 
 def test_cleanup_disarmed_air_beats_expiry_in_same_tick():
-    # 공중 분기의 타임아웃(3 s)이 되는 tick에 DISARMED 표본이 이미 있으면 관측이 먼저다(M6 순서)
+    # 공중 분기의 timeout(3 s)이 되는 tick에 DISARMED 표본이 이미 있으면 관측이 먼저다(M6 순서)
     m = mj.CleanupModel(0)
     m.step(0, False)
     m.note_sent("hold", 0, 1)
@@ -462,9 +462,10 @@ def test_judge_attempt_missing_fact_raises_instead_of_passing():
 
 
 def b2(**kw):
-    """2b 사실. 기본은 landed가 true에 닿지 못한 60 s 관찰(조건 만족)."""
-    f = {"landed_true_seen": False, "observe_s": 60.0, "observe_all_armed_loiter": True,
-         "observe_landed_transitions": 0, "dz_max_m": 0.05}
+    """2b 사실. 기본은 landed가 true에 닿지 못한 60 s 관찰(조건과 표본 조건 만족)."""
+    f = {"landed_true_seen": False, "observe_span_s": 60.0, "observe_status_n": 120,
+         "observe_landed_n": 60, "observe_status_age_s": 0.3, "observe_landed_age_s": 0.5,
+         "observe_all_armed_loiter": True, "observe_landed_transitions": 0, "dz_max_m": 0.05}
     f.update(kw)
     return f
 
@@ -478,11 +479,15 @@ def test_judge_attempt_2a():
     assert not mj.judge_attempt("2a", f).ok
 
 
-def test_judge_2b_landed_true_reached_pass_and_fail():
-    g = {"landed_true_seen": True, "disarm_confirmed": True, "dz_max_m": 0.1}
-    assert mj.judge_attempt("2b", g).ok
-    g = {"landed_true_seen": True, "disarm_confirmed": True, "dz_max_m": 0.3}
-    assert mj.judge_attempt("2b", g).verdict == "FAIL"
+def test_judge_2b_landed_true_reached_is_m3_contradicted_even_if_disarm_ok():
+    g = {"landed_true_seen": True, "landed_true_after_hold_s": 4.0, "disarm_confirmed": True,
+         "dz_max_m": 0.1}
+    v = mj.judge_attempt("2b", g)
+    assert v.verdict == "M3_CONTRADICTED" and not v.ok
+    assert "M3 문장과 다르다" in v.reasons[0] and "True" in v.reasons[0]
+    for kw in ({"disarm_confirmed": False}, {"dz_max_m": 0.3}, {"dz_max_m": None}):
+        assert mj.judge_attempt("2b", dict(g, **kw)).verdict == "M3_CONTRADICTED"
+    assert "M3_CONTRADICTED" in mj.EXIT1_VERDICTS and "M3_CONTRADICTED" in mj.VALID_VERDICTS
 
 
 def test_judge_2b_cond_not_reached_when_state_matches_after_60s():
@@ -492,17 +497,33 @@ def test_judge_2b_cond_not_reached_when_state_matches_after_60s():
 
 def test_judge_2b_cond_not_reached_requires_conditions_else_fail():
     for key, val in [("observe_all_armed_loiter", False), ("observe_landed_transitions", 1),
-                     ("dz_max_m", 0.21), ("dz_max_m", None)]:
+                     ("dz_max_m", 0.21)]:
         v = mj.judge_attempt("2b", b2(**{key: val}))
         assert v.verdict == "FAIL", (key, val)
     assert mj.judge_attempt("2b", b2(dz_max_m=0.2)).verdict == "COND_NOT_REACHED"
+    assert mj.judge_attempt("2b", b2(dz_max_m=None)).verdict == "INCONCLUSIVE"     # 값 없음은 FAIL이 아니다
 
 
 def test_judge_2b_short_observation_is_inconclusive():
-    assert mj.judge_attempt("2b", b2(observe_s=59.9)).verdict == "INCONCLUSIVE"
-    assert mj.judge_attempt("2b", b2(observe_s=60.0)).verdict == "COND_NOT_REACHED"
+    assert mj.judge_attempt("2b", b2(observe_span_s=59.9)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("2b", b2(observe_span_s=60.0)).verdict == "COND_NOT_REACHED"
     # 어긋나는 관측은 관찰이 짧아도 FAIL이다
-    assert mj.judge_attempt("2b", b2(observe_s=10, observe_landed_transitions=2)).verdict == "FAIL"
+    assert mj.judge_attempt("2b", b2(observe_span_s=10, observe_landed_transitions=2)).verdict == "FAIL"
+
+
+def test_judge_2b_observation_without_samples_is_not_state_held():
+    # 표본이 없는 관찰을 M3 상태 유지로 읽지 않는다
+    empty = dict(observe_status_n=0, observe_landed_n=0, observe_status_age_s=None,
+                 observe_landed_age_s=None)
+    assert mj.judge_attempt("2b", b2(**empty)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("2b", b2(observe_status_n=59)).verdict == "INCONCLUSIVE"     # 60 s x 1.0/s 미만
+    assert mj.judge_attempt("2b", b2(observe_status_n=60)).verdict == "COND_NOT_REACHED"
+    assert mj.judge_attempt("2b", b2(observe_landed_n=29)).verdict == "INCONCLUSIVE"     # 60 s x 0.5/s 미만
+    assert mj.judge_attempt("2b", b2(observe_landed_n=30)).verdict == "COND_NOT_REACHED"
+    assert mj.judge_attempt("2b", b2(observe_status_age_s=1.01)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("2b", b2(observe_status_age_s=1.0)).verdict == "COND_NOT_REACHED"
+    assert mj.judge_attempt("2b", b2(observe_landed_age_s=2.01)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("2b", b2(observe_landed_age_s=None)).verdict == "INCONCLUSIVE"
 
 
 def test_judge_2b_skipped_is_inconclusive():
@@ -512,7 +533,9 @@ def test_judge_2b_skipped_is_inconclusive():
 
 def hold3(**kw):
     f = good3()
-    f.update({"end_reason": "HOLD", "hold_observe_s": 60.0, "hold_observe_all_armed_loiter": True,
+    f.update({"end_reason": "HOLD", "hold_observe_span_s": 60.0, "hold_observe_status_n": 120,
+              "hold_observe_landed_n": 60, "hold_observe_status_age_s": 0.3,
+              "hold_observe_landed_age_s": 0.5, "hold_observe_all_armed_loiter": True,
               "hold_observe_landed_false": True, "hold_observe_dz_m": 0.05})
     f.update(kw)
     return f
@@ -521,18 +544,30 @@ def hold3(**kw):
 def test_judge_3_hold_end_when_m3_state_held_for_60s():
     v = mj.judge_attempt("3", hold3())
     assert v.verdict == "HOLD_END" and not v.ok
+    assert "기준표 밖" not in v.reasons[0] and "전이 표에 있는" in v.reasons[0]
 
 
 def test_judge_3_hold_end_conditions_violated_is_fail():
     for key, val in [("hold_observe_all_armed_loiter", False), ("hold_observe_landed_false", False),
-                     ("hold_observe_dz_m", 0.21), ("hold_observe_dz_m", None), ("climb_m", 0.21),
-                     ("climb_m", None), ("cleanup_total_s", 9.0), ("armed_non_offboard", 1)]:
+                     ("hold_observe_dz_m", 0.21), ("climb_m", 0.21), ("cleanup_total_s", 9.0),
+                     ("armed_non_offboard", 1)]:
         v = mj.judge_attempt("3", hold3(**{key: val}))
         assert v.verdict == "FAIL", (key, val)
 
 
-def test_judge_3_hold_end_short_observation_is_inconclusive():
-    assert mj.judge_attempt("3", hold3(hold_observe_s=59.0)).verdict == "INCONCLUSIVE"
+def test_judge_3_hold_end_missing_values_are_inconclusive_not_fail():
+    assert mj.judge_attempt("3", hold3(hold_observe_dz_m=None)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("3", hold3(climb_m=None)).verdict == "INCONCLUSIVE"
+    # 위반이 같이 있으면 FAIL이 앞선다
+    assert mj.judge_attempt("3", hold3(climb_m=None, hold_observe_dz_m=0.5)).verdict == "FAIL"
+
+
+def test_judge_3_hold_end_short_or_empty_observation_is_inconclusive():
+    assert mj.judge_attempt("3", hold3(hold_observe_span_s=59.0)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("3", hold3(hold_observe_status_n=0, hold_observe_status_age_s=None)
+                            ).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("3", hold3(hold_observe_landed_n=0)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("3", hold3(hold_observe_status_age_s=1.5)).verdict == "INCONCLUSIVE"
 
 
 def test_judge_3_other_end_reasons_stay_fail():
@@ -549,6 +584,7 @@ def test_judge_5_hold_end_is_fail():
 def test_judge_5_no_arm_evidence_is_inconclusive_when_everything_else_ok():
     v = mj.judge_attempt("5", dict(good3(), arm_evidence=False))
     assert v.verdict == "INCONCLUSIVE" and not v.ok
+    assert "ack는 증거가 아니다" in v.reasons[0] and "ACCEPTED" not in v.reasons[0]
     # 다른 위반이 있으면 FAIL이 앞선다
     assert mj.judge_attempt("5", dict(good3(), arm_evidence=False, climb_m=0.5)).verdict == "FAIL"
     assert mj.judge_attempt("5", good3()).verdict == "PASS"
@@ -590,8 +626,8 @@ def test_judge_run_counts_failed_and_other_attempts():
     rows = [row("PASS")] * 8 + [row("FAIL"), row("PRECONDITION")]
     r = mj.judge_run(rows, 10)
     assert r["n"] == 10 and r["n_pass"] == 8 and r["n_fail"] == 1 and r["n_other"] == 1
-    assert r["enough"] and not r["all_pass"]
-    assert r["upper95_fail_rate"] == pytest.approx(0.3)
+    assert r["n_valid"] == 9 and not r["enough"] and not r["all_pass"]     # PRECONDITION은 유효 시도가 아니다
+    assert r["upper95_fail_rate"] == pytest.approx(3 / 9)
 
 
 def test_judge_run_not_enough_attempts():
@@ -654,12 +690,10 @@ def test_armed_criterion_without_direct_rows_still_has_direct_class_entry():
 
 
 def test_judge_2b_dz_boundary_and_none():
-    g = {"landed_true_seen": True, "disarm_confirmed": True, "dz_max_m": 0.2}
-    assert mj.judge_attempt("2b", g).ok                       # 0.2는 통과(이하)
-    assert not mj.judge_attempt("2b", dict(g, dz_max_m=0.2001)).ok
-    v = mj.judge_attempt("2b", dict(g, dz_max_m=None))
-    assert not v.ok and any("고도 변화" in r for r in v.reasons)
-    assert not mj.judge_attempt("2b", dict(g, disarm_confirmed=False)).ok
+    assert mj.judge_attempt("2b", b2(dz_max_m=0.2)).verdict == "COND_NOT_REACHED"   # 0.2는 이하
+    assert mj.judge_attempt("2b", b2(dz_max_m=0.2001)).verdict == "FAIL"
+    v = mj.judge_attempt("2b", b2(dz_max_m=None))
+    assert v.verdict == "INCONCLUSIVE" and any("고도 변화" in r for r in v.reasons)
 
 
 def test_judge_2a_cleanup_time_boundary_and_none():
@@ -669,12 +703,12 @@ def test_judge_2a_cleanup_time_boundary_and_none():
     assert not mj.judge_attempt("2a", dict(f, cleanup_total_s=None)).ok
 
 
-def test_judge_climb_none_fails_for_3_and_5():
+def test_judge_climb_none_is_inconclusive_for_3_and_5():
     for item in ("3", "5"):
         f = good3()
         f["climb_m"] = None
         v = mj.judge_attempt(item, f)
-        assert not v.ok and any("상승" in r for r in v.reasons)
+        assert v.verdict == "INCONCLUSIVE" and any("상승" in r for r in v.reasons)
 
 
 def test_judge_item5_failure_reasons_are_separate():
@@ -711,3 +745,21 @@ def test_armed_criterion_unmeasured_rows_are_not_read_as_zero():
     rows = [row(reached=True)] * 10 + [row(reached=None, bad=None)]
     r = mj.judge_armed_criterion(rows)
     assert r["n_unmeasured"] == 1 and r["n_measured"] == 10 and r["passed"]
+
+
+def test_judge_run_valid_attempts_exclude_inconclusive_and_count_exit1_verdicts():
+    rows = ([row("PASS", item="5")] * 8 + [row("INCONCLUSIVE", item="5")] * 2
+            + [row("M3_CONTRADICTED", item="2b")])
+    r = mj.judge_run(rows, 10)
+    assert r["n_valid"] == 9 and r["n_fail"] == 1 and not r["enough"]
+    r = mj.judge_run([row("PASS")] * 10 + [row("INCONCLUSIVE")] * 5, 10)
+    assert r["enough"] and not r["all_pass"]
+
+
+def test_armed_criterion_window_missed_rows_do_not_fill_n_reached():
+    rows = [row(reached=True)] * 9 + [row("WINDOW_MISSED", reached=True)] * 5
+    r = mj.judge_armed_criterion(rows)
+    assert r["n_reached"] == 9 and not r["passed"]
+    rows = [row(reached=True)] * 10 + [row("WINDOW_MISSED", reached=True, bad=1)]
+    r = mj.judge_armed_criterion(rows)
+    assert r["n_reached"] == 10 and r["violation_total"] == 1 and not r["passed"]

@@ -24,8 +24,10 @@ tests/sitl/measure/measure.py(라이브)와 단위 테스트(tests/support/test_
 verdict와 종료 코드의 뜻
   PASS (0)               기준을 만족한 관측.
   FAIL (1)               기준과 다른 관측. 문서의 기대가 반증됐다는 뜻이며 PX4 결함이라는 뜻이 아니다.
+  M3_CONTRADICTED (1)    2b에서 landed가 true에 닿음. M3 문장(Hold로 끝난 기체는 스스로 내려앉지 않는다)과
+                         다른 관측이라 architect에게 올린다. disarm 수락과 고도 변화는 facts에 기록한다.
   그 밖 (2)              기계가 판정하지 않는다. COND_NOT_REACHED(조건에 닿지 못함: 2b에서 landed가
-                         true에 닿지 않음), HOLD_END((3)이 Hold로 끝나 기준표 밖의 끝 상태), INCONCLUSIVE
+                         true에 닿지 않음), HOLD_END((3)이 전이 표에 있는 Hold 종료로 끝남), INCONCLUSIVE
                          (판정에 필요한 전제가 없음: 관찰 60 s 미만, arm 수락 증거 없음), WINDOW_MISSED,
                          PRECONDITION, ERROR, CLOCK_STALLED, 시도 수 부족, 인프라.
 이 측정이 보증하는 범위는 PX4 쪽 사실(명령 수락 여부, 표본 순서와 지연, landed 전환, 상승)이다.
@@ -44,6 +46,18 @@ NAV_STATE_AUTO_LAND = 18
 CLEANUP_LIMIT_S = 9.0
 # 2b와 (3)의 Hold 종료 관찰 최소 시간(s). 이보다 짧으면 판정하지 않는다(INCONCLUSIVE).
 OBSERVE_MIN_S = 60.0
+# 관찰 판정에 필요한 표본 조건. 표본이 없는 관찰을 "상태 유지"로 읽지 않기 위한 하한이다.
+# vehicle_status는 약 2 Hz(간격 0.5 s), vehicle_land_detected는 약 1 Hz(간격 1 s)로 나온다(trial4 실측).
+OBSERVE_MAX_STATUS_AGE_S = 1.0      # 마지막 vehicle_status 표본이 관찰 끝에서 이 안이어야 한다
+OBSERVE_MAX_LANDED_AGE_S = 2.0      # 마지막 vehicle_land_detected 표본도 같다
+OBSERVE_MIN_STATUS_PER_S = 1.0      # 관찰 구간의 vehicle_status 표본 수 하한(초당)
+OBSERVE_MIN_LANDED_PER_S = 0.5      # 관찰 구간의 vehicle_land_detected 표본 수 하한(초당)
+
+# 종료 코드 1로 읽는 verdict(기준과 다른 관측). M3_CONTRADICTED는 2b에서 landed가 true에 닿은 경우다.
+EXIT1_VERDICTS = ("FAIL", "M3_CONTRADICTED")
+# 시도 수로 세는 verdict. INCONCLUSIVE, COND_NOT_REACHED, HOLD_END, WINDOW_MISSED, PRECONDITION 등은
+# 기준에 대한 판정이 아니므로 세지 않는다.
+VALID_VERDICTS = ("PASS", "FAIL", "M3_CONTRADICTED")
 
 # 아래 네 값(12, 3, 3, 0.5)은 idsim_mission의 노드 파라미터 기본값(core/config.hpp의 Timeouts:
 # mode_confirm_timeout 3 s, hold_confirm_timeout 3 s, command_resend_period 0.5 s,
@@ -239,11 +253,11 @@ class CleanupModel:
       A: 지상 setpoint 발행 + Hold 재전송. AUTO_LOITER 표본을 처음 관측한 시각에 발행을 멈추고
          (publishing False, publish_stop_us), 3회 연속(전송 뒤에 받은 서로 다른 timestamp) 관측하면
          end_reason HOLD로 끝낸다. 총 소요는 이 끝 시각까지다.
-      분기에 들어갈 때마다(G -> A -> G의 재진입 포함) 그 분기의 타임아웃 기준 시각, 확인 계수, 첫 전송
+      분기에 들어갈 때마다(G -> A -> G의 재진입 포함) 그 분기의 timeout 기준 시각, 확인 계수, 첫 전송
       기준(tick과 Px4Timestamp)을 새로 잡고 명령을 새로 보낸다. 이전 진입에서 센 표본은 이어지지 않는다.
-      분기 타임아웃은 G가 mode_confirm_timeout, A가 hold_confirm_timeout이고 전체 상한(hard_limit)이 있다.
+      분기 timeout은 G가 mode_confirm_timeout, A가 hold_confirm_timeout이고 전체 상한(hard_limit)이 있다.
     한 step의 순서(M6): (1) 공중 DISARMED -> (2) 정리할 것 없음 -> (3) Hold 첫 관측으로 발행 중단
-      -> (4) 상한 -> (5) 분기 실행(분기 타임아웃, 확인). 표본 하나로 정해지는 관측 (1)-(2)가 만료보다
+      -> (4) 상한 -> (5) 분기 실행(분기 timeout, 확인). 표본 하나로 정해지는 관측 (1)-(2)가 만료보다
       앞선다. (5)에서 만료와 확인이 겹치면 만료가 이긴다.
     흉내 내지 않는 것과 core/전이 표와 다른 점: (a) 입력은 tick이 아니라 약 2 ms 간격 polling이고 표본을
       수신 순서대로 먹인다(tick당 최신 표본 1개 모델이 아니다). (b) 상태 끊김(LINK_LOST), ack 거부 때의
@@ -452,6 +466,29 @@ def judge_cleanup_time(total_s, limit_s=CLEANUP_LIMIT_S):
     return total_s is not None and total_s < limit_s
 
 
+def _sampling_problem(f, p):
+    """관찰 구간의 표본이 판정에 충분한가. 부족하면 사유 문장, 충분하면 None.
+
+    p는 사실 이름의 접두사("observe_" 또는 "hold_observe_"). 관찰 시간은 명목 인자가 아니라 실제 구간
+    (관찰 시작부터 끝까지의 sim 시간)이고, 구간 안 표본 수와 마지막 표본의 나이를 함께 본다.
+    """
+    span = f[p + "span_s"]
+    if span < OBSERVE_MIN_S:
+        return "관찰 구간 %.1f s < %.0f s" % (span, OBSERVE_MIN_S)
+    if f[p + "status_n"] < span * OBSERVE_MIN_STATUS_PER_S:
+        return "vehicle_status 표본 %d개 < 초당 %.1f개 x %.0f s" % (
+            f[p + "status_n"], OBSERVE_MIN_STATUS_PER_S, span)
+    if f[p + "landed_n"] < span * OBSERVE_MIN_LANDED_PER_S:
+        return "vehicle_land_detected 표본 %d개 < 초당 %.1f개 x %.0f s" % (
+            f[p + "landed_n"], OBSERVE_MIN_LANDED_PER_S, span)
+    sa, la = f[p + "status_age_s"], f[p + "landed_age_s"]
+    if sa is None or sa > OBSERVE_MAX_STATUS_AGE_S:
+        return "마지막 vehicle_status 표본이 관찰 끝에서 %s s (기준 %.1f s 이내)" % (sa, OBSERVE_MAX_STATUS_AGE_S)
+    if la is None or la > OBSERVE_MAX_LANDED_AGE_S:
+        return "마지막 vehicle_land_detected 표본이 관찰 끝에서 %s s (기준 %.1f s 이내)" % (la, OBSERVE_MAX_LANDED_AGE_S)
+    return None
+
+
 def judge_attempt(item, f):
     """시도 하나를 판정한다. f는 측정 사실의 dict. item은 "2a", "2b", "3", "5", "armed".
 
@@ -459,27 +496,40 @@ def judge_attempt(item, f):
       공통(3, 5, armed): OFFBOARD가 아닌 ARMED 표본이 0개(첫 Hold 전송 전까지). (2a)는 기록만 한다.
       3은 취소 시점에 landed가 true였어야 한다(아니면 WINDOW_MISSED. 통과로 세지 않는다)
       2a: Hold(AUTO_LOITER 3회 연속)를 관측, 정리 총 소요 9 s 미만
-      2b: landed가 true에 닿으면 강제가 아닌 disarm이 받아들여지고(DISARMED 3회) 고도 변화 0.2 m 이하.
-          닿지 못하면(관찰 --observe-s) 관찰 중 모든 표본이 ARMED이고 AUTO_LOITER, landed 전환 0회,
-          고도 변화 0.2 m 이하인 한 COND_NOT_REACHED(관찰 60 s 미만이면 INCONCLUSIVE), 어긋나면 FAIL
+      2b: landed가 true에 닿으면 M3_CONTRADICTED(exit 1. M3 문장과 다른 관측). disarm 수락과 고도 변화는
+          facts에 그대로 기록한다. 닿지 못하면(관찰 --observe-s) 관찰 중 모든 표본이 ARMED이고
+          AUTO_LOITER, landed 전환 0회, 고도 변화 0.2 m 이하인 한 COND_NOT_REACHED(exit 2), 어긋나면 FAIL
       3, 5: mode_confirm_timeout 안에 DISARMED 3회, 상승 0.2 m 이하, 정리 총 소요 9 s 미만,
             끝난 뒤 지상에 armed로 남은 상태 없음.
             (3)이 Hold로 끝나면(end_reason HOLD) 상승 0.2 m 이하와 총 소요 9 s 미만에 더해 60 s 동안
-            ARMED, AUTO_LOITER, landed false, 고도 변화 0.2 m 이하이면 HOLD_END(관찰 60 s 미만이면
-            INCONCLUSIVE, 어긋나면 FAIL). 그 밖의 TIMEOUT_GROUND, TIMEOUT_HOLD, LIMIT, DISARMED_AIR는 FAIL.
-            (5)가 Hold로 끝나면 FAIL이다. (5)는 arm 수락 증거(arm_evidence)가 없으면 INCONCLUSIVE다
-            (유효 시도로 센다)
+            ARMED, AUTO_LOITER, landed false, 고도 변화 0.2 m 이하이면 HOLD_END(exit 2), 어긋나면 FAIL.
+            그 밖의 TIMEOUT_GROUND, TIMEOUT_HOLD, LIMIT, DISARMED_AIR는 FAIL이다.
+            (5)가 Hold로 끝나면 FAIL이다. (5)는 arm 수락 증거(arm_evidence: arm 전송 뒤 timestamp의 ARMED
+            표본)가 없으면 INCONCLUSIVE다(ack는 증거가 아니다. ULog 교차 확인에서 확정한다)
       armed: ARMED 3회 확인에 도달, ARMED 3회 확인부터 NAV_LAND 전송까지도 비OFFBOARD ARMED 0개
+    관찰 판정(2b, (3)의 Hold)은 표본 조건(구간 길이, 표본 수, 마지막 표본의 나이)을 못 채우면
+    INCONCLUSIVE다. 값이 없어 판정할 수 없는 경우(고도 변화 None)도 위반이 따로 없으면 INCONCLUSIVE다.
     필요한 키가 없으면 KeyError로 실패한다(측정 누락을 통과로 읽지 않는다).
     """
-    reasons = []
+    reasons = []      # 기준과 다른 관측
+    missing = []      # 값이 없어 판정할 수 없는 항목
 
     def need(cond, msg):
         if not cond:
             reasons.append(msg)
 
+    def need_value(v, limit, label):
+        if v is None:
+            missing.append("%s 값이 없음" % label)
+        elif v > limit:
+            reasons.append("%s %s m (기준 %.1f m 이하)" % (label, v, limit))
+
     def fin():
-        return Verdict(not reasons, "PASS" if not reasons else "FAIL", reasons)
+        if reasons:
+            return Verdict(False, "FAIL", reasons)
+        if missing:
+            return Verdict(False, "INCONCLUSIVE", missing)
+        return Verdict(True, "PASS", [])
 
     if item == "3" and not f["landed_at_cancel"]:
         # 창을 놓친 시도는 PX4의 실패가 아니라 측정이 닿지 않은 것이다. 통과로 세지 않는다.
@@ -496,45 +546,45 @@ def judge_attempt(item, f):
         if "skipped" in f:
             return Verdict(False, "INCONCLUSIVE", [f["skipped"]])
         if f["landed_true_seen"]:
-            need(f["disarm_confirmed"], "disarm 후 DISARMED 3회 미확인")
-            need(f["dz_max_m"] is not None and f["dz_max_m"] <= CLIMB_LIMIT_M,
-                 "고도 변화 %s m (기준 %.1f m 이하)" % (f["dz_max_m"], CLIMB_LIMIT_M))
-            return fin()
+            return Verdict(False, "M3_CONTRADICTED",
+                           ["landed가 true에 닿음(Hold 뒤 %.1f s). M3 문장과 다르다. disarm 수락=%s, 고도 변화 %s m"
+                            % (f["landed_true_after_hold_s"], f["disarm_confirmed"], f["dz_max_m"])])
         need(f["observe_all_armed_loiter"], "관찰 중 ARMED이고 AUTO_LOITER가 아닌 표본이 있음")
         need(f["observe_landed_transitions"] == 0,
              "관찰 중 landed 전환 %s회" % f["observe_landed_transitions"])
-        need(f["dz_max_m"] is not None and f["dz_max_m"] <= CLIMB_LIMIT_M,
-             "관찰 중 고도 변화 %s m (기준 %.1f m 이하)" % (f["dz_max_m"], CLIMB_LIMIT_M))
+        need_value(f["dz_max_m"], CLIMB_LIMIT_M, "관찰 중 고도 변화")
         if reasons:
             return fin()
-        if f["observe_s"] < OBSERVE_MIN_S:
-            return Verdict(False, "INCONCLUSIVE", ["관찰 %.0f s < %.0f s" % (f["observe_s"], OBSERVE_MIN_S)])
+        if missing:
+            return fin()
+        prob = _sampling_problem(f, "observe_")
+        if prob is not None:
+            return Verdict(False, "INCONCLUSIVE", [prob])
         return Verdict(False, "COND_NOT_REACHED",
                        ["landed가 %.0f s 관찰 동안 true가 되지 않음(Hold, ARMED, 고도 변화 %.2f m)"
-                        % (f["observe_s"], f["dz_max_m"])])
+                        % (f["observe_span_s"], f["dz_max_m"])])
     if item in ("3", "5"):
         hold_case = item == "3" and f["end_reason"] == "HOLD"
-        need(f["climb_m"] is not None and f["climb_m"] <= CLIMB_LIMIT_M,
-             "상승 %s m (기준 %.1f m 이하)" % (f["climb_m"], CLIMB_LIMIT_M))
+        need_value(f["climb_m"], CLIMB_LIMIT_M, "상승")
         need(judge_cleanup_time(f["cleanup_total_s"]),
              "정리 총 소요 %s s (기준 %.1f s 미만)" % (f["cleanup_total_s"], CLEANUP_LIMIT_S))
         if hold_case:
             need(f["hold_observe_all_armed_loiter"], "Hold 관찰 중 ARMED이고 AUTO_LOITER가 아닌 표본이 있음")
             need(f["hold_observe_landed_false"], "Hold 관찰 중 landed가 true가 된 적이 있음")
-            need(f["hold_observe_dz_m"] is not None and f["hold_observe_dz_m"] <= CLIMB_LIMIT_M,
-                 "Hold 관찰 중 고도 변화 %s m (기준 %.1f m 이하)" % (f["hold_observe_dz_m"], CLIMB_LIMIT_M))
-            if reasons:
+            need_value(f["hold_observe_dz_m"], CLIMB_LIMIT_M, "Hold 관찰 중 고도 변화")
+            if reasons or missing:
                 return fin()
-            if f["hold_observe_s"] < OBSERVE_MIN_S:
-                return Verdict(False, "INCONCLUSIVE",
-                               ["Hold 관찰 %.0f s < %.0f s" % (f["hold_observe_s"], OBSERVE_MIN_S)])
-            return Verdict(False, "HOLD_END", ["Hold로 끝남(기준표 밖). 60 s 동안 M3의 상태를 유지"])
+            prob = _sampling_problem(f, "hold_observe_")
+            if prob is not None:
+                return Verdict(False, "INCONCLUSIVE", [prob])
+            return Verdict(False, "HOLD_END", ["Hold로 끝남(전이 표에 있는 종료). 60 s 동안 M3의 상태를 유지"])
         need(f["end_reason"] == "DISARMED",
              "DISARMED 3회 미확인(end_reason=%s)" % f["end_reason"])
         need(not f["armed_after_end"], "끝난 뒤 다시 ARMED 표본이 나옴(지상 armed로 남을 수 있음)")
         need(f["final_disarmed"], "관찰 끝에 DISARMED가 아님")
-        if item == "5" and not reasons and not f["arm_evidence"]:
-            return Verdict(False, "INCONCLUSIVE", ["arm 수락 증거(ACCEPTED ack 또는 전송 뒤 ARMED 표본)가 없음"])
+        if item == "5" and not reasons and not missing and not f["arm_evidence"]:
+            return Verdict(False, "INCONCLUSIVE",
+                           ["arm 수락 증거(전송 뒤 ARMED 표본 또는 ULog logged message)가 없음. ack는 증거가 아니다"])
         return fin()
     if item == "armed":
         need(f["armed3_reached"], "ARMED 3회 확인에 도달하지 못함")
@@ -549,17 +599,21 @@ def judge_run(item_rows, min_attempts, armed_reached_min=None):
     """한 항목의 시도 행 모음을 요약한다. 실패한 시도를 빼지 않는다.
 
     item_rows: 행 dict 목록(verdict, armed3_reached 키를 색인으로 읽는다. 없으면 KeyError).
-    돌려주는 dict: n, n_pass, n_fail, n_other, enough(시도 수 >= min_attempts), all_pass,
-      upper95_fail_rate(3/n. 0건일 때의 근사), armed3_reached(ARMED 3회 확인에 간 시도 수)
+    시도 수(n_valid)는 기준에 대한 판정이 있는 verdict(PASS, FAIL, M3_CONTRADICTED)만 센다.
+    INCONCLUSIVE, COND_NOT_REACHED, HOLD_END, WINDOW_MISSED, PRECONDITION 등은 유효 시도가 아니다.
+    돌려주는 dict: n, n_valid, n_pass, n_fail(exit 1 verdict), n_other, enough(n_valid >= min_attempts),
+      all_pass(모든 시도가 PASS), upper95_fail_rate(3/n_valid), armed3_reached
     """
     n = len(item_rows)
+    n_valid = sum(1 for r in item_rows if r["verdict"] in VALID_VERDICTS)
     n_pass = sum(1 for r in item_rows if r["verdict"] == "PASS")
-    n_fail = sum(1 for r in item_rows if r["verdict"] == "FAIL")
+    n_fail = sum(1 for r in item_rows if r["verdict"] in EXIT1_VERDICTS)
     reached = sum(1 for r in item_rows if r["armed3_reached"])
     out = {
-        "n": n, "n_pass": n_pass, "n_fail": n_fail, "n_other": n - n_pass - n_fail,
-        "enough": n >= min_attempts, "all_pass": n > 0 and n_pass == n,
-        "upper95_fail_rate": (3.0 / n) if n else None,
+        "n": n, "n_valid": n_valid, "n_pass": n_pass, "n_fail": n_fail,
+        "n_other": n - n_pass - n_fail,
+        "enough": n_valid >= min_attempts, "all_pass": n > 0 and n_pass == n,
+        "upper95_fail_rate": (3.0 / n_valid) if n_valid else None,
         "armed3_reached": reached,
     }
     if armed_reached_min is not None:
@@ -574,7 +628,8 @@ CLASS_EXECUTOR = "scenario_a"    # 시나리오 A(Executor 경유)
 def _class_summary(rows, min_reached):
     measured = [r for r in rows if r["armed_non_offboard"] is not None]
     # 2a 행은 ARMED 3회 확인에 가는 실행이 아니므로 n_reached에서 빼고 위반 수에는 남긴다
-    reached = [r for r in measured if r["armed3_reached"] and r["item"] != "2a"]
+    reached = [r for r in measured
+               if r["armed3_reached"] and r["item"] != "2a" and r["verdict"] != "WINDOW_MISSED"]
     bad_reached = [r for r in reached if r["armed_non_offboard"] != 0]
     total = sum(r["armed_non_offboard"] for r in measured)
     return {
@@ -592,14 +647,14 @@ def _class_summary(rows, min_reached):
 def judge_armed_criterion(rows, min_reached=10):
     """OFFBOARD가 아닌 ARMED 표본 기준의 부류별 판정.
 
-    rows: 합산 대상 시도 행(item, class, armed3_reached, armed_non_offboard 키를 색인으로 읽는다.
+    rows: 합산 대상 시도 행(item, class, verdict, armed3_reached, armed_non_offboard 키를 색인으로 읽는다.
     없으면 KeyError). armed_non_offboard가 None인 행은 측정되지 않은 행(PRECONDITION 등)이라
     n_unmeasured로 따로 세고 0으로 읽지 않는다. 어느 행을 넣을지는 호출자가 정한다.
     부류(class): px4_direct(측정 스크립트의 PX4 직접 명령. 이 판정의 통과는 P4 머지 조건이 아니다)와
     scenario_a(Executor 경유. P4 머지 조건은 이 부류의 통과가 따로 필요하다). 부류마다
     n_reached, violation_total, passed를 낸다(classes). 최상위 필드는 px4_direct 부류의 값이다.
     ARMED 3회 확인까지 간 실행이 min_reached 이상이고 그 전부에서 0개여야 통과다. 2a 행은
-    n_reached에서 빼고 violation_total에는 남긴다. 한 건이라도 나오면 violated이고 호출자가 그 즉시
+    n_reached에서 빼고 violation_total에는 남긴다. WINDOW_MISSED 행도 n_reached를 채우지 않는다. 한 건이라도 나오면 violated이고 호출자가 그 즉시
     architect에게 올린다. ARMED 3회에 가지 못한 실행에서 나온 위반도 센다.
     """
     classes = {}

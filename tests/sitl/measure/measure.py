@@ -42,15 +42,17 @@ px4-engineer 행이다.
 
 종료 코드와 verdict의 뜻
   0  모든 시도 PASS이고 시도 수 충분.
-  1  기준과 다른 관측(verdict FAIL)이나 ARMED 위반이 있음. 문서의 기대가 반증됐다는 뜻이며 PX4
-     결함이라는 뜻이 아니다. 2보다 앞선다.
+  1  기준과 다른 관측(verdict FAIL, M3_CONTRADICTED)이나 ARMED 위반(어느 부류든)이 있음. 문서의 기대가
+     반증됐다는 뜻이며 PX4 결함이라는 뜻이 아니다. 2보다 앞선다. M3_CONTRADICTED는 2b에서 landed가
+     true에 닿은 경우로 M3 문장과 다른 관측이다(disarm 수락과 고도 변화는 facts에 기록).
   2  기계가 판정하지 않음: COND_NOT_REACHED, HOLD_END, INCONCLUSIVE, WINDOW_MISSED, PRECONDITION,
-     ERROR, CLOCK_STALLED, 시도 수 부족, 행 0개, commit unknown이나 image key 없음, 처리하지 못한 예외.
+     ERROR, CLOCK_STALLED, 유효 시도(PASS, FAIL, M3_CONTRADICTED) 수 부족, 행 0개, commit unknown이나
+     image key 없음, 처리하지 못한 예외.
 (5)의 arm 수락 증거가 ROS 표본에 없으면 이 스크립트 단독의 행은 INCONCLUSIVE(ULog 교차 확인 전)이고
 최종 PASS는 crosscheck.py 뒤에만 선언한다.
 
 보증 범위: PX4 쪽 사실(명령 수락 여부, 표본 순서와 지연, landed 전환, 상승)만 본다. 정리 총 소요 9 s
-기준은 측정용 모델의 소요이고 core의 소요를 보증하지 않는다. 타임아웃은 모두 sim 시간(/clock)이고
+기준은 측정용 모델의 소요이고 core의 소요를 보증하지 않는다. timeout은 모두 sim 시간(/clock)이고
 벽시계는 /clock이 멈췄는지 보는 데만 쓴다.
 """
 import argparse
@@ -88,9 +90,11 @@ CRITERIA = {
         "(별도 필드), 전송 뒤 받은 서로 다른 timestamp의 AUTO_LOITER 3회 연속 시점을 종료로 본다. "
         "총 소요 9 s 미만은 종료 시각 기준이다. OFFBOARD가 아닌 ARMED 표본은 기록만 한다.",
         "(2b) Hold 확인 뒤 발행을 멈추고 landed가 true가 되는지 --observe-s(sim 초) 동안 본다. 닿으면 "
-        "강제가 아닌 disarm: DISARMED 3회 확인, 고도 변화 0.2 m 이하(닿으면 M3 문장과 다르므로 architect에게 "
-        "올린다). 닿지 못하면 관찰 중 모든 표본이 ARMED이고 AUTO_LOITER, landed 전환 0회, 고도 변화 "
-        "0.2 m 이하인 한 COND_NOT_REACHED(종료 코드 2), 어긋나면 FAIL, 관찰이 60 s 미만이면 INCONCLUSIVE.",
+        "강제가 아닌 disarm을 보내 수락과 고도 변화를 facts에 기록하고 verdict는 M3_CONTRADICTED(종료 코드 1, "
+        "M3 문장과 다른 관측이므로 architect에게 올린다). 닿지 못하면 관찰 중 모든 표본이 ARMED이고 "
+        "AUTO_LOITER, landed 전환 0회, 고도 변화 0.2 m 이하인 한 COND_NOT_REACHED(종료 코드 2), 어긋나면 FAIL. "
+        "관찰 구간이 60 s 미만이거나 표본 수가 모자라거나(vehicle_status 초당 1개, vehicle_land_detected "
+        "초당 0.5개 미만) 마지막 표본이 관찰 끝에서 1 s(landed는 2 s) 넘게 지났으면 INCONCLUSIVE.",
         "시도 3회 모두 위 기준을 만족해야 통과한다. 3회는 실패율 95% 상한이 약 100%라 실패 없음의 증거가 아니다.",
     ],
     "item3": [
@@ -113,7 +117,8 @@ CRITERIA = {
         "external command'(arm 전송 뒤, 정리 종료 전). ROS ack는 증거가 아니다(arm과 disarm이 같은 command "
         "400이고 ack에 원 명령 필드가 없다). 증거가 없으면 INCONCLUSIVE. 이 스크립트 단독의 행은 ROS 표본이 "
         "없으면 'arm 수락 증거 미확인(ULog 교차 확인 전)'으로 남고 최종 PASS는 crosscheck.py 뒤에만 선언한다.",
-        "시도 10회 이상 모두 통과해야 통과한다(10회 중 0건은 실패율 95% 상한 약 26%). INCONCLUSIVE도 유효 시도로 센다.",
+        "유효 시도(PASS, FAIL)가 10회 이상이고 PASS가 10회 이상이어야 통과한다(10회 중 0건은 실패율 95% 상한 약 26%). "
+        "INCONCLUSIVE는 유효 시도가 아니다.",
     ],
     "armed": [
         "PX4 직접 명령(Executor 없음). arm 전송부터 ARMED 3회 확인(= TAKEOFF 시작에 해당)까지, 그리고 ARMED 3회 "
@@ -305,7 +310,8 @@ def armed_facts(raw, idx_s, arm_recv, end_us, cutoff_us=None):
     samples = raw.status[idx_s:]
     armed3 = mj.armed_confirm_sample(samples, arm_recv)
     to = end_us if cutoff_us is None else min(end_us, cutoff_us)
-    reached = armed3 is not None and armed3.recv_ros_us <= end_us
+    # 잘린 구간(첫 Hold 전송, 정리 종료) 안에서 ARMED 3회가 찬 경우만 도달로 센다
+    reached = armed3 is not None and armed3.recv_ros_us <= to
     if reached:
         to = min(to, armed3.recv_ros_us)
     n_armed, bad = mj.armed_non_offboard(samples, arm_recv, to)
@@ -350,21 +356,39 @@ def cleanup_facts(raw, model, arm_recv, ref_z, tail):
     }
 
 
-def hold_observe_facts(raw, end_us, z_end):
-    """Hold로 끝난 뒤의 관찰 사실: 모든 표본이 ARMED이고 AUTO_LOITER인가, landed가 계속 false인가,
-    끝 시점 z에서의 고도 변화. 관찰 시간(sim 초)은 마지막 표본까지다."""
-    st = [x for x in raw.status if x.recv_ros_us > end_us]
-    ld = [x for x in raw.landed if x.recv_ros_us > end_us]
-    zs = [abs(q[3] - z_end) for q in raw.pos if q[0] > end_us]
-    last = max([x.recv_ros_us for x in st] + [raw.now_us()])
+def observe_facts(raw, start_us, z_ref, end_us):
+    """관찰 구간 (start_us, end_us]의 사실. 명목 관찰 시간이 아니라 실제 표본으로 쓴다.
+
+    span_s는 관찰 구간의 sim 길이, status_n과 landed_n은 구간 안 표본 수, *_age_s는 마지막 표본이
+    관찰 끝에서 얼마나 지났는가(landed는 구간 앞의 표본까지 포함한 마지막 표본). 표본이 없으면
+    all_armed_loiter와 landed_false는 참(공허)이고, 판정은 표본 조건(measure_judge._sampling_problem)
+    이 INCONCLUSIVE로 막는다.
+    """
+    st = [x for x in raw.status if start_us < x.recv_ros_us <= end_us]
+    ld = [x for x in raw.landed if start_us < x.recv_ros_us <= end_us]
+    last_ld = [x for x in raw.landed if x.recv_ros_us <= end_us]
+    zs = [abs(q[3] - z_ref) for q in raw.pos if start_us < q[0] <= end_us]
     return {
-        "hold_observe_s": (last - end_us) / US,
-        "hold_observe_samples": len(st),
-        "hold_observe_all_armed_loiter": bool(st) and all(
-            mj.is_armed(x) and x.nav_state == mj.NAV_STATE_AUTO_LOITER for x in st),
-        "hold_observe_landed_false": all(not x.landed for x in ld),
-        "hold_observe_dz_m": max(zs) if zs else None,
+        "span_s": (end_us - start_us) / US,
+        "status_n": len(st),
+        "landed_n": len(ld),
+        "status_age_s": None if not st else (end_us - st[-1].recv_ros_us) / US,
+        "landed_age_s": None if not last_ld else (end_us - last_ld[-1].recv_ros_us) / US,
+        "all_armed_loiter": all(mj.is_armed(x) and x.nav_state == mj.NAV_STATE_AUTO_LOITER for x in st),
+        "landed_transitions": mj.landed_transitions(raw.landed, start_us, end_us),
+        "landed_false": all(not x.landed for x in ld),
+        "dz_m": max(zs) if zs else None,
     }
+
+
+def hold_observe_facts(raw, end_us, z_end):
+    """Hold로 끝난 뒤의 관찰 사실(접두사 hold_observe_). observe_facts를 쓴다."""
+    o = observe_facts(raw, end_us, z_end, raw.now_us())
+    return {"hold_observe_span_s": o["span_s"], "hold_observe_status_n": o["status_n"],
+            "hold_observe_landed_n": o["landed_n"], "hold_observe_status_age_s": o["status_age_s"],
+            "hold_observe_landed_age_s": o["landed_age_s"],
+            "hold_observe_all_armed_loiter": o["all_armed_loiter"],
+            "hold_observe_landed_false": o["landed_false"], "hold_observe_dz_m": o["dz_m"]}
 
 
 def ack_facts(raw, arm_recv, first_disarm_recv, first_hold_recv=None):
@@ -505,7 +529,6 @@ def attempt_item2(rig, args, a):
     g = {"hold_end_ros_us": hold_end}
     if model.end_reason != "HOLD":
         g.update({"landed_true_seen": False, "disarm_confirmed": False, "dz_max_m": None,
-                  "observe_s": 0.0, "observe_all_armed_loiter": False, "observe_landed_transitions": 0,
                   "skipped": "2a가 Hold로 끝나지 않아 2b를 하지 않음(end_reason=%s)" % model.end_reason})
         return rows + [("2b", {"item": "2b", "trigger": "해당 없음"}, g)]
     z_hold = raw.last_pos()[3]
@@ -519,14 +542,14 @@ def attempt_item2(rig, args, a):
         return False
 
     got = rig.wait(landed_true, args.observe_s)
-    lt_obs = mj.landed_transitions(raw.landed, hold_end, raw.now_us())
-    obs_st = [x for x in raw.status if x.recv_ros_us > hold_end]
-    obs_z = [abs(q[3] - z_hold) for q in raw.pos if q[0] > hold_end]
-    g.update({"landed_true_seen": got, "observe_s": args.observe_s,
-              "landed_transitions_observe": lt_obs, "observe_landed_transitions": lt_obs["count"],
-              "observe_all_armed_loiter": bool(obs_st) and all(
-                  mj.is_armed(x) and x.nav_state == mj.NAV_STATE_AUTO_LOITER for x in obs_st),
-              "observe_samples": len(obs_st)})
+    obs = observe_facts(raw, hold_end, z_hold, raw.now_us())
+    g.update({"landed_true_seen": got, "observe_s_nominal": args.observe_s,
+              "landed_transitions_observe": obs["landed_transitions"],
+              "observe_landed_transitions": obs["landed_transitions"]["count"],
+              "observe_span_s": obs["span_s"], "observe_status_n": obs["status_n"],
+              "observe_landed_n": obs["landed_n"], "observe_status_age_s": obs["status_age_s"],
+              "observe_landed_age_s": obs["landed_age_s"],
+              "observe_all_armed_loiter": obs["all_armed_loiter"]})
     if got:
         t_true = seen_true["l"].recv_ros_us
         conf = mj.ConsecutiveConfirm(mj.is_disarmed)
@@ -542,7 +565,7 @@ def attempt_item2(rig, args, a):
                   "dz_after_disarm_m": max(after) if after else None,
                   "dz_max_m": max(both) if both else None})
     else:
-        g.update({"disarm_confirmed": False, "dz_max_m": max(obs_z) if obs_z else None})
+        g.update({"disarm_confirmed": False, "dz_max_m": obs["dz_m"]})
     return rows + [("2b", {"item": "2b", "trigger": "Hold 확인 뒤 landed 최신 표본이 true",
                            "hold_end_ros_us": hold_end}, g)]
 
@@ -714,14 +737,14 @@ def write_extra_summary(fh, item, rows):
             d = r["injection"]["delay_s_nominal"] if r["injection"] else None
             e = by.setdefault(d, {"valid": 0, "all": 0})
             e["all"] += 1
-            if r["verdict"] in ("PASS", "FAIL", "INCONCLUSIVE"):
+            if r["verdict"] in mj.VALID_VERDICTS:
                 e["valid"] += 1
-        fh.write("지연값별 시도(유효 = PASS, FAIL, INCONCLUSIVE): %s\n" % json.dumps(
+        fh.write("지연값별 시도(유효 = PASS, FAIL. INCONCLUSIVE는 유효 시도가 아니다): %s\n" % json.dumps(
             {str(k): v for k, v in sorted(by.items(), key=lambda kv: (kv[0] is None, kv[0]))}))
 
 
 def exit_code_of(verdict):
-    return {"PASS": 0, "FAIL": 1}.get(verdict, 2)
+    return 1 if verdict in mj.EXIT1_VERDICTS else (0 if verdict == "PASS" else 2)
 
 
 def parse_args(argv):
@@ -770,7 +793,7 @@ def main(argv=None):
     item = args.item
 
     # 기록 덮어쓰기 금지: 같은 항목의 기록이 있으면 시작하지 않는다
-    names = ["measure_%s.jsonl", "raw_%s.jsonl", "summary_%s.txt", "distribution_%s.json"]
+    names = ["measure_%s.jsonl", "raw_%s.jsonl", "summary_%s.txt", "distribution_%s.json", "done_%s.json"]
     existing = [str(out / (n % item)) for n in names if (out / (n % item)).exists()]
     if existing:
         print("이미 있는 기록을 덮어쓰지 않는다: %s" % existing, file=sys.stderr)
@@ -810,6 +833,7 @@ def main(argv=None):
     rclpy.init()
     raw = Px4Raw(veh.px4_ns, veh.sysid)
     rows_all = []
+    final_reset = "하지 않음(실행이 중단됨)"
     try:
         raw.start()
         pub = MeasureOnlyPublisher(raw, measure_only=True)
@@ -829,10 +853,16 @@ def main(argv=None):
                 wall0 = time.monotonic()
                 ros0 = raw.now_us()
                 idx = (len(raw.status), len(raw.landed), len(raw.pos), len(raw.acks), len(raw.sends))
-                facts_rows = []
+                judged = []
                 err = None
                 try:
                     facts_rows = ATTEMPTS[item](rig, args, a)
+                    n_arm = sum(1 for x in raw.sends[idx[4]:] if x["kind"] == "arm")
+                    for sub, inj, facts in facts_rows:
+                        facts["arm_sends"] = n_arm
+                        facts["stop_arm_resend_after_first_armed"] = (
+                            STOP_ARM_RESEND_AFTER_FIRST_ARMED if sub == "armed" else None)
+                        judged.append((sub, inj, facts, mj.judge_attempt(sub, facts)))
                 except Precondition as e:
                     err = ("PRECONDITION", str(e), getattr(e, "facts", None))
                 except ClockStalled as e:
@@ -865,8 +895,7 @@ def main(argv=None):
                         dump_raw(rfh, raw, a + 1, *idx)
                         break
                 else:
-                    for sub, inj, facts in facts_rows:
-                        v = mj.judge_attempt(sub, facts)
+                    for sub, inj, facts, v in judged:
                         has = "armed_window_ros_us" in facts
                         row = dict(base, item=sub, injection=inj, verdict=v.verdict, result=v.verdict,
                                    **{"class": mj.CLASS_DIRECT},
@@ -879,6 +908,12 @@ def main(argv=None):
                 print("attempt %d/%d %s" % (a + 1, args.attempts,
                                             [(r["item"], r["verdict"]) for r in rows_all
                                              if r["attempt"] == a + 1]), flush=True)
+        # 마지막 시도 뒤 기체를 안전 상태(DISARMED, landed true)로 되돌린다(--keep이어도)
+        try:
+            reset_vehicle(rig)
+            final_reset = "DISARMED, landed true"
+        except (Precondition, ClockStalled) as e:
+            final_reset = "실패: %s" % e
     finally:
         raw.close()
         rclpy.shutdown()
@@ -904,9 +939,9 @@ def main(argv=None):
         for sub in subitems:
             rs = [r for r in rows_all if r["item"] == sub]
             j = mj.judge_run(rs, MIN_ATTEMPTS[item])
-            fh.write("%s: 시도 %d, PASS %d, FAIL %d, 그 밖 %d, 시도 수 충분 %s, 전부 PASS %s, "
-                     "실패율 95%% 상한 약 %s\n" % (
-                         sub, j["n"], j["n_pass"], j["n_fail"], j["n_other"], j["enough"],
+            fh.write("%s: 시도 %d(유효 %d), PASS %d, 기준과 다른 관측(exit 1) %d, 그 밖 %d, 유효 시도 수 충분 %s, "
+                     "전부 PASS %s, 실패율 95%% 상한 약 %s\n" % (
+                         sub, j["n"], j["n_valid"], j["n_pass"], j["n_fail"], j["n_other"], j["enough"],
                          j["all_pass"], "-" if j["upper95_fail_rate"] is None
                          else "%.0f%%" % (100 * min(1.0, j["upper95_fail_rate"]))))
             for r in rs:
@@ -917,10 +952,16 @@ def main(argv=None):
             if tot:
                 fh.write("  정리 총 소요(s): min %.3f max %.3f\n" % (min(tot), max(tot)))
         write_extra_summary(fh, item, rows_all)
+        fh.write("마지막 시도 뒤 기체 정리: %s\n" % final_reset)
         fh.write("ARMED 기준(이 실행, 부류별. 최상위는 px4_direct): %s\n" % json.dumps(arm, sort_keys=True))
         if arm["violated"]:
             fh.write("!! OFFBOARD가 아닌 ARMED 표본이 나왔다. 즉시 architect에게 올린다.\n")
-    return mc.run_status(rows_all, MIN_ATTEMPTS[item], meta_ok=meta["ok"], crit=arm)
+    rc = mc.run_status(rows_all, MIN_ATTEMPTS[item], meta_ok=meta["ok"], crit=arm)
+    with open(out / ("done_%s.json" % item), "x") as fh:
+        json.dump({"rows": len(rows_all), "rc": rc, "meta_ok": meta["ok"], "final_reset": final_reset},
+                  fh, sort_keys=True)
+        fh.write("\n")
+    return rc
 
 
 if __name__ == "__main__":
