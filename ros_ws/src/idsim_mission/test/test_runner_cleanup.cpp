@@ -272,6 +272,28 @@ TEST(CancelGround, LinkLostDuringGroundDisarm)
   expect_terminated_once(h, Status::kAborted, Reason::kLinkLost);
 }
 
+TEST(CancelGround, LinkLostDuringGroundDisarmWithTimestampFailureDropsDisarm)
+{
+  // 상태 끊김 tick에 Px4Timestamp를 만들 수 없으면 끝내기 전의 disarm을 버리고 결과는 유지한다.
+  Harness h(standard_mission());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.auto_px4 = false;
+  h.world.arming = Arming::kArmed;
+  h.tick(true);
+  h.auto_samples = false;
+  for (int i = 0; i < 39; ++i) {
+    h.tick();
+  }
+  ASSERT_FALSE(h.runner().done());
+  h.clock.fail = true;
+  const StepOutput end = h.tick();
+  EXPECT_TRUE(end.commands.empty());
+  expect_terminated_once(h, Status::kAborted, Reason::kLinkLost);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("disarm not sent (Px4Timestamp unavailable)"), std::string::npos) << detail;
+  EXPECT_EQ(detail.find("sent once"), std::string::npos) << detail;
+}
+
 TEST(CancelGround, DeniedDisarmAckKeepsRetrying)
 {
   // M5. 방어 경로(합성 ack): v1.17.0의 ARM_DISARM은 DENIED를 돌려주지 않는다. 거부 ack는 종류와
@@ -631,25 +653,40 @@ TEST(TakeoffTimeout, DisarmedSnapshotAfterArmReselectsGroundDisarm)
 TEST(UntrustedSample, FirstCleanupTickEndsAndDisarmsIfArmSent)
 {
   // 방어 경로(합성): 정리의 첫 tick에 식별 불일치면 분기를 고를 수 없어 끝낸다. 취소는
-  // ABORTED, INTERNAL이고 arm을 보냈으면 강제가 아닌 disarm을 한 번 보낸다.
-  Harness h(standard_mission());
-  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
-  h.world.identity = IdentityCheck::kMismatch;
-  h.push_world_samples();
-  TickInput input;
-  input.tick = h.tick_no;
-  input.now_ns = h.now_ns;
-  input.cancel_requested = true;
-  h.clock.now_ns = h.now_ns;
-  const StepOutput out =
-    MissionRunnerTestAccess::begin_cancel(h.mutable_runner(), input, h.snapshot, h.clock);
-  ASSERT_TRUE(out.termination.has_value());
-  EXPECT_EQ(out.termination->status, Status::kAborted);
-  EXPECT_EQ(out.termination->reason, Reason::kInternal);
-  EXPECT_NE(out.termination->detail.find("may remain armed"), std::string::npos);
-  EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kDisarm});
-  EXPECT_FALSE(out.setpoint.has_value());
-  EXPECT_TRUE(h.runner().done());
+  // ABORTED, INTERNAL이고 arm을 보냈으면 강제가 아닌 disarm을 한 번 보낸다. 그 tick에
+  // Px4Timestamp를 만들 수 없으면 disarm을 버리고 보내지 못했다고 적는다.
+  for (const bool stamp_fails : {false, true}) {
+    SCOPED_TRACE(stamp_fails ? "Px4Timestamp failure" : "normal");
+    Harness h(standard_mission());
+    ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+    h.world.identity = IdentityCheck::kMismatch;
+    h.push_world_samples();
+    TickInput input;
+    input.tick = h.tick_no;
+    input.now_ns = h.now_ns;
+    input.cancel_requested = true;
+    h.clock.now_ns = h.now_ns;
+    h.clock.fail = stamp_fails;
+    const StepOutput out =
+      MissionRunnerTestAccess::begin_cancel(h.mutable_runner(), input, h.snapshot, h.clock);
+    ASSERT_TRUE(out.termination.has_value());
+    EXPECT_EQ(out.termination->status, Status::kAborted);
+    EXPECT_EQ(out.termination->reason, Reason::kInternal);
+    EXPECT_NE(out.termination->detail.find("may remain armed"), std::string::npos);
+    EXPECT_FALSE(out.setpoint.has_value());
+    EXPECT_TRUE(h.runner().done());
+    if (stamp_fails) {
+      EXPECT_TRUE(out.commands.empty());
+      EXPECT_NE(
+        out.termination->detail.find("disarm not sent (Px4Timestamp unavailable)"),
+        std::string::npos)
+        << out.termination->detail;
+      EXPECT_EQ(out.termination->detail.find("sent once"), std::string::npos);
+    } else {
+      EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kDisarm});
+      EXPECT_NE(out.termination->detail.find("disarm sent once"), std::string::npos);
+    }
+  }
 }
 
 // ---- 교차표의 원인 축(상태기 수준): (취소, ITEM_TIMEOUT, PREPARING 실패) x
@@ -1325,6 +1362,29 @@ TEST(CleanupCap, TimestampFailureOnCapTickDropsTheCommandKeepsResult)
       << detail;
     EXPECT_EQ(detail.find("sent once"), std::string::npos) << detail;
   }
+}
+
+TEST(CleanupCap, HoldObservedAndNavLandNotSentSaysVehicleStaysInHold)
+{
+  // 합성 표본: Hold를 본 뒤 상한 tick에 Px4Timestamp를 만들 수 없으면 NAV_LAND를 보내지 못하고
+  // 기체는 Hold로 남는다("if NAV_LAND is lost"가 아니다).
+  Harness h(standard_mission());
+  start_cancel(h, false);
+  std::vector<Sample> seq;
+  for (int k = 1; k < kCapTicks; ++k) {
+    const bool landed = toggled_landed(false, k);
+    seq.push_back(armed(!landed && k % 2 == 0 ? NavMode::kHold : NavMode::kOther, landed));
+  }
+  h.feed(seq);
+  ASSERT_FALSE(h.runner().done());
+  h.clock.fail = true;
+  const std::vector<StepOutput> end = h.feed({armed(NavMode::kOther, false)});
+  EXPECT_TRUE(end[0].commands.empty());
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("NAV_LAND not sent"), std::string::npos) << detail;
+  EXPECT_NE(detail.find("publishing stopped, vehicle stays in Hold"), std::string::npos) << detail;
+  EXPECT_EQ(detail.find("if NAV_LAND is lost"), std::string::npos) << detail;
 }
 
 TEST(CleanupCap, HoldObservedWithoutPublishingDoesNotSayPublishingStopped)

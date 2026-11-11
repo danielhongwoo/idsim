@@ -124,7 +124,7 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 13. 지상 setpoint의 위치가 유한하지 않으면 P3에서 읽은 위치를 쓰고, heading이 유한하지 않으면 그때의 setpoint yaw를 쓴다.
 14. 정리의 상한 tick에서 공중일 때 `detail`에 더하는 "Hold를 관측해 발행을 멈춘 기체"의 판정은 "이 정리에서 식별이 맞는 AUTO_LOITER 표본을 한 번이라도 봤다"이다. "발행을 멈췄다"는 이 goal이 발행한 적이 있을 때만 적는다. 상한의 `detail`에는 상한 값(ms)과 마지막 분기(none, air (Hold), air (Land path), ground (disarm))를 적는다.
 15. "Hold가 한 번 실패했다"는 이 정리에서 Land 경로에 한 번이라도 들어갔다는 뜻이다(거부 ack와 `hold_confirm_timeout` 둘 다 Land 경로로 들어간다). 정리를 시작할 때 지운다. 재진입한 Land 경로의 `detail`에는 처음 실패한 이유와 재진입했다는 것을 한 번만 적는다.
-16. 끝나는 tick에 확인 없이 한 번 보내는 명령(감시 표 종료의 disarm, 정리의 상한의 disarm과 NAV_LAND, 식별 불일치의 disarm)은 그 tick의 `Px4Timestamp`를 먼저 묻는다(`send_final`). 만들 수 없으면 명령을 버리고 `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground" 대신 "disarm not sent (Px4Timestamp unavailable); vehicle state unknown, may remain armed on ground"를, NAV_LAND이면 "NAV_LAND not sent (Px4Timestamp unavailable); vehicle state unknown"을 적는다.
+16. 끝나는 tick에 확인 없이 한 번 보내는 명령(감시 표 종료의 disarm, 정리의 상한의 disarm과 NAV_LAND, 식별 불일치의 disarm, 지상 disarm 분기의 상태 끊김과 만료 때 한 번 더 보내는 disarm)은 그 tick의 `Px4Timestamp`를 먼저 묻는다(`send_final`). 명령의 종류, 조건, tick은 그대로다. 만들 수 없으면 명령을 버리고 결과는 유지하며, `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground" 대신 "disarm not sent (Px4Timestamp unavailable); vehicle state unknown, may remain armed on ground"를, NAV_LAND이면 "NAV_LAND not sent (Px4Timestamp unavailable); vehicle state unknown"을 적는다. NAV_LAND 문구에 "may remain armed on ground"를 붙이지 않는 것은 NAV_LAND를 보내는 상한 tick의 고르기가 공중(`landed` false)이기 때문이다. 그때 Hold 표본을 본 적이 있으면 보낸 경우 "vehicle stays in Hold if NAV_LAND is lost", 보내지 못한 경우 "vehicle stays in Hold"를 적는다.
 
 ## 알려진 제한
 
@@ -141,11 +141,11 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 | `test_termination.cpp` | status와 reason 전수 대응표, reason 값, 종료 결과 == 종료 사건 |
 | `test_monitor_table.cpp` | 감시 표 순위마다 한 건, 같은 tick 동률 24쌍, 순위 5의 가지, 행 수와 parametrize 수, 감시 표로 끝낼 때의 disarm 술어(8행 전수 x 입력 16조합) |
 | `test_confirm_rules.cpp` | N회 연속 계수, 전송 뒤 표본 기준, 늦은 arm 경합, 정리 분기 고르기(snapshot 5종), yaw 변환 |
-| `test_runner_preparing.cpp` | P0-P6, `[LAND]` 미션, PREPARING 실패의 정리, P6의 첫 ARMED 표본 뒤(감시 표 행마다, 묵은 표본, arm 재전송 중단, 늦은 거부 ack, 확인 기한, 같은 tick, failsafe 이력의 구간) |
+| `test_runner_preparing.cpp` | P0-P6, `[LAND]` 미션, PREPARING 실패의 정리, P6의 첫 ARMED 표본 뒤(감시 표 행마다, 묵은 표본, arm 재전송 중단, 늦은 거부 ack, 확인 기한과 3번째 확인의 같은 tick, P6 최대 길이의 끝 경계, 감시 표의 같은 tick, failsafe 이력의 구간, landed false 이력의 같은 tick 경계), 식별 불일치의 disarm과 `Px4Timestamp` 실패 |
 | `test_runner_items.cpp` | TAKEOFF, LOITER, 상태기 안의 감시 표(순위마다), 엇갈림, 이력의 항목 경계, 분류 고정, 감시 표로 끝낼 때의 disarm 1회(8행 x {P6, TAKEOFF, LOITER} x landed 이력) |
 | `test_runner_land.cpp` | LAND 세 구간, 완료 우선, 대비책 disarm, LAND의 ITEM_TIMEOUT 변형 |
-| `test_runner_cleanup.cpp` | 취소 분기, Hold와 Land 경로, 지상 disarm 확인과 상태 끊김, ITEM_TIMEOUT 정리, 원인 3 x snapshot 3 교차표, 정리 중 식별 불일치, Hold 실패 뒤 공중 재진입, 정리의 상한(원인 3 x {지상, 공중}, 가장 긴 정당한 경로, 같은 tick 넷, 식별 불일치 표본) |
-| `test_runner_conflicts.cpp` | 종료의 충돌 규칙, `Px4Timestamp` 공급 실패 |
+| `test_runner_cleanup.cpp` | 취소 분기, Hold와 Land 경로, 지상 disarm 확인과 상태 끊김, ITEM_TIMEOUT 정리, 원인 3 x snapshot 3 교차표, 정리 중 식별 불일치, Hold 실패 뒤 공중 재진입과 재진입 문구, 분기 재진입(`BranchReentry`: 지상 재진입의 disarm 확인 기준, 공중 재진입의 Hold 재전송과 타이머와 계수), 정리의 상한(원인 3 x {지상, 공중}과 정확한 마지막 분기 문자열, 가장 긴 정당한 경로, 같은 tick 넷, 상한 tick의 고르기가 직전 분기와 다른 경우, 상한 대 3번째 Hold 확인, 마지막 분기가 Land 경로, 식별 불일치 표본, Hold 관측 문구), 끝나는 tick의 `Px4Timestamp` 실패(상한의 disarm과 NAV_LAND, 상태 끊김의 disarm, 정리 첫 tick 식별 불일치의 disarm) |
+| `test_runner_conflicts.cpp` | 종료의 충돌 규칙, `Px4Timestamp` 공급 실패(지상 disarm 분기 만료의 마지막 disarm 포함) |
 | `node/test_contract_constants.cpp` | core 값과 메시지 상수(REASON_* 13, 14 포함, TYPE_*, MODE_*, PHASE_*, STATUS_*), yaw 식과 idsim_common/frames, 변환의 result == 사건 |
 | `node/test_executor_node.cpp` | 한 프로세스 배선(노드, 가짜 PX4, /clock thread, action client): self_start 대조군 쌍, 직접 configure/activate, configure 실패 둘, 정상 경로 SUCCEEDED와 무효 경로 INVALID_MISSION(사건 ACCEPTED가 앞, 종료 사건 1건, result와 같은 값), goal 중 deactivate 거부와 on_shutdown의 ABORTED INTERNAL, 종료 때 disarm(arm 뒤 1개, arm 전 0개), PREPARING 중 취소의 CANCELED, 두 번째 goal의 BUSY, cancel을 받아들인 goal의 abort 허용(rclcpp_action) |
 

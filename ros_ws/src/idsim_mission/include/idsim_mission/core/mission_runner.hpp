@@ -225,7 +225,8 @@ private:
   SetpointOut ground_setpoint(const Tick & t) const;
   void send(Tick & t, CommandKind kind);
   void send_once(Tick & t, CommandKind kind);
-  void send_final(Tick & t, CommandKind kind, std::string & detail);
+  // 보냈으면 true. Px4Timestamp를 만들 수 없으면 보내지 않고 false.
+  bool send_final(Tick & t, CommandKind kind, std::string & detail);
   void clear_pending() { pending_.active = false; }
   void resend_due(Tick & t);
   AckView take_ack(const Tick & t);
