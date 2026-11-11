@@ -61,8 +61,13 @@ OBSERVE_MAX_LANDED_GAP_S = 4.0
 
 # 종료 코드 1로 읽는 verdict(기준과 다른 관측). M3_CONTRADICTED는 2b에서 landed가 true에 닿은 경우다.
 EXIT1_VERDICTS = ("FAIL", "M3_CONTRADICTED")
-# 시도 수로 세는 verdict. INCONCLUSIVE, COND_NOT_REACHED, HOLD_END, WINDOW_MISSED, PRECONDITION 등은
-# 기준에 대한 판정이 아니므로 세지 않는다.
+# 자극이 성립하지 않아 시도 수에도 not-pass 집계에도 넣지 않는 verdict(행과 횟수는 기록하고 따로 적는다).
+# WINDOW_MISSED는 (3)에서 취소 시점에 landed가 이미 false였던 회, ARM_NOT_ACCEPTED는 (5)에서 ULog 교차
+# 확인 뒤에도 arm 수락 증거가 없는 회다(교차 확인 전의 live 행은 INCONCLUSIVE kind ARM_EVIDENCE로 2).
+# 그 회에서 기준과 다른 관측(OFFBOARD가 아닌 ARMED 등)이 나오면 이 verdict가 아니라 FAIL이고 빼지 않는다.
+EXCLUDED_VERDICTS = ("WINDOW_MISSED", "ARM_NOT_ACCEPTED")
+# 시도 수로 세는 verdict. INCONCLUSIVE, COND_NOT_REACHED, HOLD_END, PRECONDITION 등은 기준에 대한
+# 판정이 아니므로 세지 않고(not-pass로 집계해 종료 코드 2), EXCLUDED_VERDICTS는 세지도 집계하지도 않는다.
 VALID_VERDICTS = ("PASS", "FAIL", "M3_CONTRADICTED")
 
 # 아래 네 값(12, 3, 3, 0.5)은 idsim_mission의 노드 파라미터 기본값(core/config.hpp의 Timeouts:
@@ -473,7 +478,9 @@ class Verdict:
 def neighbor_gap_s(times_us, start_us, end_us=None):
     """관찰 구간 (start_us, end_us]에서 이웃한 표본 사이의 최대 간격(s)과 그 수.
 
-    times_us: 표본 시각 목록(PX4 timestamp 또는 ROS 수신 시각, 같은 시각 중복은 무시). 시작 직전의
+    times_us: 표본 시각 목록(PX4 timestamp 또는 ROS 수신 시각, 같은 시각 중복은 무시). PX4 timestamp 축으로
+    부를 때도 start_us와 end_us는 ROS 수신 시각이다(둘은 같은 sim 시간 축이라는 근사이고 차이의 분포는
+    distribution_*.json에 있다. 근사 오차는 수 ms 수준이라 초 단위 기준에는 영향이 없다). 시작 직전의
     마지막 표본이 있으면 구간 안으로 세어 첫 표본과의 간격을 시작 가장자리로 잰다. 없으면 start_us부터
     첫 표본까지를 잰다. 구간 안 표본이 없으면 None(간격을 말할 수 없다).
     """
@@ -565,7 +572,12 @@ def judge_attempt(item, f):
         return Verdict(True, "PASS", [])
 
     if item == "3" and not f["landed_at_cancel"]:
-        # 창을 놓친 시도는 PX4의 실패가 아니라 측정이 닿지 않은 것이다. 통과로 세지 않는다.
+        # 창을 놓친 시도는 자극이 성립하지 않은 회라 통과로도 시도 수로도 세지 않는다. 다만 이 회에서
+        # 기준과 다른 관측(OFFBOARD가 아닌 ARMED)이 나왔으면 빼지 않고 FAIL이다.
+        if f["armed_non_offboard"] != 0:
+            return Verdict(False, "FAIL", [
+                "OFFBOARD가 아닌 ARMED 표본 %d개" % f["armed_non_offboard"],
+                "취소 시점에 landed가 이미 false(창을 놓친 회지만 위반이 있어 제외하지 않음)"])
         return Verdict(False, "WINDOW_MISSED", ["취소 시점에 landed가 이미 false(이륙 직후 창을 놓침)"])
     if item in ("3", "5", "armed"):
         need(f["armed_non_offboard"] == 0,
@@ -634,19 +646,21 @@ def judge_run(item_rows, min_attempts, armed_reached_min=None):
 
     item_rows: 행 dict 목록(verdict, armed3_reached 키를 색인으로 읽는다. 없으면 KeyError).
     시도 수(n_valid)는 기준에 대한 판정이 있는 verdict(PASS, FAIL, M3_CONTRADICTED)만 센다.
-    INCONCLUSIVE, COND_NOT_REACHED, HOLD_END, WINDOW_MISSED, PRECONDITION 등은 유효 시도가 아니다.
-    돌려주는 dict: n, n_valid, n_pass, n_fail(exit 1 verdict), n_other, enough(n_valid >= min_attempts),
-      all_pass(모든 시도가 PASS), upper95_fail_rate(3/n_valid), armed3_reached
+    INCONCLUSIVE, COND_NOT_REACHED, HOLD_END, PRECONDITION 등은 유효 시도가 아니고, EXCLUDED_VERDICTS
+    (WINDOW_MISSED, ARM_NOT_ACCEPTED)는 유효 시도도 not-pass도 아닌 제외된 회(n_excluded)다.
+    돌려주는 dict: n, n_valid, n_pass, n_fail(exit 1 verdict), n_excluded, n_other, enough(n_valid >=
+      min_attempts), all_pass(제외된 회를 뺀 모든 시도가 PASS), upper95_fail_rate(3/n_valid), armed3_reached
     """
     n = len(item_rows)
     n_valid = sum(1 for r in item_rows if r["verdict"] in VALID_VERDICTS)
     n_pass = sum(1 for r in item_rows if r["verdict"] == "PASS")
     n_fail = sum(1 for r in item_rows if r["verdict"] in EXIT1_VERDICTS)
+    n_excl = sum(1 for r in item_rows if r["verdict"] in EXCLUDED_VERDICTS)
     reached = sum(1 for r in item_rows if r["armed3_reached"])
     out = {
-        "n": n, "n_valid": n_valid, "n_pass": n_pass, "n_fail": n_fail,
-        "n_other": n - n_pass - n_fail,
-        "enough": n_valid >= min_attempts, "all_pass": n > 0 and n_pass == n,
+        "n": n, "n_valid": n_valid, "n_pass": n_pass, "n_fail": n_fail, "n_excluded": n_excl,
+        "n_other": n - n_pass - n_fail - n_excl,
+        "enough": n_valid >= min_attempts, "all_pass": n - n_excl > 0 and n_pass == n - n_excl,
         "upper95_fail_rate": (3.0 / n_valid) if n_valid else None,
         "armed3_reached": reached,
     }

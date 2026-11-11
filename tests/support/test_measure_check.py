@@ -265,15 +265,16 @@ def test_ulog_evidence_b_log_outside_range_does_not_count():
     u = [ul(1100, arming=DIS)]
     res = mc.check_row(row5(), [ros(1100, arming=DIS)], *index(u),
                        logged=[logged(900), logged(9000), logged(1500, "[commander] Disarmed")])
-    assert res["final_verdict"] == "INCONCLUSIVE" and res["evidence_pending"]
-    assert mc.row_status(res) == 2
+    # 대조가 일치하고 증거가 끝내 없으면 자극이 성립하지 않은 회(ARM_NOT_ACCEPTED)다. 2가 아니다.
+    assert res["final_verdict"] == "ARM_NOT_ACCEPTED" and not res["evidence_pending"]
+    assert mc.row_status(res) == 0
 
 
 def test_ack_only_is_not_evidence_inconclusive_stays():
     # arm_evidence False(ROS 표본 없음), ULog에도 A, B 없음 -> 확정하지 않는다
     u = [ul(1100, arming=DIS)]
     res = mc.check_row(row5(), [ros(1100, arming=DIS)], *index(u))
-    assert res["final_verdict"] == "INCONCLUSIVE"
+    assert res["final_verdict"] == "ARM_NOT_ACCEPTED"      # ack만 있고 A, B가 모두 없다
 
 
 def test_final_verdict_does_not_touch_other_rows():
@@ -456,3 +457,74 @@ def test_item_problems_flags_missing_rows_and_done():
     p = mc.item_problems(["item2"], {"item2": 0}, {"item2"})
     assert len(p) == 1 and "행이 0개" in p[0]
     assert mc.crosscheck_status([OKROW], GOOD, done=not p) == 2
+
+
+# --- 5차 수정: 자극 불성립 회의 제외 -------------------------------------------------
+
+
+def test_window_missed_is_excluded_from_valid_and_not_pass_counts():
+    rows = [srow("3", i, "PASS") for i in (1, 2, 3)] + [srow("3", 4, "WINDOW_MISSED")]
+    s = mc.final_summary(rows, {})["3"]
+    assert s["n"] == 4 and s["n_valid"] == 3 and s["n_pass"] == 3
+    assert s["n_excluded"] == 1 and s["n_not_pass"] == 0 and s["enough"]
+    assert mc.crosscheck_status([OKROW], GOOD, summary=mc.final_summary(rows, {})) == 0
+    assert mc.run_status(rows, 3) == 0
+
+
+def test_not_enough_valid_pass_with_window_missed_is_exit_two():
+    rows = [srow("3", i, "PASS") for i in (1, 2)] + [srow("3", i, "WINDOW_MISSED") for i in (3, 4)]
+    s = mc.final_summary(rows, {})
+    assert s["3"]["n_pass"] == 2 and s["3"]["n_excluded"] == 2 and not s["3"]["enough"]
+    assert mc.crosscheck_status([OKROW], GOOD, summary=s) == 2
+    assert mc.run_status(rows, 3) == 2
+
+
+def test_arm_not_accepted_is_excluded_and_counted_per_delay():
+    rows = [srow("5", i, "INCONCLUSIVE", delay=0.0 if i % 2 else 0.1) for i in range(1, 12)]
+    finals = {("5", i): "PASS" for i in range(1, 11)}
+    finals[("5", 11)] = "ARM_NOT_ACCEPTED"
+    s = mc.final_summary(rows, finals)["5"]
+    assert s["n_pass"] == 10 and s["n_excluded"] == 1 and s["n_not_pass"] == 0 and s["enough"]
+    assert s["by_delay"]["0.0"]["n_excluded"] == 1 and s["by_delay"]["0.1"]["n_excluded"] == 0
+    assert mc.crosscheck_status([OKROW], GOOD, summary={"5": s}) == 0
+
+
+def test_excluded_rows_do_not_hide_other_unjudged_rows_or_exit1():
+    rows = ([srow("5", i, "PASS") for i in range(1, 11)] + [srow("5", 11, "ARM_NOT_ACCEPTED"),
+                                                              srow("5", 12, "INCONCLUSIVE")])
+    s = mc.final_summary(rows, {})
+    assert s["5"]["n_not_pass"] == 1 and mc.crosscheck_status([OKROW], GOOD, summary=s) == 2
+    rows = [srow("3", 1, "PASS")] * 3 + [srow("3", 4, "WINDOW_MISSED"), srow("3", 5, "FAIL")]
+    assert mc.crosscheck_status([OKROW], GOOD, summary=mc.final_summary(rows, {})) == 1
+
+
+def test_window_missed_row_with_armed_violation_is_exit_one():
+    # live 판정: 위반이 있으면 WINDOW_MISSED가 아니라 FAIL이라 제외하지 않는다
+    f = {"landed_at_cancel": False, "armed_non_offboard": 1}
+    v = mj.judge_attempt("3", f)
+    assert v.verdict == "FAIL" and not v.ok
+    rows = [srow("3", i, "PASS") for i in (1, 2, 3)] + [srow("3", 4, v.verdict)]
+    assert mc.run_status(rows, 3) == 1
+    assert mc.crosscheck_status([OKROW], GOOD, summary=mc.final_summary(rows, {})) == 1
+    # ULog에서 드러난 위반은 WINDOW_MISSED 행에서도 1이다
+    f2 = {"armed_window_ros_us": [1000, 2000], "arm_send": [1000, 1000]}
+    r = {"item": "3", "attempt": 4, "verdict": "WINDOW_MISSED", "facts": f2}
+    u = [ul(1100), ul(1600, nav=LOI)]
+    res = mc.check_row(r, [ros(1100), ros(1600)], *index(u))
+    assert res["ulog_armed_non_offboard"] == 1 and mc.row_status(res) == 1
+
+
+def test_arm_evidence_missing_after_consistent_crosscheck_is_arm_not_accepted_but_mismatch_is_not():
+    u = [ul(1100, arming=DIS)]
+    ok = mc.check_row(row5(), [ros(1100, arming=DIS)], *index(u))
+    assert ok["final_verdict"] == "ARM_NOT_ACCEPTED" and mc.row_status(ok) == 0
+    bad = mc.check_row(row5(), [ros(1100, arming=DIS), ros(1500, arming=DIS)], *index(u))
+    assert bad["final_verdict"] == "INCONCLUSIVE" and mc.row_status(bad) == 1
+
+
+def test_rows_schema_problems_flag_old_records():
+    good = {"item": "5", "attempt": 1, "inconclusive_kind": "", "class": "px4_direct", "args": {}}
+    assert mc.rows_schema_problems([good]) == []
+    old = {"item": "5", "attempt": 1, "class": "px4_direct", "args": {}}
+    p = mc.rows_schema_problems([good, old])
+    assert len(p) == 1 and "inconclusive_kind" in p[0]

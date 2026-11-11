@@ -811,3 +811,21 @@ def test_judge_gap_limits_apply_to_hold_end_too():
     assert mj.judge_attempt("3", hold3()).verdict == "HOLD_END"
     assert mj.judge_attempt("3", hold3(hold_observe_status_gap_recv_s=3.0)).verdict == "INCONCLUSIVE"
     assert mj.judge_attempt("3", hold3(hold_observe_landed_gap_ts_s=5.0)).verdict == "INCONCLUSIVE"
+
+
+def test_judge_run_excluded_verdicts_are_not_other_nor_counted_valid():
+    rows = [row("PASS", item="3")] * 3 + [row("WINDOW_MISSED", item="3")]
+    r = mj.judge_run(rows, 3)
+    assert r["n_excluded"] == 1 and r["n_other"] == 0 and r["n_valid"] == 3
+    assert r["enough"] and r["all_pass"]
+
+
+def test_judge_3_window_missed_with_armed_violation_is_fail_not_excluded():
+    v = mj.judge_attempt("3", {"landed_at_cancel": False, "armed_non_offboard": 2})
+    assert v.verdict == "FAIL" and "제외하지 않음" in v.reasons[1]
+    v = mj.judge_attempt("3", {"landed_at_cancel": False, "armed_non_offboard": 0})
+    assert v.verdict == "WINDOW_MISSED" and v.verdict in mj.EXCLUDED_VERDICTS
+
+
+def test_neighbor_gap_docstring_states_start_axis_approximation():
+    assert "ROS 수신 시각이다" in mj.neighbor_gap_s.__doc__

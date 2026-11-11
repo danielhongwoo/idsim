@@ -43,7 +43,10 @@ final_summary.json)이 이미 있으면 --force 없이는 덮어쓰지 않고 �
 종료 코드: 0 PX4 직접 부류의 통과(ULog 표본이 실제로 대조됨), 1 위반 또는 불일치 또는 대조가 비어 있음
 (어느 부류든 ARMED 위반, 최종 판정 FAIL과 M3_CONTRADICTED 포함), 2 입력 부족 또는 ULog를 못 읽음 또는
 (5)의 증거 미확인 또는 PASS 횟수 부족 또는 ARMED 3회 도달 실행 부족 또는 commit/image key 없음 또는
-measure.py 완료 기록(done_<항목>.json) 없음. run_measure.sh의 최종 종료 코드는 이 값을 따른다. 이 통과는
+measure.py 완료 기록(done_<항목>.json) 없음 또는 이 판 이전의 기록(필요한 키가 없음). 자극이 성립하지
+않은 회((3)의 WINDOW_MISSED, ULog 교차 확인 뒤에도 arm 수락 증거가 없는 (5)의 ARM_NOT_ACCEPTED)는 유효 시도에도
+not-pass에도 넣지 않고 항목별((5)는 지연값별)로 따로 센다(final_summary.json). 그 회에서 기준과 다른 관측이
+나오면 빼지 않고 1이다. run_measure.sh의 최종 종료 코드는 이 값을 따른다. 이 통과는
 PX4 직접 부류의 통과이며 P4 머지 조건은 Executor 경유 부류(시나리오 A)의 통과가 따로 필요하다.
 """
 import argparse
@@ -104,6 +107,12 @@ def main(argv=None):
     for mf in files:
         item = os.path.basename(mf)[len("measure_"):-len(".jsonl")]
         rows = load_jsonl(mf)
+        schema = mc.rows_schema_problems(rows)
+        if schema:
+            for line in schema[:5]:
+                print(line, file=sys.stderr)
+            print("%s: 이 판 이전의 기록은 crosscheck가 읽을 수 없다(종료 코드 2)" % mf, file=sys.stderr)
+            return 2
         all_rows.extend(rows)
         rows_by_item[item] = len(rows)
         if (mdir / ("done_%s.json" % item)).exists():
@@ -178,8 +187,10 @@ def main(argv=None):
         json.dump(summary, fh, indent=1, sort_keys=True)
         fh.write("\n")
     for sub_item, d in sorted(summary.items()):
-        print("최종 %s: 시도 %d, 유효 %d, PASS %d(최소 %d), PASS가 아닌 행 %d, 기준과 다른 관측 %d, verdict별 %s%s%s" % (
-            sub_item, d["n"], d["n_valid"], d["n_pass"], d["min"], d["n_not_pass"], d["n_exit1"],
+        print("최종 %s: 시도 %d, 유효 %d, PASS %d(최소 %d), 제외(자극 불성립) %d, PASS가 아닌 행 %d, "
+              "기준과 다른 관측 %d, verdict별 %s%s%s" % (
+            sub_item, d["n"], d["n_valid"], d["n_pass"], d["min"], d["n_excluded"], d["n_not_pass"],
+            d["n_exit1"],
             json.dumps(d["by_verdict"], sort_keys=True),
             ", (가) 미도달 %d회, (나) M3_CONTRADICTED %d회" % (d["case_ga"], d["case_na"])
             if "case_ga" in d else "",

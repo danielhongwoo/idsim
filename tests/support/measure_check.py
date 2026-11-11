@@ -62,14 +62,20 @@ def ulog_arm_evidence(arm_ts, end_ts, ulog_by_ts, ulog_ts, logged):
 def final_verdict(row, evidence, consistent=True):
     """live 판정을 ULog 증거로 확정한다. (5)가 arm 수락 증거 미확인으로 INCONCLUSIVE였던 행만 바뀐다.
 
-    돌려주는 (verdict, pending). pending은 증거가 끝내 없어 INCONCLUSIVE로 남은 경우다.
-    행의 ULog 대조가 일치하지 않으면(consistent False) 증거가 있어도 PASS로 올리지 않는다."""
+    돌려주는 (verdict, pending).
+      증거 있음(A 또는 B) + 대조 일치: ("PASS", False)
+      대조 불일치(consistent False): ("INCONCLUSIVE", True). 증거가 있어도 올리지 않고 row_status가 1로 본다.
+      대조 일치 + 증거가 끝내 없음: ("ARM_NOT_ACCEPTED", False). 자극이 성립하지 않은 회라 시도 수에도
+        not-pass 집계에도 넣지 않는다(최종 판정 단계에서만. measure.py 단독의 증거 미확인은 2다).
+    """
     # 증거 미확인으로 INCONCLUSIVE가 된 행만 승격한다. 값이 없어서(예: climb_m None) INCONCLUSIVE인
     # 행은 증거가 있어도 승격하지 않는다.
     if row["item"] == "5" and row["verdict"] == "INCONCLUSIVE" and row["inconclusive_kind"] == "ARM_EVIDENCE":
-        if consistent and (evidence["A_armed_sample"] or evidence["B_armed_log"]):
+        if not consistent:
+            return "INCONCLUSIVE", True
+        if evidence["A_armed_sample"] or evidence["B_armed_log"]:
             return "PASS", False
-        return "INCONCLUSIVE", True
+        return "ARM_NOT_ACCEPTED", False
     return row["verdict"], False
 
 
@@ -214,28 +220,33 @@ def final_summary(rows, finals, min_by_item=MIN_ATTEMPTS_BY_ITEM):
 
     rows: measure 행(item, attempt, injection, verdict). finals: {(item, attempt): 최종 verdict}.
     항목마다 n, n_valid(PASS, FAIL, M3_CONTRADICTED만. INCONCLUSIVE 등은 유효 시도가 아니다), n_pass,
-    n_not_pass(최종 verdict가 PASS가 아닌 행 수), n_exit1, by_verdict(최종 verdict별 횟수),
-    enough(n_pass >= 최소 시도 수 그리고 n_not_pass == 0), by_delay((5)의 명목 지연값별 n, n_valid,
-    n_pass)를 낸다. 판정 안 된 행이 하나라도 있으면 PASS 횟수를 채워도 enough가 아니다(종료 코드 2).
+    n_excluded(자극이 성립하지 않은 회: WINDOW_MISSED, ARM_NOT_ACCEPTED. 행과 횟수는 기록하지만 유효 시도에도
+    n_not_pass에도 넣지 않는다), n_not_pass(최종 verdict가 PASS도 제외도 아닌 행 수), n_exit1,
+    by_verdict(최종 verdict별 횟수), enough(n_pass >= 최소 시도 수 그리고 n_not_pass == 0),
+    by_delay((5)의 명목 지연값별 n, n_valid, n_pass, n_excluded)를 낸다. 판정 안 된 행이 하나라도 있으면
+    PASS 횟수를 채워도 enough가 아니다(종료 코드 2). 시도 수는 실행 전에 정하고 결과를 보고 더하지 않는다.
     2b는 (가) 미도달(COND_NOT_REACHED)과 (나) M3_CONTRADICTED를 case_ga, case_na로 따로 센다.
     """
     out = {}
     for r in rows:
         sub = r["item"]
         v = finals.get((sub, r["attempt"]), r["verdict"])
-        d = out.setdefault(sub, {"n": 0, "n_valid": 0, "n_pass": 0, "n_not_pass": 0, "n_exit1": 0,
-                                 "by_verdict": {}, "by_delay": {}})
+        d = out.setdefault(sub, {"n": 0, "n_valid": 0, "n_pass": 0, "n_excluded": 0, "n_not_pass": 0,
+                                 "n_exit1": 0, "by_verdict": {}, "by_delay": {}})
         d["n"] += 1
         d["by_verdict"][v] = d["by_verdict"].get(v, 0) + 1
-        d["n_not_pass"] += 0 if v == "PASS" else 1
+        excluded = v in mj.EXCLUDED_VERDICTS
+        d["n_excluded"] += 1 if excluded else 0
+        d["n_not_pass"] += 0 if (v == "PASS" or excluded) else 1
         valid = v in mj.VALID_VERDICTS
         d["n_valid"] += 1 if valid else 0
         d["n_pass"] += 1 if v == "PASS" else 0
         d["n_exit1"] += 1 if v in mj.EXIT1_VERDICTS else 0
         if sub == "5" and r["injection"] is not None:
             e = d["by_delay"].setdefault(str(r["injection"]["delay_s_nominal"]),
-                                         {"n": 0, "n_valid": 0, "n_pass": 0})
+                                         {"n": 0, "n_valid": 0, "n_pass": 0, "n_excluded": 0})
             e["n"] += 1
+            e["n_excluded"] += 1 if excluded else 0
             e["n_valid"] += 1 if valid else 0
             e["n_pass"] += 1 if v == "PASS" else 0
     for sub, d in out.items():
@@ -258,6 +269,23 @@ def item_problems(requested, rows_by_item, done_items):
             out.append("%s: 기록(measure_%s.jsonl)이 없거나 행이 0개" % (it, it))
         if it not in done_items:
             out.append("%s: 완료 기록(done_%s.json)이 없음" % (it, it))
+    return out
+
+
+REQUIRED_ROW_KEYS = ("inconclusive_kind", "class", "args")
+
+
+def rows_schema_problems(rows):
+    """crosscheck가 읽는 행에 필요한 키가 있는가. 없는 키 목록의 사유 문장(없으면 빈 목록).
+
+    trial5 이전에 만든 기록은 inconclusive_kind 같은 키가 없어 crosscheck가 읽을 수 없다. KeyError로 죽는
+    대신 사유와 함께 종료 코드 2로 끝내기 위한 검사다."""
+    out = []
+    for r in rows:
+        miss = [k for k in REQUIRED_ROW_KEYS if k not in r]
+        if miss:
+            out.append("행(item %s, 시도 %s)에 키 %s가 없다. 이 판의 measure.py가 만든 기록이 아니다"
+                       % (r.get("item"), r.get("attempt"), miss))
     return out
 
 
@@ -304,6 +332,9 @@ def run_status(rows, min_attempts, meta_ok=True, crit=None):
     rows: 모든 행(item, verdict 키). min_attempts: 항목의 최소 시도 수(유효 시도 기준).
     행이 0개, PASS와 FAIL이 아닌 verdict(COND_NOT_REACHED, HOLD_END, INCONCLUSIVE, WINDOW_MISSED,
     PRECONDITION, ERROR 등), 유효 시도 수 부족, 메타 부족(commit unknown, image key null)은 2.
+    EXCLUDED_VERDICTS 중 WINDOW_MISSED(measure.py 안에서 정해지는 자극 불성립)는 유효 시도에도 not-pass에도
+    넣지 않는다. (5)의 증거 미확인 INCONCLUSIVE는 ULog 교차 확인 전이라 여기서는 2다(제외는 crosscheck의
+    최종 판정 단계에서만).
     FAIL, M3_CONTRADICTED, ARMED 위반(violated_any_class, 어느 부류든)이 하나라도 있으면 1이 2보다 앞선다.
     """
     if not rows:
@@ -311,7 +342,7 @@ def run_status(rows, min_attempts, meta_ok=True, crit=None):
     status = 0 if meta_ok else 2
     fail = False
     for sub in sorted({r["item"] for r in rows}):
-        rs = [r for r in rows if r["item"] == sub]
+        rs = [r for r in rows if r["item"] == sub and r["verdict"] != "WINDOW_MISSED"]
         n_pass = sum(1 for r in rs if r["verdict"] == "PASS")
         n_valid = sum(1 for r in rs if r["verdict"] in mj.VALID_VERDICTS)
         if any(r["verdict"] in mj.EXIT1_VERDICTS for r in rs):

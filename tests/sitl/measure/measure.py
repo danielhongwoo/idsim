@@ -47,7 +47,9 @@ px4-engineer 행이다.
      true에 닿은 경우로 M3 문장과 다른 관측이다(disarm 수락과 고도 변화는 facts에 기록).
   2  기계가 판정하지 않음: COND_NOT_REACHED, HOLD_END, INCONCLUSIVE, WINDOW_MISSED, PRECONDITION,
      ERROR, CLOCK_STALLED, 유효 시도(PASS, FAIL, M3_CONTRADICTED) 수 부족, 행 0개, commit unknown이나
-     image key 없음, 처리하지 못한 예외.
+     image key 없음, 처리하지 못한 예외. 자극이 성립하지 않은 회((3)의 WINDOW_MISSED)는 유효 시도에도
+     not-pass에도 넣지 않는다. (5)의 arm 수락 증거 미확인은 이 스크립트 단독에서는 2이고, ULog 교차 확인
+     뒤 증거가 끝내 없으면 crosscheck가 ARM_NOT_ACCEPTED로 제외한다(최종 판정 단계에서만).
 (5)의 arm 수락 증거가 ROS 표본에 없으면 이 스크립트 단독의 행은 INCONCLUSIVE(ULog 교차 확인 전)이고
 최종 PASS는 crosscheck.py 뒤에만 선언한다.
 
@@ -100,8 +102,10 @@ CRITERIA = {
         "시도 3회 모두 위 기준을 만족해야 통과한다. 3회는 실패율 95% 상한이 약 100%라 실패 없음의 증거가 아니다.",
     ],
     "item3": [
-        "TAKEOFF 목표점으로 arm한 뒤 첫 ARMED 표본에서 landed가 true인 시도만 창 안이다(아니면 WINDOW_MISSED, "
-        "통과로 세지 않음). 그 시점에 지상 setpoint로 바꾸고 disarm.",
+        "TAKEOFF 목표점으로 arm한 뒤 첫 ARMED 표본에서 landed가 true인 시도만 창 안이다. 아니면 WINDOW_MISSED로 "
+        "자극이 성립하지 않은 회라 유효 시도에도 not-pass에도 넣지 않고 따로 센다(그 회에서 OFFBOARD가 아닌 "
+        "ARMED 표본이 나오면 제외하지 않고 FAIL). 시도 수는 실행 전에 정하고 결과를 보고 더하지 않는다. "
+        "그 시점에 지상 setpoint로 바꾸고 disarm.",
         "mode_confirm_timeout(3 s) 안에 DISARMED 3회, 상승 0.2 m 이하, 정리 총 소요 9 s 미만, "
         "OFFBOARD가 아닌 ARMED 표본 0개(구간 끝 = min(ARMED 3회 확인, 정리 종료, 측정기의 첫 Hold 전송)), "
         "끝난 뒤 지상에 armed로 남지 않음.",
@@ -120,7 +124,9 @@ CRITERIA = {
         "400이고 ack에 원 명령 필드가 없다). 증거가 없으면 INCONCLUSIVE. 이 스크립트 단독의 행은 ROS 표본이 "
         "없으면 'arm 수락 증거 미확인(ULog 교차 확인 전)'으로 남고 최종 PASS는 crosscheck.py 뒤에만 선언한다.",
         "유효 시도(PASS, FAIL)가 10회 이상이고 PASS가 10회 이상이어야 통과한다(10회 중 0건은 실패율 95% 상한 약 26%). "
-        "INCONCLUSIVE는 유효 시도가 아니다.",
+        "INCONCLUSIVE는 유효 시도가 아니고 not-pass로 집계한다(종료 코드 2). crosscheck의 최종 판정에서 ULog 증거가 "
+        "끝내 없는 회는 ARM_NOT_ACCEPTED로 자극이 성립하지 않은 회라 유효 시도에도 not-pass에도 넣지 않고 "
+        "지연값별로 따로 센다(그 회에서 기준과 다른 관측이 있으면 제외하지 않고 1). 시도 수는 실행 전에 정한다.",
     ],
     "armed": [
         "PX4 직접 명령(Executor 없음). arm 전송부터 ARMED 3회 확인(= TAKEOFF 시작에 해당)까지, 그리고 ARMED 3회 "
@@ -959,9 +965,10 @@ def main(argv=None):
         for sub in subitems:
             rs = [r for r in rows_all if r["item"] == sub]
             j = mj.judge_run(rs, MIN_ATTEMPTS[item])
-            fh.write("%s: 시도 %d(유효 %d), PASS %d, 기준과 다른 관측(exit 1) %d, 그 밖 %d, 유효 시도 수 충분 %s, "
-                     "전부 PASS %s, 실패율 95%% 상한 약 %s\n" % (
-                         sub, j["n"], j["n_valid"], j["n_pass"], j["n_fail"], j["n_other"], j["enough"],
+            fh.write("%s: 시도 %d(유효 %d), PASS %d, 기준과 다른 관측(exit 1) %d, 제외(자극 불성립) %d, 그 밖 %d, "
+                     "유효 시도 수 충분 %s, 전부 PASS %s, 실패율 95%% 상한 약 %s\n" % (
+                         sub, j["n"], j["n_valid"], j["n_pass"], j["n_fail"], j["n_excluded"], j["n_other"],
+                         j["enough"],
                          j["all_pass"], "-" if j["upper95_fail_rate"] is None
                          else "%.0f%%" % (100 * min(1.0, j["upper95_fail_rate"]))))
             for r in rs:
