@@ -13,7 +13,8 @@ model: sonnet
 ## 소유 영역
 
 - `tests/`: compose를 올리는 pytest fixture, rclpy 판정 노드, 시나리오별 통합 테스트
-- 각 패키지 `test/` 디렉터리의 구조 규약(GoogleTest, pytest)
+- `tests/sitl/`(통합 테스트 드라이버 `run_sitl.sh`와 시나리오)
+- 각 패키지 `test/` 디렉터리의 구조 규약(GoogleTest, pytest). 구조 승인이며 `idsim_mission/test/`의 소유는 ros2-engineer(`test/px4/`는 px4-engineer)
 - 판정 코드: "도달", "arm/disarm", "미션 완료"를 토픽에서만 읽는 공용 모듈
 
 ## 책임

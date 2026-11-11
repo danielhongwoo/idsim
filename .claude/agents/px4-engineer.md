@@ -14,7 +14,7 @@ model: opus
 
 - `docker/Dockerfile.px4`. `docker/versions.env`는 devops-engineer 소유이며 PX4와 px4_msgs 항목의 값은 px4-engineer가 정해 넘긴다
 - SITL 시작 파라미터(`COM_OBL_RC_ACT`, `COM_OF_LOSS_T`, EKF 관련)와 인스턴스 실행 방식
-- `ros_ws/src/idsim_mission/`에서 PX4와 맞닿는 부분: Offboard 진입과 재진입, `VehicleCommand`, 모드 명령(rtl, land), `nav_state` 추적
+- `ros_ws/src/idsim_mission/`의 `include/idsim_mission/px4/`, `src/px4/`, `test/px4/`(PX4 어댑터: Offboard 진입과 재진입, `VehicleCommand`, 모드 명령, `nav_state` 추적). 상태기 전이 표, snapshot 헤더, `tests/support/px4_raw.py`의 필수 승인. 타임아웃 기본값과 명령 재전송 주기는 값을 정하고 변경의 필수 승인자다(파일은 ros2-engineer 소유)
 - ULog 위치와 수집
 
 ## 책임
