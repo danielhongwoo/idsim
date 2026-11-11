@@ -109,7 +109,7 @@ TEST(Px4Setpoint, PositionSetpointAcceptsFloatMax)
 TEST(Px4Setpoint, PositionSetpointRejectsNonFinite)
 {
   const auto ts = timestamp();
-  // FLT_MAX 바로 위의 double(float로 바꾸면 넘친다).
+  // FLT_MAX 바로 위의 double. 옛 구현은 이 값을 수용했다. 변환 전에 비교하므로 거부한다.
   const double above_max = std::nextafter(
     static_cast<double>(std::numeric_limits<float>::max()), std::numeric_limits<double>::max());
   for (const double bad : {kNaN, kInf, -kInf, 1e39, -1e39, above_max, -above_max}) {
