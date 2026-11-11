@@ -20,7 +20,13 @@
 // 세 함수 모두 목록에 등록된 기술자만 받는다. NodeT는 rclcpp::Node와
 // rclcpp_lifecycle::LifecycleNode 둘 다 된다.
 // create_subscription과 create_publisher는 마지막 인자로 SubscriptionOptions, PublisherOptions를
-// 받는다(callback group 지정용, 생략하면 기본값). 이름과 QoS는 options로 바꿀 수 없다.
+// 받는다(callback group 지정용, 생략하면 기본값).
+// rclcpp의 options에는 qos_overriding_options가 있어, policy kind가 하나라도 있으면
+// qos_overrides.<토픽>.* 파라미터를 선언하고 그 값으로 QoS를 덮는다(jazzy create_publisher.hpp,
+// create_subscription.hpp). /fmu/out 구독이 RELIABLE로 덮이면 PX4의 BEST_EFFORT writer와 맞지 않아
+// 데이터가 조용히 끊긴다. 그래서 두 함수는 options를 복사해 qos_overriding_options를 비운 뒤
+// 넘긴다(예외를 던지지 않는다). QoS는 PX4 계약이라 params로 바꿀 이유가 없고, options를 받는
+// 목적은 callback group 같은 실행 구성뿐이기 때문이다. 이름과 QoS는 options로 바꿀 수 없다.
 // options를 별도 overload가 아니라 기본 인자로 둔 이유: 테스트가 함수 템플릿의 주소를 취해
 // 인스턴스화를 확인하므로(양성 trait 테스트, 음성 컴파일 테스트) overload 집합이 되면
 // 주소가 모호해진다.
@@ -43,6 +49,19 @@
 
 namespace idsim_common::px4
 {
+
+namespace detail
+{
+
+// options에서 QoS 덮어쓰기(qos_overrides.* 파라미터)를 끈 사본.
+template <class Options>
+Options without_qos_overrides(Options options)
+{
+  options.qos_overriding_options = rclcpp::QosOverridingOptions();
+  return options;
+}
+
+}  // namespace detail
 
 template <class Topic>
 inline constexpr bool is_subscribable_v =
@@ -80,7 +99,8 @@ auto create_subscription(
     rosidl_generator_traits::is_message<typename Topic::Msg>::value,
     "idsim_common: include the full px4_msgs/msg/<name>.hpp for this message type");
   return node.template create_subscription<typename Topic::Msg>(
-    detail::topic_name<Topic>(ns.str()), px4_out_qos(), std::forward<Callback>(callback), options);
+    detail::topic_name<Topic>(ns.str()), px4_out_qos(), std::forward<Callback>(callback),
+    detail::without_qos_overrides(options));
 }
 
 template <class Topic, class NodeT>
@@ -100,7 +120,7 @@ auto create_publisher(
     rosidl_generator_traits::is_message<typename Topic::Msg>::value,
     "idsim_common: include the full px4_msgs/msg/<name>.hpp for this message type");
   return node.template create_publisher<typename Topic::Msg>(
-    detail::topic_name<Topic>(ns.str()), px4_in_qos(), options);
+    detail::topic_name<Topic>(ns.str()), px4_in_qos(), detail::without_qos_overrides(options));
 }
 
 }  // namespace idsim_common::px4

@@ -43,8 +43,8 @@ namespace idsim_common::px4
 // position만 true인 offboard_control_mode.
 px4_msgs::msg::OffboardControlMode offboard_position_mode(Px4Timestamp timestamp);
 
-// position_ned(m)와 yaw_ned(rad)가 유한하고 float로 바꾼 뒤에도 유한할 때만 값을 돌려준다.
-// yaw는 [-pi, pi)로 맞추지 않고 그대로 넣는다(호출자가 frames::wrap_pi를 쓸 수 있다).
+// position_ned(m)와 yaw_ned(rad)가 유한하고 float 범위(절댓값 FLT_MAX 이하) 안일 때만 값을
+// 돌려준다. yaw는 wrap하지 않는다. 호출자(상태기)가 frames::wrap_pi로 [-pi, pi)에 넣는다.
 // velocity, acceleration, jerk, yawspeed는 NaN.
 std::optional<px4_msgs::msg::TrajectorySetpoint> position_setpoint(
   Px4Timestamp timestamp, const Eigen::Vector3d & position_ned, double yaw_ned);

@@ -70,6 +70,11 @@ TEST(VehicleParams, ParsesValid)
   EXPECT_EQ(p->identity.sysid.value(), 2);
   EXPECT_TRUE(error.empty());
 
+  // sysid 경계: 0과 256은 RejectsInvalidValues가 본다.
+  const auto min = parse_vehicle_params("px4_9", "/px4_9", 1);
+  ASSERT_TRUE(min.has_value());
+  EXPECT_EQ(min->identity.sysid.value(), 1);
+
   const auto max = parse_vehicle_params("px4_9", "/px4_9", 255);
   ASSERT_TRUE(max.has_value());
   EXPECT_EQ(max->identity.sysid.value(), 255);

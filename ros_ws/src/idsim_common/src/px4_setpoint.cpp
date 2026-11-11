@@ -25,10 +25,12 @@ namespace
 
 constexpr float kNaN = std::numeric_limits<float>::quiet_NaN();
 
-// double이 유한하고 float로 바꿔도 넘치지 않는가.
+// double이 유한하고 float 범위 안인가. 범위 밖 double의 float 변환은 미정의 동작이라
+// 변환 전에 비교한다.
 bool finite_as_float(double value)
 {
-  return std::isfinite(value) && std::isfinite(static_cast<float>(value));
+  return std::isfinite(value) &&
+         std::fabs(value) <= static_cast<double>(std::numeric_limits<float>::max());
 }
 
 }  // namespace
