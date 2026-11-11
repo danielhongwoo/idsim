@@ -6,11 +6,12 @@
 # tools/ci/build_images.py --mode load ros-ws 로 직접 빌드한다. 이 분기는 ros-base부터 다시 빌드한다.
 #
 # 단계별 시간은 GITHUB_STEP_SUMMARY의 표로 남는다(이미지 확보 단계와 tools/ros_ws.sh의 build, test, tidy).
-# 트리거와 concurrency는 lint 워크플로와 같다(push와 pull_request 이중 실행 정리는 lint와 함께 별도 항목).
+# 트리거와 concurrency는 lint 워크플로와 같다(pull_request + push: main. PR의 옛 실행은 취소).
 name: unit
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -18,8 +19,9 @@ permissions:
   packages: read
 
 concurrency:
-  group: unit-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: unit-${{ github.ref }}
+  # PR의 옛 실행은 취소한다. main에서는 취소하지 않는다(push마다 결과가 남아야 한다).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   unit:

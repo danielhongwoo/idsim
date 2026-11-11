@@ -1,4 +1,4 @@
-# lint: 모든 push와 PR에서 돈다. 검사 내용은 tools/ci/lint.sh 한 곳에 있고 로컬에서도
+# lint: PR과 main push에서 돈다(PR 없는 브랜치 push에는 돌지 않는다). 검사 내용은 tools/ci/lint.sh 한 곳에 있고 로컬에서도
 # `tools/ci/lint.sh all` 로 같은 검사를 돌린다. 도구 버전은 docker/versions.env의 LINT_* 줄.
 #
 # 결과 표시: 검사마다 로그 마지막 줄이 "RESULT <검사>: <상태>" 이다.
@@ -12,14 +12,16 @@ name: lint
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: lint-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: lint-${{ github.ref }}
+  # PR의 옛 실행은 취소한다. main에서는 취소하지 않는다(push마다 결과가 남아야 한다).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
