@@ -35,14 +35,34 @@ target_include_directories(idsim_mission_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
 
+# ---- px4 어댑터(P3c, 소유 px4-engineer): px4_msgs <-> core 타입 변환과 Px4ClockPort 구현 ----
+# core 위에 얹는다. core는 이 대상에 의존하지 않는다.
+find_package(idsim_common REQUIRED)
+find_package(px4_msgs REQUIRED)
+find_package(rclcpp REQUIRED)
+add_library(idsim_mission_px4 SHARED
+  src/px4/clock_port.cpp
+  src/px4/inputs.cpp
+  src/px4/outputs.cpp)
+target_include_directories(idsim_mission_px4 PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
+target_link_libraries(idsim_mission_px4 PUBLIC
+  idsim_mission_core
+  idsim_common::idsim_common
+  ${px4_msgs_TARGETS}
+  rclcpp::rclcpp)
+# ---- px4 어댑터 끝 ----
+
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
-install(TARGETS idsim_mission_core
+install(TARGETS idsim_mission_core idsim_mission_px4
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_dependencies(idsim_common px4_msgs rclcpp)  # px4 어댑터
 
 if(BUILD_TESTING)
   # ---- ament 린터: xmllint, lint_cmake, cpplint, copyright만(idsim_common과 같다) ----
@@ -104,6 +124,15 @@ if(BUILD_TESTING)
   foreach(_test ${_core_tests})
     ament_add_gtest(${_test} test/${_test}.cpp)
     target_link_libraries(${_test} idsim_mission_core)
+  endforeach()
+
+  # ---- px4 어댑터 단위 테스트(test/px4/, 소유 px4-engineer). 노드와 DDS 참가자를 만들지 않는다 ----
+  set(_px4_tests
+    test_px4_inputs
+    test_px4_outputs)
+  foreach(_test ${_px4_tests})
+    ament_add_gtest(${_test} test/px4/${_test}.cpp)
+    target_link_libraries(${_test} idsim_mission_px4)
   endforeach()
 endif()
 
