@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""스모크 S1, S1b, S2, S3의 PX4 쪽 토픽 판정. 담당: px4-engineer.
+"""스모크 embedded, px4-out, px4-in의 PX4 쪽 토픽 판정. 담당: px4-engineer.
 
 ros-ws 컨테이너 안에서 실행한다(px4_msgs, rclpy 필요). 판정 기준은
 docs/smoke-test.md를 따른다.
 
 사용법
-  check_px4.py --system-id 1 --timeout 30              # S1 (네임스페이스 없음)
-  check_px4.py --ns px4_1 --system-id 2 --timeout 30   # S1b, S2
-  check_px4.py --ns px4_1 --system-id 2 --timeout 60 --arm   # S3
+  check_px4.py --ns px4_1 --system-id 2 --timeout 30   # embedded, px4-out
+  check_px4.py --ns px4_1 --system-id 2 --timeout 60 --arm   # px4-in
   check_px4.py --ns px4_1 --system-id 2 --timeout 60 \
-      --expect-origin 37.5665 126.978 38.0                     # S2 (원점 판정 추가)
+      --expect-origin 37.5665 126.978 38.0                     # px4-out (원점 판정 추가)
 
 판정 항목
   status_topic     ros2 topic list에서 ^/(<ns>/)?fmu/out/vehicle_status(_v[0-9]+)?$
@@ -17,12 +16,12 @@ docs/smoke-test.md를 따른다.
   status_received  sensor_data QoS로 1회 이상 수신, timestamp가 0이 아님
   timestamp_rises  다시 받은 메시지의 timestamp가 앞의 것보다 큼
   system_id        vehicle_status.system_id가 기대값과 같음
-  (--expect-origin일 때 S2)
+  (--expect-origin일 때 px4-out)
   gps_topic        ^/(<ns>/)?fmu/out/vehicle_gps_position(_v[0-9]+)?$ 에 맞는 토픽이
                    정확히 하나, 타입 px4_msgs/msg/SensorGps
   gps_origin       fix_type >= 3(3D)인 메시지 ORIGIN_SAMPLES개의 위도/경도/고도가
                    기대 원점과 수평 ORIGIN_TOL_H_M, 수직 ORIGIN_TOL_V_M 안(최대 오차로 판정)
-  (--arm일 때 S3)
+  (--arm일 때 px4-in)
   arm_ack          VEHICLE_CMD_COMPONENT_ARM_DISARM(param1 1.0) 발행 후
                    vehicle_command_ack.result 0(ACCEPTED)
   armed_hold       arming_state가 ARMING_STATE_ARMED로 N회 연속
@@ -221,7 +220,7 @@ def send_until_ack(node, pub, ack_topic, cmd_factory, deadline):
 
 
 def run_status_checks(node, args, deadline, report):
-    """S1, S1b, S2 공통. 성공하면 vehicle_status 토픽 이름, 실패하면 None."""
+    """embedded, px4-out 공통. 성공하면 vehicle_status 토픽 이름, 실패하면 None."""
     status_topic = find_unique_topic(
         node, topic_regex(args.ns, "out", "vehicle_status"), STATUS_TYPE,
         deadline, report, "status_topic")
@@ -282,7 +281,7 @@ def collect_gps_fixes(node, topic, n, timeout_s):
 
 
 def run_origin_checks(node, args, deadline, report):
-    """S2. vehicle_gps_position이 기대 월드 원점을 보고하는지."""
+    """px4-out. vehicle_gps_position이 기대 월드 원점을 보고하는지."""
     gps_topic = find_unique_topic(
         node, topic_regex(args.ns, "out", "vehicle_gps_position"), GPS_TYPE,
         deadline, report, "gps_topic")
@@ -324,7 +323,7 @@ def run_origin_checks(node, args, deadline, report):
 
 
 def run_arm_checks(node, args, deadline, report, status_topic):
-    """S3. 시동, 유지 확인, 시동 끄기, 복귀 확인."""
+    """px4-in. 시동, 유지 확인, 시동 끄기, 복귀 확인."""
     names = ("command_topic", "ack_topic", "arm_ack", "armed_hold", "disarm_ack", "disarmed_hold")
 
     cmd_topic = find_unique_topic(
@@ -375,20 +374,20 @@ def run_arm_checks(node, args, deadline, report, status_topic):
 def parse_args(argv):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--ns", default="",
-                   help="PX4 네임스페이스(앞뒤 빗금 없이). 비우면 접두사 없음(S1)")
+                   help="PX4 네임스페이스(앞뒤 빗금 없이). 비우면 접두사 없음")
     p.add_argument("--system-id", type=int, required=True,
                    help="기대 vehicle_status.system_id. 인스턴스 N이면 N+1")
     p.add_argument("--timeout", type=float, required=True,
                    help="전체 벽시계 예산(초)")
     p.add_argument("--arm", action="store_true",
-                   help="S3 시동/시동 끄기 왕복 판정을 추가로 실행")
+                   help="px4-in 시동/시동 끄기 왕복 판정을 추가로 실행")
     p.add_argument("--hold", type=int, default=3,
                    help="상태 유지 판정의 연속 수신 횟수. 기본 3")
     p.add_argument("--disarm-grace", type=float, default=10.0,
                    help="예산이 바닥나도 시동 끄기에 주는 최소 시간(초). 기본 10")
     p.add_argument("--expect-origin", type=float, nargs=3, metavar=("LAT", "LON", "ALT"),
                    default=None,
-                   help="S2 원점 판정. stack.json world.origin(도, 도, m). "
+                   help="px4-out 원점 판정. stack.json world.origin(도, 도, m). "
                         "기체 pose가 0이라고 가정한다")
     args = p.parse_args(argv)
     args.ns = args.ns.strip("/")
