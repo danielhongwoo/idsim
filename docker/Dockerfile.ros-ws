@@ -1,4 +1,4 @@
-# ros-ws: ros-base + px4_msgs + px4_ros_com(underlay) + ros_gz_bridge + 개발 도구(colcon, clang-format, clang-tidy)
+# ros-ws: ros-base + foxglove_bridge + px4_msgs + px4_ros_com(underlay) + ros_gz_bridge + 개발 도구(colcon, clang-format, clang-tidy)
 # gz 서버는 넣지 않는다. 프로젝트 소스는 /opt/idsim에 마운트한다.
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
@@ -6,8 +6,9 @@ FROM ${BASE_IMAGE}
 ARG PX4_MSGS_REF
 ARG PX4_ROS_COM_REF
 ARG LLVM_MAJOR
-RUN test -n "${PX4_MSGS_REF}" && test -n "${PX4_ROS_COM_REF}" && test -n "${LLVM_MAJOR}" \
- || { echo "PX4_MSGS_REF, PX4_ROS_COM_REF, LLVM_MAJOR 빌드 인자가 비어 있다" >&2; exit 1; }
+ARG FOXGLOVE_BRIDGE_VERSION
+RUN test -n "${PX4_MSGS_REF}" && test -n "${PX4_ROS_COM_REF}" && test -n "${LLVM_MAJOR}" && test -n "${FOXGLOVE_BRIDGE_VERSION}" \
+ || { echo "PX4_MSGS_REF, PX4_ROS_COM_REF, LLVM_MAJOR, FOXGLOVE_BRIDGE_VERSION 빌드 인자가 비어 있다" >&2; exit 1; }
 
 # ros_gz_bridge는 vendor gz-transport만 끌어온다 (OSRF gz 패키지와 섞지 않는다)
 # clang-tidy는 compile_commands.json과 이 이미지의 헤더가 있어야 하므로 이 이미지 안에서만 돈다(tools/ros_ws.sh tidy).
@@ -15,6 +16,7 @@ RUN test -n "${PX4_MSGS_REF}" && test -n "${PX4_ROS_COM_REF}" && test -n "${LLVM
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       "ros-${ROS_DISTRO}-ros-gz-bridge" \
+      "ros-${ROS_DISTRO}-foxglove-bridge" \
       "ros-${ROS_DISTRO}-ament-cmake" \
       "ros-${ROS_DISTRO}-eigen3-cmake-module" \
       libeigen3-dev \
@@ -25,6 +27,12 @@ RUN apt-get update \
       "clang-tidy-${LLVM_MAJOR}" \
       "clang-format-${LLVM_MAJOR}" \
  && rm -rf /var/lib/apt/lists/*
+
+# foxglove_bridge는 ROS apt 저장소가 최신 빌드 하나만 남겨 정확한 판을 pin할 수 없다.
+# 대신 설치된 판이 upstream 버전(FOXGLOVE_BRIDGE_VERSION)으로 시작하는지 단정한다. 같은 판의 재빌드는 통과하고 다음 판은 실패한다.
+RUN ver="$(dpkg-query -W -f='${Version}' "ros-${ROS_DISTRO}-foxglove-bridge")" \
+ && case "${ver}" in "${FOXGLOVE_BRIDGE_VERSION}"-*) ;; \
+      *) echo "foxglove_bridge 설치 판 ${ver}이 versions.env의 ${FOXGLOVE_BRIDGE_VERSION}과 다르다" >&2; exit 1 ;; esac
 
 # px4_msgs를 고정 커밋으로, px4_ros_com(frame_transforms 라이브러리)을 underlay로 빌드한다
 RUN mkdir -p /opt/px4_ws/src && cd /opt/px4_ws/src \
@@ -49,6 +57,7 @@ RUN chmod +x /usr/local/bin/ros-ws-entrypoint.sh
 ENV IDSIM_BUILD_PX4_MSGS_REF=${PX4_MSGS_REF} \
     IDSIM_BUILD_PX4_ROS_COM_REF=${PX4_ROS_COM_REF} \
     IDSIM_BUILD_LLVM_MAJOR=${LLVM_MAJOR} \
+    IDSIM_BUILD_FOXGLOVE_BRIDGE_VERSION=${FOXGLOVE_BRIDGE_VERSION} \
     CYCLONEDDS_URI=file:///opt/idsim/config/cyclonedds.xml
 WORKDIR /opt/idsim
 ENTRYPOINT ["/usr/local/bin/ros-ws-entrypoint.sh"]
