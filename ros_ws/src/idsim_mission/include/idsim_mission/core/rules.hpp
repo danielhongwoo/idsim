@@ -1,0 +1,177 @@
+// Copyright 2026 Daniel Hongwoo Lee
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// 전이 표에서 떼어 낸 순수 규칙 셋. 상태기(mission_runner)가 쓰고 단위 테스트가 표로 시험한다.
+// 근거는 docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 3, 4.
+//
+// 재실측으로 바뀔 수 있는 것은 고칠 곳이 한 곳이 되게 여기에 모았다(README.md "재실측으로 바뀔 수
+// 있는 곳").
+// - 비행 중 감시 표의 행 순위(재실측 (4) 전까지 잠정): kMonitorRankOrder 한 배열.
+// - "disarm 전송 뒤 받은 표본"의 기준(재실측 (5)): is_after_disarm_send 한 함수.
+
+#ifndef IDSIM_MISSION__CORE__RULES_HPP_
+#define IDSIM_MISSION__CORE__RULES_HPP_
+
+#include <array>
+#include <cstdint>
+#include <optional>
+#include <string>
+
+#include "idsim_mission/core/snapshot.hpp"
+#include "idsim_mission/core/types.hpp"
+
+namespace idsim_mission::core
+{
+
+// ---- 비행 중 감시 표(setpoint 항목 실행 중) ----
+
+enum class MonitorRow : std::uint8_t
+{
+  kTimestampFailure,  // Px4Timestamp::now 실패 -> INTERNAL
+  kIdentityMismatch,  // 식별 대조 불일치 -> INTERNAL(M2)
+  kLinkLost,          // vehicle_status가 link_timeout 동안 없음 -> LINK_LOST
+  kDisarmedInAir,     // DISARMED이고 landed false -> FAILSAFE
+  kDisarmedOnGround,  // DISARMED이고 landed true -> FAILSAFE 또는 EXTERNAL_DISARM
+  kModeFailsafe,      // OFFBOARD 아님이고 failsafe -> FAILSAFE
+  kModeExternal,  // OFFBOARD 아님, failsafe 아님, 사용자 의도 OFFBOARD 아님 -> EXTERNAL_MODE_CHANGE
+  kModeDefensive,  // OFFBOARD 아님, failsafe 아님, 사용자 의도 OFFBOARD -> FAILSAFE(방어용)
+};
+
+// 순위. 앞이 이긴다. 순위는 같은 tick의 동률만 가른다(엇갈려 시작하면 먼저 맞은 행이 그 tick에
+// goal을 끝낸다). 재실측 (4) 전까지 잠정이다. 순위를 바꾸려면 이 배열만 고친다.
+inline constexpr std::array<MonitorRow, 8> kMonitorRankOrder = {
+  MonitorRow::kTimestampFailure, MonitorRow::kIdentityMismatch, MonitorRow::kLinkLost,
+  MonitorRow::kDisarmedInAir,    MonitorRow::kDisarmedOnGround, MonitorRow::kModeFailsafe,
+  MonitorRow::kModeExternal,     MonitorRow::kModeDefensive,
+};
+
+// 1부터. kMonitorRankOrder에 없으면 0.
+int monitor_rank(MonitorRow row);
+const char * monitor_row_name(MonitorRow row);
+
+struct MonitorInput
+{
+  bool timestamp_ok{true};
+  const StatusSample * status{nullptr};  // 최신 vehicle_status. 없으면 상태 끊김으로 본다
+  bool landed{true};                     // 그 tick까지 받은 최신 landed
+  bool link_lost{false};
+  // 이 항목 실행 중 앞선 표본에서 failsafe == true를 본 적이 있는가(순위 5의 이력 가지).
+  // 지금 표본은 넣지 않는다.
+  bool failsafe_history{false};
+};
+
+bool monitor_row_matches(MonitorRow row, const MonitorInput & input);
+// 행이 맞을 때의 reason. 순위 5는 이 표본의 failsafe와 이력으로 가른다.
+Reason monitor_row_reason(MonitorRow row, const MonitorInput & input);
+
+struct MonitorVerdict
+{
+  MonitorRow row{MonitorRow::kTimestampFailure};
+  Reason reason{Reason::kInternal};
+  std::string detail;
+};
+
+// 순위대로 처음 맞는 행. 어느 행도 맞지 않으면 nullopt(goal을 계속한다). OFFBOARD이고 ARMED인
+// 채 failsafe가 true인 표본은 어느 행에도 맞지 않는다(decisions.md "확인 예정의 처리").
+std::optional<MonitorVerdict> evaluate_monitor(const MonitorInput & input);
+
+// ---- 정리 분기 고르기(취소, ITEM_TIMEOUT, PREPARING 실패가 같이 쓴다) ----
+
+// disarm의 지상 대 공중 분류. 처음 관측한 DISARMED 표본의 tick에 그때까지 받은 최신 landed로
+// 정하고 고정한다(뒤의 landed 표본으로 바꾸지 않는다). ARMED 표본을 보면 kUnknown으로 되돌린다.
+enum class DisarmClass : std::uint8_t
+{
+  kUnknown,
+  kGround,
+  kAir,
+};
+
+enum class CleanupChoice : std::uint8_t
+{
+  kAir,        // Hold 분기(확인되지 않으면 Land 경로)
+  kGround,     // 지상 disarm 분기(지상 setpoint + disarm + 전송 뒤 DISARMED 확인)
+  kAirDisarm,  // 공중에서 disarm됨. 정리 없이 끝낸다(취소면 FAILSAFE)
+  kEnd,        // 지상 disarm이고 이 goal에서 arm을 보낸 적이 없음. 바로 끝낸다
+};
+
+const char * cleanup_choice_name(CleanupChoice choice);
+
+struct CleanupInput
+{
+  Arming arming{Arming::kDisarmed};
+  bool landed{true};                                // 최신 landed(ARMED일 때 쓴다)
+  DisarmClass disarm_class{DisarmClass::kUnknown};  // DISARMED일 때 쓴다(고정된 분류)
+  bool arm_sent{false};          // 이 goal에서 arm을 한 번이라도 보냈는가
+  bool in_ground_branch{false};  // 이미 지상 disarm 분기에 있는가
+};
+
+// 매 tick 다시 고른다. DISARMED이면 고정된 분류를 쓰고, ARMED이면 최신 landed를 쓴다.
+CleanupChoice select_cleanup(const CleanupInput & input);
+
+// ---- 확인 계수 ----
+
+// "N회 연속"의 계수. 표본은 vehicle_status.timestamp로 가른다. timestamp가 직전에 본 표본보다
+// 크지 않으면(같은 표본을 다시 본 경우와 줄어든 경우) 건너뛴다(되돌리지도 더하지도 않는다).
+// 맞는 표본은 1을 더하고 맞지 않는 표본은 0으로 되돌린다.
+class SampleCounter
+{
+public:
+  void reset();
+  // 새 표본으로 셌으면 true.
+  bool observe(std::uint64_t timestamp_us, bool matches);
+  int count() const { return count_; }
+
+private:
+  int count_{0};
+  std::uint64_t last_timestamp_us_{0};
+  bool has_last_{false};
+};
+
+// "disarm 전송 뒤 받은 표본"의 기준(decisions.md "px4-engineer 승인 반영", 쟁점 3 M5). 재실측
+// (5)로 바뀌면 이 함수만 고친다. 수신 tick이 이 분기의 첫 disarm 전송 tick보다 크고, timestamp가
+// 첫 전송에 실은 Px4Timestamp보다 엄격히 뒤인 표본만 센다(두 조건 모두. 재전송의 값이 아니라
+// 첫 전송의 값과 비교한다).
+bool is_after_disarm_send(
+  const StatusSample & sample, std::uint64_t first_send_tick, std::uint64_t first_send_stamp_us);
+
+// 지상 disarm 분기의 DISARMED 확인. 전송 뒤의 표본만 보고, 그 안에서 SampleCounter 규칙을 쓴다
+// (DISARMED가 아닌 표본은 0으로 되돌린다. 늦게 처리된 arm의 경합).
+class DisarmConfirm
+{
+public:
+  // 분기에 들어가 첫 disarm을 보낸 tick. 계수를 0으로 되돌리고 전송 시각은 모르는 상태로 둔다.
+  void begin(std::uint64_t first_send_tick);
+  // 첫 전송에 실은 Px4Timestamp. 알기 전의 표본은 세지 않는다.
+  void set_first_stamp(std::uint64_t stamp_us);
+  void observe(const StatusSample & sample);
+  int count() const { return counter_.count(); }
+  std::uint64_t first_send_tick() const { return first_send_tick_; }
+  bool stamp_known() const { return stamp_known_; }
+
+private:
+  SampleCounter counter_;
+  std::uint64_t first_send_tick_{0};
+  std::uint64_t first_send_stamp_us_{0};
+  bool stamp_known_{false};
+};
+
+// world ENU yaw -> 로컬 NED yaw, [-pi, pi). idsim_common/frames의 enu_to_ned_yaw와 같은 식이다.
+// core는 idsim_common(rclcpp 의존)을 링크하지 않으므로 식을 다시 쓴다. 같은 값인지는 노드 쪽
+// gtest(P3d)가 교차 검사한다.
+double enu_to_ned_yaw(double yaw_enu);
+double wrap_pi(double angle);
+
+}  // namespace idsim_mission::core
+
+#endif  // IDSIM_MISSION__CORE__RULES_HPP_

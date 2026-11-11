@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>idsim_mission</name>
+  <version>0.1.0</version>
+  <description>idsim Mission Executor: 미션 검증, 상태기 core, PX4 어댑터, lifecycle 노드</description>
+  <maintainer email="27140685+danielhongwoo@users.noreply.github.com">Daniel Hongwoo Lee</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- px4 어댑터(idsim_mission_px4). core는 아무것에도 의존하지 않는다 -->
+  <depend>idsim_common</depend>
+  <depend>px4_msgs</depend>
+  <depend>rclcpp</depend>
+
+  <!-- 노드 껍질(mission_executor_component)과 launch -->
+  <depend>idsim_interfaces</depend>
+  <depend>lifecycle_msgs</depend>
+  <depend>rclcpp_action</depend>
+  <depend>rclcpp_components</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>ament_cmake_copyright</test_depend>
+  <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_lint_cmake</test_depend>
+  <test_depend>ament_cmake_xmllint</test_depend>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>rosgraph_msgs</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
