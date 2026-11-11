@@ -299,7 +299,7 @@ TEST(RunnerMonitor, Rank5HistoryWithinItemIsFailsafe)
   }()});
   h.feed({disarmed(true)});
   expect_terminated_once(h, Status::kAborted, Reason::kFailsafe);
-  EXPECT_NE(h.termination()->detail.find("rank 5"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("rank 5"), std::string::npos);
 }
 
 TEST(RunnerMonitor, DisarmClassIsFixedAtFirstDisarmed)

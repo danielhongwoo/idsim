@@ -80,8 +80,8 @@ TEST(Conflict, CompletionThenCancelSameTickCancelsNextItem)
   EXPECT_EQ(h.view().stage, Stage::kCleanup);
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
   expect_terminated_once(h, Status::kCanceled, Reason::kNone);
-  EXPECT_EQ(h.termination()->items_completed, 1U);
-  EXPECT_EQ(h.termination()->last_item_index, 1U);
+  EXPECT_EQ(termination_or_empty(h).items_completed, 1U);
+  EXPECT_EQ(termination_or_empty(h).last_item_index, 1U);
 }
 
 TEST(Conflict, CancelDuringPreparingFailureCleanupIsIgnored)
@@ -134,7 +134,7 @@ TEST(TimestampPort, FailureDuringItemTimeoutCleanupKeepsReason)
   h.clock.fail = true;
   h.tick();
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("Px4Timestamp unavailable"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("Px4Timestamp unavailable"), std::string::npos);
 }
 
 TEST(TimestampPort, NoQueryWhenNothingToEmit)
@@ -180,7 +180,7 @@ TEST(TimestampPort, DetailSaysStateUnknownAfterActing)
   h.clock.fail = true;
   h.tick();
   expect_terminated_once(h, Status::kAborted, Reason::kInternal);
-  EXPECT_NE(h.termination()->detail.find("vehicle state unknown"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("vehicle state unknown"), std::string::npos);
 }
 
 }  // namespace

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 노드 껍질의 배선 테스트(PX4 없이, 한 프로세스). decisions.md 쟁점 2, 7과 test-engineer 지시.
+// 노드 껍질의 배선 테스트(PX4 없이, 한 프로세스). decisions.md 쟁점 2, 7.
 // - lifecycle.self_start 대조군 쌍: 같은 spin 횟수에서 true는 active, false는 unconfigured.
 // - 직접 건 configure, activate. params 누락과 use_sim_time false의 configure 실패.
 // - goal 실행 중 deactivate 거부, on_shutdown이 실행 중 goal을 ABORTED, REASON_INTERNAL로 끝내고
@@ -22,7 +22,7 @@
 // - rclcpp_action에서 cancel을 받아들인 goal을 abort로 끝낼 수 있는지(decisions.md 쟁점 3 "종료의
 //   충돌 규칙"의 rclcpp_action 허용 확인).
 // - PREPARING 중 취소의 CANCELED, 실행 중 두 번째 goal의 BUSY, 종료 때의 disarm 한 번(arm 뒤 1개,
-//   arm 전 0개. px4-engineer P3d-1).
+//   arm 전 0개).
 // 시계: 별도 thread가 /clock을 발행한다(on_activate의 2 s 대기는 파라미터가 아니다). 사건 구독은
 // action client보다 먼저, 같은 노드에서 만든다(쟁점 7 순서 규칙).
 
@@ -592,7 +592,7 @@ TEST_F(CanceledGoalEndTest, SucceedIsAllowed)
 
 TEST_F(ExecutorNodeTest, CancelInPreparingIsCanceled)
 {
-  // test-engineer N1: PX4 표본 없이 PREPARING(P0)에 둔 goal을 취소하면 바로 CANCELED,
+  // PX4 표본 없이 PREPARING(P0)에 둔 goal을 취소하면 바로 CANCELED,
   // REASON_NONE이고 CANCELED 종료 사건이 result와 같다.
   auto node = make_executor(true);
   auto test_node = std::make_shared<rclcpp::Node>("test_client");
@@ -703,7 +703,7 @@ protected:
 
 TEST_F(ShutdownDisarmTest, AfterArmSendsOneDisarm)
 {
-  // px4-engineer P3d-1: arm을 보낸 뒤의 종료는 강제가 아닌 disarm을 정확히 한 번 보낸다.
+  // arm을 보낸 뒤의 종료는 강제가 아닌 disarm을 정확히 한 번 보낸다.
   run(true, [](const FakePx4 & px4) { return px4.armed(); }, 1, "may remain armed");
 }
 

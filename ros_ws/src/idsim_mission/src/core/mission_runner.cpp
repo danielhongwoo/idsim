@@ -164,8 +164,7 @@ void MissionRunner::step_preparing(Tick & t)
     std::string detail =
       "vehicle_status identity mismatch during preparing: " + t.status->identity_detail;
     if (arm_sent_) {
-      send_once(t, CommandKind::kDisarm);
-      detail += "; disarm sent once, not confirmed; vehicle may remain armed on ground";
+      send_final(t, CommandKind::kDisarm, detail);
     }
     terminate(t, aborted(Reason::kInternal, detail));
     return;
@@ -455,8 +454,7 @@ void MissionRunner::end_by_monitor(
   disarm.landed_known = t.land != nullptr;
   disarm.landed = t.land != nullptr && t.land->landed;
   if (monitor_sends_disarm(verdict.row, disarm)) {
-    send_once(t, CommandKind::kDisarm);
-    detail += "; disarm sent once, not confirmed; vehicle may remain armed on ground";
+    send_final(t, CommandKind::kDisarm, detail);
   }
   if (verdict.row == MonitorRow::kTimestampFailure && acted_) {
     detail += "; vehicle state unknown, may remain armed on ground";
@@ -766,7 +764,7 @@ void MissionRunner::end_at_cleanup_cap(Tick & t, bool on_ground)
 {
   // 정리의 상한 tick(M6): 발행을 멈추고 대기 중인 명령을 지운 뒤 명령 하나를 보내고 끝낸다.
   // 지상이면 강제가 아닌 disarm, 공중이면 NAV_LAND(force라 거부가 없다). Px4Timestamp 공급이
-  // 실패하면 finalize가 명령을 버리고 결과는 유지한다.
+  // 실패하면 명령을 버리고 결과는 유지한다(send_final).
   const char * last_branch = "none";
   switch (branch_) {
     case Branch::kNone:
@@ -788,15 +786,16 @@ void MissionRunner::end_at_cleanup_cap(Tick & t, bool on_ground)
                      std::to_string(cleanup_cap_ns(config_.timeouts) / 1000000) +
                      " ms), last branch " + last_branch;
   if (on_ground) {
-    send_once(t, CommandKind::kDisarm);
-    what += "; disarm sent once, not confirmed; vehicle may remain armed on ground";
+    send_final(t, CommandKind::kDisarm, what);
     finish(t, Outcome::kCapGround, what);
     return;
   }
-  send_once(t, CommandKind::kNavLand);
-  what += "; NAV_LAND sent once, not confirmed";
+  send_final(t, CommandKind::kNavLand, what);
   if (hold_observed_) {
-    what += "; Hold was observed and publishing stopped, vehicle stays in Hold if NAV_LAND is lost";
+    // 발행한 적이 있으면 Hold를 처음 관측한 tick에 발행을 멈췄다(발행 규칙).
+    what +=
+      publish_count_ > 0 ? "; Hold was observed and publishing stopped" : "; Hold was observed";
+    what += ", vehicle stays in Hold if NAV_LAND is lost";
   }
   finish(t, Outcome::kCapAir, what);
 }
@@ -814,8 +813,7 @@ void MissionRunner::cleanup_with_untrusted_sample(Tick & t)
     clear_pending();
     std::string detail = what;
     if (arm_sent_) {
-      send_once(t, CommandKind::kDisarm);
-      detail += "; disarm sent once, not confirmed; vehicle may remain armed on ground";
+      send_final(t, CommandKind::kDisarm, detail);
     }
     terminate(
       t, cause_ == CleanupCause::kCancel
@@ -891,7 +889,7 @@ void MissionRunner::enter_air(Tick & t)
   if (hold_failed_) {
     // 이 정리에서 Hold가 한 번 실패했으면 공중 재진입은 Land 경로다(decisions.md 쟁점 3 M4). 기준
     // 시각은 다시 들어간 시각이다.
-    enter_air_land(t, land_path_why_ + "; air re-entered after Hold failure");
+    enter_air_land(t, hold_failed_why_ + "; air re-entered after Hold failure");
     return;
   }
   branch_ = Branch::kAir;
@@ -929,6 +927,9 @@ void MissionRunner::run_air(Tick & t)
 void MissionRunner::enter_air_land(Tick & t, const std::string & why)
 {
   branch_ = Branch::kAirLand;
+  if (!hold_failed_) {
+    hold_failed_why_ = why;  // 재진입 문구가 쌓이지 않게 처음 실패한 이유만 남긴다
+  }
   hold_failed_ = true;
   land_path_why_ = why;
   clear_pending();
@@ -1095,6 +1096,25 @@ void MissionRunner::send(Tick & t, CommandKind kind)
   pending_.last_ns = t.input.now_ns;
   t.out.commands.push_back(kind);
   acted_ = true;
+}
+
+void MissionRunner::send_final(Tick & t, CommandKind kind, std::string & detail)
+{
+  // 끝나는 tick에 확인 없이 한 번 보내는 명령. 이 tick의 Px4Timestamp를 먼저 물어, 만들 수 없으면
+  // 명령을 버리고 그 사실을 detail에 적는다(결과는 유지한다).
+  const std::string name = kind == CommandKind::kNavLand ? "NAV_LAND" : "disarm";
+  if (!query_stamp(t)) {
+    detail += "; " + name + " not sent (Px4Timestamp unavailable); vehicle state unknown";
+    if (kind == CommandKind::kDisarm) {
+      detail += ", may remain armed on ground";
+    }
+    return;
+  }
+  send_once(t, kind);
+  detail += "; " + name + " sent once, not confirmed";
+  if (kind == CommandKind::kDisarm) {
+    detail += "; vehicle may remain armed on ground";
+  }
 }
 
 void MissionRunner::send_once(Tick & t, CommandKind kind)

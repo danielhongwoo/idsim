@@ -90,7 +90,7 @@ TEST(Preparing, SignalNeedsFlagsReceivedAfterPublishStart)
   h.push_status();
   h.step_only();  // 발행 시작에서 2.0 s
   expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
-  EXPECT_NE(h.termination()->detail.find("offboard_signal_timeout"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("offboard_signal_timeout"), std::string::npos);
   EXPECT_TRUE(h.commands().empty());
 }
 
@@ -109,7 +109,7 @@ TEST(Preparing, ReadyTimeoutBoundaryAndFeedbackBeforeNotReady)
   }
   h.tick();  // 접수에서 30.0 s
   expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
-  EXPECT_NE(h.termination()->detail.find("EKF gate"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("EKF gate"), std::string::npos);
   EXPECT_TRUE(h.commands().empty());
 }
 
@@ -139,7 +139,7 @@ TEST(Preparing, MissingTopicWaitsThenNotReady)
   h.auto_samples = false;
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 700));
   expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
-  EXPECT_NE(h.termination()->detail.find("vehicle_status"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("vehicle_status"), std::string::npos);
 }
 
 TEST(Preparing, IdentityMismatchIsImmediateNotReady)
@@ -148,7 +148,7 @@ TEST(Preparing, IdentityMismatchIsImmediateNotReady)
   h.world.identity = IdentityCheck::kMismatch;
   h.tick();
   expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
-  EXPECT_NE(h.termination()->detail.find("expected sysid 2"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("expected sysid 2"), std::string::npos);
   EXPECT_TRUE(h.commands().empty());
 }
 
@@ -204,8 +204,8 @@ TEST(Preparing, LandOnlyNeverPublishesAndSucceeds)
   EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 0);
   EXPECT_FALSE(h.view().arm_sent);
   expect_terminated_once(h, Status::kSucceeded, Reason::kNone);
-  EXPECT_EQ(h.termination()->items_completed, 1U);
-  EXPECT_EQ(h.termination()->last_item_index, 0U);
+  EXPECT_EQ(termination_or_empty(h).items_completed, 1U);
+  EXPECT_EQ(termination_or_empty(h).last_item_index, 0U);
 }
 
 TEST(Preparing, OffboardRejectedAckIsModeSwitchFailed)
@@ -217,7 +217,7 @@ TEST(Preparing, OffboardRejectedAckIsModeSwitchFailed)
   h.tick();
   // arm을 보내지 않았고 지상 DISARMED라 정리 없이 끝난다.
   expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
-  EXPECT_NE(h.termination()->detail.find("rejected"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("rejected"), std::string::npos);
   EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);
 }
@@ -272,8 +272,8 @@ TEST(Preparing, ArmDeniedCleansUpWithGroundDisarm)
   EXPECT_EQ(h.view().branch, Branch::kGround);
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 20));
   expect_terminated_once(h, Status::kAborted, Reason::kArmRejected);
-  EXPECT_NE(h.termination()->detail.find("cleanup: disarm confirmed"), std::string::npos)
-    << h.termination()->detail;
+  EXPECT_NE(termination_or_empty(h).detail.find("cleanup: disarm confirmed"), std::string::npos)
+    << termination_or_empty(h).detail;
 }
 
 TEST(Preparing, ArmTimeoutKeepsReasonWhenDisarmUnconfirmed)
@@ -290,9 +290,10 @@ TEST(Preparing, ArmTimeoutKeepsReasonWhenDisarmUnconfirmed)
   h.world.arming = Arming::kArmed;                    // 늦은 arm
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
   expect_terminated_once(h, Status::kAborted, Reason::kArmRejected);
-  EXPECT_NE(h.termination()->detail.find("arm_timeout: ARMED not observed"), std::string::npos);
-  EXPECT_NE(h.termination()->detail.find("disarm not confirmed"), std::string::npos)
-    << h.termination()->detail;
+  EXPECT_NE(
+    termination_or_empty(h).detail.find("arm_timeout: ARMED not observed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("disarm not confirmed"), std::string::npos)
+    << termination_or_empty(h).detail;
 }
 
 TEST(Preparing, IdentityMismatchAfterPublishingStartsStops)
@@ -333,7 +334,8 @@ TEST(Preparing, NonFinitePositionWaitsThenNotReady)
     EXPECT_FALSE(out.setpoint.has_value());
   }
   expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
-  EXPECT_NE(h.termination()->detail.find("finite vehicle_local_position"), std::string::npos);
+  EXPECT_NE(
+    termination_or_empty(h).detail.find("finite vehicle_local_position"), std::string::npos);
 }
 
 TEST(Preparing, NonFiniteHeadingWaitsOnlyForKeepYaw)
@@ -386,7 +388,7 @@ TEST(Preparing, IdentityMismatchAfterArmSentSendsOneDisarm)
   EXPECT_TRUE(out.px4_timestamp_us.has_value());
   EXPECT_FALSE(out.setpoint.has_value());
   expect_terminated_once(h, Status::kAborted, Reason::kInternal);
-  EXPECT_NE(h.termination()->detail.find("may remain armed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("may remain armed"), std::string::npos);
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 1);
 }
 
@@ -465,7 +467,7 @@ TEST(P6AfterArmed, ExternalModeAfterTwoConfirmsEndsWithoutWaitingForDeadline)
   h.feed({armed(NavMode::kOffboard, true)});
   const std::vector<StepOutput> outs = h.feed({mode_sample(NavMode::kHold, NavMode::kHold, false)});
   expect_p6_monitor_end(h, outs[0], Reason::kExternalModeChange, 7, 1);
-  EXPECT_NE(h.termination()->detail.find("may remain armed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("may remain armed"), std::string::npos);
 }
 
 TEST(P6AfterArmed, FailsafeModeIsFailsafe)
@@ -538,7 +540,7 @@ TEST(P6AfterArmed, TimestampFailureIsInternalWithoutCommands)
   const std::vector<StepOutput> outs = h.feed({armed(NavMode::kOffboard, true)});
   expect_p6_monitor_end(h, outs[0], Reason::kInternal, 1, 0);
   EXPECT_FALSE(outs[0].px4_timestamp_us.has_value());
-  EXPECT_NE(h.termination()->detail.find("vehicle state unknown"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("vehicle state unknown"), std::string::npos);
 }
 
 TEST(P6AfterArmed, IdentityMismatchSendsDisarmRegardlessOfLanded)
@@ -642,8 +644,8 @@ TEST(P6Scope, NoArmResendAfterFirstArmedAndDeadlineEndsWithArmRejected)
   h.auto_px4 = true;
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 20));
   expect_terminated_once(h, Status::kAborted, Reason::kArmRejected);
-  EXPECT_NE(h.termination()->detail.find("ARMED observed"), std::string::npos)
-    << h.termination()->detail;
+  EXPECT_NE(termination_or_empty(h).detail.find("ARMED observed"), std::string::npos)
+    << termination_or_empty(h).detail;
   EXPECT_EQ(h.count_command(CommandKind::kArm), 1);
 }
 
@@ -740,6 +742,96 @@ TEST(P6SameTick, MonitorRowBeatsCancel)
   expect_p6_monitor_end(h, outs[0], Reason::kFailsafe, 6, 1);
 }
 
+TEST(P6SameTick, ConfirmDeadlineBeatsThirdConfirmSample)
+{
+  // 첫 ARMED 표본에서 정확히 3.0 s tick에 3번째 확인 표본이 오면 만료가 이긴다(ARM_REJECTED와
+  // 정리 분기). 대조군: 한 tick 앞(2.95 s)이면 TAKEOFF를 시작한다.
+  for (const bool on_deadline : {true, false}) {
+    SCOPED_TRACE(on_deadline ? "3.0 s" : "2.95 s");
+    Harness h(standard_mission());
+    to_first_armed(h);
+    std::vector<Sample> seq(29, no_new_sample());
+    seq.push_back(armed(NavMode::kOffboard, true));  // 1.5 s: 확인 2회
+    seq.insert(seq.end(), on_deadline ? 29 : 28, no_new_sample());
+    seq.push_back(armed(NavMode::kOffboard, true));  // 확인 3회
+    const std::vector<StepOutput> outs = h.feed(seq);
+    for (const StepOutput & out : outs) {
+      ASSERT_FALSE(out.termination.has_value());
+    }
+    if (!on_deadline) {
+      EXPECT_EQ(h.view().stage, Stage::kItem);
+      continue;
+    }
+    EXPECT_EQ(h.view().stage, Stage::kCleanup);
+    EXPECT_EQ(h.view().cleanup_cause, CleanupCause::kPreparingFailure);
+    EXPECT_EQ(h.view().branch, Branch::kGround);
+    EXPECT_EQ(outs.back().commands, std::vector<CommandKind>{CommandKind::kDisarm});
+    h.auto_px4 = true;
+    ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 20));
+    expect_terminated_once(h, Status::kAborted, Reason::kArmRejected);
+  }
+}
+
+TEST(P6Deadline, MaximumLengthIsArmTimeoutPlusModeConfirmTimeout)
+{
+  // P6 최대 길이의 끝 경계(합성 표본): arm_timeout 직전(4.95 s)에 첫 ARMED 표본이 오고 그 뒤
+  // timestamp가 늘지 않으면, 그 시각부터 3.0 s(arm 전송에서 7.95 s)에 ARM_REJECTED와 정리 분기.
+  Harness h(standard_mission());
+  to_arm_sent(h);
+  h.feed(std::vector<Sample>(98, disarmed(true)));
+  Sample stuck = armed(NavMode::kOffboard, true);
+  stuck.timestamp_us = h.default_timestamp_us();
+  h.feed({stuck});  // 4.95 s: 첫 ARMED 표본
+  ASSERT_TRUE(h.view().armed_seen);
+  const std::vector<StepOutput> wait = h.feed(std::vector<Sample>(59, stuck));
+  for (const StepOutput & out : wait) {
+    ASSERT_FALSE(out.termination.has_value());
+  }
+  ASSERT_EQ(h.view().stage, Stage::kPreparing);
+  h.feed({stuck});  // 7.95 s
+  EXPECT_EQ(h.view().stage, Stage::kCleanup);
+  EXPECT_EQ(h.view().cleanup_cause, CleanupCause::kPreparingFailure);
+}
+
+TEST(P6History, LandedFalseOnFirstArmedTickCountsButEarlierDoesNot)
+{
+  // 지상 disarm 1회의 조건 2: 첫 ARMED 표본의 tick에 받은 landed false는 이력에 들어가고(순위 6에서
+  // disarm 0개), 그 앞 tick에 받은 landed false는 들어가지 않는다(disarm 1개).
+  const Sample failsafe_land = mode_sample(NavMode::kLand, NavMode::kOffboard, true, true);
+  {
+    Harness h(standard_mission());
+    to_arm_sent(h);
+    h.feed({armed(NavMode::kOffboard, false)});  // 첫 ARMED 표본과 같은 tick의 landed false
+    EXPECT_TRUE(h.view().landed_false_seen);
+    const std::vector<StepOutput> outs = h.feed({failsafe_land});
+    expect_p6_monitor_end(h, outs[0], Reason::kFailsafe, 6, 0);
+  }
+  {
+    Harness h(standard_mission());
+    to_arm_sent(h);
+    h.feed({disarmed(false)});                  // 첫 ARMED 표본 앞 tick의 landed false
+    h.feed({armed(NavMode::kOffboard, true)});  // 첫 ARMED 표본
+    EXPECT_FALSE(h.view().landed_false_seen);
+    const std::vector<StepOutput> outs = h.feed({failsafe_land});
+    expect_p6_monitor_end(h, outs[0], Reason::kFailsafe, 6, 1);
+  }
+}
+
+TEST(Preparing, IdentityMismatchWithTimestampFailureDropsDisarm)
+{
+  // 끝나는 tick의 disarm을 만들 Px4Timestamp가 없으면 보내지 않고, detail도 보냈다고 적지 않는다.
+  Harness h(standard_mission());
+  to_arm_sent(h);
+  h.world.identity = IdentityCheck::kMismatch;
+  h.clock.fail = true;
+  const std::vector<StepOutput> outs = h.feed({disarmed(true)});
+  EXPECT_TRUE(outs[0].commands.empty());
+  expect_terminated_once(h, Status::kAborted, Reason::kInternal);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("disarm not sent (Px4Timestamp unavailable)"), std::string::npos) << detail;
+  EXPECT_EQ(detail.find("sent once"), std::string::npos) << detail;
+}
+
 // ---- failsafe 이력의 구간 ----
 
 TEST(P6History, FailsafeHistorySpansP6AndTakeoff)
@@ -756,7 +848,7 @@ TEST(P6History, FailsafeHistorySpansP6AndTakeoff)
   const std::vector<StepOutput> outs = h.feed({armed(NavMode::kOffboard, true), disarmed(true)});
   EXPECT_FALSE(outs[0].termination.has_value());
   expect_terminated_once(h, Status::kAborted, Reason::kFailsafe);
-  EXPECT_NE(h.termination()->detail.find("rank 5"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("rank 5"), std::string::npos);
 }
 
 }  // namespace

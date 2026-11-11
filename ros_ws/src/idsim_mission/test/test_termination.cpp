@@ -151,8 +151,8 @@ TEST(TerminalEvent, EqualsResultInRunnerScenarios)
     h.world.arming = Arming::kDisarmed;
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 50));
     expect_terminated_once(h, Status::kSucceeded, Reason::kNone);
-    EXPECT_EQ(h.termination()->items_completed, 3U);
-    EXPECT_EQ(h.termination()->last_item_index, 2U);
+    EXPECT_EQ(termination_or_empty(h).items_completed, 3U);
+    EXPECT_EQ(termination_or_empty(h).last_item_index, 2U);
     expect_result_equals_event(*h.termination(), 3);
   }
   {
@@ -161,8 +161,8 @@ TEST(TerminalEvent, EqualsResultInRunnerScenarios)
     h.tick(true);
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
     expect_terminated_once(h, Status::kCanceled, Reason::kNone);
-    EXPECT_EQ(h.termination()->items_completed, 1U);
-    EXPECT_EQ(h.termination()->last_item_index, 1U);
+    EXPECT_EQ(termination_or_empty(h).items_completed, 1U);
+    EXPECT_EQ(termination_or_empty(h).last_item_index, 1U);
     expect_result_equals_event(*h.termination(), 3);
   }
   {
@@ -170,8 +170,8 @@ TEST(TerminalEvent, EqualsResultInRunnerScenarios)
     h.world.ekf_ready = false;
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 700));
     expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
-    EXPECT_EQ(h.termination()->items_completed, 0U);
-    EXPECT_EQ(h.termination()->last_item_index, 0U);
+    EXPECT_EQ(termination_or_empty(h).items_completed, 0U);
+    EXPECT_EQ(termination_or_empty(h).last_item_index, 0U);
     expect_result_equals_event(*h.termination(), 3);
   }
 }

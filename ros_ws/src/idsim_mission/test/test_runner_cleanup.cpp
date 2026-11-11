@@ -71,8 +71,8 @@ TEST(CancelAir, HoldConfirmedIsCanceled)
   EXPECT_FALSE(seen.setpoint.has_value());
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 5));
   expect_terminated_once(h, Status::kCanceled, Reason::kNone);
-  EXPECT_EQ(h.termination()->items_completed, 1U);
-  EXPECT_EQ(h.termination()->last_item_index, 1U);
+  EXPECT_EQ(termination_or_empty(h).items_completed, 1U);
+  EXPECT_EQ(termination_or_empty(h).last_item_index, 1U);
 }
 
 TEST(CancelAir, HoldRejectedGoesToLandPath)
@@ -90,7 +90,7 @@ TEST(CancelAir, HoldRejectedGoesToLandPath)
   const StepOutput end = h.tick();  // AUTO_LAND를 처음 관측한 tick에 끝난다
   EXPECT_FALSE(end.setpoint.has_value());
   expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
-  EXPECT_NE(h.termination()->detail.find("Hold rejected"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("Hold rejected"), std::string::npos);
 }
 
 TEST(CancelAir, HoldTimeoutThenLandNotConfirmed)
@@ -229,7 +229,7 @@ TEST(CancelGround, DisarmFailedBoundaryAndFinalResend)
   EXPECT_TRUE(end.px4_timestamp_us.has_value());
   EXPECT_FALSE(end.setpoint.has_value());
   expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
-  EXPECT_NE(h.termination()->detail.find("may remain armed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("may remain armed"), std::string::npos);
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 7);  // 첫 1 + 재전송 5 + 마지막 1
 }
 
@@ -286,7 +286,7 @@ TEST(CancelGround, DeniedDisarmAckKeepsRetrying)
   EXPECT_FALSE(h.runner().done());
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
   expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
-  EXPECT_NE(h.termination()->detail.find("DENIED"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("DENIED"), std::string::npos);
 }
 
 // ---- 취소: LAND 항목과 [LAND] 미션 ----
@@ -417,7 +417,7 @@ TEST(TakeoffTimeout, AirHoldConfirmed)
   EXPECT_EQ(first.feedback->phase, FeedbackPhase::kExecuting);
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("Hold confirmed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("Hold confirmed"), std::string::npos);
 }
 
 TEST(TakeoffTimeout, HoldNotConfirmedSendsLand)
@@ -431,7 +431,7 @@ TEST(TakeoffTimeout, HoldNotConfirmedSendsLand)
   h.world.nav = NavMode::kLand;
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 5));
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("Land sent"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("Land sent"), std::string::npos);
 }
 
 TEST(TakeoffTimeout, GroundArmedDisarms)
@@ -444,7 +444,7 @@ TEST(TakeoffTimeout, GroundArmedDisarms)
   EXPECT_EQ(first.setpoint->kind, SetpointKind::kGround);
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("disarm confirmed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("disarm confirmed"), std::string::npos);
 }
 
 TEST(TakeoffTimeout, CancelDuringCleanupIsIgnored)
@@ -471,7 +471,7 @@ TEST(TakeoffTimeout, GroundDisarmLinkLostKeepsReason)
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
   EXPECT_EQ(h.outputs().back().commands, std::vector<CommandKind>{CommandKind::kDisarm});
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("vehicle_status lost"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("vehicle_status lost"), std::string::npos);
 }
 
 TEST(TakeoffTimeout, ReasonStaysItemTimeoutInEveryBranch)
@@ -483,15 +483,15 @@ TEST(TakeoffTimeout, ReasonStaysItemTimeoutInEveryBranch)
     Harness h(standard_mission());
     to_takeoff_timeout(h, false);
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
-    details.push_back(h.termination()->detail);
-    EXPECT_EQ(h.termination()->reason, Reason::kItemTimeout);
+    details.push_back(termination_or_empty(h).detail);
+    EXPECT_EQ(termination_or_empty(h).reason, Reason::kItemTimeout);
   }
   {
     Harness h(standard_mission());
     to_takeoff_timeout(h, true);
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
-    details.push_back(h.termination()->detail);
-    EXPECT_EQ(h.termination()->reason, Reason::kItemTimeout);
+    details.push_back(termination_or_empty(h).detail);
+    EXPECT_EQ(termination_or_empty(h).reason, Reason::kItemTimeout);
   }
   {
     Harness h(standard_mission());
@@ -499,8 +499,8 @@ TEST(TakeoffTimeout, ReasonStaysItemTimeoutInEveryBranch)
     h.auto_px4 = false;
     h.world.arming = Arming::kArmed;
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
-    details.push_back(h.termination()->detail);
-    EXPECT_EQ(h.termination()->reason, Reason::kItemTimeout);
+    details.push_back(termination_or_empty(h).detail);
+    EXPECT_EQ(termination_or_empty(h).reason, Reason::kItemTimeout);
   }
   ASSERT_EQ(details.size(), 3U);
   EXPECT_NE(details[0], details[1]);
@@ -603,7 +603,7 @@ TEST(UntrustedSample, NotCountedForHold)
   EXPECT_FALSE(h.runner().done());
   h.tick();
   expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
-  EXPECT_NE(h.termination()->detail.find("AUTO_LAND not confirmed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("AUTO_LAND not confirmed"), std::string::npos);
 }
 
 TEST(TakeoffTimeout, DisarmedSnapshotAfterArmReselectsGroundDisarm)
@@ -625,7 +625,7 @@ TEST(TakeoffTimeout, DisarmedSnapshotAfterArmReselectsGroundDisarm)
   EXPECT_EQ(g[0].setpoint->kind, SetpointKind::kGround);
   h.feed({disarmed(true), disarmed(true), disarmed(true)});
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("disarm confirmed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("disarm confirmed"), std::string::npos);
 }
 
 TEST(UntrustedSample, FirstCleanupTickEndsAndDisarmsIfArmSent)
@@ -821,10 +821,24 @@ TEST(HoldFailedReentry, AirAgainAfterRejectedHoldSendsNavLand)
     ASSERT_FALSE(out.termination.has_value());
     EXPECT_FALSE(has_command(out, CommandKind::kSetModeHold));
   }
+  // 한 번 더 지상을 거쳐 공중에 다시 들어가도 재진입 문구는 쌓이지 않는다.
+  h.feed({armed(NavMode::kOffboard, true)});
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  const std::vector<StepOutput> twice = h.feed({armed(NavMode::kOffboard, false)});
+  EXPECT_EQ(twice[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  h.feed(std::vector<Sample>(59, armed(NavMode::kOffboard, false)));
   h.feed({armed(NavMode::kOffboard, false)});  // 다시 들어간 시각에서 3.0 s
   expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
-  EXPECT_NE(h.termination()->detail.find("air re-entered after Hold failure"), std::string::npos)
-    << h.termination()->detail;
+  {
+    const std::string & detail = termination_or_empty(h).detail;
+    const std::string suffix = "air re-entered after Hold failure";
+    const std::size_t first = detail.find(suffix);
+    ASSERT_NE(first, std::string::npos) << detail;
+    EXPECT_EQ(detail.find(suffix, first + 1), std::string::npos) << detail;
+  }
+  EXPECT_NE(
+    termination_or_empty(h).detail.find("air re-entered after Hold failure"), std::string::npos)
+    << termination_or_empty(h).detail;
   EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 1);
 }
 
@@ -966,12 +980,13 @@ TEST_P(CleanupCapCell, EndsExactlyOnCapTickWithOneCommand)
     std::vector<CommandKind>{cell.on_ground ? CommandKind::kDisarm : CommandKind::kNavLand});
   const Status status = Status::kAborted;
   expect_terminated_once(h, status, cell.reason);
-  EXPECT_NE(h.termination()->detail.find("cleanup cap reached"), std::string::npos)
-    << h.termination()->detail;
+  EXPECT_NE(termination_or_empty(h).detail.find("cleanup cap reached"), std::string::npos)
+    << termination_or_empty(h).detail;
   EXPECT_NE(
-    h.termination()->detail.find(cell.on_ground ? "last branch ground" : "last branch air"),
+    termination_or_empty(h).detail.find(
+      cell.on_ground ? "last branch ground (disarm)" : "last branch air (Hold)"),
     std::string::npos)
-    << h.termination()->detail;
+    << termination_or_empty(h).detail;
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1008,9 +1023,9 @@ TEST(CleanupCap, LongestLegitimatePathEndsByItsBranch)
   ASSERT_TRUE(end[0].termination.has_value());
   EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kDisarm});
   expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
-  EXPECT_EQ(h.termination()->detail.find("cleanup cap"), std::string::npos)
-    << h.termination()->detail;
-  EXPECT_NE(h.termination()->detail.find("mode_confirm_timeout"), std::string::npos);
+  EXPECT_EQ(termination_or_empty(h).detail.find("cleanup cap"), std::string::npos)
+    << termination_or_empty(h).detail;
+  EXPECT_NE(termination_or_empty(h).detail.find("mode_confirm_timeout"), std::string::npos);
 }
 
 TEST(CleanupCapSameTick, CapBeatsThirdConfirmSample)
@@ -1026,7 +1041,7 @@ TEST(CleanupCapSameTick, CapBeatsThirdConfirmSample)
   ASSERT_TRUE(outs[2].termination.has_value());
   EXPECT_EQ(outs[2].commands, std::vector<CommandKind>{CommandKind::kDisarm});
   expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
-  EXPECT_NE(h.termination()->detail.find("cleanup cap reached"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("cleanup cap reached"), std::string::npos);
 }
 
 TEST(CleanupCapSameTick, LinkLostBeatsCap)
@@ -1042,7 +1057,7 @@ TEST(CleanupCapSameTick, LinkLostBeatsCap)
   const std::vector<StepOutput> end = h.feed({no_new_sample()});
   EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kDisarm});
   expect_terminated_once(h, Status::kAborted, Reason::kLinkLost);
-  EXPECT_EQ(h.termination()->detail.find("cleanup cap"), std::string::npos);
+  EXPECT_EQ(termination_or_empty(h).detail.find("cleanup cap"), std::string::npos);
 }
 
 TEST(CleanupCapSameTick, AirDisarmedBeatsCap)
@@ -1053,7 +1068,7 @@ TEST(CleanupCapSameTick, AirDisarmedBeatsCap)
   const std::vector<StepOutput> end = h.feed({disarmed(false)});
   EXPECT_TRUE(end[0].commands.empty());
   expect_terminated_once(h, Status::kAborted, Reason::kFailsafe);
-  EXPECT_EQ(h.termination()->detail.find("cleanup cap"), std::string::npos);
+  EXPECT_EQ(termination_or_empty(h).detail.find("cleanup cap"), std::string::npos);
 }
 
 TEST(CleanupCapSameTick, NothingToCleanUpBeatsCap)
@@ -1104,7 +1119,7 @@ TEST(CleanupCap, UntrustedSampleOnCapTickUsesPreviousBranch)
       std::vector<CommandKind>{ground ? CommandKind::kDisarm : CommandKind::kNavLand});
     expect_terminated_once(
       h, Status::kAborted, ground ? Reason::kDisarmFailed : Reason::kModeSwitchFailed);
-    EXPECT_NE(h.termination()->detail.find("cleanup cap reached"), std::string::npos);
+    EXPECT_NE(termination_or_empty(h).detail.find("cleanup cap reached"), std::string::npos);
   }
 }
 
@@ -1124,8 +1139,218 @@ TEST(CleanupCap, AirCapAfterHoldObservedSaysVehicleMayStayInHold)
   const std::vector<StepOutput> end = h.feed({armed(NavMode::kOther, false)});
   EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
   expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
-  EXPECT_NE(h.termination()->detail.find("stays in Hold"), std::string::npos)
-    << h.termination()->detail;
+  EXPECT_NE(termination_or_empty(h).detail.find("stays in Hold"), std::string::npos)
+    << termination_or_empty(h).detail;
+}
+
+// ---- 분기 재진입(지상 G -> A -> G, 공중 A -> G -> A) ----
+
+TEST(BranchReentry, GroundReentryRestartsDisarmConfirmFromNewFirstSend)
+{
+  // 지상 분기에 다시 들어가면 그 tick에 disarm을 새로 보내고, "전송 뒤 표본"의 기준은 재진입의 첫
+  // 전송이다. 첫 지상 분기의 첫 전송보다 뒤이고 재진입의 첫 전송보다 앞선 timestamp의 DISARMED
+  // 표본은 재진입 뒤에 와도 세지 않는다(합성 표본).
+  Harness h(standard_mission());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.auto_px4 = false;
+  const std::uint64_t first_send = static_cast<std::uint64_t>(h.now_ns / 1000);
+  h.feed({armed(NavMode::kOffboard, true)}, true);
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  h.feed({armed(NavMode::kOffboard, false)});
+  ASSERT_EQ(h.view().branch, Branch::kAir);
+  const std::uint64_t reentry_send = static_cast<std::uint64_t>(h.now_ns / 1000);
+  const std::vector<StepOutput> again = h.feed({armed(NavMode::kOffboard, true)});
+  EXPECT_EQ(again[0].commands, std::vector<CommandKind>{CommandKind::kDisarm});
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  ASSERT_GT(reentry_send, first_send + 3);
+  std::vector<Sample> between;
+  for (std::uint64_t i = 1; i <= 3; ++i) {
+    Sample s = disarmed(true);
+    s.timestamp_us = first_send + i;  // 첫 전송보다 뒤, 재진입 전송보다 앞
+    between.push_back(s);
+  }
+  const std::vector<StepOutput> ignored = h.feed(between);
+  for (const StepOutput & out : ignored) {
+    ASSERT_FALSE(out.termination.has_value());
+  }
+  const std::vector<StepOutput> counted = h.feed({disarmed(true), disarmed(true)});
+  EXPECT_FALSE(counted[1].termination.has_value());
+  h.feed({disarmed(true)});
+  expect_terminated_once(h, Status::kCanceled, Reason::kNone);
+}
+
+// 공중 분기에서 Hold 표본 2개를 센 뒤 지상을 거쳐 공중 분기에 다시 들어간다(Hold 실패 없음).
+void to_air_reentry(Harness & h)
+{
+  h.drive_to_loiter();
+  h.auto_px4 = false;
+  h.tick(true);
+  ASSERT_EQ(h.view().branch, Branch::kAir);
+  h.feed({armed(NavMode::kHold, false), armed(NavMode::kHold, false)});
+  ASSERT_FALSE(h.runner().done());
+  h.feed({armed(NavMode::kHold, true)});
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+}
+
+TEST(BranchReentry, AirReentryWithoutHoldFailureSendsHoldAgainAndRestartsTimers)
+{
+  // 재진입 tick에 Hold를 한 번 더 보내고, 재전송은 그때부터 0.5 s 간격, hold_confirm_timeout은
+  // 재진입 시각부터 정확히 3.0 s에 Land 경로다.
+  Harness h(standard_mission());
+  to_air_reentry(h);
+  const int holds_before = h.count_command(CommandKind::kSetModeHold);
+  const std::vector<StepOutput> again = h.feed({armed(NavMode::kOther, false)});
+  EXPECT_EQ(again[0].commands, std::vector<CommandKind>{CommandKind::kSetModeHold});
+  EXPECT_EQ(h.view().branch, Branch::kAir);
+  EXPECT_FALSE(h.view().hold_failed);
+  const std::vector<StepOutput> wait =
+    h.feed(std::vector<Sample>(59, armed(NavMode::kOther, false)));
+  for (std::size_t i = 0; i < wait.size(); ++i) {
+    ASSERT_FALSE(wait[i].termination.has_value());
+    EXPECT_EQ(has_command(wait[i], CommandKind::kSetModeHold), (i + 1) % 10 == 0) << i + 1;
+  }
+  EXPECT_EQ(h.view().branch, Branch::kAir);
+  const std::vector<StepOutput> land = h.feed({armed(NavMode::kOther, false)});  // 3.0 s
+  EXPECT_EQ(land[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  EXPECT_EQ(h.view().branch, Branch::kAirLand);
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), holds_before + 6);
+}
+
+TEST(BranchReentry, AirReentryNeedsThreeNewHoldSamples)
+{
+  // 재진입 직전에 센 Hold 표본 2개는 남지 않는다. 재진입 뒤 3개가 새로 차야 CANCELED.
+  Harness h(standard_mission());
+  to_air_reentry(h);
+  h.feed({armed(NavMode::kOther, false)});
+  ASSERT_EQ(h.view().branch, Branch::kAir);
+  const std::vector<StepOutput> two =
+    h.feed({armed(NavMode::kHold, false), armed(NavMode::kHold, false)});
+  EXPECT_FALSE(two[1].termination.has_value());
+  h.feed({armed(NavMode::kHold, false)});
+  expect_terminated_once(h, Status::kCanceled, Reason::kNone);
+}
+
+// ---- 정리의 상한: 추가 경계 ----
+
+TEST(CleanupCapSameTick, CapTickChoiceFollowsThatTickNotPreviousBranch)
+{
+  // 상한 tick의 명령은 그 tick의 고르기로 정한다. k = 239까지 지상 분기였어도 k = 240 표본이
+  // landed false이면 NAV_LAND이고, 반대도 같다.
+  {
+    Harness h(standard_mission());
+    start_cancel(h, true);
+    h.feed(toggling(true, 1, kCapTicks - 1));
+    ASSERT_EQ(h.view().branch, Branch::kGround);
+    const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, false)});
+    EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+    expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+    EXPECT_NE(
+      termination_or_empty(h).detail.find("last branch ground (disarm)"), std::string::npos);
+  }
+  {
+    Harness h(standard_mission());
+    start_cancel(h, false);
+    h.feed(toggling(false, 1, kCapTicks - 1));
+    ASSERT_EQ(h.view().branch, Branch::kAir);
+    const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, true)});
+    EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kDisarm});
+    expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
+    EXPECT_NE(termination_or_empty(h).detail.find("last branch air (Hold)"), std::string::npos);
+  }
+}
+
+TEST(CleanupCapSameTick, AirCapBeatsThirdHoldSample)
+{
+  // 공중 분기의 상한 tick에 온 3번째 AUTO_LOITER 표본은 세지 않는다.
+  Harness h(standard_mission());
+  start_cancel(h, false);
+  h.feed(toggling(false, 1, kCapTicks - 3));
+  ASSERT_EQ(h.view().branch, Branch::kAir);
+  const std::vector<StepOutput> outs = h.feed(
+    {armed(NavMode::kHold, false), armed(NavMode::kHold, false), armed(NavMode::kHold, false)});
+  EXPECT_FALSE(outs[1].termination.has_value());
+  ASSERT_TRUE(outs[2].termination.has_value());
+  EXPECT_EQ(outs[2].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  EXPECT_NE(termination_or_empty(h).detail.find("cleanup cap reached"), std::string::npos);
+}
+
+TEST(CleanupCap, LastBranchLandPathIsNamed)
+{
+  // 합성 표본: Hold 실패 뒤 지상과 Land 경로를 오가다 Land 경로에서 상한에 닿는다.
+  // k: 0-99 공중(60에 Hold 실패 -> Land 경로), 100-149 지상, 150-199 공중(Land 경로 재진입),
+  // 200-229 지상, 230-240 공중(Land 경로 재진입). 분기마다 타임아웃(3 s)보다 짧다.
+  Harness h(standard_mission());
+  start_cancel(h, false);
+  std::vector<Sample> seq;
+  for (int k = 1; k < kCapTicks; ++k) {
+    const bool landed = (k >= 100 && k < 150) || (k >= 200 && k < 230);
+    seq.push_back(armed(NavMode::kOffboard, landed));
+  }
+  const std::vector<StepOutput> outs = h.feed(seq);
+  for (const StepOutput & out : outs) {
+    ASSERT_FALSE(out.termination.has_value());
+  }
+  ASSERT_EQ(h.view().branch, Branch::kAirLand);
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 6);  // 처음 공중 분기에서만
+  const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, false)});
+  EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("last branch air (Land path)"), std::string::npos) << detail;
+}
+
+TEST(CleanupCap, TimestampFailureOnCapTickDropsTheCommandKeepsResult)
+{
+  // 상한 tick에 Px4Timestamp를 만들 수 없으면 명령을 버리고 결과는 유지한다. detail은 보내지
+  // 못했다고 적는다.
+  for (const bool ground : {true, false}) {
+    SCOPED_TRACE(ground ? "ground" : "air");
+    Harness h(standard_mission());
+    start_cancel(h, ground);
+    h.feed(toggling(ground, 1, kCapTicks - 1));
+    h.clock.fail = true;
+    const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, ground)});
+    ASSERT_TRUE(end[0].termination.has_value());
+    EXPECT_TRUE(end[0].commands.empty());
+    EXPECT_FALSE(end[0].px4_timestamp_us.has_value());
+    expect_terminated_once(
+      h, Status::kAborted, ground ? Reason::kDisarmFailed : Reason::kModeSwitchFailed);
+    const std::string & detail = termination_or_empty(h).detail;
+    EXPECT_NE(
+      detail.find(
+        ground ? "disarm not sent (Px4Timestamp unavailable)"
+               : "NAV_LAND not sent (Px4Timestamp unavailable)"),
+      std::string::npos)
+      << detail;
+    EXPECT_EQ(detail.find("sent once"), std::string::npos) << detail;
+  }
+}
+
+TEST(CleanupCap, HoldObservedWithoutPublishingDoesNotSayPublishingStopped)
+{
+  // [LAND] 미션(발행한 적이 없음)의 공중 취소에서 Hold를 본 뒤 상한에 닿으면 "publishing
+  // stopped"를 적지 않는다(합성 표본).
+  Harness h(land_only_mission());
+  h.world.arming = Arming::kArmed;
+  h.world.landed = false;
+  h.world.nav = NavMode::kHold;
+  h.tick();
+  h.auto_px4 = false;
+  h.feed({armed(NavMode::kOther, false)}, true);
+  ASSERT_EQ(h.view().stage, Stage::kCleanup);
+  std::vector<Sample> seq;
+  for (int k = 1; k < kCapTicks; ++k) {
+    const bool landed = toggled_landed(false, k);
+    seq.push_back(armed(!landed && k % 2 == 0 ? NavMode::kHold : NavMode::kOther, landed));
+  }
+  h.feed(seq);
+  ASSERT_FALSE(h.runner().done());
+  h.feed({armed(NavMode::kOther, false)});
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("Hold was observed, vehicle stays in Hold"), std::string::npos) << detail;
+  EXPECT_EQ(detail.find("publishing stopped"), std::string::npos) << detail;
 }
 
 }  // namespace

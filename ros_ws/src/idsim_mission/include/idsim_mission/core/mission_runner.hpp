@@ -225,6 +225,7 @@ private:
   SetpointOut ground_setpoint(const Tick & t) const;
   void send(Tick & t, CommandKind kind);
   void send_once(Tick & t, CommandKind kind);
+  void send_final(Tick & t, CommandKind kind, std::string & detail);
   void clear_pending() { pending_.active = false; }
   void resend_due(Tick & t);
   AckView take_ack(const Tick & t);
@@ -262,6 +263,7 @@ private:
   SampleCounter counter_;                       // OFFBOARD, ARMED, AUTO_LOITER 확인
   std::string cleanup_detail_;
   std::string land_path_why_;
+  std::string hold_failed_why_;  // 이 정리에서 Hold가 처음 실패한 이유
   SetpointOut setpoint_;
   SetpointOut reference_;  // P3에서 읽은 위치(지상 setpoint의 대체값)
   Pending pending_;        // 대기 중인 명령은 한 번에 하나

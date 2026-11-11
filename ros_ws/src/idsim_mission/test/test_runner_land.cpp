@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // LAND 항목(WAITING_MODE)의 세 구간 감시, 완료 우선 규칙, 대비책 disarm, LAND의 ITEM_TIMEOUT.
-// 결정: decisions.md 쟁점 4 "LAND 항목의 감시", 항목 표의 LAND 행, LAND 항목의 ITEM_TIMEOUT.
+// 결정: decisions.md 쟁점 4 "LAND 항목(WAITING_MODE)의 감시", 항목 표의 LAND 행, LAND 항목의
+// ITEM_TIMEOUT.
 
 #include <gtest/gtest.h>
 
@@ -240,8 +241,8 @@ TEST(LandItemTimeout, ConfirmedButNeverDisarmed)
   const StepOutput & last = h.outputs().back();
   EXPECT_TRUE(last.commands.empty());
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("AUTO_LAND was confirmed"), std::string::npos);
-  EXPECT_NE(h.termination()->detail.find("landed and still ARMED"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("AUTO_LAND was confirmed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("landed and still ARMED"), std::string::npos);
   EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 0);
 }
 
@@ -274,7 +275,7 @@ TEST(LandItemTimeout, LandOnlyNavLandNotArrived)
   EXPECT_FALSE(h.runner().done());
   h.tick();  // 2.0 s
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("AUTO_LAND not observed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("AUTO_LAND not observed"), std::string::npos);
   for (const StepOutput & out : h.outputs()) {
     EXPECT_FALSE(out.setpoint.has_value());
   }
@@ -291,7 +292,7 @@ TEST(LandItemTimeout, LandOnlyNavLandAcceptedOrObserved)
     h.push_ack(AckCommand::kNavLand, AckResult::kAccepted);
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
     expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-    EXPECT_NE(h.termination()->detail.find("NAV_LAND accepted"), std::string::npos);
+    EXPECT_NE(termination_or_empty(h).detail.find("NAV_LAND accepted"), std::string::npos);
   }
   {
     Harness h(land_only_mission(2));
@@ -302,7 +303,7 @@ TEST(LandItemTimeout, LandOnlyNavLandAcceptedOrObserved)
     h.feed({armed(NavMode::kLand), armed(NavMode::kHold)});
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
     expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-    EXPECT_NE(h.termination()->detail.find("observed but not confirmed"), std::string::npos);
+    EXPECT_NE(termination_or_empty(h).detail.find("observed but not confirmed"), std::string::npos);
   }
 }
 
@@ -336,11 +337,11 @@ TEST(Land, LinkLostAndIdentityMismatch)
     h.world.identity = IdentityCheck::kMismatch;
     h.tick();
     expect_terminated_once(h, Status::kAborted, Reason::kInternal);
-    EXPECT_NE(h.termination()->detail.find("expected sysid 2"), std::string::npos);
+    EXPECT_NE(termination_or_empty(h).detail.find("expected sysid 2"), std::string::npos);
   }
 }
 
-// ---- 대비책 disarm의 부정 시험(px4-engineer N5-4) ----
+// ---- 대비책 disarm의 부정 시험 ----
 
 TEST(Land, FallbackNotSentBeforeAutoLandConfirm)
 {

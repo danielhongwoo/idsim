@@ -6,7 +6,7 @@
 
 | 대상 | 내용 | 의존 | 소유 | 단계 |
 | --- | --- | --- | --- | --- |
-| `idsim_mission_core` | 미션 검증, `TYPE_*` 분류, 상태기(`MissionRunner`), 종료 결과 | 없음(C++17 표준 라이브러리만) | ros2-engineer. `core/snapshot.hpp`와 상태기 전이 표는 px4-engineer 필수 승인 | P3b(이 단계) |
+| `idsim_mission_core` | 미션 검증, `TYPE_*` 분류, 상태기(`MissionRunner`), 종료 결과 | 없음(C++17 표준 라이브러리만) | ros2-engineer. `core/snapshot.hpp`와 상태기 전이 표는 px4-engineer 필수 승인 | P3b, P4 |
 | `idsim_mission_px4` | px4_msgs -> snapshot 변환, 명령 목록 -> `VehicleCommand`와 setpoint | core, `idsim_common`, px4_msgs | px4-engineer(`include/idsim_mission/px4/`, `src/px4/`, `test/px4/`) | P3c |
 | `mission_executor_component` | lifecycle 노드 껍질 `idsim_mission::MissionExecutorNode`(컴포넌트), action 서버, 사건 발행, 계약 메시지 변환(`node/conversion.hpp`) | core, px4 어댑터, idsim_interfaces, rclcpp_lifecycle, rclcpp_action, rclcpp_components | ros2-engineer | P3d |
 
@@ -40,7 +40,7 @@ lifecycle
 - on_configure: `link_timeout`이 `mode_confirm_timeout`보다 짧지 않으면 WARN(지상 disarm 분기의 상태 끊김 규칙의 전제. decisions.md 쟁점 3 M5). 정리의 상한(`core::cleanup_cap_ns`, 노드 파라미터가 아니다)의 계산값을 INFO로 남긴다. `vehicle.*` 해석 실패, `use_sim_time` false, 노드 네임스페이스와 `vehicle.ns` 불일치, 타임아웃 0 이하, command source 무효나 source == sysid이면 FAILURE. 구독 다섯, PX4 발행자 셋, 사건 발행자, `RosPx4ClockPort`를 만든다.
 - on_activate: 첫 `/clock`을 벽시계 2 s 기다리고(`wait_until_started`. 파라미터가 아니다) `Px4Timestamp::now`가 되는지 본 뒤 발행자를 켜고, 20 Hz tick timer(노드 시계)와 action 서버를 만든다.
 - on_deactivate: goal 실행 중이면 FAILURE(active에 남는다). 아니면 action 서버와 timer를 없앤다.
-- on_shutdown, on_error, context 종료 직전(pre-shutdown callback): 실행 중인 goal을 ABORTED, REASON_INTERNAL로 끝내고 종료 사건을 낸다. 이 goal에서 arm을 보냈으면 새 `Px4Timestamp`로 강제가 아닌 disarm을 한 번 발행하고 `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground"를, 발행할 수 없으면(발행자 비활성, 시간 공급 실패) "disarm could not be sent, vehicle state unknown"을 더한다(px4-engineer P3d-1. 지상 arm 뒤 이륙 전이면 자동 disarm이 없다). on_error는 on_cleanup처럼 구독과 발행자를 비워 다음 configure가 새로 만들게 하고, 남은 action 서버는 다음 on_activate가 새 서버를 만들기 전에 지운다. on_shutdown 뒤에도 action 서버는 소멸자까지 남는다(끝낸 goal의 result 요청에 답해야 한다). 그 뒤에 온 goal은 `handle_accepted`가 즉시 ABORTED, REASON_INTERNAL("executor is not active")로 끝낸다.
+- on_shutdown, on_error, context 종료 직전(pre-shutdown callback): 실행 중인 goal을 ABORTED, REASON_INTERNAL로 끝내고 종료 사건을 낸다. 이 goal에서 arm을 보냈으면 새 `Px4Timestamp`로 강제가 아닌 disarm을 한 번 발행하고 `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground"를, 발행할 수 없으면(발행자 비활성, 시간 공급 실패) "disarm could not be sent, vehicle state unknown"을 더한다(지상 arm 뒤 이륙 전이면 자동 disarm이 없다. `COM_DISARM_PRFLT=-1`). on_error는 on_cleanup처럼 구독과 발행자를 비워 다음 configure가 새로 만들게 하고, 남은 action 서버는 다음 on_activate가 새 서버를 만들기 전에 지운다. on_shutdown 뒤에도 action 서버는 소멸자까지 남는다(끝낸 goal의 result 요청에 답해야 한다). 그 뒤에 온 goal은 `handle_accepted`가 즉시 ABORTED, REASON_INTERNAL("executor is not active")로 끝낸다.
 - callback group은 MutuallyExclusive 하나(PX4 구독, tick timer, action 서버). pre-shutdown callback은 다른 thread에서 돌 수 있어 goal 상태와 snapshot은 mutex로 지킨다.
 
 tick 순서: `begin_tick` -> `select_ack` -> `step` -> `to_px4_messages(out, builder, port.stamp())` -> 오류면 ERROR 로그 -> `offboard_control_mode`, `trajectory_setpoint`, 명령 순 발행 -> feedback -> 종료면 사건과 result. tick 번호는 goal이 없어도 하나씩 오른다. 구독 callback은 "다음 step의 tick 번호"와 노드 시계 ROS 시각을 표본에 적는다.
@@ -114,17 +114,17 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 3. P3은 위치 값(x, y, z와 MODE_KEEP이면 heading)이 유한할 때까지 기다린다(`ready_timeout` 안). `xy_valid`는 gate로 쓰지 않는다는 결정은 그대로다.
 4. P4의 신호 확인은 발행 시작 tick 뒤에 받은 failsafe_flags만 쓴다(그 전의 flags는 앞 미션의 값일 수 있다).
 5. P6의 확인 계수: 첫 ARMED 표본을 본 tick에 계수를 0으로 두고 그 표본부터 센다. 세는 것은 감시 표를 지난 표본 가운데 ARMED이고 OFFBOARD인 서로 다른 표본이다(감시 표를 지난 표본은 OFFBOARD이고 ARMED인 채 failsafe인 방어용 표본을 빼면 늘 ARMED이고 OFFBOARD다). 첫 ARMED 표본 전에는 세지 않는다.
-6. 감시 구간(P6의 첫 ARMED 표본부터 setpoint 항목 끝까지)에서 timestamp가 첫 ARMED 표본보다 작은 vehicle_status 표본은 판정에 쓰지 않고, 그 tick의 감시 표와 확인 계수는 직전에 쓴 표본으로 본다. 그래서 그런 표본만 오면 순위 3의 `link_timeout`은 직전에 쓴 표본의 수신 시각부터 흐른다. 식별이 어긋난 표본은 timestamp와 무관하게 순위 2로 본다.
+6. 감시 구간(P6의 첫 ARMED 표본부터 setpoint 항목 끝까지)에서 timestamp가 첫 ARMED 표본보다 작은 vehicle_status 표본은 판정에 쓰지 않고, 그 tick의 감시 표와 확인 계수는 직전에 쓴 표본으로 본다. 그래서 그런 표본만 오면 순위 3의 `link_timeout`은 직전에 쓴 표본의 수신 시각부터 흐른다. 식별이 어긋난 표본은 timestamp와 무관하게 순위 2로 본다. 이 거르기는 감시 구간에만 쓰고 정리와 LAND 항목에는 적용하지 않는다(그 둘은 `SampleCounter`의 "직전보다 크지 않은 timestamp는 건너뛴다"와 disarm 확인의 전송 뒤 표본 기준만 쓴다).
 7. 지상 disarm 1회의 조건 2("첫 ARMED 표본 뒤에 받은 landed가 한 번도 false가 아니었다")는 `received_tick`이 첫 ARMED 표본의 tick 이상인 vehicle_land_detected 표본으로 본다(같은 tick에 받은 표본을 넣는다). 조건 3의 "그 tick의 최신 landed"는 그 tick의 Snapshot 값이다.
-8. 감시 표 순위 1(`Px4Timestamp` 공급 실패)로 끝날 때도 발행이나 명령을 한 번이라도 했으면 `detail`에 "vehicle state unknown, may remain armed on ground"를 더한다(감시 표 밖의 공급 실패와 같은 문구).
-9. Hold와 Offboard는 같은 DO_SET_MODE라 ack로 가를 수 없다. 대기 중인 명령이 하나라는 규칙에 기대어 그 명령의 ack로 본다. Offboard의 늦은 거부 ack가 Hold 대기 중에 오면 Hold 거부로 읽힌다.
-10. LAND 항목의 대비책 disarm은 AUTO_LAND 확인 뒤에만 보낸다(대기 중인 명령은 하나라 NAV_LAND 재전송과 겹치지 않게). 지연 시간은 landed이고 ARMED인 최신 값을 처음 본 tick부터 재고, 둘 중 하나가 깨지면 처음부터 다시 잰다.
-11. disarm 분류(지상 대 공중)는 처음 관측한 DISARMED 표본에서 정하고, ARMED 표본을 보면 미정으로 되돌린다. LAND 항목에서 정한 분류는 취소의 정리로 이어진다.
-12. 지상 disarm 분기의 LINK_LOST에서 "disarm을 한 번 더 보낸다"는 그 tick의 분기 고르기가 지상일 때다.
-13. ITEM_TIMEOUT과 PREPARING 실패의 정리 중 feedback phase는 실패한 단계의 phase(EXECUTING, WAITING_MODE, PREPARING)를 유지한다. PHASE_CANCELING은 취소일 때만이다.
-14. 지상 setpoint의 위치가 유한하지 않으면 P3에서 읽은 위치를 쓰고, heading이 유한하지 않으면 그때의 setpoint yaw를 쓴다.
-15. 정리의 상한 tick에서 공중일 때 `detail`에 더하는 "Hold를 관측해 발행을 멈춘 기체"의 판정은 "이 정리에서 식별이 맞는 AUTO_LOITER 표본을 한 번이라도 봤다"이다. 상한의 `detail`에는 상한 값(ms)과 마지막 분기(none, air (Hold), air (Land path), ground (disarm))를 적는다.
-16. "Hold가 한 번 실패했다"는 이 정리에서 Land 경로에 한 번이라도 들어갔다는 뜻이다(거부 ack와 `hold_confirm_timeout` 둘 다 Land 경로로 들어간다). 정리를 시작할 때 지운다.
+8. Hold와 Offboard는 같은 DO_SET_MODE라 ack로 가를 수 없다. 대기 중인 명령이 하나라는 규칙에 기대어 그 명령의 ack로 본다. Offboard의 늦은 거부 ack가 Hold 대기 중에 오면 Hold 거부로 읽힌다.
+9. LAND 항목의 대비책 disarm은 AUTO_LAND 확인 뒤에만 보낸다(대기 중인 명령은 하나라 NAV_LAND 재전송과 겹치지 않게). 지연 시간은 landed이고 ARMED인 최신 값을 처음 본 tick부터 재고, 둘 중 하나가 깨지면 처음부터 다시 잰다.
+10. disarm 분류(지상 대 공중)는 처음 관측한 DISARMED 표본에서 정하고, ARMED 표본을 보면 미정으로 되돌린다. LAND 항목에서 정한 분류는 취소의 정리로 이어진다.
+11. 지상 disarm 분기의 LINK_LOST에서 "disarm을 한 번 더 보낸다"는 그 tick의 분기 고르기가 지상일 때다.
+12. ITEM_TIMEOUT과 PREPARING 실패의 정리 중 feedback phase는 실패한 단계의 phase(EXECUTING, WAITING_MODE, PREPARING)를 유지한다. PHASE_CANCELING은 취소일 때만이다.
+13. 지상 setpoint의 위치가 유한하지 않으면 P3에서 읽은 위치를 쓰고, heading이 유한하지 않으면 그때의 setpoint yaw를 쓴다.
+14. 정리의 상한 tick에서 공중일 때 `detail`에 더하는 "Hold를 관측해 발행을 멈춘 기체"의 판정은 "이 정리에서 식별이 맞는 AUTO_LOITER 표본을 한 번이라도 봤다"이다. "발행을 멈췄다"는 이 goal이 발행한 적이 있을 때만 적는다. 상한의 `detail`에는 상한 값(ms)과 마지막 분기(none, air (Hold), air (Land path), ground (disarm))를 적는다.
+15. "Hold가 한 번 실패했다"는 이 정리에서 Land 경로에 한 번이라도 들어갔다는 뜻이다(거부 ack와 `hold_confirm_timeout` 둘 다 Land 경로로 들어간다). 정리를 시작할 때 지운다. 재진입한 Land 경로의 `detail`에는 처음 실패한 이유와 재진입했다는 것을 한 번만 적는다.
+16. 끝나는 tick에 확인 없이 한 번 보내는 명령(감시 표 종료의 disarm, 정리의 상한의 disarm과 NAV_LAND, 식별 불일치의 disarm)은 그 tick의 `Px4Timestamp`를 먼저 묻는다(`send_final`). 만들 수 없으면 명령을 버리고 `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground" 대신 "disarm not sent (Px4Timestamp unavailable); vehicle state unknown, may remain armed on ground"를, NAV_LAND이면 "NAV_LAND not sent (Px4Timestamp unavailable); vehicle state unknown"을 적는다.
 
 ## 알려진 제한
 
