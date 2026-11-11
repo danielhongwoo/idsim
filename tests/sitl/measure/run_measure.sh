@@ -31,7 +31,10 @@
 # 산출물은 artifacts/runs/<실행 id>/measure/ 아래다(실행 id 기본: <UTC 시각>-k<k>-measure, IDSIM_RUN_ID로 지정).
 #   measure_<item>.jsonl, raw_<item>.jsonl, summary_<item>.txt, distribution_<item>.json,
 #   crosscheck_<item>.json, armed_criterion.json, run_<item>.log, stop_exit.txt, compose.log
-# 종료 코드: 0 모두 통과, 1 FAIL 또는 위반이 하나라도 있음(2보다 앞선다), 2 그 밖(시도 수 부족, 전제 실패, 인프라).
+# 종료 코드: 0 모두 통과, 1 기준과 다른 관측(FAIL, ARMED 위반. 문서의 기대가 반증됐다는 뜻이며 PX4 결함이라는
+#   뜻이 아니다. 2보다 앞선다), 2 기계가 판정하지 않음(COND_NOT_REACHED, HOLD_END, INCONCLUSIVE, WINDOW_MISSED,
+#   PRECONDITION, 시도 수 부족, 인프라, 예상 밖의 종료 코드). 0은 PX4 직접 부류의 통과이며 P4 머지 조건은
+#   Executor 경유 부류(시나리오 A)의 통과가 따로 필요하다.
 # 이 스크립트는 판정을 느슨하게 만들지 않는다. 통과 기준은 summary_<item>.txt 머리와 measure.py에 있다.
 
 set -uo pipefail
@@ -54,6 +57,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ "${#items[@]}" -gt 0 ] || usage
+# 같은 item을 두 번 돌리면 기록이 섞이거나 덮어써지므로 거부한다(measure.py도 기존 기록을 거부한다)
+if [ "$(printf '%s\n' "${items[@]}" | sort | uniq -d | wc -l)" -gt 0 ]; then
+  echo "같은 item이 중복되었다: ${items[*]}" >&2
+  exit 2
+fi
 case "$k" in [0-9]) ;; *) echo "스택 번호는 0-9: '${k}'" >&2; exit 2 ;; esac
 if [ "$k" = "0" ] && [ "${IDSIM_MEASURE_ALLOW_STACK0:-}" != "1" ]; then
   echo "스택 0은 사용자 스택이다. 다른 번호를 쓰거나 IDSIM_MEASURE_ALLOW_STACK0=1을 준다" >&2
@@ -88,6 +96,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# 주의: 이 스크립트는 tools/sim_stack.sh up으로 스택을 올린다. P4 뒤에는 up이 Executor(ops-N)도
+# 띄우므로 Executor의 setpoint가 측정기의 직접 발행과 섞인다. P4 뒤에는 sim_stack.sh up --infra-only로
+# 바꿔야 한다(--infra-only는 P4의 devops 작업에서 생긴다).
 if ! STACK_UP_TIMEOUT="${STACK_UP_TIMEOUT:-240}" tools/sim_stack.sh up --stack "$k" --run-dir "$run_dir" >/dev/null; then
   echo "스택 올리기 실패(INFRA_UP). 로그는 tools/sim_stack.sh logs --stack ${k}" >&2
   exit 2
@@ -107,6 +118,7 @@ for item in "${items[@]}"; do
     runner bash -c 'cd /opt/idsim && python3 tests/sitl/measure/measure.py "$@"' _ "${args[@]}" \
     2>&1 | tee "${out_dir}/run_${item}.log"
   rc="${PIPESTATUS[0]}"
+  case "$rc" in 0|1|2) ;; *) echo "${item}: 예상 밖의 종료 코드 ${rc}를 2로 접는다" >&2; rc=2 ;; esac
   echo "${item}: measure.py 종료 코드 ${rc}" >&2
   [ "$rc" -eq 1 ] && fail=1
   [ "$rc" -gt "$status" ] && status="$rc"
@@ -120,6 +132,7 @@ echo "서비스 종료 상태: ${out_rel}/stop_exit.txt" >&2
 
 python3 tests/sitl/measure/crosscheck.py --measure-dir "$out_dir" --repo-root "$repo_root" | tee "${out_dir}/crosscheck.log"
 rc="${PIPESTATUS[0]}"
+case "$rc" in 0|1|2) ;; *) echo "crosscheck: 예상 밖의 종료 코드 ${rc}를 2로 접는다" >&2; rc=2 ;; esac
 [ "$rc" -eq 1 ] && fail=1
 [ "$rc" -gt "$status" ] && status="$rc"
 [ "$fail" -eq 1 ] && status=1

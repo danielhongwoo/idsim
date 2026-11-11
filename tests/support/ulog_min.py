@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ULog에서 한 토픽의 표본만 읽는 최소 파서. 표준 라이브러리만 쓴다.
+"""ULog에서 한 토픽의 표본만 읽는 최소 parser. 표준 라이브러리만 쓴다.
 
 호스트와 ros-ws, px4 이미지에 pyulog가 없어서 둔다. 읽는 것: 헤더, F(형식), A(구독), D(데이터).
 나머지 메시지는 건너뛴다. 파일이 닫히지 않아 마지막 메시지가 잘려 있으면 거기서 멈추고 그때까지
-읽은 표본을 돌려준다. 플래그 비트의 "추가 데이터 첨부"(append) 구간은 읽지 않는다.
+읽은 표본을 돌려준다. flag bit의 "추가 데이터 첨부"(append) 구간은 읽지 않는다.
 
 ULog 형식: https://docs.px4.io/main/en/dev_log/ulog_file_format
 """
@@ -117,3 +117,34 @@ def read_topic(path, topic, multi_id=0):
                     continue
                 rows.append(_decode(formats, topic, data.ljust(full, b"\0"))[0])
     return rows
+
+
+def read_logged(path):
+    """ULog의 logged message(L, tag가 붙은 C)를 [{"level", "ts", "msg"}]로 읽는다.
+
+    level은 ULog 문자 코드의 숫자(0 emerg ... 7 debug). ts는 PX4 timestamp(us)다.
+    """
+    with open(path, "rb") as fh:
+        buf = fh.read()
+    if buf[:7] != _MAGIC:
+        raise UlogError("ULog 머리가 아니다: %s" % path)
+    pos = 16
+    out = []
+    while pos + 3 <= len(buf):
+        size, mtype = struct.unpack_from("<HB", buf, pos)
+        start = pos + 3
+        if start + size > len(buf):
+            break
+        payload = buf[start:start + size]
+        pos = start + size
+        if mtype == 0x4C and size >= 9:        # 'L'
+            level, ts = struct.unpack_from("<BQ", payload, 0)
+            text = payload[9:]
+        elif mtype == 0x43 and size >= 11:     # 'C' (tag u16 뒤는 L과 같다)
+            level, ts = struct.unpack_from("<BQ", payload, 2)
+            text = payload[11:]
+        else:
+            continue
+        out.append({"level": level - 0x30 if level >= 0x30 else level, "ts": ts,
+                    "msg": text.decode("utf-8", "replace")})
+    return out

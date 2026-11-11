@@ -20,15 +20,21 @@
 
   crosscheck.py --measure-dir <실행 디렉터리>/measure [--repo-root 저장소]
 
-시도마다(armed_window_ros_us가 있는 행)
-  - ROS 표본 중 구간 안의 것이 ULog에 같은 timestamp로 있고 arming_state, nav_state, failsafe,
+시도마다(armed_window_ros_us가 있는 행). 대조 로직은 tests/support/measure_check.py(단위 테스트)다.
+  - ROS 표본이 ULog에 같은 timestamp로 있고 arming_state, nav_state, failsafe,
     nav_state_user_intention이 같은가 (ros_missing_in_ulog, ros_field_mismatch)
-  - ULog 구간 [arm 전송의 Px4Timestamp, 구간 끝 ROS 표본의 timestamp]의 표본 중 ROS가 못 받은 것
-    (ulog_only)과, ULog 기준의 OFFBOARD가 아닌 ARMED 표본 수 (ulog_armed_non_offboard)
-  - ULog vehicle_status의 최소 표본 간격(ulog_min_interval_ms). 200 ms 근처이면 ULog가 표본을
-    솎아 기록하는 것이라 50 ms 안에 연달아 오는 표본을 못 본다는 뜻이다.
-결과: crosscheck_<항목>.json, armed_criterion.json(모든 항목의 합산, ROS와 ULog 둘 다 0이어야 통과).
-종료 코드: 0 위반 없음, 1 위반 또는 불일치, 2 입력 부족.
+  - ULog 구간의 표본 중 ROS가 못 받은 것(ulog_only)과 ULog 기준의 OFFBOARD가 아닌 ARMED 표본 수.
+    위반 구간의 끝은 측정기의 ARMED 구간 끝(min(ARMED 3회 확인, 정리 종료, 첫 Hold 전송))과 같고,
+    대조 구간의 끝은 정리 종료 시각까지 넓혀 ROS 누락을 ULog가 잡게 한다.
+  - ULog 표본 간격의 최소값(ulog_min_interval_ms)
+  - (5): arm 수락 증거를 ULog에서 확정한다(증거 A: arm 전송 뒤 timestamp의 ARMED 표본, 증거 B: logged
+    message '[commander] Armed by external command'). ROS ack는 증거가 아니다. 증거가 확인되면
+    INCONCLUSIVE였던 (5) 행의 최종 판정이 PASS가 되고(final_verdict), 끝내 없으면 INCONCLUSIVE로 남는다.
+결과: crosscheck_<항목>.json, armed_criterion.json(부류별), 끝에 요약 줄.
+
+종료 코드: 0 PX4 직접 부류의 통과(ULog 표본이 실제로 대조됨), 1 위반 또는 불일치 또는 대조가 비어 있음,
+2 입력 부족 또는 ULog를 못 읽음 또는 (5)의 증거 미확인 또는 ARMED 3회 도달 실행 부족. 이 통과는
+PX4 직접 부류의 통과이며 P4 머지 조건은 Executor 경유 부류(시나리오 A)의 통과가 따로 필요하다.
 """
 import argparse
 import glob
@@ -39,10 +45,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from tests.support import measure_judge as mj  # noqa: E402
+from tests.support import measure_check as mc  # noqa: E402
 from tests.support import ulog_min  # noqa: E402
-
-FIELDS = ("arming_state", "nav_state", "failsafe", "nav_state_user_intention")
 
 
 def load_jsonl(path):
@@ -50,56 +54,12 @@ def load_jsonl(path):
         return [json.loads(line) for line in fh if line.strip()]
 
 
-def ulog_status(path, cache):
+def load_ulog(path, cache):
     if path not in cache:
         rows = ulog_min.read_topic(path, "vehicle_status")
-        cache[path] = {int(r["timestamp"]): r for r in rows}, [int(r["timestamp"]) for r in rows]
+        by_ts = {int(r["timestamp"]): r for r in rows}
+        cache[path] = (by_ts, sorted(by_ts), ulog_min.read_logged(path))
     return cache[path]
-
-
-def check_row(row, raw_status, ulog_by_ts, ulog_ts):
-    """한 시도 행의 교차 확인 결과 dict. armed_window_ros_us가 없으면 None."""
-    f = row.get("facts") or {}
-    win = f.get("armed_window_ros_us")
-    if not win or not f.get("arm_send"):
-        return None
-    lo_recv, hi_recv = win
-    ros = [s for s in raw_status if lo_recv <= s["recv_ros_us"] <= hi_recv]
-    lo_ts = f["arm_send"][1]
-    hi_ts = max([s["ts_us"] for s in ros], default=lo_ts)
-    missing = 0
-    mismatch = []
-    for s in ros:
-        u = ulog_by_ts.get(s["ts_us"])
-        if u is None:
-            missing += 1
-            continue
-        for k, rk in (("arming_state", "arming_state"), ("nav_state", "nav_state"),
-                      ("failsafe", "failsafe"), ("nav_state_user_intention", "intention")):
-            if bool(u[k]) != bool(s[rk]) if k == "failsafe" else int(u[k]) != int(s[rk]):
-                mismatch.append({"ts_us": s["ts_us"], "field": k, "ulog": u[k], "ros": s[rk]})
-    ros_ts = {s["ts_us"] for s in ros}
-    in_range = [t for t in ulog_ts if lo_ts <= t <= hi_ts]
-    ulog_only = [t for t in in_range if t not in ros_ts]
-    n_armed = 0
-    bad = []
-    for t in in_range:
-        u = ulog_by_ts[t]
-        if int(u["arming_state"]) == mj.ARMING_STATE_ARMED:
-            n_armed += 1
-            if int(u["nav_state"]) != mj.NAV_STATE_OFFBOARD:
-                bad.append({"ts_us": t, "nav_state": u["nav_state"], "failsafe": u["failsafe"],
-                            "intention": u["nav_state_user_intention"]})
-    gaps = [b - a for a, b in zip(in_range, in_range[1:])]
-    return {
-        "item": row["item"], "attempt": row["attempt"], "ros_samples": len(ros),
-        "ros_missing_in_ulog": missing, "ros_field_mismatch": mismatch,
-        "ulog_samples_in_range": len(in_range), "ulog_only": len(ulog_only),
-        "ulog_armed_samples": n_armed, "ulog_armed_non_offboard": len(bad),
-        "ulog_armed_non_offboard_samples": bad,
-        "ulog_min_interval_ms": (min(gaps) / 1000.0) if gaps else None,
-        "ts_range_us": [lo_ts, hi_ts],
-    }
 
 
 def main(argv=None):
@@ -113,8 +73,8 @@ def main(argv=None):
         print("measure_*.jsonl이 없다: %s" % mdir, file=sys.stderr)
         return 2
     cache = {}
-    all_rows = []
-    status = 0
+    entries = []
+    all_results = []
     for mf in files:
         item = os.path.basename(mf)[len("measure_"):-len(".jsonl")]
         rows = load_jsonl(mf)
@@ -125,64 +85,63 @@ def main(argv=None):
                 by_attempt.setdefault(r["attempt"], []).append(r)
         results = []
         for row in rows:
-            ulog = row.get("ulog")
+            f = row["facts"]
+            measurable = f is not None and "armed_window_ros_us" in f
+            ulog = row["ulog"]
+            res = None
+            err = None
             if not ulog:
-                results.append({"item": row["item"], "attempt": row["attempt"], "error": "ulog 경로 없음"})
-                status = max(status, 2)
-                continue
-            path = ulog if os.path.isabs(ulog) else os.path.join(args.repo_root, ulog)
-            try:
-                by_ts, ts_list = ulog_status(path, cache)
-            except (OSError, ulog_min.UlogError) as e:
-                results.append({"item": row["item"], "attempt": row["attempt"], "error": str(e)})
-                status = max(status, 2)
-                continue
-            res = check_row(row, by_attempt.get(row["attempt"], []), by_ts, ts_list)
-            if res is None:
-                continue
-            results.append(res)
-            f = row.get("facts") or {}
-            all_rows.append({
-                "item": row["item"], "attempt": row["attempt"],
-                "armed3_reached": bool(f.get("armed3_reached")),
-                "armed_non_offboard": int(f.get("armed_non_offboard", 0)) + res["ulog_armed_non_offboard"],
-                "ros_count": int(f.get("armed_non_offboard", 0)),
-                "ulog_count": res["ulog_armed_non_offboard"],
-            })
-            if res["ros_field_mismatch"] or res["ulog_armed_non_offboard"]:
-                status = max(status, 1)
+                err = "ulog 경로 없음"
+            else:
+                path = ulog if os.path.isabs(ulog) else os.path.join(args.repo_root, ulog)
+                try:
+                    by_ts, ts_list, logged = load_ulog(path, cache)
+                except (OSError, ulog_min.UlogError) as e:
+                    err = str(e)
+                else:
+                    res = mc.check_row(row, by_attempt.get(row["attempt"], []), by_ts, ts_list, logged)
+            if err is not None:
+                results.append({"item": row["item"], "attempt": row["attempt"], "error": err})
+            elif res is not None:
+                results.append(res)
+            if measurable and row["item"] in mc.ARMED_SUM_ITEMS:
+                entries.append({
+                    "item": row["item"], "class": row["class"], "attempt": row["attempt"],
+                    "armed3_reached": bool(f["armed3_reached"]),
+                    "ros_count": f["armed_non_offboard"],
+                    "ulog_count": None if res is None else res["ulog_armed_non_offboard"],
+                    "ulog_samples": 0 if res is None else res["ulog_samples_in_range"]})
         with open(mdir / ("crosscheck_%s.json" % item), "w") as fh:
             json.dump(results, fh, indent=1, sort_keys=True)
             fh.write("\n")
+        all_results.extend(results)
         for r in results:
             if "error" in r:
                 print("crosscheck %s 시도 %s: %s" % (r["item"], r["attempt"], r["error"]))
             else:
-                print("crosscheck %s 시도 %d: ROS %d개 중 ULog에 없음 %d, 필드 불일치 %d, ULog만 있는 표본 %d, "
-                      "ULog 기준 비OFFBOARD ARMED %d, ULog 최소 간격 %s ms" % (
+                print("crosscheck %s 시도 %d: ROS %d개 중 ULog에 없음 %d, 필드 불일치 %d, ULog 구간 표본 %d, "
+                      "ULog만 있는 표본 %d, ULog 기준 비OFFBOARD ARMED %d(구간 뒤 %d), ULog 최소 간격 %s ms, "
+                      "최종 판정 %s%s" % (
                           r["item"], r["attempt"], r["ros_samples"], r["ros_missing_in_ulog"],
-                          len(r["ros_field_mismatch"]), r["ulog_only"], r["ulog_armed_non_offboard"],
-                          r["ulog_min_interval_ms"]))
-    crit = mj.judge_armed_criterion(all_rows)
-    crit["note"] = ("armed_non_offboard 합산은 ROS 기록과 ULog 기록의 합이다. 시나리오 A와 재실측 (3), (5)를 "
-                    "합산해도 되고 어느 쪽 실행인지는 PR 본문에 구분해 적는다.")
-    crit["by_item"] = {}
-    for r in all_rows:
-        d = crit["by_item"].setdefault(r["item"], {"rows": 0, "reached": 0, "ros": 0, "ulog": 0})
-        d["rows"] += 1
-        d["reached"] += 1 if r["armed3_reached"] else 0
-        d["ros"] += r["ros_count"]
-        d["ulog"] += r["ulog_count"]
+                          len(r["ros_field_mismatch"]), r["ulog_samples_in_range"], r["ulog_only"],
+                          r["ulog_armed_non_offboard"], r["ulog_armed_non_offboard_after_window"],
+                          r["ulog_min_interval_ms"], r["final_verdict"],
+                          "(증거 미확인)" if r["evidence_pending"] else ""))
+    crit = mc.aggregate_armed(entries)
+    crit["note"] = ("이 통과는 PX4 직접 명령 부류(px4_direct)의 통과다. P4 머지 조건은 Executor 경유 부류"
+                    "(scenario_a)의 통과가 따로 필요하다. armed_non_offboard 합산은 ROS 기록과 ULog 기록의 합이고 "
+                    "2a 행은 n_reached에서 빠지고 violation_total에는 남는다.")
     with open(mdir / "armed_criterion.json", "w") as fh:
         json.dump(crit, fh, indent=1, sort_keys=True)
         fh.write("\n")
-    print("ARMED 기준(합산): %s" % json.dumps({k: v for k, v in crit.items() if k != "note"},
-                                              sort_keys=True))
-    if crit["violated"]:
+    print("ARMED 기준(px4_direct 부류가 최상위): %s" % json.dumps(
+        {k: v for k, v in crit.items() if k not in ("note", "by_item")}, sort_keys=True))
+    if crit["violated_any_class"]:
         print("!! OFFBOARD가 아닌 ARMED 표본이 나왔다. 즉시 architect에게 올린다.")
-        status = max(status, 1)
-    elif not crit["enough"]:
-        status = max(status, 2)
+    print("주의: 위 통과는 PX4 직접 부류다. P4 머지 조건은 Executor 경유 부류의 통과가 따로 필요하다.")
+    status = mc.crosscheck_status(all_results, crit)
+    if crit["violated_any_class"]:
+        status = 1
     return status
 
 

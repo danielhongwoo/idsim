@@ -68,8 +68,19 @@ def test_trailing_padding_is_not_in_file(tmp_path):
     fmt = b"t:uint64_t timestamp;uint8_t a;uint8_t[3] _padding0;"
     out = b"ULog\x01\x12\x35" + b"\x01" + struct.pack("<Q", 0) + msg(0x42, b"\x00" * 40)
     out += msg(0x46, fmt) + msg(0x41, struct.pack("<BH", 0, 1) + b"t")
-    out += msg(0x44, struct.pack("<H", 1) + struct.pack("<QB", 7, 9))     # 패딩 3바이트 없음
+    out += msg(0x44, struct.pack("<H", 1) + struct.pack("<QB", 7, 9))     # padding 3바이트 없음
     p = tmp_path / "d.ulg"
     p.write_bytes(out)
     rows = ulog_min.read_topic(str(p), "t")
     assert rows[0]["timestamp"] == 7 and rows[0]["a"] == 9
+
+
+def test_read_logged_messages_l_and_c(tmp_path):
+    out = b"ULog\x01\x12\x35" + b"\x01" + struct.pack("<Q", 0) + msg(0x42, b"\x00" * 40)
+    out += msg(0x4C, struct.pack("<BQ", 0x36, 1234) + b"[commander] Armed by external command")
+    out += msg(0x43, struct.pack("<H", 7) + struct.pack("<BQ", 0x34, 99) + b"tagged text")
+    p = tmp_path / "e.ulg"
+    p.write_bytes(out)
+    rows = ulog_min.read_logged(str(p))
+    assert rows[0] == {"level": 6, "ts": 1234, "msg": "[commander] Armed by external command"}
+    assert rows[1]["ts"] == 99 and rows[1]["msg"] == "tagged text"
