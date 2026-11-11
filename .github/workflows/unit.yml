@@ -1,16 +1,19 @@
 # unit: ros-ws 이미지 안에서 ROS 2 패키지를 빌드하고 GoogleTest/ament_lint 테스트와 clang-tidy를 돌린다.
 # 실제 단계는 tools/ros_ws.sh ci 한 곳에 있고 로컬에서도 같은 명령을 쓴다.
 #
-# ros-ws 이미지는 build 워크플로가 main에서 GHCR에 올린 <REGISTRY>/ros-ws:<key>를 받는다. key가 없으면
-# (Dockerfile.ros-ws나 versions.env를 바꾸는 PR, 또는 패키지가 비공개라 받지 못하는 경우) 러너에서
+# ros-ws 이미지는 build workflow가 main에서 GHCR에 올린 <REGISTRY>/ros-ws:<key>를 받는다. key가 없으면
+# (Dockerfile.ros-ws나 versions.env를 바꾸는 PR, 또는 패키지가 비공개라 받지 못하는 경우) runner에서
 # tools/ci/build_images.py --mode load ros-ws 로 직접 빌드한다. 이 분기는 ros-base부터 다시 빌드한다.
 #
 # 단계별 시간은 GITHUB_STEP_SUMMARY의 표로 남는다(이미지 확보 단계와 tools/ros_ws.sh의 build, test, tidy).
-# 트리거와 concurrency는 lint 워크플로와 같다(push와 pull_request 이중 실행 정리는 lint와 함께 별도 항목).
+# trigger와 concurrency는 lint workflow와 같다(pull_request + push: main. PR의 옛 실행은 취소).
+# 대가: base와 충돌이 있는 PR에서는 pull_request 실행이 돌지 않는다. key는 PR merge commit 기준이고
+# re-run은 처음 merge SHA를 쓰므로 main의 새 key 반영에는 새 push가 필요하다.
 name: unit
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -18,8 +21,9 @@ permissions:
   packages: read
 
 concurrency:
-  group: unit-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  # PR: 같은 ref면 옛 실행 취소. main: 실행마다 group이 달라 대기 중 실행도 취소되지 않는다(push마다 결과가 남는다).
+  group: unit-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   unit:
@@ -55,7 +59,7 @@ jobs:
             echo "ros-ws ${KEY_ROS_WS}: pull"
           else
             echo "pulled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=unit::레지스트리에 ros-ws ${KEY_ROS_WS}가 없어 러너에서 빌드한다"
+            echo "::notice title=unit::레지스트리에 ros-ws ${KEY_ROS_WS}가 없어 runner에서 빌드한다"
           fi
           t1=$(date +%s)
           {
@@ -71,7 +75,7 @@ jobs:
       - name: build ros-ws image (no key in registry)
         if: steps.pull.outputs.pulled != 'true'
         env:
-          # build-images.yml과 같은 이유로 러너(미국)는 우분투 기본 미러를 쓴다. 미러는 이미지 key에 들어가지 않는다.
+          # build-images.yml과 같은 이유로 runner(미국)는 우분투 기본 미러를 쓴다. 미러는 이미지 key에 들어가지 않는다.
           UBUNTU_APT_MIRROR: http://archive.ubuntu.com/ubuntu
         run: |
           t0=$(date +%s)
