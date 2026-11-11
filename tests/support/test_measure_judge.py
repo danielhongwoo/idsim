@@ -925,3 +925,13 @@ def test_median_z_too_few_samples_is_none():
     assert mj.median_z(pos, 1100 * 1000, 1.0, 5) == (None, 4)
     assert mj.median_z([], 1000, 1.0, 5) == (None, 0)
     assert mj.median_z(pos, 1100 * 1000, 1.0, 4)[0] == 0.0
+
+
+def test_judge_3_landed_at_cancel_none_is_inconclusive_not_window_missed():
+    v = mj.judge_attempt("3", dict(good3(), landed_at_cancel=None, height_at_cancel_m=None))
+    assert v.verdict == "INCONCLUSIVE" and "landed 표본이 없어" in v.reasons[0]
+    v = mj.judge_attempt("3", dict(hold3(), landed_at_cancel=None, height_at_cancel_m=None))
+    assert v.verdict == "INCONCLUSIVE"
+    # 위반이 있으면 FAIL이 앞선다
+    assert mj.judge_attempt("3", dict(good3(), landed_at_cancel=None, climb_m=0.5)).verdict == "FAIL"
+    assert mj.judge_attempt("3", dict(good3(), landed_at_cancel=None, armed_non_offboard=1)).verdict == "FAIL"

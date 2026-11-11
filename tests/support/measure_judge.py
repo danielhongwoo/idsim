@@ -548,7 +548,7 @@ def judge_attempt(item, f):
 
     통과 기준(정본: decisions.md 넘김 목록의 px4-engineer 행)
       공통(3, 5, armed): OFFBOARD가 아닌 ARMED 표본이 0개(첫 Hold 전송 전까지). (2a)는 기록만 한다.
-      3은 취소 시점에 landed가 true였어야 한다. 아니면 창을 놓친 회지만 창과 무관한 기준(위 3, 5의 기준과
+      3은 취소 시점에 landed가 true였어야 한다(landed 표본이 없으면 None이라 INCONCLUSIVE). false면 창을 놓친 회지만 창과 무관한 기준(위 3, 5의 기준과
           Hold 종료의 60 s 관찰)은 전부 적용하고, 위반이 있으면 FAIL, 관찰 표본이 모자라면 INCONCLUSIVE,
           모두 만족하면 WINDOW_MISSED(유효 시도에도 not-pass에도 넣지 않는다)
       2a: Hold(AUTO_LOITER 3회 연속)를 관측, 정리 총 소요 9 s 미만
@@ -590,8 +590,14 @@ def judge_attempt(item, f):
     # 창을 놓친 회((3)에서 취소 시점에 landed가 이미 false)는 자극이 성립하지 않은 회라 유효 시도에도
     # not-pass에도 넣지 않는다. 그러나 창과 무관한 기준은 전부 적용한다. 순서: 기준 위반이 하나라도 있으면
     # FAIL -> 위반이 없고 Hold로 끝났는데 관찰 표본이 하한 미달이거나 값이 없으면 INCONCLUSIVE ->
-    # 아니면 WINDOW_MISSED. DISARMED 종료는 요구하지 않는다(Hold 종료나 지상 종료 모두 가능).
-    missed = item == "3" and not f["landed_at_cancel"]
+    # 아니면 WINDOW_MISSED. Hold 종료도 허용한다(지상에서 끝나면 끝난 뒤 ARMED 없음과 마지막 DISARMED여야 한다).
+    # 취소 시점의 landed 표본이 없으면(landed_at_cancel None) 창을 놓쳤는지 알 수 없으므로 PASS도
+    # WINDOW_MISSED도 아니고 위반이 없으면 INCONCLUSIVE다.
+    missed = item == "3" and f["landed_at_cancel"] is False
+    unknown = item == "3" and f["landed_at_cancel"] is None
+
+    def unknown_verdict():
+        return Verdict(False, "INCONCLUSIVE", ["취소 시점의 landed 표본이 없어 창 안인지 알 수 없음"])
 
     def missed_verdict():
         how = "Hold" if f["end_reason"] == "HOLD" else "지상 %s" % f["end_reason"]
@@ -644,6 +650,8 @@ def judge_attempt(item, f):
                 return Verdict(False, "INCONCLUSIVE", [prob])
             if missed:
                 return missed_verdict()
+            if unknown:
+                return unknown_verdict()
             return Verdict(False, "HOLD_END", ["Hold로 끝남(전이 표에 있는 종료). 60 s 동안 M3의 상태를 유지"])
         need(f["end_reason"] == "DISARMED",
              "DISARMED 3회 미확인(end_reason=%s)" % f["end_reason"])
@@ -656,6 +664,8 @@ def judge_attempt(item, f):
         v = fin()
         if missed and v.verdict == "PASS":
             return missed_verdict()
+        if unknown and v.verdict == "PASS":
+            return unknown_verdict()
         return v
     if item == "armed":
         need(f["armed3_reached"], "ARMED 3회 확인에 도달하지 못함")
