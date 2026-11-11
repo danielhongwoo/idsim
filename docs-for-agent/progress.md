@@ -21,7 +21,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 | 3 `config/fleet.yaml`과 `tools/gen_compose.py` | 완료 |
 | 4 `idsim_common` | 완료 |
 | 5 `idsim_interfaces` | 완료. 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md` |
-| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0(CI trigger), P1(ros-ws 이미지의 foxglove_bridge), P2(`idsim_common` 추가), P3a(런타임 확인)는 완료. P3(`idsim_mission` 패키지)는 구현과 담당자 승인, reviewer 검토, CI가 끝나 PR #27로 머지를 기다린다(승인 내역과 넘기는 항목은 PR #27 본문). P4(생성기, 통합 테스트, `sitl` job, 문서)와 P5(viz)는 시작 전 |
+| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0(CI trigger), P1(ros-ws 이미지의 foxglove_bridge), P2(`idsim_common` 추가), P3a(런타임 확인)는 완료. P3(`idsim_mission` 패키지)도 완료(승인 내역과 넘기는 항목은 PR #27 본문). `decisions.md`는 지금 유효한 계약만 담은 한 판이고 P4 착수 전 설계 토론의 결정(P6의 ARMED 관측 뒤 감시, 정리의 상한)이 들어 있다. P4(그 결정의 core 구현, 생성기, 통합 테스트, `sitl` job, 문서)와 P5(viz)는 시작 전 |
 | 7 `docs/interface.md` | 시작 전 |
 
 환경.
@@ -53,25 +53,13 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. PR #27(P3) 머지. 머지되면 위 표의 P3를 완료로 고친다.
-2. `plan-1a-6-idsim-mission/decisions.md`를 지금 유효한 계약만 담은 한 판으로 다시 쓴다(architect). 개정 절을 본문에 녹이고 다음을 반영한다. 근거는 PR #27 본문 "넘기는 것".
-   - 446행 근처: 식별 불일치로 끝나는 PREPARING 실패는 정리 분기를 고르지 않고, arm을 보냈으면 disarm을 한 번 보낸 뒤 확인 없이 끝낸다.
-   - M1, M2: 발행 시작(P3) 전의 식별 불일치는 NOT_READY, 그 뒤(P3-P6, 실행, 정리)는 INTERNAL. NOT_READY로 끝난 goal은 setpoint와 명령을 보내지 않았다.
-   - 545행 근처: LAND 확인 전 구간의 `mode_confirm_timeout`은 DISARMED 계수 중에도 흐른다.
-   - 553행 근처: 거부 ack는 ACCEPTED와 IN_PROGRESS가 아닌 것이다.
-   - 773행 근처: 정리 분기 교차표는 상태기 수준 원인 3 x snapshot 3(`CauseCrossTable`)과 고르기 순수 함수의 snapshot 5종(`test_confirm_rules.cpp`)이다.
-   - 615행 근처: 어댑터 단위 테스트는 필드 대응과 enum 매핑을 합성 값과 전 범위 순회로 검사한다. 실측 값과의 일치는 재실측 (2), (3), (5)와 P4 SITL 시나리오가 맡는다.
-   - C5: 정리 분기의 확인 대 타임아웃도 같은 tick이면 타임아웃이 이긴다(만료는 >=).
-   - 구현에서 정한 것 19건(패키지 `ros_ws/src/idsim_mission/README.md`) 중 계약으로 올릴 것: 9, 10, 11, 13, 19, 1과 2.
-3. P4의 선행 작업: 측정 스크립트를 `tests/sitl/measure/`에 만든다(test-engineer, 절차 승인 px4-engineer). px4-engineer의 필수 재실측 (2), (3), (5)는 P4 머지 조건이다(`plan-1a-6-idsim-mission/decisions.md` 넘김 목록). 재실측 (3)에는 arm 전송부터 ARMED 3회까지 모든 표본의 `nav_state`, `failsafe`를, (2)와 (3)에는 `landed` 전환 횟수와 간격을 함께 기록한다.
-4. P4 착수 전 설계 토론(architect 주재, px4-engineer, ros2-engineer). P4 머지 조건이다.
-   - P6에서 ARMED를 본 뒤 OFFBOARD가 아닌 표본을 보면 발행을 멈추고 끝낸다(방향은 정해졌다). reason과 "arm 전이 중 정상 경로에서 OFFBOARD가 아닌 표본이 나오는지"를 정한다.
-   - 정리 분기 전체의 상한(취소는 유한 시간 안에 끝난다). 상한값, 상한에서의 reason과 마지막 동작. 지금은 지상 분기와 공중 분기가 바뀔 때마다 분기 타이머가 다시 시작한다.
-5. P4 생성기와 통합(devops-engineer, test-engineer, architect의 문서 반영). `ops-N` 서비스, params와 `stack.json` key, `tests/sitl/`, CI `sitl` job, `build_images.py --mode pull`. 함께 할 것: `idsim_mission/config/ops.example.yaml`의 손으로 쓴 식별자를 지우거나 install에서 빼기, 노드 이름 기본값 `mission_executor`와 생성기의 대조, CI 첫 몇 회의 노드 테스트(`test_executor_node`) 소요 기록(벽시계 1 ms당 sim 2 ms라 runner가 느리면 LINK_LOST로 흔들릴 수 있다. 흔들리면 재시도나 상한 늘리기로 덮지 않는다).
-6. P5 viz(devops-engineer). `foxglove`와 `lichtblick` 서비스, 브라우저 실접속 확인.
-7. 6단계 마무리: 통합 테스트 로컬 3회 연속 통과, CI `sitl` 통과, 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인.
-8. 1a 7단계 `docs/interface.md`. ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 계약 고정 전에 px4-engineer의 나머지 필수 재실측이 끝나야 한다. 6단계에서 넘어온 것: reason별 ABORTED 뒤 기체 상태 표(INTERNAL은 지상 arm으로 남거나 이륙 램프 중이면 offboard 손실 Land, NOT_READY는 손대지 않음, LAND의 MODE_SWITCH_FAILED 뒤 지상 disarm일 수 있음), 아무것도 하지 않은 goal의 취소가 Hold나 disarm을 보내는 동작의 재검토(ops-service-engineer 포함. failsafe Land 중인 기체를 Hold로 세울 수 있다).
-9. CI 후속 PR. `Dockerfile.px4`의 pip 고정과 `PX4_OPTICAL_FLOW_REF` 반영, `ls | grep` 정리(px4-engineer). `Dockerfile.sim-base`의 `GZ_APT_KEY_FPR` 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 이미지 key 재료 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 key에서 뺀 것이 "같은 key는 같은 바이트"의 예외라는 점 포함). `image_keys.py`가 bake 블록의 tags와 공백까지 해시하는 것 정리(devops-engineer).
+1. P4의 선행 작업: 측정 스크립트를 `tests/sitl/measure/`에 만든다(test-engineer, 절차 승인 px4-engineer). px4-engineer의 필수 재실측 (2), (3), (5)는 P4 머지 조건이다. 항목별 기록 항목과 통과 기준(OFFBOARD가 아닌 ARMED 표본 0개, 정리의 총 소요 9 s 미만 등)은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록에 있다.
+2. P4의 core 변경(ros2-engineer 구현, px4-engineer 필수 승인. `decisions.md` 쟁점 3 M6과 쟁점 4, 담당자별 구현 지시). P6에서 ARMED를 처음 관측한 뒤의 감시 표 적용과 arm 재전송 중단, 감시 표로 끝낼 때의 disarm 1회, ARMED 관측 뒤의 확인 기한, 정리의 상한(`hold_confirm_timeout + 3 x mode_confirm_timeout`, 기본 12 s)과 상한 tick의 동작, Hold 실패 뒤 공중 재진입은 Land 경로, 단위 테스트, 패키지 `README.md` 갱신. `ExecuteMission.action`의 의미 주석은 이미 이 결정에 맞춰져 있다(golden 무변경).
+3. P4 생성기와 통합(devops-engineer, test-engineer, architect의 문서 반영). `ops-N` 서비스, params와 `stack.json` key, `tests/sitl/`, CI `sitl` job, `build_images.py --mode pull`. 함께 할 것: `idsim_mission/config/ops.example.yaml`의 손으로 쓴 식별자를 지우거나 install에서 빼기, 노드 이름 기본값 `mission_executor`와 생성기의 대조, CI 첫 몇 회의 노드 테스트(`test_executor_node`) 소요 기록(벽시계 1 ms당 sim 2 ms라 runner가 느리면 LINK_LOST로 흔들릴 수 있다. 흔들리면 재시도나 상한 늘리기로 덮지 않는다).
+4. P5 viz(devops-engineer). `foxglove`와 `lichtblick` 서비스, 브라우저 실접속 확인.
+5. 6단계 마무리: 통합 테스트 로컬 3회 연속 통과, CI `sitl` 통과, 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인.
+6. 1a 7단계 `docs/interface.md`. ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 계약 고정 전에 px4-engineer의 나머지 필수 재실측이 끝나야 한다. 6단계에서 넘어온 것은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록의 architect 7단계 행에 있다(reason별 ABORTED 뒤 기체 상태 표, 정리의 상한, 정리 중 failsafe인 기체에 Hold를 보낼지, 아무것도 하지 않은 goal의 취소 동작 재검토).
+7. CI 후속 PR. `Dockerfile.px4`의 pip 고정과 `PX4_OPTICAL_FLOW_REF` 반영, `ls | grep` 정리(px4-engineer). `Dockerfile.sim-base`의 `GZ_APT_KEY_FPR` 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 이미지 key 재료 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 key에서 뺀 것이 "같은 key는 같은 바이트"의 예외라는 점 포함). `image_keys.py`가 bake 블록의 tags와 공백까지 해시하는 것 정리(devops-engineer).
 
 ## 미해결 사항
 
@@ -82,11 +70,13 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 1a 6단계.
 
 - 감시 표의 행 순위는 필수 재실측 (4) 전까지 잠정이다. 필수 재실측 여덟 항목은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록에 있다.
+- `idsim_mission` 패키지의 소스 주석 일부가 `decisions.md`의 없어진 절 이름("px4-engineer 승인 반영", "담당자별 구현 지시", "C4", "C5" 등)을 가리킨다. P4의 core 변경 때 맞춘다(ros2-engineer. 목록은 `decisions.md` 담당자별 구현 지시).
+- `ExecuteMission.action`의 주석 가운데 정리의 상한, 첫 항목 전의 FAILSAFE 등, EXTERNAL_DISARM의 넓힌 범위는 P4의 core 변경이 들어가기 전까지 구현과 다르다.
 - 스모크 images 단계(`tests/smoke/run_smoke.sh`의 check_s0)가 `LLVM_MAJOR`와 `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다. `tools/ros_ws.sh`의 대조는 이미지에 있는 ENV만 돌아서 그 ENV가 없는 옛 ros-ws 이미지가 통과한다. 옛 `:local` 이미지로 `sim_stack.sh up --viz`를 하면 foxglove만 죽는다. P4 또는 P5 전에 images 단계에 넣는다(test-engineer). `ros_ws.sh`에 `versions.env`의 이름 기준 존재 검사를 둘지는 devops-engineer와 test-engineer가 정한다.
 - foxglove_bridge의 판은 `FOXGLOVE_BRIDGE_VERSION` 접두 단정까지만 고정된다. ROS sync로 새 판이 오면 ros-ws key가 바뀌는 PR의 빌드가 실패한다(의도한 동작). 같은 판 안의 revision과 의존 패키지는 고정되지 않는다.
 - Lichtblick 공식 이미지(1.30.0. 이미지 label의 2.5.2는 베이스 Caddy의 버전)가 두 서브프로토콜을 제시하는 것만 확인했다. foxglove_bridge와의 브라우저 실접속은 P5에서 확인한다.
 - `px4-api` 검사는 C++과 `.py`만 본다. params와 remap yaml이 생기는 P4에서 범위를 넓힌다.
-- PX4 timestamp와 `/clock`이 같은 축이라는 것의 회귀 판정은 6단계 failsafe 테스트까지 없다. 스모크 clock 단계에 `vehicle_status.timestamp`와 `/clock`의 차이 상한 판정을 넣을지 px4-engineer와 test-engineer가 검토한다.
+- PX4 timestamp와 `/clock`이 같은 축이라는 것의 회귀 판정은 P4의 SITL fixture 사전조건(`/clock` 정렬)과 시나리오 T가 생길 때까지 없다. 스모크 clock 단계에는 넣지 않는다(`decisions.md` 쟁점 9).
 - `artifacts/`를 CI job 아티팩트로 올리는 것은 `sitl` job을 만드는 P4에서 확인한다.
 
 1a 7단계(`docs/interface.md`)에 적을 것.
@@ -98,9 +88,10 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 빌드와 CI.
 
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
-- 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 9).
+- 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 7).
 - apt 미러: 지정 미러가 막히면 콜드 빌드가 실패한다. apt `Acquire::Retries` 미적용. CI에서는 Canonical 노드의 동기화 시차로 apt 단계가 간헐적으로 실패할 수 있다(대안: apt 단계 재시도, CI 미러 변경). GHCR 이미지를 받아 태그하는 `build_images.py --mode pull`은 P4에서 만든다.
 - `docker/Dockerfile.px4` 132행 주석이 없는 문서 이름 `smoke-test-phase1a.md`를 가리킨다. 주석만 고쳐도 px4 이미지 key가 바뀌므로 다음에 그 파일을 바꿀 때 `smoke-test.md`로 함께 고친다(px4-engineer).
+- `plan-1a-6-idsim-mission/decisions.md`에 옛 판에서 온 음차("헬퍼", "램프", "가드", "히스테리시스")가 남아 있다. 다음에 그 문서를 고칠 때 바꾼다(architect).
 - `.github/workflows/build.yml`, `build-images.yml`, `tools/ci/image_keys.py`, `tools/ci/build_images.py`에 음차("키", "잡")가 남아 있다. 다음에 고칠 때 바꾼다.
 - clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다(`src/`의 소스가 include하는 헤더만 검사된다). 헤더 전용 검사를 둘지, `test/`를 tidy 대상에 넣을지 정한다(ros2-engineer, devops-engineer).
 - `tools/ros_ws.sh tidy`는 대상이 0개이면 PASS-NO-TARGETS로 통과한다. `ci`에서는 경고나 실패로 바꿀지 검토한다(devops-engineer).
