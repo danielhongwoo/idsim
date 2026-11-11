@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 종료의 충돌 규칙(C5. decisions.md 쟁점 3): 먼저 정해진 것이 이기고, 같은 tick이면 ABORTED 사유,
-// 완료, 취소 순이다. 종료 뒤의 cancel과 표본은 결과를 바꾸지 않는다. 그리고 Px4Timestamp 공급
-// 실패(감시 표 순위 1 밖의 단계).
+// 종료의 충돌 규칙(decisions.md 쟁점 3 "종료의 충돌 규칙"): 먼저 정해진 것이 이기고, 같은
+// tick이면 ABORTED 사유, 완료, 취소 순이다. 종료 뒤의 cancel과 표본은 결과를 바꾸지 않는다.
+// 그리고 Px4Timestamp 공급 실패(감시 표 순위 1 밖의 단계).
 
 #include <gtest/gtest.h>
 
@@ -174,7 +174,7 @@ TEST(TimestampPort, FailureOnFinalDisarmDropsCommandKeepsResult)
 
 TEST(TimestampPort, DetailSaysStateUnknownAfterActing)
 {
-  // N3: 발행이나 명령을 한 뒤의 실패는 기체 상태를 모른다고 detail에 적는다.
+  // 발행이나 명령을 한 뒤의 실패는 기체 상태를 모른다고 detail에 적는다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
   h.clock.fail = true;

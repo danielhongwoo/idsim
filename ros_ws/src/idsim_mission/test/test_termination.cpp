@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // status와 reason의 전수 대응표, reason 값, 종료 결과 == 종료 사건.
-// 결정: decisions.md 담당자별 구현 지시(test-engineer, ros2-engineer).
+// 결정: decisions.md 쟁점 3 "종료의 충돌 규칙"(종료 사건은 정확히 1건)과 "계약과 golden"의
+// reason 상수.
 // core의 reason 값과 생성된 메시지 상수 값의 교차 검사는 노드 쪽 gtest(P3d)에 둔다.
 
 #include <gtest/gtest.h>

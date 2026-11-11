@@ -21,7 +21,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 | 3 `config/fleet.yaml`과 `tools/gen_compose.py` | 완료 |
 | 4 `idsim_common` | 완료 |
 | 5 `idsim_interfaces` | 완료. 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md` |
-| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0(CI trigger), P1(ros-ws 이미지의 foxglove_bridge), P2(`idsim_common` 추가), P3a(런타임 확인)는 완료. P3(`idsim_mission` 패키지)도 완료(승인 내역과 넘기는 항목은 PR #27 본문). `decisions.md`는 지금 유효한 계약만 담은 한 판이고 P4 착수 전 설계 토론의 결정(P6의 ARMED 관측 뒤 감시, 정리의 상한)이 들어 있다. P4(그 결정의 core 구현, 생성기, 통합 테스트, `sitl` job, 문서)와 P5(viz)는 시작 전 |
+| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0(CI trigger), P1(ros-ws 이미지의 foxglove_bridge), P2(`idsim_common` 추가), P3a(런타임 확인)는 완료. P3(`idsim_mission` 패키지)도 완료(승인 내역과 넘기는 항목은 PR #27 본문). `decisions.md`는 지금 유효한 계약만 담은 한 판이고 P4 착수 전 설계 토론의 결정(P6의 ARMED 관측 뒤 감시, 정리의 상한)이 들어 있다. P4의 core 변경(그 결정의 구현과 단위 테스트)은 구현이 끝났고 px4-engineer 필수 승인과 reviewer 검토를 받는다. P4의 나머지(생성기, 통합 테스트, `sitl` job, 문서)와 P5(viz)는 시작 전 |
 | 7 `docs/interface.md` | 시작 전 |
 
 환경.
@@ -54,7 +54,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 ## 다음 작업
 
 1. P4의 선행 작업: 측정 스크립트를 `tests/sitl/measure/`에 만든다(test-engineer, 절차 승인 px4-engineer). px4-engineer의 필수 재실측 (2), (3), (5)는 P4 머지 조건이다. 항목별 기록 항목과 통과 기준(OFFBOARD가 아닌 ARMED 표본 0개, 정리의 총 소요 9 s 미만 등)은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록에 있다.
-2. P4의 core 변경(ros2-engineer 구현, px4-engineer 필수 승인. `decisions.md` 쟁점 3 M6과 쟁점 4, 담당자별 구현 지시). P6에서 ARMED를 처음 관측한 뒤의 감시 표 적용과 arm 재전송 중단, 감시 표로 끝낼 때의 disarm 1회, ARMED 관측 뒤의 확인 기한, 정리의 상한(`hold_confirm_timeout + 3 x mode_confirm_timeout`, 기본 12 s)과 상한 tick의 동작, Hold 실패 뒤 공중 재진입은 Land 경로, 단위 테스트, 패키지 `README.md` 갱신. `ExecuteMission.action`의 의미 주석은 이미 이 결정에 맞춰져 있다(golden 무변경).
+2. P4의 core 변경 검토(px4-engineer 필수 승인, reviewer 검토). 구현은 브랜치 `feat/1a-6-p4-core`에 있다(P6의 첫 ARMED 표본 뒤 감시 표와 arm 재전송 중단과 확인 기한, 감시 표로 끝낼 때의 disarm 1회, 정리의 상한과 상한 tick의 동작, Hold 실패 뒤 공중 재진입, 단위 테스트, 패키지 `README.md`). 구현에서 정한 것은 패키지 `README.md` "표에 없어 구현에서 정한 것"에 있다. px4-engineer의 필수 재실측 (2), (3), (5)는 머지 조건이다(다음 작업 1).
 3. P4 생성기와 통합(devops-engineer, test-engineer, architect의 문서 반영). `ops-N` 서비스, params와 `stack.json` key, `tests/sitl/`, CI `sitl` job, `build_images.py --mode pull`. 함께 할 것: `idsim_mission/config/ops.example.yaml`의 손으로 쓴 식별자를 지우거나 install에서 빼기, 노드 이름 기본값 `mission_executor`와 생성기의 대조, CI 첫 몇 회의 노드 테스트(`test_executor_node`) 소요 기록(벽시계 1 ms당 sim 2 ms라 runner가 느리면 LINK_LOST로 흔들릴 수 있다. 흔들리면 재시도나 상한 늘리기로 덮지 않는다).
 4. P5 viz(devops-engineer). `foxglove`와 `lichtblick` 서비스, 브라우저 실접속 확인.
 5. 6단계 마무리: 통합 테스트 로컬 3회 연속 통과, CI `sitl` 통과, 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인.
@@ -70,8 +70,6 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 1a 6단계.
 
 - 감시 표의 행 순위는 필수 재실측 (4) 전까지 잠정이다. 필수 재실측 여덟 항목은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록에 있다.
-- `idsim_mission` 패키지의 소스 주석 일부가 `decisions.md`의 없어진 절 이름("px4-engineer 승인 반영", "담당자별 구현 지시", "C4", "C5" 등)을 가리킨다. P4의 core 변경 때 맞춘다(ros2-engineer. 목록은 `decisions.md` 담당자별 구현 지시).
-- `ExecuteMission.action`의 주석 가운데 정리의 상한, 첫 항목 전의 FAILSAFE 등, EXTERNAL_DISARM의 넓힌 범위는 P4의 core 변경이 들어가기 전까지 구현과 다르다.
 - 스모크 images 단계(`tests/smoke/run_smoke.sh`의 check_s0)가 `LLVM_MAJOR`와 `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다. `tools/ros_ws.sh`의 대조는 이미지에 있는 ENV만 돌아서 그 ENV가 없는 옛 ros-ws 이미지가 통과한다. 옛 `:local` 이미지로 `sim_stack.sh up --viz`를 하면 foxglove만 죽는다. P4 또는 P5 전에 images 단계에 넣는다(test-engineer). `ros_ws.sh`에 `versions.env`의 이름 기준 존재 검사를 둘지는 devops-engineer와 test-engineer가 정한다.
 - foxglove_bridge의 판은 `FOXGLOVE_BRIDGE_VERSION` 접두 단정까지만 고정된다. ROS sync로 새 판이 오면 ros-ws key가 바뀌는 PR의 빌드가 실패한다(의도한 동작). 같은 판 안의 revision과 의존 패키지는 고정되지 않는다.
 - Lichtblick 공식 이미지(1.30.0. 이미지 label의 2.5.2는 베이스 Caddy의 버전)가 두 서브프로토콜을 제시하는 것만 확인했다. foxglove_bridge와의 브라우저 실접속은 P5에서 확인한다.

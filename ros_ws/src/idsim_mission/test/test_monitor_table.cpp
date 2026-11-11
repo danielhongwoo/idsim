@@ -17,6 +17,7 @@
 // - 같은 tick 동률: 동시에 맞을 수 있는 행 쌍 전부(1-3은 서로와 모든 행, 4-5끼리와 6-8끼리는 배타).
 // - 순위 5의 failsafe 가지와 nav_state를 보지 않는다는 것.
 // - OFFBOARD이고 ARMED인 채 failsafe가 true인 표본은 어느 행에도 맞지 않는다.
+// - 감시 표로 끝낼 때의 disarm 1회 술어(8행 전수 x 입력 조합 전수).
 // 상태기 안에서의 같은 판정(엇갈림, 이력의 항목 경계)은 test_runner_items.cpp에 있다.
 
 #include <gtest/gtest.h>
@@ -184,7 +185,7 @@ TEST(MonitorTable, MissingStatusIsLinkLost)
 TEST(MonitorTable, OffboardArmedFailsafeEndsNothing)
 {
   // 방어 경로(합성 표본): PX4 v1.17.0에서 OFFBOARD이고 ARMED인 채 failsafe가 true인 표본은 나오지
-  // 않는다. 나와도 goal을 끝내지 않는다(decisions.md "확인 예정의 처리", px4 확인 2번).
+  // 않는다. 나와도 goal을 끝내지 않는다(decisions.md 쟁점 4 "비행 중 감시" 표 아래 문단).
   Probe p;
   p.status.failsafe = true;
   EXPECT_FALSE(evaluate_monitor(p.get()).has_value());
@@ -316,6 +317,68 @@ TEST(MonitorRank5, NavStateOfThisSampleIsNotRead)
       ASSERT_TRUE(verdict.has_value());
       EXPECT_EQ(verdict->row, MonitorRow::kDisarmedOnGround);
       EXPECT_EQ(verdict->reason, Reason::kExternalDisarm);
+    }
+  }
+}
+
+// ---- 감시 표로 끝낼 때의 disarm 1회(decisions.md 쟁점 4 표 아래 "지상 disarm 1회") ----
+
+struct DisarmRuleCase
+{
+  MonitorRow row;
+  MonitorDisarm rule;
+};
+
+const std::vector<DisarmRuleCase> & disarm_rule_table()
+{
+  // 순위 1, 4, 5는 보내지 않는다. 순위 2는 arm을 보냈으면 조건 없이, 순위 3, 6, 7, 8은 조건 셋.
+  static const std::vector<DisarmRuleCase> table = {
+    {MonitorRow::kTimestampFailure, MonitorDisarm::kNever},
+    {MonitorRow::kIdentityMismatch, MonitorDisarm::kIfArmSent},
+    {MonitorRow::kLinkLost, MonitorDisarm::kIfNeverAirborne},
+    {MonitorRow::kDisarmedInAir, MonitorDisarm::kNever},
+    {MonitorRow::kDisarmedOnGround, MonitorDisarm::kNever},
+    {MonitorRow::kModeFailsafe, MonitorDisarm::kIfNeverAirborne},
+    {MonitorRow::kModeExternal, MonitorDisarm::kIfNeverAirborne},
+    {MonitorRow::kModeDefensive, MonitorDisarm::kIfNeverAirborne},
+  };
+  return table;
+}
+
+TEST(MonitorDisarm, RuleOfEveryRow)
+{
+  ASSERT_EQ(disarm_rule_table().size(), kMonitorRankOrder.size());
+  for (std::size_t i = 0; i < kMonitorRankOrder.size(); ++i) {
+    EXPECT_EQ(disarm_rule_table()[i].row, kMonitorRankOrder[i]);
+    EXPECT_EQ(monitor_row_disarm(kMonitorRankOrder[i]), disarm_rule_table()[i].rule)
+      << monitor_row_name(kMonitorRankOrder[i]);
+  }
+}
+
+TEST(MonitorDisarm, PredicateOverAllInputs)
+{
+  // 8행 x 입력 16조합(arm_sent, landed_false_seen, landed_known, landed) 전수.
+  for (const DisarmRuleCase & c : disarm_rule_table()) {
+    for (int bits = 0; bits < 16; ++bits) {
+      MonitorDisarmInput in;
+      in.arm_sent = (bits & 1) != 0;
+      in.landed_false_seen = (bits & 2) != 0;
+      in.landed_known = (bits & 4) != 0;
+      in.landed = (bits & 8) != 0;
+      bool expected = false;
+      switch (c.rule) {
+        case MonitorDisarm::kNever:
+          expected = false;
+          break;
+        case MonitorDisarm::kIfArmSent:
+          expected = in.arm_sent;
+          break;
+        case MonitorDisarm::kIfNeverAirborne:
+          expected = in.arm_sent && !in.landed_false_seen && in.landed_known && in.landed;
+          break;
+      }
+      EXPECT_EQ(monitor_sends_disarm(c.row, in), expected)
+        << monitor_row_name(c.row) << " bits " << bits;
     }
   }
 }

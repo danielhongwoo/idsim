@@ -123,6 +123,9 @@ struct RunnerView
   DisarmClass disarm_class{DisarmClass::kUnknown};
   bool land_confirmed{false};
   bool failsafe_history{false};
+  bool armed_seen{false};         // P6에서 첫 ARMED 표본을 봤다
+  bool landed_false_seen{false};  // 첫 ARMED 표본 뒤에 landed false를 받은 적이 있다
+  bool hold_failed{false};        // 이 정리에서 Hold가 한 번 실패했다
 };
 
 class MissionRunner
@@ -182,6 +185,8 @@ private:
     kDisarmFailed,
     kLinkLost,
     kAirDisarm,
+    kCapGround,  // 정리의 상한에 지상에서 닿음(disarm 1회)
+    kCapAir,     // 정리의 상한에 공중에서 닿음(NAV_LAND 1회)
   };
 
   // 단계별 처리
@@ -190,6 +195,10 @@ private:
   void prepare_signal(Tick & t);
   void prepare_offboard(Tick & t);
   void prepare_arm(Tick & t);
+  void prepare_arm_before_armed(Tick & t);
+  bool monitor_flight(Tick & t, const std::string & label);
+  const StatusSample * monitored_status(const Tick & t);
+  void end_by_monitor(Tick & t, const MonitorVerdict & verdict, const std::string & label);
   void start_signal(Tick & t);
   void start_item(Tick & t, std::uint32_t index);
   void complete_item(Tick & t);
@@ -199,6 +208,8 @@ private:
   void land_item_timeout(Tick & t, bool landed);
   void begin_cleanup(Tick & t, CleanupCause cause, Reason reason, std::string detail);
   void step_cleanup(Tick & t);
+  bool cleanup_cap_reached(const Tick & t) const;
+  void end_at_cleanup_cap(Tick & t, bool on_ground);
   void cleanup_with_untrusted_sample(Tick & t);
   void enter_ground(Tick & t);
   void run_ground(Tick & t);
@@ -239,7 +250,16 @@ private:
   std::int64_t step_start_ns_{0};  // P5, P6 시작
   std::uint64_t last_ack_tick_{0};
   std::int64_t branch_first_ns_{0};  // 정리 분기의 첫 명령 시각
-  SampleCounter counter_;            // OFFBOARD, ARMED, AUTO_LOITER 확인
+  std::int64_t cleanup_start_ns_{0};  // 정리를 시작한 tick의 ROS 시각(정리의 상한 M6의 기준)
+  std::uint64_t arm_first_tick_{0};  // P6에서 arm을 처음 보낸 tick
+  std::int64_t first_armed_ns_{0};  // 첫 ARMED 표본을 본 tick의 ROS 시각(P6 확인 기한의 기준)
+  std::uint64_t first_armed_tick_{0};
+  std::uint64_t first_armed_timestamp_us_{0};  // 이보다 작은 timestamp의 표본은 판정에 쓰지 않는다
+  // failsafe 이력(감시 표 순위 5)에 넣는 표본은 received_tick이 이 값보다 큰 것이다. P6과 TAKEOFF는
+  // 한 구간(첫 ARMED 표본 포함)이고 그 뒤 항목은 항목이 시작된 뒤에 받은 표본부터다.
+  std::uint64_t history_after_tick_{0};
+  std::optional<StatusSample> trusted_status_;  // 감시 구간에서 판정에 쓰는 최신 vehicle_status
+  SampleCounter counter_;                       // OFFBOARD, ARMED, AUTO_LOITER 확인
   std::string cleanup_detail_;
   std::string land_path_why_;
   SetpointOut setpoint_;
@@ -259,6 +279,10 @@ private:
   bool publishing_{false};
   bool arm_sent_{false};
   bool failsafe_history_{false};
+  bool armed_seen_{false};
+  bool landed_false_seen_{false};
+  bool hold_failed_{false};
+  bool hold_observed_{false};  // 정리 중 AUTO_LOITER 표본을 본 적이 있다
   DisarmClass disarm_class_{DisarmClass::kUnknown};
   CleanupCause cause_{CleanupCause::kCancel};
   Reason cleanup_reason_{Reason::kNone};
