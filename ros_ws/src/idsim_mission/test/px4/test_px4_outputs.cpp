@@ -90,10 +90,7 @@ SetpointOut setpoint(SetpointKind kind, double x, double y, double z, double yaw
   return sp;
 }
 
-bool same_float(double a, double b)
-{
-  return (std::isnan(a) && std::isnan(b)) || a == b;
-}
+bool same_float(double a, double b) { return (std::isnan(a) && std::isnan(b)) || a == b; }
 
 // VehicleCommand의 모든 필드를 NaN을 같게 보고 비교한다(land의 param4-7이 NaN이라 ==를 못 쓴다).
 void expect_same_command(const VehicleCommand & a, const VehicleCommand & b)
@@ -117,10 +114,7 @@ void expect_same_command(const VehicleCommand & a, const VehicleCommand & b)
 
 // ---- 지상 오프셋 ----
 
-TEST(Px4Outputs, GroundOffsetConstant)
-{
-  EXPECT_DOUBLE_EQ(kGroundSetpointOffsetDownM, 0.5);
-}
+TEST(Px4Outputs, GroundOffsetConstant) { EXPECT_DOUBLE_EQ(kGroundSetpointOffsetDownM, 0.5); }
 
 TEST(Px4Outputs, GroundOffsetOnlyForGroundKind)
 {
@@ -153,9 +147,8 @@ TEST(Px4Outputs, GroundSetpointMessageCarriesOffset)
 
 TEST(Px4Outputs, TargetSetpointMessages)
 {
-  const auto msgs =
-    to_setpoint_messages(
-      setpoint(SetpointKind::kTarget, 1.0, 2.0, -5.0, -1.25), stamp_at(kStampUs));
+  const auto msgs = to_setpoint_messages(
+    setpoint(SetpointKind::kTarget, 1.0, 2.0, -5.0, -1.25), stamp_at(kStampUs));
   ASSERT_TRUE(msgs.has_value());
   const auto & mode = msgs->mode;
   EXPECT_EQ(mode.timestamp, kStampUs);

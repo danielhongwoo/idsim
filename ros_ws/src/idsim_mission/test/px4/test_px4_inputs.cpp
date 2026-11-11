@@ -193,15 +193,20 @@ TEST(Px4Inputs, AckCommandGroups)
     ack_command_from_px4(0x10000U + VehicleCommand::VEHICLE_CMD_NAV_LAND), AckCommand::kOther);
   EXPECT_EQ(ack_command_from_px4(std::numeric_limits<std::uint32_t>::max()), AckCommand::kOther);
   // 어댑터의 묶음이 core의 ack_command_of와 같다.
-  EXPECT_EQ(ack_command_from_px4(VehicleCommand::VEHICLE_CMD_DO_SET_MODE),
+  EXPECT_EQ(
+    ack_command_from_px4(VehicleCommand::VEHICLE_CMD_DO_SET_MODE),
     core::ack_command_of(core::CommandKind::kSetModeOffboard));
-  EXPECT_EQ(ack_command_from_px4(VehicleCommand::VEHICLE_CMD_DO_SET_MODE),
+  EXPECT_EQ(
+    ack_command_from_px4(VehicleCommand::VEHICLE_CMD_DO_SET_MODE),
     core::ack_command_of(core::CommandKind::kSetModeHold));
-  EXPECT_EQ(ack_command_from_px4(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM),
+  EXPECT_EQ(
+    ack_command_from_px4(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM),
     core::ack_command_of(core::CommandKind::kArm));
-  EXPECT_EQ(ack_command_from_px4(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM),
+  EXPECT_EQ(
+    ack_command_from_px4(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM),
     core::ack_command_of(core::CommandKind::kDisarm));
-  EXPECT_EQ(ack_command_from_px4(VehicleCommand::VEHICLE_CMD_NAV_LAND),
+  EXPECT_EQ(
+    ack_command_from_px4(VehicleCommand::VEHICLE_CMD_NAV_LAND),
     core::ack_command_of(core::CommandKind::kNavLand));
 }
 
@@ -247,20 +252,17 @@ TEST(Px4Inputs, AckForAnotherSenderIsDropped)
 
 // ---- failsafe_flags와 ekf_ready 술어 ----
 
-TEST(Px4Inputs, EkfReadyWhenFourInvalidFlagsAreFalse)
-{
-  EXPECT_TRUE(ekf_ready(ready_flags()));
-}
+TEST(Px4Inputs, EkfReadyWhenFourInvalidFlagsAreFalse) { EXPECT_TRUE(ekf_ready(ready_flags())); }
 
 TEST(Px4Inputs, EkfNotReadyWhenAnyOfFourIsTrue)
 {
-  bool FailsafeFlags::* const fields[] = {
+  bool FailsafeFlags::*const fields[] = {
     &FailsafeFlags::local_position_invalid,
     &FailsafeFlags::local_altitude_invalid,
     &FailsafeFlags::global_position_invalid,
     &FailsafeFlags::home_position_invalid,
   };
-  for (bool FailsafeFlags::* const field : fields) {
+  for (bool FailsafeFlags::*const field : fields) {
     FailsafeFlags flags = ready_flags();
     flags.*field = true;
     EXPECT_FALSE(ekf_ready(flags));
