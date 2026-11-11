@@ -10,7 +10,7 @@
 | 사용자 결정 | U1(D와 `[LAND]`를 1a 필수에), U2(`sitl`은 PR 머리 커밋마다와 main push, lint와 unit trigger 정리), U3(공중에서 끝나는 미션은 1b로) 확정. GHCR Public 확인만 남음 |
 | 소유 반영(`CLAUDE.md`, `.claude/agents/`) | 완료(사용자 승인 2026-11-11, 호출한 쪽이 반영). `file-ownership.md`는 계획 PR에서 호출한 쪽이 반영한다(문안은 `decisions.md` 문서 반영 목록) |
 | px4-engineer 승인 항목(P3b 착수 전) | 닫힘(2026-11-11). 승인 2건, 수정 조건부 3건, 반대 없음. 실측 run 20261111-030155-k5. `decisions.md`의 "px4-engineer 승인 반영"에 반영했다(PR #21 머지). P3b 착수 가능. 실측이 없는 두 경로와 감시 표의 행 순위는 표대로 구현하되 재실측으로 바뀔 수 있다 |
-| PR #21 reviewer 검증 | 조건부(필수 5건, 권고 6건). 후속 PR에서 반영: 상수 `REASON_EXTERNAL_DISARM = 14` 추가(golden은 두 파일에 두 줄씩), 감시 표의 행 순위(잠정), M3의 미확인 목록, 필수 재실측 다시 정함. 사용자 결정 U4(replay job trigger는 Phase 2에서), U5(px4 확인은 개정 뒤, sonnet으로). px4-engineer 확인 완료(`approval-px4-p3b-review.md`. 승인 3건, 수정 조건부 2건, 반대 없음)와 PR #23 reviewer 검증(조건부, 필수 3건)을 같은 PR에 반영했다. 필수 재실측 (2), (3), (5)는 P4 머지 조건 |
+| PR #21 reviewer 검증 | 조건부(필수 5건, 권고 6건). 후속 PR에서 반영: 상수 `REASON_EXTERNAL_DISARM = 14` 추가(golden은 두 파일에 두 줄씩), 감시 표의 행 순위(잠정), M3의 미확인 목록, 필수 재실측 다시 정함. 사용자 결정 U4(replay job trigger는 Phase 2에서), U5(px4 확인은 개정 뒤, sonnet으로). px4-engineer 확인 완료(`approval-px4-p3b-review.md`. 승인 3건, 수정 조건부 2건, 반대 없음)와 PR #23 reviewer 검증(조건부, 필수 3건)을 같은 PR에 반영했다. 필수 재실측 (2), (3), (5)는 P4 머지 조건. 이어서 쟁점 2 재결정에 대한 devops-engineer 의견과 reviewer 필수 3건, ros2-engineer의 timer 확인, test-engineer의 조건부 승인(C1-C6)을 반영했다. 남은 확인 예정은 px4-engineer 몫 하나(감시 표 순위 5의 이력 문장과 함께 묶은 문장들)다 |
 | P0 CI trigger 정리 | 완료(PR #19 머지 2026-11-11). lint와 unit이 `pull_request` + `push: main`에서 돈다 |
 | P1 ros-ws에 foxglove_bridge | 진행 중 |
 | P2 `idsim_common` 추가 | 진행 중 |
@@ -31,6 +31,7 @@
 | `approval-px4-p3b.md` | px4-engineer의 P3b 착수 전 승인 항목 다섯 검토(2026-11-11. 스택 5 실측 run 20261111-030155-k5, 타임아웃과 재전송 주기의 최종 값, 추가로 발견한 문제 다섯) | 근거 |
 | `opinion-ros2.md` | ros2-engineer 의견과 실측(스택 6. 패키지 구조, lifecycle, matched 판정, foxglove_bridge 파라미터) | 근거 |
 | `opinion-test.md` | test-engineer 의견(실측 없음. 통합 테스트 구조, 판정 코드, 시나리오) | 근거 |
+| `approval-test-p3.md` | test-engineer의 P3 단위 테스트 목록과 P4 실측 기록 확인(2026-11-11. 조건부 승인, 선결 C1-C6, 더할 테스트, 기록 형식) | 근거 |
 | `opinion-devops-selfstart.md` | devops-engineer의 쟁점 2 재결정 검토(2026-11-11. healthcheck 값과 실패 탐지 상한, `stop_signal`과 exit code, 다른 서비스의 `init`, 생성기 성질 테스트) | 근거 |
 | `opinion-devops.md` | devops-engineer 의견과 조회(생성기, 이미지, Lichtblick digest, `sitl` job) | 근거 |
 
@@ -98,7 +99,8 @@
   - CI `sitl` job이 통과하고 실패 때 아티팩트가 올라가는 것을 한 번 확인한다(일부러 실패시킨 실행 또는 첫 실패 실행).
   - `artifacts/runs/`에 호스트 사용자 소유가 아닌 파일이 없다.
   - 문서 반영 목록 반영(reviewer 확인).
-  - `ops-N`의 정지와 실패 탐지를 쟀다: stop 검증 10회(goal 실행 중 stop 3회 이상 포함. 유예 안 종료, 정리 로그, exit code 분포, 종료 사건 수신 여부), `vehicle.id`가 빠진 params의 결함 주입으로 unhealthy 보고까지의 시간(예상 약 54 s, 최악 70 s), CI 첫 3회의 probe 시간. 값이 `decisions.md` 쟁점 2와 다르면 architect에게 알린다.
+  - `ops-N`의 정지와 실패 탐지를 쟀다: stop 검증 10회(goal 실행 중 stop 4회 이상: PREPARING, TAKEOFF, LOITER, LAND 각 1회 이상. 유예 안 종료, 정리 로그, exit code 분포, 종료 사건 수신 여부), `vehicle.id`가 빠진 params의 결함 주입으로 unhealthy 보고까지의 시간(예상 약 54 s, 최악 70 s), CI 첫 3회의 probe 시간. 값이 `decisions.md` 쟁점 2와 다르면 architect에게 알린다. 기록은 시도마다 한 행이고 실패한 시도를 빼지 않는다. 10회 통과는 실패율 상한 약 26%를 뜻할 뿐이라고 요약에 적는다.
+  - 측정 스크립트가 `tests/sitl/measure/`에 있다(소유 test-engineer, 절차 승인 px4-engineer).
   - 생성기 성질 테스트 넷(상주 ros-ws 서비스의 `init: true`, `ops-N`의 `stop_signal`과 `stop_grace_period`, params에 `lifecycle.` key 없음, healthcheck FQN과 `executor_node` 일치)이 통과한다.
   - px4-engineer의 필수 재실측 (2), (3), (5)가 끝나 있고 결과가 `decisions.md`의 표와 맞다(다르면 표와 구현을 먼저 고친다).
 - P5: `tools/stack.sh up --viz` 뒤 브라우저에서 Lichtblick이 foxglove_bridge에 붙고 setpoint와 `vehicle_local_position`이 같은 플롯에 놓인다. 두 포트가 127.0.0.1에만 열려 있다.
