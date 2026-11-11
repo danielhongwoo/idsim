@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // VehicleCommand 빌더의 필드 표와 ack 매칭 술어.
-// 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 6. 필드 값은 opinion-px4.md P3 표.
+// 결정: 1a 4단계 idsim_common 설계 결정(git 이력) 쟁점 6.
+// 필드 값은 px4-engineer 의견서(git 이력) P3 표.
 // make의 source == target 거부: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5.
 
 #include <gtest/gtest.h>

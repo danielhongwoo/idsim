@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 좌표 변환 테스트. px4_ros_com frame_transforms와 차등 비교하고, NaN 보존과 yaw를 따로 본다.
-// 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 1.
+// 결정: 1a 4단계 idsim_common 설계 결정(git 이력) 쟁점 1.
 
 #include <gtest/gtest.h>
 

@@ -26,7 +26,8 @@ grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git .
 
 - `docs/architecture.md`: 목표와 범위, 레이어 구조, 기술 스택, 실행 환경, 테스트 전략. 설계가 바뀌면 여기를 고친다.
 - `docs/roadmap.md`: Phase별 작업 항목, 완료 기준, 리스크, 확장 방향. 소요 시간 예상은 적지 않는다.
-- `docs-for-agent/`: 에이전트용 정보. `progress.md`(진행 상황, 결정 기록, 미해결 사항, 다음 작업. 세션 시작 시 먼저 읽고 작업 단위가 끝나면 갱신), `file-ownership.md`(담당자별 파일 소유).
+- `docs-for-agent/`: 에이전트용 정보. `progress.md`(현재 상태, 다음 작업, 미해결 사항, 운영 규칙. 세션 시작 시 먼저 읽고 작업 단위가 끝나면 갱신), `file-ownership.md`(담당자별 파일 소유).
+- 문서에는 지금 유효한 것만 쓴다. 결정이 바뀌면 그 문장을 고쳐 쓰고, 개정 절이나 날짜 붙은 이력을 덧붙이지 않는다. 결정의 경위와 근거, 담당자 의견과 승인 보고는 커밋 메시지와 PR 본문에 남긴다(저장소 파일로 만들지 않는다). 지난 내용은 git 이력에서 찾는다.
 - `docs/`는 프로젝트의 설계와 계획만 담는다. 진행 상황, 담당자 이름, 파일 소유, 에이전트 운영 규칙 같은 에이전트용 정보는 `docs-for-agent/`에 둔다. `docs/`에서 `docs-for-agent/`를 가리키지 않는다.
 
 ## 담당자 에이전트
@@ -35,7 +36,7 @@ grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git .
 
 | 이름 | 역할 | 소유 영역 |
 | --- | --- | --- |
-| architect | 레이어 경계, 인터페이스 계약, 식별 규칙의 최종 결정. 토론 주재와 결정 기록 | `docs/architecture.md`, `docs/interface.md`, `idsim_interfaces`, `proto/` 스키마 |
+| architect | 레이어 경계, 인터페이스 계약, 식별 규칙의 최종 결정. 토론 주재와 결정 반영 | `docs/architecture.md`, `docs/interface.md`, `idsim_interfaces`, `proto/` 스키마 |
 | px4-engineer | SITL, Offboard 절차, 파라미터, px4_msgs 버전, ULog | `Dockerfile.px4`, SITL 파라미터, `idsim_mission`의 `px4/` 디렉터리(어댑터), 상태기 전이 표의 필수 승인 |
 | ros2-engineer | CycloneDDS, QoS, 네임스페이스, 좌표 변환, 토픽 매핑, 노드 구조 | `idsim_common`, `config/cyclonedds.xml`, `idsim_mission`(`px4/` 디렉터리 제외) |
 | sim-engineer | Gazebo 월드, 표적 Actor, 브리지, 표적 어댑터, 성능 | `idsim_sim`, `Dockerfile.sim-base` |
@@ -47,7 +48,7 @@ grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git .
 
 소통 방식 세 가지.
 
-- 설계 토론: 질문을 관련 담당자 둘셋에게 동시에 보내 답을 받고, architect가 충돌 지점을 짚어 재질문한 뒤 결정한다. reviewer가 근거를 검증하고, 결과는 `docs-for-agent/progress.md` 결정 기록에 남긴다.
+- 설계 토론: 질문을 관련 담당자 둘셋에게 동시에 보내 답을 받고, architect가 충돌 지점을 짚어 재질문한 뒤 결정한다. reviewer가 근거를 검증하고, 결정은 해당 문서(`docs/architecture.md`, `docs/interface.md`, 진행 중인 계획의 `decisions.md` 등)에 현재형으로 반영하며 경위는 PR 본문에 남긴다.
 - 구현: 담당자가 소유 영역을 구현하고, 관련 owner와 reviewer가 검토한다. 관련 owner의 승인 없이 머지하지 않는다.
 - 장애 분석: 증상을 가진 담당자가 가설을 내고, 관련 owner가 각자 영역에서 반증 실험을 돌린 뒤 결과를 모은다.
 
@@ -71,3 +72,4 @@ grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git .
 - 장애 분석: 첫 두 번의 가설 검증은 기본 모델로, 그래도 못 찾으면 해당 담당자를 fable로 올리고 reviewer를 붙인다.
 - reviewer는 내리지 않는다. 검토의 가치는 놓치지 않는 데 있다.
 - 같은 담당자와 대화를 이어 갈 때는 모델을 바꾸지 않는다. 바꾸려면 새로 호출한다.
+- 사용자 예외: px4-engineer의 읽기 전용 확인(검토, 문서 대조, 승인 확인)과 정형 작업은 처음부터 sonnet으로 부른다. opus 호출이 안전장치 오탐으로 반복 중단되기 때문이다. 실측, 구현, 설계 토론은 기본 모델로 부르고, 안전장치로 중단되면 묻지 않고 같은 작업을 sonnet으로 다시 부른 뒤 사용자에게 Request ID를 알린다.

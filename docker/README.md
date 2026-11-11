@@ -33,7 +33,7 @@ ubuntu:24.04 -> xrce-agent
 | `ros-base` | Ubuntu 24.04 (digest 고정) | ROS 2 Jazzy, CycloneDDS rmw, 공통 도구. `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` 고정 | 838MB |
 | `sim-base` | `ros-base` | OSRF 저장소의 Gazebo Harmonic, PX4-gazebo-models의 모델과 월드, 센서 설정 파일(`/opt/px4-gz`) | 2.97GB |
 | `px4` | `sim-base` | PX4 SITL 빌드 결과물(`px4` 바이너리, 시작 스크립트), idsim용 `px4-rc.mavlink`와 airframe `.post` 훅. 빌드 도구와 소스는 최종 이미지에 없다 | 3.06GB |
-| `ros-ws` | `ros-base` | px4_msgs, px4_ros_com, ros_gz_bridge, colcon, clang-tidy-18, clang-format-18. 이 프로젝트의 소스는 이미지에 넣지 않고 실행 시 `/opt/idsim`에 마운트한다. Gazebo 서버는 없다 | 1.99GB (clang 도구 추가 전 1.58GB, 추가분 약 410MB 실측) |
+| `ros-ws` | `ros-base` | px4_msgs, px4_ros_com, ros_gz_bridge, colcon, clang-tidy-18, clang-format-18. 이 프로젝트의 소스는 이미지에 넣지 않고 실행 시 `/opt/idsim`에 마운트한다. Gazebo 서버는 없다 | 1.99GB |
 | `xrce-agent` | Ubuntu 24.04 (digest 고정) | Micro XRCE-DDS Agent. ROS 없음 | 153MB |
 
 이렇게 나눈 이유는 다음과 같다.
@@ -143,7 +143,7 @@ http 미러만 가능하다(베이스 이미지에 CA 인증서가 없어 https 
 UBUNTU_APT_MIRROR=http://archive.ubuntu.com/ubuntu python3 tools/ci/build_images.py --mode load
 ```
 
-CI(`build-images.yml`)는 러너가 미국에 있어 위 방식으로 우분투 기본 미러를 쓴다. `tools/check_host.sh`의 미러 검사도 같은 값을 읽는다.
+CI(`build-images.yml`)는 runner가 미국에 있어 위 방식으로 우분투 기본 미러를 쓴다. `tools/check_host.sh`의 미러 검사도 같은 값을 읽는다.
 
 스택 올리기와 내리기. 저장소 루트에서 실행한다. `up` 한 번이 생성, 떠 있던 같은 스택 내리기, 두 단계 `up --wait`(gazebo까지 올린 뒤 이 스택의 모델이 Gazebo에 남아 있지 않은지 확인하고 나머지를 올린다)를 모두 한다. 실패하면 에이전트의 `bind error`와 px4의 `bind failed`를 찾아 알려 준다.
 
@@ -205,8 +205,9 @@ docker compose -p idsim-0 stop gz-gui   # GUI만 끈다. 서버는 계속 돈다
 - `gui.config`는 WorldControl 플러그인을 뺐으므로 GUI에서 월드를 멈출 수 없다. 화면에서 실수로 일시정지하는 것을 막기 위해서다.
 - `ipc: host`가 없으면 GPU 가속이 없는 호스트(소프트웨어 렌더링)에서 창이 검게 나온다. Mesa의 소프트웨어 경로가 X 서버와 MIT-SHM 공유 메모리로 화면을 전달하는데, 컨테이너의 IPC 네임스페이스가 분리되어 있으면 X 서버가 그 메모리에 붙지 못하기 때문이다. GPU 가속(DRI3) 경로에서는 없어도 되지만 항상 붙인다.
 - `gui.config`는 바닥 격자(GridConfig, 2m 간격, 500 x 500 m, 어두운 선)를 켠다. PX4 기본 월드는 배경과 바닥이 균일한 회색이라 격자가 없으면 기체 이동이 보이지 않는다. 왼쪽 패널의 "Grid config"에서 칸 수와 간격을 바꿀 수 있다.
-- 화면이 깜빡이면 `QSG_RENDER_LOOP=basic vblank_mode=1`을 호스트 셸에 두고 올려 본다. Qt 렌더 루프를 단일 스레드로 고정하고 Mesa 수직 동기를 켜 주사율 이하로 그린다. 가상머신에서 효과가 있는지는 확인 중이다.
+- 화면이 깜빡이면 `QSG_RENDER_LOOP=basic vblank_mode=1`을 호스트 셸에 두고 올려 본다. Qt 렌더 루프를 단일 스레드로 고정하고 Mesa 수직 동기를 켜 주사율 이하로 그린다. 가상머신에서의 효과는 확인되지 않았다.
 - 도구 모음 아이콘이 보이도록 `sim-base`에 `libqt5svg5`가 들어 있다.
+- 기체가 보이지 않으면 대개 거리 때문이다(기본 카메라는 원점 근처를 본다). Entity Tree에서 `x500_1`을 오른쪽 클릭해 Move To를 한 뒤 Follow를 건다. Move To 없이 Follow만 걸면 따라가지 않는 경우가 있다.
 - 종료는 `docker compose -p idsim-<k> stop gz-gui`다. GUI만 끝나고 서버는 계속 돈다.
 - 창이 뜨지 않거나 경고를 보려면 `docker compose -f <compose.yaml> --profile viz run --rm --no-deps gz-gui /opt/idsim/sim/scripts/gz_gui.sh -v 4`로 플러그인 로드 줄과 Qt 메시지를 확인한다. WorldStats의 "Binding loop detected" 한 줄은 gz 자체 경고라 무시한다.
 

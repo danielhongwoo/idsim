@@ -28,7 +28,7 @@
 // 나머지 /fmu/in은 Restricted이며 공개 API(topic_name, create_publisher)로 쓸 수 없다.
 // Restricted -> Allowed로 바꾸려면 한 PR 안에 다음 다섯 가지가 함께 있어야 한다.
 //   (1) 아래 항목의 Restricted를 Allowed로 변경, (2) px4-engineer 인터페이스 승인,
-//   (3) docs-for-agent/progress.md 결정 기록,
+//   (3) PR 본문에 허용하는 근거,
 //   (4) test_topics_traits의 허용 목록 기대 집합 갱신,
 //   (5) docs/interface.md 공개 /fmu/in 목록 갱신.
 // 이 차단은 실수 방지 수준이며 보안 경계가 아니다.

@@ -12,7 +12,7 @@ model: sonnet
 
 ## 소유 영역
 
-- `docker/`: `Dockerfile.ros-base`, `Dockerfile.ros-ws`, `Dockerfile.xrce-agent`, `ros-ws-entrypoint.sh`, `docker-bake.hcl`, `versions.env`, `compose.smoke.yaml`(`Dockerfile.px4`는 px4-engineer, `Dockerfile.sim-base`는 sim-engineer. 전체 표는 `docs-for-agent/file-ownership.md`)
+- `docker/`: `Dockerfile.ros-base`, `Dockerfile.ros-ws`, `Dockerfile.xrce-agent`, `ros-ws-entrypoint.sh`, `docker-bake.hcl`, `versions.env`(`Dockerfile.px4`는 px4-engineer, `Dockerfile.sim-base`는 sim-engineer. 전체 표는 `docs-for-agent/file-ownership.md`)
 - `config/fleet.yaml`의 스키마와 `tools/gen_compose.py`
 - compose의 healthcheck, `depends_on`, `network_mode: host`, 볼륨
 - `.github/workflows/`: lint, build, unit + replay, sitl, nightly

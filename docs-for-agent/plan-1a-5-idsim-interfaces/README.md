@@ -20,13 +20,8 @@
 | --- | --- | --- |
 | `README.md` | 이 문서. 작업 단위, 순서, 검토, 완료 기준 | 실행 계획 |
 | `decisions.md` | architect 결정 11건(확정본), 확정 개정 요약(reviewer 필수 5건과 권고 8건의 처리), 메시지와 action의 필드 목록, 담당자별 구현 지시, 넘김 목록, 사용자 결정 2건의 결과 | 계약. 구현은 이 문서를 따른다 |
-| `opinion-ros2.md` | ros2-engineer 의견과 실측(rosidl 빌드, 예약어, type hash가 바뀌는 조건, 토픽 이름 검증) | 근거 |
-| `opinion-sim.md` | sim-engineer 의견과 실측(스크립트 궤적 Actor의 pose, `dynamic_pose/info` segfault, pose/info 주기) | 근거 |
-| `opinion-ops.md` | ops-service-engineer 의견(`VehicleState`와 `ExecuteMission`의 소비자 요구, proto와 JSON 규칙) | 근거 |
 
-재질문 답 네 건(ros2, ops, sim, px4)은 파일로 두지 않고 `decisions.md`의 "재질문 결과 요약"에 옮겼다. reviewer 검증 보고와 ros2-engineer 추가 실측 보고도 파일로 두지 않고 결론을 `decisions.md`에 옮겼다. 의견서의 권고 중 `decisions.md`와 다른 것은 `decisions.md`가 우선한다(공통 토픽, 평평한 필드, 공분산, `attempt`, `link_ok`, 발행 KEEP_LAST 1은 채택하지 않았다).
-
-근거 파일에 나오는 scratchpad 경로와 실험 디렉터리는 당시 환경의 임시 파일이라 저장소에 없다. 결론과 인용된 실측값만 쓴다.
+담당자 의견서는 git 이력에 있다(`git show b02f28f:docs-for-agent/plan-1a-5-idsim-interfaces/opinion-<담당>.md`). 결론은 `decisions.md`에 있고 `decisions.md`가 우선한다.
 
 ## 범위
 

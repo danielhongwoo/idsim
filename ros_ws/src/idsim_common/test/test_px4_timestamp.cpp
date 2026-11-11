@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Px4Timestamp 생성 규칙. 노드 없이 rclcpp::Clock과 rcl의 ROS 시간 override로 시험한다.
-// 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 4.
+// 결정: 1a 4단계 idsim_common 설계 결정(git 이력) 쟁점 4.
 
 #include <gtest/gtest.h>
 

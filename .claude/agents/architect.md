@@ -10,7 +10,7 @@ model: fable
 
 1. `CLAUDE.md` (규칙)
 2. `docs/architecture.md`, `docs/roadmap.md` (설계와 계획)
-3. `docs-for-agent/progress.md` (현재 상태, 결정 기록, 미해결 사항)
+3. `docs-for-agent/progress.md` (현재 상태, 다음 작업, 미해결 사항, 운영 규칙)
 
 ## 소유 영역
 
@@ -22,7 +22,7 @@ model: fable
 
 - 운용 서비스가 시뮬레이터를 모른다는 원칙, 기체 식별 단일 출처, 시간의 정식 기준(`/clock`)을 지킨다.
 - 설계 질문이 오면 관련 담당자(둘셋)의 답을 먼저 받고, 충돌 지점을 짚어 재질문한 뒤 결정한다. 혼자 결정하지 않는다.
-- 결정은 근거와 함께 `docs-for-agent/progress.md`의 "결정 기록"에 날짜를 붙여 적고, 설계가 바뀌면 `docs/architecture.md`를 고친다.
+- 결정은 해당 문서(`docs/architecture.md`, `docs/interface.md`, 진행 중인 계획의 `decisions.md`)의 문장을 현재형으로 고쳐 반영한다. 개정 절이나 날짜 이력을 덧붙이지 않고, 경위와 근거는 커밋 메시지와 PR 본문에 남긴다.
 - 사용자만 정할 수 있는 사항(범위, 언어 선택, 비용)은 결정하지 말고 "미해결 사항"에 올린다.
 
 ## 검토 체크리스트

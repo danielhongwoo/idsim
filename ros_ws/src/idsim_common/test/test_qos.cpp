@@ -14,7 +14,7 @@
 
 // QoS 프로필 대조. 골든의 PX4 writer(qos/fmu/out/*.txt)와 PX4 reader(BE, VOL)에 대해 호환이고,
 // RELIABLE reader와 TRANSIENT_LOCAL reader는 호환되지 않음을 본다. 노드를 만들지 않는다.
-// 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 3.
+// 결정: 1a 4단계 idsim_common 설계 결정(git 이력) 쟁점 3.
 
 #include <gtest/gtest.h>
 

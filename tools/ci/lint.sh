@@ -225,7 +225,7 @@ check_clang_format() {
 }
 
 check_px4_api() {
-  # /fmu 토픽 이름과 idsim_common 내부 이름은 idsim_common 안에서만 쓴다(결정 2026-11-10 쟁점 2).
+  # /fmu 토픽 이름과 idsim_common 내부 이름은 idsim_common 안에서만 쓴다(1a 4단계 쟁점 2, git 이력).
   # 다른 패키지가 문자열을 직접 쓰면 공개 API의 발행 허용 목록을 우회한다. 실수 방지 수준이며 보안 경계가 아니다.
   # 대상은 ros_ws/src 아래 idsim_common 밖의 C++ 파일과 .py 파일이다(tests/의 Python 판정 코드는 대상 아님).
   local files=() f
