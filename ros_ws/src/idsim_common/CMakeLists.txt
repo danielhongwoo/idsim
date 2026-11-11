@@ -145,6 +145,10 @@ if(BUILD_TESTING)
   ament_add_gtest(test_contract_qos test/test_contract_qos.cpp)
   target_link_libraries(test_contract_qos ${PROJECT_NAME})
 
+  # 예외: 이 테스트만 노드를 만든다(options의 QoS 덮어쓰기는 노드 파라미터 경로라서). 통신은 없다.
+  ament_add_gtest(test_px4_io_node test/test_px4_io_node.cpp TIMEOUT 60)
+  target_link_libraries(test_px4_io_node ${PROJECT_NAME})
+
   # ---- 음성 컴파일 테스트: 빌드가 실패하고 기대한 static_assert 문구가 나와야 통과 ----
   # 타깃은 EXCLUDE_FROM_ALL이라 colcon build에서는 컴파일하지 않고, 테스트가 cmake --build로 부른다.
   set(_neg_publish_out_regex "publish only to /fmu/in descriptors")

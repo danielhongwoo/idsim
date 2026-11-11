@@ -96,10 +96,23 @@ TEST(Px4Setpoint, PositionSetpointYawIsNotWrapped)
   EXPECT_EQ(sp->yaw, 4.0F);
 }
 
+TEST(Px4Setpoint, PositionSetpointAcceptsFloatMax)
+{
+  const double max = static_cast<double>(std::numeric_limits<float>::max());
+  const auto sp = px4::position_setpoint(timestamp(), Eigen::Vector3d(max, -max, 0.0), -max);
+  ASSERT_TRUE(sp.has_value());
+  EXPECT_EQ(sp->position[0], std::numeric_limits<float>::max());
+  EXPECT_EQ(sp->position[1], -std::numeric_limits<float>::max());
+  EXPECT_EQ(sp->yaw, -std::numeric_limits<float>::max());
+}
+
 TEST(Px4Setpoint, PositionSetpointRejectsNonFinite)
 {
   const auto ts = timestamp();
-  for (const double bad : {kNaN, kInf, -kInf, 1e39}) {
+  // FLT_MAX 바로 위의 double(float로 바꾸면 넘친다).
+  const double above_max = std::nextafter(
+    static_cast<double>(std::numeric_limits<float>::max()), std::numeric_limits<double>::max());
+  for (const double bad : {kNaN, kInf, -kInf, 1e39, -1e39, above_max, -above_max}) {
     EXPECT_FALSE(px4::position_setpoint(ts, Eigen::Vector3d(bad, 0.0, -1.0), 0.0).has_value())
       << "x " << bad;
     EXPECT_FALSE(px4::position_setpoint(ts, Eigen::Vector3d(0.0, bad, -1.0), 0.0).has_value())

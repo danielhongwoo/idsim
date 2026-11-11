@@ -67,8 +67,9 @@ rcl_interfaces::msg::ParameterDescriptor vehicle_param_descriptor(const char * d
 
 }  // namespace detail
 
-// NodeT는 rclcpp::Node와 rclcpp_lifecycle::LifecycleNode. 세 key는 한 번만 선언할 수 있다
-// (두 번째 호출은 이미 선언됨 오류로 nullopt).
+// NodeT는 rclcpp::Node와 rclcpp_lifecycle::LifecycleNode. 세 key는 한 번만 선언할 수 있어
+// 두 번째 호출은 "already declared" 오류로 nullopt다. 노드 수명 동안 한 번만 부른다(생성자 권장).
+// on_configure에서 부르면 재configure가 실패한다.
 template <class NodeT>
 std::optional<VehicleParams> declare_vehicle_params(NodeT & node, std::string * error = nullptr)
 {
