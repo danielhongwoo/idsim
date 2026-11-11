@@ -73,7 +73,7 @@ warn_running_stack() {
   # 스택이 떠 있는 동안 install을 바꾸면 실행 중인 노드의 .so가 바뀐다(경고만 한다)
   if command -v docker >/dev/null 2>&1 \
       && docker compose ls --quiet 2>/dev/null | grep -q '^idsim-'; then
-    say "경고: idsim 스택이 떠 있다. install을 바꾸면 실행 중인 노드에 영향을 줄 수 있다 (tools/stack.sh down)"
+    say "경고: idsim 스택이 떠 있다. install을 바꾸면 실행 중인 노드에 영향을 줄 수 있다 (tools/sim_stack.sh down)"
   fi
 }
 

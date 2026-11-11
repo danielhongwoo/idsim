@@ -1,6 +1,9 @@
 """topic_info.py 단위 테스트. ros2 출력 형식은 Jazzy 기준 가정(test_golden.py 참조)."""
 import argparse
 import io
+import subprocess
+
+import pytest
 
 from tests.support import topic_info
 from tests.support.test_golden import INFO_V, TOPIC_LIST
@@ -50,3 +53,33 @@ def test_global_topic_without_ns_prefix(tmp_path):
     args = _args(regex="^/clock$", expect_type="rosgraph_msgs/msg/Clock", save=str(tmp_path), ns="px4_1")
     assert topic_info.run(args, runner=runner, out=out) == 0
     assert (tmp_path / "clock.txt").read_text() == clock_info
+
+
+def test_info_unknown_topic_is_retried():
+    calls = {"info": 0}
+    t = {"now": 0.0}
+
+    def runner(cmd):
+        if cmd[2] == "list":
+            return TOPIC_LIST
+        calls["info"] += 1
+        if calls["info"] < 3:
+            raise subprocess.CalledProcessError(1, cmd)
+        return INFO_V
+
+    def sleep(dt):
+        t["now"] += dt
+
+    rc = topic_info.run(_args(timeout=10.0), runner=runner, clock=lambda: t["now"],
+                        sleep=sleep, out=io.StringIO())
+    assert rc == 0 and calls["info"] == 3
+
+
+def test_info_unknown_topic_raises_after_timeout():
+    def runner(cmd):
+        if cmd[2] == "list":
+            return TOPIC_LIST
+        raise subprocess.CalledProcessError(1, cmd)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        topic_info.run(_args(timeout=0.0), runner=runner, out=io.StringIO())

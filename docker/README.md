@@ -42,7 +42,7 @@ ubuntu:24.04 -> xrce-agent
 - 모델 파일은 `sim-base` 한 곳에만 둔다. Gazebo 서버와 PX4가 같은 절대 경로로 모델을 열어야 하는데, 둘 다 `sim-base` 위에 있으면 경로가 저절로 일치한다.
 - `xrce-agent`는 자체 Fast-DDS를 소스 빌드하므로, ROS가 가져오는 다른 Fast-DDS와 섞이지 않게 ROS 없는 베이스에 둔다.
 
-각 이미지는 빌드에 쓴 버전을 `IDSIM_BUILD_*` 환경변수로 남긴다. 스모크 S0가 이 값을 `versions.env`와 대조해, 이미지를 다시 빌드하지 않은 채 버전만 올린 상태를 잡아낸다.
+각 이미지는 빌드에 쓴 버전을 `IDSIM_BUILD_*` 환경변수로 남긴다. 스모크 images가 이 값을 `versions.env`와 대조해, 이미지를 다시 빌드하지 않은 채 버전만 올린 상태를 잡아낸다.
 
 ## 컨테이너 구성 (생성되는 compose)
 
@@ -70,7 +70,7 @@ xrce-agent --> gazebo --> px4-1..N --> bridge      (본 스택, up --wait 대상
 변형은 둘이다(`--variant`).
 
 - `standalone`(기본): 위 표 전부.
-- `embedded`: 진단용(스모크 S1b). 기체 1대, `gazebo`, `bridge`, `gz-gui` 없이 PX4가 Gazebo를 컨테이너 안에서 직접 띄운다(`HEADLESS=1`). 원점은 적용하지 않는다.
+- `embedded`: 진단용(스모크 embedded). 기체 1대, `gazebo`, `bridge`, `gz-gui` 없이 PX4가 Gazebo를 컨테이너 안에서 직접 띄운다(`HEADLESS=1`). 원점은 적용하지 않는다.
 
 호스트에 쓰는 서비스는 호스트 사용자의 uid:gid로 돌고 `HOME`은 컨테이너 안 `/tmp`, ROS 로그는 `artifacts/runs/<실행 id>/ros_log/<서비스>/`다. 그래서 `artifacts/runs/`에는 root 소유 파일이 생기지 않는다. 바인드 마운트는 중첩하지 않는다(중첩하면 마운트 지점이 root 소유로 생긴다).
 
@@ -148,30 +148,30 @@ CI(`build-images.yml`)는 러너가 미국에 있어 위 방식으로 우분투 
 스택 올리기와 내리기. 저장소 루트에서 실행한다. `up` 한 번이 생성, 떠 있던 같은 스택 내리기, 두 단계 `up --wait`(gazebo까지 올린 뒤 이 스택의 모델이 Gazebo에 남아 있지 않은지 확인하고 나머지를 올린다)를 모두 한다. 실패하면 에이전트의 `bind error`와 px4의 `bind failed`를 찾아 알려 준다.
 
 ```
-tools/stack.sh up                 # 스택 0. 실행 디렉터리 경로를 출력한다
-tools/stack.sh up --stack 1       # 스택 1을 동시에
-tools/stack.sh up --viz           # Gazebo GUI까지
-tools/stack.sh ps
-tools/stack.sh logs px4-1
-tools/stack.sh down               # docker compose -p idsim-0 down
+tools/sim_stack.sh up                 # 스택 0. 실행 디렉터리 경로를 출력한다
+tools/sim_stack.sh up --stack 1       # 스택 1을 동시에
+tools/sim_stack.sh up --viz           # Gazebo GUI까지
+tools/sim_stack.sh ps
+tools/sim_stack.sh logs px4-1
+tools/sim_stack.sh down               # docker compose -p idsim-0 down
 ```
 
 생성만 하려면 `tools/gen_compose.sh --stack k`를 쓴다. 생성기는 ros-ws 컨테이너 안에서 돌므로(호스트에 PyYAML이 필요 없다) ros-ws 이미지가 있어야 한다. 기체, 월드, 원점(`world.origin`), SITL 파라미터는 `config/fleet.yaml`에서 고친다.
 
-스모크 실행. 같은 생성기와 `tools/stack.sh up`으로 스택을 올리고 판정한 뒤 내린다.
+스모크 실행. 같은 생성기와 `tools/sim_stack.sh up`으로 스택을 올리고 판정한 뒤 내린다.
 
 ```
-tests/smoke/run_smoke.sh S0
-tests/smoke/run_smoke.sh S2
-tests/smoke/run_smoke.sh --stack 1 S2         # 다른 스택 번호로
-tests/smoke/run_smoke.sh --update-golden S4   # 골든이 없을 때 처음 한 번
+tests/smoke/run_smoke.sh images
+tests/smoke/run_smoke.sh px4-out
+tests/smoke/run_smoke.sh --stack 1 px4-out         # 다른 스택 번호로
+tests/smoke/run_smoke.sh --update-golden golden   # 골든이 없을 때 처음 한 번
 ```
 
 실행 결과는 `artifacts/runs/<실행 id>/`에 남는다(`compose.yaml`, `stack.json`, 판정과 로그 `smoke/`, ULog `px4-N/log/`). 모든 파일이 호스트 사용자 소유다.
 
 ## 시각 도구
 
-이 절의 도구는 개발자가 눈으로 보기 위한 화면이다. 판정, 스모크, CI와 무관하며 어떤 테스트도 이 도구에 의존하지 않는다(본 스택 서비스는 `viz` 프로필 서비스에 의존하지 않고, 스모크와 CI는 이 프로필을 켜지 않는다). `tools/stack.sh up`으로 올린 standalone 스택 위에서 쓴다.
+이 절의 도구는 개발자가 눈으로 보기 위한 화면이다. 판정, 스모크, CI와 무관하며 어떤 테스트도 이 도구에 의존하지 않는다(본 스택 서비스는 `viz` 프로필 서비스에 의존하지 않고, 스모크와 CI는 이 프로필을 켜지 않는다). `tools/sim_stack.sh up`으로 올린 standalone 스택 위에서 쓴다.
 
 ### QGroundControl
 
@@ -194,14 +194,14 @@ tools/qgc.sh --print-path     # 캐시된 AppImage 경로 출력
 생성된 compose의 `gz-gui` 서비스(sim-base, 프로필 `viz`)가 이미 떠 있는 `gazebo` 서버에 GUI 클라이언트만 붙인다. 같은 `GZ_PARTITION`, 호스트 uid:gid, `ipc: host`, X11 소켓과 Xauthority를 읽기 전용으로 마운트하고 `idsim_sim`의 `gz_gui.sh`와 `gui.config`를 쓴다.
 
 ```
-tools/stack.sh up --viz           # 스택과 GUI를 함께
-tools/stack.sh up                 # 또는 스택을 올린 뒤
+tools/sim_stack.sh up --viz           # 스택과 GUI를 함께
+tools/sim_stack.sh up                 # 또는 스택을 올린 뒤
 docker compose -f artifacts/runs/<실행 id>/compose.yaml --profile viz up -d gz-gui
 docker compose -p idsim-0 stop gz-gui   # GUI만 끈다. 서버는 계속 돈다
 ```
 
 - 호스트 셸에 `DISPLAY`와 `XAUTHORITY`가 있어야 한다. compose는 `${DISPLAY:-}`와 `${XAUTHORITY:-/dev/null}`을 넘기므로 비어 있으면 `gz_gui.sh`가 안내 메시지와 함께 끝난다. GNOME Wayland(Xwayland)에서는 로그인마다 이름이 바뀌는 `/run/user/<uid>/.mutter-Xwaylandauth.*`를 쓴다: `export XAUTHORITY=$(ls /run/user/$(id -u)/.mutter-Xwaylandauth.* | head -n 1)`.
-- GUI 렌더 엔진은 `IDSIM_GZ_GUI_ENGINE`(기본 ogre2), 깜빡임 시도용 `QSG_RENDER_LOOP`, `vblank_mode`는 호스트 셸에 있으면 그대로 넘어간다(예: `QSG_RENDER_LOOP=basic vblank_mode=1 tools/stack.sh up --viz`).
+- GUI 렌더 엔진은 `IDSIM_GZ_GUI_ENGINE`(기본 ogre2), 깜빡임 시도용 `QSG_RENDER_LOOP`, `vblank_mode`는 호스트 셸에 있으면 그대로 넘어간다(예: `QSG_RENDER_LOOP=basic vblank_mode=1 tools/sim_stack.sh up --viz`).
 - `gui.config`는 WorldControl 플러그인을 뺐으므로 GUI에서 월드를 멈출 수 없다. 화면에서 실수로 일시정지하는 것을 막기 위해서다.
 - `ipc: host`가 없으면 GPU 가속이 없는 호스트(소프트웨어 렌더링)에서 창이 검게 나온다. Mesa의 소프트웨어 경로가 X 서버와 MIT-SHM 공유 메모리로 화면을 전달하는데, 컨테이너의 IPC 네임스페이스가 분리되어 있으면 X 서버가 그 메모리에 붙지 못하기 때문이다. GPU 가속(DRI3) 경로에서는 없어도 되지만 항상 붙인다.
 - `gui.config`는 바닥 격자(GridConfig, 2m 간격, 500 x 500 m, 어두운 선)를 켠다. PX4 기본 월드는 배경과 바닥이 균일한 회색이라 격자가 없으면 기체 이동이 보이지 않는다. 왼쪽 패널의 "Grid config"에서 칸 수와 간격을 바꿀 수 있다.
@@ -214,7 +214,7 @@ docker compose -p idsim-0 stop gz-gui   # GUI만 끈다. 서버는 계속 돈다
 
 1. `versions.env`의 값을 바꾼다. PX4 태그를 올리면 `PX4_MSGS_REF`도 같은 릴리스 브랜치의 커밋으로 함께 올린다.
 2. 이미지를 다시 빌드한다.
-3. `run_smoke.sh S0`로 이미지 버전과 `versions.env`가 일치하는지 확인한다(ros-ws의 PyYAML과 `LINT_PYYAML_VERSION` 대조 포함).
+3. `run_smoke.sh images`로 이미지 버전과 `versions.env`가 일치하는지 확인한다(ros-ws의 PyYAML과 `LINT_PYYAML_VERSION` 대조 포함).
 4. PX4 태그를 올렸다면 `docker/Dockerfile.px4`의 `sha256sum -c` 줄이 빌드에서 실패한다. 이것은 의도된 것이다. 상류 `ROMFS/px4fmu_common/init.d-posix/px4-rc.mavlink`를 새 태그에서 받아 `docker/px4/px4-rc.mavlink`와 비교하고(GCS, API 링크 정의와 포트 식이 바뀌었는지), idsim 파일을 맞춘 뒤 새 상류 파일의 sha256(`sha256sum`)으로 그 줄을 바꾼다. 상류에 `.post`가 있는 gz airframe이 생겨도 빌드가 실패하므로 같은 때에 본다. 검토는 px4-engineer다.
-5. PX4 태그를 올렸다면 `run_smoke.sh --update-golden S4`로 새 태그의 골든을 만들고, 옛 태그 디렉터리는 지운다.
+5. PX4 태그를 올렸다면 `run_smoke.sh --update-golden golden`으로 새 태그의 골든을 만들고, 옛 태그 디렉터리는 지운다.
 6. 생성기 골든(`tests/fixtures/gen_compose/`)은 이미지 버전과 무관하다. 생성 규칙이나 `config/px4/sitl_params.env`를 바꾸면 `python3 -m pytest tests/tools --update-golden`(PyYAML이 있는 환경, 예: ros-ws 컨테이너)으로 다시 만들고 diff를 리뷰한다.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""스모크 S2, S4의 PX4 쪽 판정(pxh 명령과 PX4 로그). 담당: px4-engineer.
+"""스모크 px4-out, golden의 PX4 쪽 판정(pxh 명령과 PX4 로그). 담당: px4-engineer.
 
 check_px4.py(ros-ws, 토픽 판정)와 나눈 이유: pxh 모듈 명령(px4-commander 등)은
 PX4 서버와 같은 컨테이너 안에서만 동작한다(서버 소켓이 컨테이너의 /tmp에 있다).

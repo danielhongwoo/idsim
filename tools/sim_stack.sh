@@ -2,10 +2,10 @@
 # idsim 스택 운영 스크립트(호스트). 생성(tools/gen_compose.sh)과 docker compose 호출을 묶는다.
 #
 # 사용법
-#   tools/stack.sh up   [--stack k] [--fleet f] [--viz] [--variant standalone|embedded] [--run-dir 경로]
-#   tools/stack.sh down [--stack k]
-#   tools/stack.sh logs [--stack k] [docker compose logs 인자...]
-#   tools/stack.sh ps   [--stack k]
+#   tools/sim_stack.sh up   [--stack k] [--fleet f] [--viz] [--variant standalone|embedded] [--run-dir 경로]
+#   tools/sim_stack.sh down [--stack k]
+#   tools/sim_stack.sh logs [--stack k] [docker compose logs 인자...]
+#   tools/sim_stack.sh ps   [--stack k]
 #   k는 --stack, 없으면 IDSIM_STACK_INDEX, 없으면 0. compose 프로젝트 이름은 idsim-<k>.
 #
 # up이 하는 일(인자 없는 up 한 번이 사용자 진입점이다)
@@ -18,7 +18,7 @@
 #      확인하고(startup.model_precheck) 같은 파티션의 gz 서버가 하나뿐인지도 본다(scene/info 제공자 1, /clock 발행자 1). bridge는 px4-N이 healthy가 된 뒤에만 시작하므로 실패한 단계 번호가 원인을 가른다.
 #   4. --viz면 viz 프로필(gz-gui)을 `up -d`로 붙인다(기다리지 않는다. healthcheck 없음).
 #   5. 실패하면 unhealthy 또는 exited 서비스 이름을 한 줄로 찍고, 에이전트 로그의 "bind error"와 px4 로그의 "bind failed"를 찾아 보고하고 종료 코드 1.
-#      스택은 조사할 수 있게 그대로 두며 `tools/stack.sh down`으로 내린다.
+#      스택은 조사할 수 있게 그대로 두며 `tools/sim_stack.sh down`으로 내린다.
 #   성공하면 실행 디렉터리의 절대 경로 한 줄을 stdout에 쓴다(안내는 stderr).
 #
 # 환경변수: STACK_UP_TIMEOUT (단계별 up --wait 제한 초, 기본 240)
@@ -27,7 +27,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 usage() { sed -n '2,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; exit 2; }
-say() { echo "stack.sh: $*" >&2; }
+say() { echo "sim_stack.sh: $*" >&2; }
 
 [ "$#" -ge 1 ] || usage
 cmd="$1"; shift
@@ -98,7 +98,7 @@ report_bind_errors() { # compose파일 stack.json
       found=1
     fi
   done
-  [ "$found" -eq 1 ] || say "bind 오류는 찾지 못했다. 'tools/stack.sh logs --stack ${stack}'로 로그를 보라"
+  [ "$found" -eq 1 ] || say "bind 오류는 찾지 못했다. 'tools/sim_stack.sh logs --stack ${stack}'로 로그를 보라"
 }
 
 # 1단계 뒤: 같은 파티션의 gz 서버에 이 스택의 모델이 이미 있는지 본다
@@ -189,11 +189,11 @@ do_up() {
       report_bad_services "$f"
       report_bind_errors "$f" "$sf"
       docker compose -f "$f" ps -a >&2 || true
-      say "스택은 그대로 두었다. 내리려면: tools/stack.sh down --stack ${stack}"
+      say "스택은 그대로 두었다. 내리려면: tools/sim_stack.sh down --stack ${stack}"
       exit 1
     fi
     if [ "$i" -eq 0 ] && [ "$(sj "$sf" startup.model_precheck)" = "true" ]; then
-      model_precheck "$sf" || { say "스택은 그대로 두었다. 내리려면: tools/stack.sh down --stack ${stack}"; exit 1; }
+      model_precheck "$sf" || { say "스택은 그대로 두었다. 내리려면: tools/sim_stack.sh down --stack ${stack}"; exit 1; }
     fi
   done
   if [ "$viz" -eq 1 ]; then
@@ -209,7 +209,7 @@ do_up() {
     fi
   fi
   say "준비됨: ${project} (stack.json: ${sf})"
-  say "QGC: tools/qgc.sh --stack ${stack}   내리기: tools/stack.sh down --stack ${stack}"
+  say "QGC: tools/qgc.sh --stack ${stack}   내리기: tools/sim_stack.sh down --stack ${stack}"
   printf '%s\n' "$run_dir"
 }
 

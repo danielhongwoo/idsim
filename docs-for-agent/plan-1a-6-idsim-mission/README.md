@@ -56,10 +56,10 @@
 | P1. 이미지 | devops-engineer | `Dockerfile.ros-ws`에 foxglove_bridge, `versions.env`의 `FOXGLOVE_BRIDGE_VERSION`, bake, 버전 접두 단정. 이미지 크기 실측 | 없음 |
 | P2. `idsim_common` 추가 | ros2-engineer | `VehicleId`, vehicle params 해석, Options overload, position setpoint 헬퍼, 사건 QoS, 빌더 `make`(`decisions.md` 쟁점 5) | 없음. P1과 병렬 |
 | P3. `idsim_mission` | ros2-engineer(껍질, core), px4-engineer(`px4/` 셋), architect(`ExecuteMission.action`의 상수 `REASON_DISARM_FAILED`, `REASON_EXTERNAL_DISARM` 추가와 주석, golden) | P3a autostart 실행 확인, 콜드 기동의 첫 `/clock` 수신 시간, ACCEPTED 누락 계수 실험 200회. P3b core(검증, 분류 함수, 상태기, 종료 결과)와 단위 테스트. P3c `px4/` 어댑터와 단위 테스트. P3d 노드 껍질, launch, 배선 테스트. P3e `ExecuteMission.action`의 상수 둘 추가(13은 M5, 14는 감시 표의 지상 DISARMED 행)와 주석(M1, M3-M5, 두 상수의 의미), golden 두 파일 | P2. P3b는 `decisions.md` 쟁점 4의 "P3b 착수 전 px4-engineer 승인 항목" 뒤 |
-| P4. 생성기와 통합 | devops-engineer(생성기, `stack.sh`, `run_smoke.sh`, `check_host.sh`, `build_images.py --mode pull`, `sitl.yml`, `px4-api` 범위), test-engineer(`tests/support/`, `tests/sitl/`), architect(문서 반영) | `decisions.md` 쟁점 1, 2, 7-11 | P1이 main에 들어가 build가 새 key를 올린 뒤, P3 뒤 |
+| P4. 생성기와 통합 | devops-engineer(생성기, `sim_stack.sh`, `run_smoke.sh`, `check_host.sh`, `build_images.py --mode pull`, `sitl.yml`, `px4-api` 범위), test-engineer(`tests/support/`, `tests/sitl/`), architect(문서 반영) | `decisions.md` 쟁점 1, 2, 7-11 | P1이 main에 들어가 build가 새 key를 올린 뒤, P3 뒤 |
 | P5. viz | devops-engineer | `foxglove`, `lichtblick` 서비스, `LICHTBLICK_IMAGE`, 접속 안내, 브라우저 실접속 확인 | P4 |
 
-커밋은 담당자 소유 단위로 나눈다. PR은 위 단위마다 하나다. P4가 합쳐지기 전에는 `tools/stack.sh up`의 동작이 바뀌지 않는다.
+커밋은 담당자 소유 단위로 나눈다. PR은 위 단위마다 하나다. P4가 합쳐지기 전에는 `tools/sim_stack.sh up`의 동작이 바뀌지 않는다.
 
 실험용 스택 번호: px4 5, ros2 6, test 7, devops 8. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
 
@@ -71,7 +71,7 @@
 4. P3. 첫 작업 P3a는 끝났다. 컨테이너 autostart가 동작하지 않아 Executor는 스스로 configure와 activate를 건다(`decisions.md` 쟁점 2). px4-engineer가 승인 항목 다섯(ITEM_TIMEOUT 뒤 정리의 snapshot 분기, TAKEOFF 시작 조건은 지상이고 DISARMED, 지상 arm 취소 분기의 setpoint, LAND 감시의 세 구간, 방어용 분류)을 닫은 뒤 P3b를 시작한다(2026-11-11에 닫혔고 PR #21로 반영됐다. 시작할 수 있다).
 5. P4. 로컬에서 `tests/sitl/run_sitl.sh --repeat 3`이 통과한 뒤 PR을 올리고 `sitl` job의 첫 실행을 본다. 첫 3회의 단계별 시간과 RTF를 기록한다.
 6. P5. 브라우저 실접속을 확인한다.
-7. 사용자 육안 확인(QGC, Gazebo GUI에서 같은 비행). `tools/stack.sh up --viz` 뒤 `tests/sitl/run_sitl.sh --attach <실행 디렉터리>`로 시나리오 A를 돌린다.
+7. 사용자 육안 확인(QGC, Gazebo GUI에서 같은 비행). `tools/sim_stack.sh up --viz` 뒤 `tests/sitl/run_sitl.sh --attach <실행 디렉터리>`로 시나리오 A를 돌린다.
 8. 7단계(`docs/interface.md`)로 넘어간다. 계약 고정 전에 px4-engineer의 필수 재실측이 끝나야 한다(`decisions.md` 넘김 목록의 여덟 항목: AUTO_LAND 하강 중 0.3 m 아래 취소, 지상 setpoint 발행 중의 Hold, 이륙 직후의 지상 setpoint와 disarm, 감시 표 순위의 확인, arm 전송 직후 취소의 경쟁, 표본 늘리기, X3, Executor가 보낸 `[LAND]`). 그중 (2) 지상 setpoint 발행 중의 Hold, (3) 이륙 직후의 지상 setpoint와 disarm, (5) arm 전송 직후 취소의 경쟁은 P4 머지 조건이다(P4부터 Executor가 스택에서 기본으로 뜬다).
 
 ## 검토
@@ -81,7 +81,7 @@
 | P1 | ros2-engineer | 설치 판과 foxglove params 이름. 다른 이미지 key가 그대로인지 |
 | P2 | px4-engineer, test-engineer | setpoint 헬퍼와 빌더의 필드 표, source == target 거부. 테스트가 노드 없이 도는지 |
 | P3 | px4-engineer(전이 표와 상태기 테스트의 필수 승인), ros2-engineer(`px4/` 어댑터와 snapshot 경계), test-engineer(단위 테스트 구조), architect(계약 문장과 구현의 일치, golden diff가 `ExecuteMission`의 두 파일에 두 줄씩뿐이고 `type_hashes.txt`는 그대로인지) | 발행 규칙, 감시 표, 취소 분기, status와 reason 대응표, 사건 == result, core가 px4_msgs에 의존하지 않는지 |
-| P4 | ros2-engineer(launch와 params 대응, matched 판정), px4-engineer(시나리오의 판정 필드, 타임아웃, 테스트의 /fmu/in 사용), test-engineer와 devops-engineer(서로의 경계: wrapper의 `stack.sh` 호출부, `stack.py` 접근자, 아티팩트 경로), sim-engineer(`--infra-only`가 스모크와 gazebo 단계에 주는 영향) | 스모크 S2-S5가 `--infra-only`로 통과하는지, 생성기 golden 4종의 diff, embedded에 노드 서비스가 없는지 |
+| P4 | ros2-engineer(launch와 params 대응, matched 판정), px4-engineer(시나리오의 판정 필드, 타임아웃, 테스트의 /fmu/in 사용), test-engineer와 devops-engineer(서로의 경계: wrapper의 `sim_stack.sh` 호출부, `stack.py` 접근자, 아티팩트 경로), sim-engineer(`--infra-only`가 스모크와 gazebo 단계에 주는 영향) | 스모크 px4-out-clock이 `--infra-only`로 통과하는지, 생성기 golden 4종의 diff, embedded에 노드 서비스가 없는지 |
 | P5 | ros2-engineer, sim-engineer | 화이트리스트, 127.0.0.1, `viz`에 본 스택이 의존하지 않는지, 실접속 결과 |
 | 전체 | reviewer | PR마다 규칙 준수와 가정의 근거. P3과 P4는 머지 전 필수 |
 
@@ -94,7 +94,7 @@
 - P3: `tools/ros_ws.sh ci` 통과. `idsim_mission` 테스트 결과 1건 이상. `idsim_interfaces` 계약 테스트가 통과하고 `git diff test/golden`이 `ExecuteMission`의 직접 정의와 펼친 정의 두 파일에 `REASON_DISARM_FAILED = 13`과 `REASON_EXTERNAL_DISARM = 14` 두 줄씩뿐이다(`type_hashes.txt` 무변경). core 단위 테스트가 `decisions.md`의 전이 표, 취소 분기, status와 reason 대응표, 종료 사건 == result, `TYPE_*` 분류를 덮는다. 스택 위에서 `ops` 컨테이너가 자기 전이로 active가 되는 것을 손으로 확인한다(launch에서 `autostart`를 뺀 형태). P3a의 계수 실험 결과(200회 중 ACCEPTED 누락 횟수)와 첫 `/clock` 수신 시간이 기록되어 있다.
 - P4
   - `tools/ci/lint.sh all` 통과(생성기 단위 테스트와 golden 4종, `compose config`, `px4-api` 넓힌 범위, 문자 집합).
-  - 스모크 S0, S2-S5가 `--infra-only` 스택에서 통과한다(S4 `--check` 일치).
+  - 스모크 images, px4-out-clock이 `--infra-only` 스택에서 통과한다(golden `--check` 일치).
   - `tests/sitl/run_sitl.sh --repeat 3`이 같은 commit, 같은 이미지 key에서 3회 연속 통과하고 회차 요약이 남는다. 시나리오는 B, C, A, D, T 다섯이다.
   - 올림 기준: `sitl` job이 15분을 넘거나 판정 구간의 RTF(ROS 시각 경과 / 벽시계 경과)가 한 회라도 0.7 미만이면 타임아웃, 허용 오차, `wall_cap` 배수를 느슨하게 하지 않고 측정값과 함께 architect와 사용자에게 올린다. 첫 3회의 단계별 시간과 RTF를 기록한다.
   - CI `sitl` job이 통과하고 실패 때 아티팩트가 올라가는 것을 한 번 확인한다(일부러 실패시킨 실행 또는 첫 실패 실행).
@@ -104,7 +104,7 @@
   - 측정 스크립트가 `tests/sitl/measure/`에 있다(소유 test-engineer, 절차 승인 px4-engineer).
   - 생성기 성질 테스트 넷(상주 ros-ws 서비스의 `init: true`, `ops-N`의 `stop_signal`과 `stop_grace_period`, params에 `lifecycle.` key 없음, healthcheck FQN과 `executor_node` 일치)이 통과한다.
   - px4-engineer의 필수 재실측 (2), (3), (5)가 끝나 있고 결과가 `decisions.md`의 표와 맞다(다르면 표와 구현을 먼저 고친다).
-- P5: `tools/stack.sh up --viz` 뒤 브라우저에서 Lichtblick이 foxglove_bridge에 붙고 setpoint와 `vehicle_local_position`이 같은 플롯에 놓인다. 두 포트가 127.0.0.1에만 열려 있다.
+- P5: `tools/sim_stack.sh up --viz` 뒤 브라우저에서 Lichtblick이 foxglove_bridge에 붙고 setpoint와 `vehicle_local_position`이 같은 플롯에 놓인다. 두 포트가 127.0.0.1에만 열려 있다.
 - 6단계 전체(roadmap 1a 완료 기준 중 이 단계 몫): 통합 테스트 로컬 3회 연속 통과, CI `sitl` 통과, QGC와 Gazebo GUI로 같은 비행을 사용자가 확인.
 
 ## 범위 밖(넘길 곳)
