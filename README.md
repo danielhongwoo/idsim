@@ -34,7 +34,7 @@ tests/smoke/run_smoke.sh clock
 | 명령 | 하는 일 |
 | --- | --- |
 | `tools/check_host.sh` | 호스트가 위 조건을 갖췄는지, 포트와 미러 접근에 문제가 없는지 본다 |
-| `python3 tools/ci/build_images.py --mode load` | 이미지 5종을 로컬에 빌드한다. 콜드 빌드는 CI 실측 약 22분. 로컬 16 vCPU에서 PX4 컴파일 단계는 163초였다 |
+| `python3 tools/ci/build_images.py --mode load` | 이미지 5종을 로컬에 빌드한다. 콜드 빌드는 CI 러너에서 약 22분이다 |
 | `tests/smoke/run_smoke.sh images` | 이미지 버전과 `docker/versions.env`의 일치를 본다. 스택을 올리지 않는다 |
 | `tests/smoke/run_smoke.sh px4-out` | 운용과 같은 구성(Gazebo 분리)에서 기체 스폰, PX4 -> ROS 방향 토픽, `commander check`를 본다 |
 | `tests/smoke/run_smoke.sh px4-in` | ROS -> PX4 방향. arm/disarm 왕복과 `trajectory_setpoint` 구독을 본다. 미션 노드가 이 방향으로 명령과 setpoint를 보낸다 |
@@ -80,7 +80,7 @@ px4-out, px4-in, clock은 각각 스택을 내렸다가 다시 올리고, 끝나
 ## 알려진 제약
 
 - 이미지 빌드의 apt 미러는 `docker/versions.env`의 `UBUNTU_APT_MIRROR`(기본 kr 미러)이다. 다른 호스트에서 바꾸는 방법은 `docker/README.md`의 "apt 미러" 절을 본다. 해당 미러가 막히면 콜드 빌드가 실패한다.
-- GHCR 이미지가 공개되면 빌드 없이 받아 쓰는 경로를 검토 중이다.
+- GHCR의 이미지를 빌드 없이 받아 쓰는 경로는 아직 없다.
 
 ## 문서 지도
 
@@ -92,4 +92,4 @@ px4-out, px4-in, clock은 각각 스택을 내렸다가 다시 올리고, 끝나
 | `docker/README.md` | 이미지와 compose |
 | `CLAUDE.md` | 작업 규칙 |
 
-`docs-for-agent/`는 에이전트용 기록이므로 처음 읽을 필요가 없다.
+`docs-for-agent/`는 에이전트용 정보이므로 처음 읽을 필요가 없다.

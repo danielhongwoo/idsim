@@ -14,7 +14,7 @@
 
 // 기술자 목록과 PX4 골든(tests/fixtures/px4/<PX4_TAG>/topics.txt)의 양방향 일치,
 // PX4_MSGS_REF 3곳 일치.
-// 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 2, 9.
+// 결정: 1a 4단계 idsim_common 설계 결정(git 이력) 쟁점 2, 9.
 // 골든 경로와 PX4_MSGS_REF는 CMake가 docker/versions.env에서 읽어 환경 변수로 넘긴다.
 
 #include <gtest/gtest.h>

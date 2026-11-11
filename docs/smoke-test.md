@@ -1,23 +1,21 @@
 # 환경 스모크 테스트 설계
 
-2026-11-06, Daniel
-
-이 문서는 환경 스모크 테스트의 설계다. [roadmap.md](roadmap.md) Phase 1a 1단계에서 처음 도입했고, 그 뒤로는 이미지, PX4 파라미터, PX4 태그가 바뀔 때마다 돌리는 회귀 검사이며 골든 파일 형식의 기준 문서다. 목적은 Ubuntu 24.04 + ROS 2 Jazzy + Gazebo Harmonic + PX4 v1.17.0 + uXRCE-DDS Agent v2.4.3 + CycloneDDS 조합이 컨테이너 구성에서 동작하는지 확인하고, 토픽 이름의 버전 접미사와 발행자 QoS 실측값을 골든 파일로 고정하는 것이다. 버전과 경로의 단일 출처는 `docker/versions.env`이며, 이 문서의 값은 그 파일을 설명한 것이다.
+이 문서는 환경 스모크 테스트의 설계다. 스모크는 이미지, PX4 파라미터, PX4 태그가 바뀔 때마다 돌리는 회귀 검사이며, 이 문서는 골든 파일 형식의 기준 문서다. 목적은 Ubuntu 24.04 + ROS 2 Jazzy + Gazebo Harmonic + PX4 v1.17.0 + uXRCE-DDS Agent v2.4.3 + CycloneDDS 조합이 컨테이너 구성에서 동작하는지 확인하고, 토픽 이름의 버전 접미사와 발행자 QoS 실측값을 골든 파일로 고정하는 것이다. 버전과 경로의 단일 출처는 `docker/versions.env`이며, 이 문서의 값은 그 파일을 설명한 것이다.
 
 ## 원칙
 
 - 한 단계에서 한 변수만 바꾼다. 앞 단계가 실패하면 뒤 단계는 보지 않는다.
-- 3단계부터 px4-out-clock은 운영 스택과 같은 구성으로 올린다(standalone은 bridge 포함). 변수 분리는 스모크 단계가 아니라 기동 단계가 맡는다: `startup.stages`는 에이전트와 gazebo, px4-N, bridge의 세 단계이고 `up --wait`가 어느 단계에서 실패했는지로 원인을 가른다. bridge는 px4-N이 healthy가 된 뒤에만 시작되므로 px4 실패와 bridge 실패는 섞이지 않는다.
+- px4-out, px4-in, golden, clock은 운영 스택과 같은 구성으로 올린다(standalone은 bridge 포함). 변수 분리는 스모크 단계가 아니라 기동 단계가 맡는다: `startup.stages`는 에이전트와 gazebo, px4-N, bridge의 세 단계이고 `up --wait`가 어느 단계에서 실패했는지로 원인을 가른다. bridge는 px4-N이 healthy가 된 뒤에만 시작되므로 px4 실패와 bridge 실패는 섞이지 않는다.
 - ROS 2 CLI는 항상 `--no-daemon`으로 실행한다. 데몬 캐시로 오판하지 않기 위함이다.
 - 토픽 수신 판정은 "벽시계 T초 안에 1회 이상 수신, timestamp 필드가 0이 아님"으로 정의하고 주기에 묶지 않는다. 상태 전이는 에지가 아니라 "최신 상태가 N회 연속 유지"로 판정한다.
 - echo와 판정 노드의 QoS는 `sensor_data` 프로필 하나로 통일한다. `reliable`로 echo해 수신 0을 확인하는 반증 실험은 진단 절차로만 쓴다.
-- 1단계에는 `/clock`이 clock에서야 올라오므로 스모크의 타임아웃은 예외적으로 벽시계를 쓴다. 6단계 통합 테스트부터는 architecture.md대로 `/clock` 기준이다.
+- 스모크의 타임아웃은 예외적으로 벽시계를 쓴다. `/clock` 공급 자체가 clock 단계의 판정 대상이기 때문이다. 통합 테스트는 architecture.md대로 `/clock` 기준이다.
 
 ## 단계와 통과 기준
 
 images 이미지 확인. `ros-ws`에서 `printenv RMW_IMPLEMENTATION`이 `rmw_cyclonedds_cpp`. `px4`에서 `gz sim --versions`가 `versions.env`의 `GZ_RELEASE`에 해당하는 major 버전, `command -v px4`가 `/opt/PX4-Autopilot/build/px4_sitl_default/bin/px4`를 가리키고 `etc/init.d-posix/rcS`가 있고, `/opt/px4-gz/models/x500/model.sdf`, `/opt/px4-gz/server.config`, `/opt/px4-gz/server.idsim.config`가 있다. `xrce-agent`에서 `MicroXRCEAgent --help`가 동작. 모든 이미지의 `dpkg -l | grep gz-transport` 결과를 artifacts에 남긴다.
 
-embedded (진단용). PX4가 Gazebo를 컨테이너 안에서 직접 띄우는 구성으로, 운용 구성이 아니라 px4-out이 실패할 때 원인을 가르는 데 쓴다. `gen_compose --variant embedded`(gazebo 서비스 없음, px4-1에 `HEADLESS=1`, `PX4_GZ_STANDALONE` 없음)로 만든 compose로 실행하고 인스턴스는 `-i 1`, 네임스페이스는 `px4_1`이다. 통과: PX4 로그에 `Gazebo world is ready`, `px4-uxrce_dds_client status` 출력에 `Running, connected`(단어 `connected`만 찾으면 `disconnected`에도 걸리므로 두 단어 문자열로 찾는다), `ros2 topic list --no-daemon`에 `^/px4_1/fmu/out/vehicle_status(_v[0-9]+)?$`가 정확히 한 줄, `timeout 10 ros2 topic echo --once --qos-profile sensor_data`가 종료 코드 0이고 timestamp가 0이 아님, `ros2 topic info -v`에서 Publisher count 1, 타입 `px4_msgs/msg/VehicleStatus`, 수신한 `vehicle_status.system_id`가 2. `info -v` 출력은 artifacts에 남기고 QoS 값 판정은 하지 않는다. 값은 golden이 golden 파일로 저장하고 이후 단위 테스트가 비교한다. 예상값(BEST_EFFORT, TRANSIENT_LOCAL)은 [PX4 ROS 2 가이드](https://docs.px4.io/main/en/ros2/user_guide)의 QoS 설명을 따른 참고값이다.
+embedded (진단용). PX4가 Gazebo를 컨테이너 안에서 직접 띄우는 구성으로, 운용 구성이 아니라 px4-out이 실패할 때 원인을 가르는 데 쓴다. `gen_compose --variant embedded`(gazebo 서비스 없음, px4-1에 `HEADLESS=1`, `PX4_GZ_STANDALONE` 없음)로 만든 compose로 실행하고 인스턴스는 `-i 1`, 네임스페이스는 `px4_1`이다. 통과: PX4 로그에 `Gazebo world is ready`, `px4-uxrce_dds_client status` 출력에 `Running, connected`(단어 `connected`만 찾으면 `disconnected`에도 걸리므로 두 단어 문자열로 찾는다), `ros2 topic list --no-daemon`에 `^/px4_1/fmu/out/vehicle_status(_v[0-9]+)?$`가 정확히 한 줄, `timeout 10 ros2 topic echo --once --qos-profile sensor_data`가 종료 코드 0이고 timestamp가 0이 아님, `ros2 topic info -v`에서 Publisher count 1, 타입 `px4_msgs/msg/VehicleStatus`, 수신한 `vehicle_status.system_id`가 2. `info -v` 출력은 artifacts에 남기고 QoS 값 판정은 하지 않는다. 값은 golden 단계가 골든 파일로 저장하고 단위 테스트가 비교한다. 예상값(BEST_EFFORT, TRANSIENT_LOCAL)은 [PX4 ROS 2 가이드](https://docs.px4.io/main/en/ros2/user_guide)의 QoS 설명을 따른 참고값이다.
 
 px4-out standalone. Gazebo를 `gazebo` 서비스로 분리하고 `PX4_GZ_STANDALONE=1`. 통과: `gz model --list`에 `x500_1`, PX4 로그에 gz_bridge 오류 없음, embedded 판정 반복, `pxh commander check` 통과. 스폰 요청(`/world/<월드>/create`)의 결과를 PX4가 검사하지 않으므로(v1.17.0 `ROMFS/px4fmu_common/init.d-posix/px4-rc.gzsim`, standalone 분기) `gz model --list`가 스폰 성공의 유일한 증거다.
 
@@ -25,33 +23,33 @@ px4-in in 방향 왕복. `/px4_1/fmu/in/vehicle_command`로 arm(`target_system` 
 
 golden 기록. `tests/smoke/capture.sh`가 골든 파일과 원시 산출물을 만든다. 원시 산출물은 `ros2 topic list -t`, 토픽별 `info -v` 원문, 30초 `hz`, `pxh param show`, `pxh ver all`, compose logs, ULog.
 
-clock /clock 판정. `bridge` 서비스(ros-ws의 ros_gz_bridge, vendor gz-transport)가 `gazebo` 서비스(OSRF gz-transport13)의 `/clock`을 ROS 2로 브리지하며 6단계부터 노드들의 시간 기준이 된다. 와이어 호환은 1단계에서 양쪽 13.6.0으로 실측 통과했고 이 단계는 이미지 재빌드 때의 회귀를 잡는다. bridge healthcheck는 `/clock` 1회 수신만 보므로 여기서 품질을 본다. 통과: `ros2 topic info -v /clock`의 Publisher count가 정확히 1, `ros2 topic echo /clock`의 sim 시각이 증가. 양쪽 gz-transport 버전을 artifacts에 기록. 실패하면 `bridge`를 sim-base 계열 이미지(ros_gz 소스 빌드)로 바꾸는 대안으로 간다.
+clock /clock 판정. `bridge` 서비스(ros-ws의 ros_gz_bridge, vendor gz-transport)가 `gazebo` 서비스(OSRF gz-transport13)의 `/clock`을 ROS 2로 브리지하며 이것이 노드들의 시간 기준이다. 이 단계가 양쪽 gz-transport(둘 다 13.6.0)의 와이어 호환을 확인하고 이미지 재빌드 때의 회귀를 잡는다. bridge healthcheck는 `/clock` 1회 수신만 보므로 여기서 품질을 본다. 통과: `ros2 topic info -v /clock`의 Publisher count가 정확히 1, `ros2 topic echo /clock`의 sim 시각이 증가. 양쪽 gz-transport 버전을 artifacts에 기록. 실패하면 `bridge`를 sim-base 계열 이미지(ros_gz 소스 빌드)로 바꾸는 대안으로 간다.
 
 ## 서비스별 환경변수
 
-`gazebo` (sim-base, px4-out부터): `GZ_PARTITION=idsim-<k>`, `GZ_IP=127.0.0.1`, `GZ_SIM_SERVER_CONFIG_PATH=/opt/px4-gz/server.idsim.config`, `GZ_SIM_RESOURCE_PATH=/opt/px4-gz/models:/opt/px4-gz/worlds`, `PX4_GZ_WORLD=default`. 명령 `gz sim -r -s /opt/px4-gz/worlds/${PX4_GZ_WORLD}.sdf`. 3단계부터는 `idsim_sim`의 wrapper `gz_server.sh`가 이 명령을 감싸 `world.name`을 SDF와 대조하고 `world.origin`이 있으면 `set_spherical_coordinates`를 한 번 호출한 뒤 표시 파일을 남긴다. 헤드리스는 `-s`(서버만)로 얻는다. 렌더링 엔진 플래그는 주지 않는다. x500 기본 월드에는 렌더링 센서가 없어 Sensors 시스템이 렌더 엔진을 초기화하지 않고, ogre 1.x는 X 디스플레이 없이 돌지 않는다(gz-rendering8 소스 확인). 나중에 카메라 센서를 쓰면 ogre2 + `--headless-rendering` + Mesa llvmpipe로 간다. `HEADLESS`와 `PX4_GZ_SIM_RENDER_ENGINE`은 PX4 rcS 전용 변수임이 소스로 확인되어 gazebo 서비스에는 주지 않는다. `server.idsim.config`는 sim-base가 PX4-gazebo-models 원본 `server.config`에서 PX4 전용 플러그인 두 줄(`libOpticalFlowSystem.so`, `libGstCameraSystem.so`)만 뺀 파일이며 빌드 때 지운 줄 수가 2인지 검사한다. 원본은 px4 builder의 diff 검사를 위해 그대로 둔다. 두 플러그인은 sim-base에 없어 로드 실패 오류 두 줄이 나지만 서버는 정상 동작함이 실측되었고, x500 기본 모델에는 카메라와 광류 센서가 없다. 이 파일이 월드의 `<plugin>` 선언 대신 Imu, NavSat, Magnetometer, AirPressure 센서 시스템을 올리므로(PX4-gazebo-models의 `worlds/default.sdf`에는 plugin 선언이 없다) 이 변수를 빼면 EKF가 수렴하지 않는다고 본다(가정 절 참조).
+`gazebo` (sim-base, px4-out부터): `GZ_PARTITION=idsim-<k>`, `GZ_IP=127.0.0.1`, `GZ_SIM_SERVER_CONFIG_PATH=/opt/px4-gz/server.idsim.config`, `GZ_SIM_RESOURCE_PATH=/opt/px4-gz/models:/opt/px4-gz/worlds`, `PX4_GZ_WORLD=default`. 명령 `gz sim -r -s /opt/px4-gz/worlds/${PX4_GZ_WORLD}.sdf`. `idsim_sim`의 wrapper `gz_server.sh`가 이 명령을 감싸 `world.name`을 SDF와 대조하고 `world.origin`이 있으면 `set_spherical_coordinates`를 한 번 호출하며, 원점 단계가 끝나면 준비 파일 `/tmp/idsim/ready`를 남긴다. 헤드리스는 `-s`(서버만)로 얻는다. 렌더링 엔진 플래그는 주지 않는다. x500 기본 월드에는 렌더링 센서가 없어 Sensors 시스템이 렌더 엔진을 초기화하지 않고, ogre 1.x는 X 디스플레이 없이 돌지 않는다(gz-rendering8 소스 확인). 나중에 카메라 센서를 쓰면 ogre2 + `--headless-rendering` + Mesa llvmpipe로 간다. `HEADLESS`와 `PX4_GZ_SIM_RENDER_ENGINE`은 PX4 rcS 전용 변수임이 소스로 확인되어 gazebo 서비스에는 주지 않는다. `server.idsim.config`는 sim-base가 PX4-gazebo-models 원본 `server.config`에서 PX4 전용 플러그인 두 줄(`libOpticalFlowSystem.so`, `libGstCameraSystem.so`)만 뺀 파일이며 빌드 때 지운 줄 수가 2인지 검사한다. 원본은 px4 builder의 diff 검사를 위해 그대로 둔다. 두 플러그인은 sim-base에 없어 로드 실패 오류 두 줄이 나지만 서버는 정상 동작함이 실측되었고, x500 기본 모델에는 카메라와 광류 센서가 없다. 이 파일이 월드의 `<plugin>` 선언 대신 Imu, NavSat, Magnetometer, AirPressure 센서 시스템을 올리므로(PX4-gazebo-models의 `worlds/default.sdf`에는 plugin 선언이 없다) 이 변수를 빼면 EKF가 수렴하지 않는다고 본다(가정 절 참조).
 
-`px4` (px4): `PX4_SYS_AUTOSTART=4001`, `PX4_SIM_MODEL=gz_x500`, `PX4_GZ_STANDALONE=1`(standalone 구성), `PX4_GZ_WORLD=default`, `PX4_GZ_MODELS=/opt/px4-gz/models`(standalone 분기는 gz_env.sh를 읽지 않고 `file://${PX4_GZ_MODELS}/<모델>/model.sdf`로 스폰하므로 필수, v1.17.0 `px4-rc.gzsim` 137행), `PX4_GZ_MODEL_POSE="0,0,0,0,0,0"`, `PX4_UXRCE_DDS_NS=px4_1`, `PX4_UXRCE_DDS_PORT=<에이전트 포트>`, `ROS_DOMAIN_ID=<스택 오프셋>`, `GZ_PARTITION`, `GZ_IP=127.0.0.1`, `config/px4/sitl_params.env`의 `PX4_PARAM_*`. 작업 디렉터리는 `/opt/PX4-Autopilot/build/px4_sitl_default/rootfs`, 명령 `px4 -d -i 1`(PATH에 `build/px4_sitl_default/bin`이 있다. `bin/px4`는 rootfs 기준으로 존재하지 않는다). px4 runtime의 `gz_bridge/server.config` 링크도 `/opt/px4-gz/server.idsim.config`를 가리킨다. `-i 1`이면 실제 작업 디렉터리는 `rootfs/1`이고 ULog는 `rootfs/1/log`다. `PX4_SIM_SPEED_FACTOR`는 스모크에서 주지 않는다(rcS가 손실 타임아웃 파라미터를 덮어쓴다). embedded 모드(S1, embedded)에서는 `HEADLESS=1`을 준다. 이 변수는 PX4 rcS가 읽어 Gazebo GUI를 띄우지 않게 하는 것이며, 실측에서 빼면 rcS가 GUI를 띄우려 했다. gazebo 서비스에는 효과가 없다. 3단계부터 이 서비스는 생성된 compose의 `px4-1`이고 호스트 uid:gid로 실행되며 `rootfs/1`은 `artifacts/runs/<실행 id>/px4-1/`의 바인드 마운트다. 판정 스크립트는 식별자를 `stack.json`에서 읽는다.
+`px4` (px4): `PX4_SYS_AUTOSTART=4001`, `PX4_SIM_MODEL=gz_x500`, `PX4_GZ_STANDALONE=1`(standalone 구성), `PX4_GZ_WORLD=default`, `PX4_GZ_MODELS=/opt/px4-gz/models`(standalone 분기는 gz_env.sh를 읽지 않고 `file://${PX4_GZ_MODELS}/<모델>/model.sdf`로 스폰하므로 필수, v1.17.0 `px4-rc.gzsim` 137행), `PX4_GZ_MODEL_POSE="0,0,0,0,0,0"`, `PX4_UXRCE_DDS_NS=px4_1`, `PX4_UXRCE_DDS_PORT=<에이전트 포트>`, `ROS_DOMAIN_ID=<스택 오프셋>`, `GZ_PARTITION`, `GZ_IP=127.0.0.1`, `config/px4/sitl_params.env`의 `PX4_PARAM_*`. 작업 디렉터리는 `/opt/PX4-Autopilot/build/px4_sitl_default/rootfs`, 명령 `px4 -d -i 1`(PATH에 `build/px4_sitl_default/bin`이 있다. `bin/px4`는 rootfs 기준으로 존재하지 않는다). px4 runtime의 `gz_bridge/server.config` 링크도 `/opt/px4-gz/server.idsim.config`를 가리킨다. `-i 1`이면 실제 작업 디렉터리는 `rootfs/1`이고 ULog는 `rootfs/1/log`다. `PX4_SIM_SPEED_FACTOR`는 스모크에서 주지 않는다(rcS가 손실 타임아웃 파라미터를 덮어쓴다). embedded 변형에서는 `HEADLESS=1`을 준다. 이 변수는 PX4 rcS가 읽어 Gazebo GUI를 띄우지 않게 하는 것이며, 빼면 rcS가 GUI를 띄우려 한다(실측). gazebo 서비스에는 효과가 없다. 이 서비스는 생성된 compose의 `px4-1`이고 호스트 uid:gid로 실행되며 `rootfs/1`은 `artifacts/runs/<실행 id>/px4-1/`의 바인드 마운트다. 판정 스크립트는 식별자를 `stack.json`에서 읽는다.
 
 `xrce-agent`: 명령 `MicroXRCEAgent udp4 -p <에이전트 포트>`. `ROS_DOMAIN_ID`는 주지 않는다. 도메인은 PX4 client가 세션 생성 때 넘긴다.
 
 `ros-ws`, `bridge`, `runner`: `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`, `CYCLONEDDS_URI=file:///opt/idsim/config/cyclonedds.xml`, `ROS_DOMAIN_ID`, `GZ_PARTITION`과 `GZ_IP=127.0.0.1`(bridge만).
 
-스택 오프셋 전달. 1단계에서는 compose 보간이 산술을 못 해 손으로 쓴 compose가 세 값을 환경변수로 받았고 `run_smoke.sh`가 계산해 넘겼다. 3단계부터는 `tools/gen_compose.py`가 `config/fleet.yaml`과 스택 번호 k에서 값을 계산해 compose에 구체값으로 박고 같은 값을 `stack.json`에 남긴다. 스택을 올리는 진입점은 `tools/sim_stack.sh`(스모크는 같은 생성기를 부르는 `run_smoke.sh`)이며, 판정 스크립트는 `stack.json`만 읽고 값을 다시 계산하지 않는다. 그래서 compose를 직접 실행해 세 값이 어긋날 일이 없고, k가 다르면 스택과 스모크를 동시에 돌릴 수 있다.
+스택 오프셋 전달. `tools/gen_compose.py`가 `config/fleet.yaml`과 스택 번호 k에서 값을 계산해 compose에 구체값으로 박고 같은 값을 `stack.json`에 남긴다(compose 보간은 산술을 못 한다). 스택을 올리는 진입점은 `tools/sim_stack.sh`(스모크는 같은 생성기를 부르는 `run_smoke.sh`)이며, 판정 스크립트는 `stack.json`만 읽고 값을 다시 계산하지 않는다. 그래서 compose를 직접 실행해 세 값이 어긋날 일이 없고, k가 다르면 스택과 스모크를 동시에 돌릴 수 있다.
 
 스택 오프셋 값. 스택 번호 k(기본 0)에 대해 `ROS_DOMAIN_ID` = 20 + k, 에이전트 포트 = 8888 + k, `GZ_PARTITION` = `idsim-<k>`. 기본 도메인을 0이 아닌 20으로 두는 이유는 인터페이스를 제한하지 않는 DDS 설정에서 격리가 도메인 ID로만 이루어지는데, 도메인 0은 같은 호스트의 다른 ROS 2 스택이 흔히 쓰기 때문이다. CI도 같은 규칙을 쓰며 예외를 두지 않는다. `ROS_DOMAIN_ID`는 PX4 rcS가 `UXRCE_DDS_DOM_ID`로 복사해 에이전트 세션에 넘기므로 px4 서비스와 ROS 서비스에 같은 값이 들어가야 한다. `GZ_PARTITION`은 gz-transport의 기본값(호스트명과 사용자명)에 기대지 않고 gazebo, px4, bridge 서비스에 항상 명시한다. 같은 호스트의 다른 Gazebo 인스턴스와 섞이지 않기 위해서다.
 
-cyclonedds.xml은 유니캐스트 피어 127.0.0.1, 멀티캐스트 끔, `ParticipantIndex auto`만 둔 파일 하나이며 `NetworkInterface`를 고정하지 않는다. 처음 설계는 lo 인터페이스로 고정했으나 S1 실측에서 틀린 것으로 드러났다. 에이전트의 Fast DDS는 호스트 인터페이스 주소(lo가 아님)만 메타트래픽 로케이터로 광고하고 `interfaceWhiteList` 프로필도 적용되지 않아, lo에 묶인 Cyclone 참가자는 그 주소로 갈 수 없었다. 인터페이스 고정을 빼면 fmu 토픽 65개가 보였다. 설정 없음과 비교할 때는 `CYCLONEDDS_URI`를 비운다.
+cyclonedds.xml은 유니캐스트 피어 127.0.0.1, 멀티캐스트 끔, `ParticipantIndex auto`만 둔 파일 하나이며 `NetworkInterface`를 고정하지 않는다. 에이전트의 Fast DDS는 호스트 인터페이스 주소(lo가 아님)만 메타트래픽 로케이터로 광고하고 `interfaceWhiteList` 프로필도 적용되지 않아, lo에 묶인 Cyclone 참가자는 에이전트를 찾지 못한다(실측). 설정 없음과 비교할 때는 `CYCLONEDDS_URI`를 비운다.
 
-compose 프로젝트 이름. 모든 compose 파일은 `name:`을 명시한다(스모크도 `gen_compose.py`가 만드는 `idsim-<k>`를 쓴다. 1단계의 손으로 쓴 compose는 `idsim-smoke` 하나뿐이라 호스트당 스택 하나만 가능했다). 명시하지 않으면 디렉터리명이 프로젝트 이름이 되어 호스트의 다른 compose 프로젝트와 충돌한다. S1 실행에서 실제로 일어났다.
+compose 프로젝트 이름. 모든 compose 파일은 `name:`을 명시한다(스모크도 `gen_compose.py`가 만드는 `idsim-<k>`를 쓴다). 명시하지 않으면 디렉터리명이 프로젝트 이름이 되어 호스트의 다른 compose 프로젝트와 충돌한다.
 
 ## healthcheck와 시작 정책
 
 | 서비스 | 명령 | interval / timeout / retries / start_period |
 | --- | --- | --- |
 | xrce-agent | `/proc/net/udp`의 local_address 열에 에이전트 포트(16진수)가 바인드된 행 존재. UDP에는 LISTEN 상태가 없으므로 st 열은 보지 않는다. 포트는 compose가 계산 | 5s / 5s / 6 / 10s |
-| gazebo | `gz service -l \| grep -q /world/${PX4_GZ_WORLD}/scene/info`. 3단계부터는 `gz service -i`의 scene/info 응답 AND (`world.origin`이 있으면) wrapper의 원점 표시 파일 | 5s / 5s / 6 / 30s |
-| px4 | `px4-uxrce_dds_client --instance 1 status \| grep -q 'Running, connected'`. 명령의 종료 코드는 연결 상태를 반영하지 않으므로(v1.17.0 `src/modules/uxrce_dds_client/uxrce_dds_client.cpp`의 `print_status`가 항상 0을 돌려준다) 문자열로 판정. `px4-gz_bridge status`는 연결 상태를 출력하지 않고 Gazebo가 멈춰도 종료 코드 0이라 healthcheck에 쓰지 않는다(2026-11-09 실측). 옛 모델 잔존은 운영 스크립트의 down 뒤 up과 `gz model --list` 사전 검사로 막는다 | 5s / 5s / 6 / 90s(embedded), 45s(standalone) |
+| gazebo | `gz service -i --service /world/<월드>/scene/info \| grep -q "Service providers" && test -f /tmp/idsim/ready`. 준비 파일은 wrapper가 원점 단계 뒤에 쓴다 | 5s / 5s / 6 / 30s |
+| px4 | `px4-uxrce_dds_client --instance 1 status \| grep -q 'Running, connected'`. 명령의 종료 코드는 연결 상태를 반영하지 않으므로(v1.17.0 `src/modules/uxrce_dds_client/uxrce_dds_client.cpp`의 `print_status`가 항상 0을 돌려준다) 문자열로 판정. `px4-gz_bridge status`는 연결 상태를 출력하지 않고 Gazebo가 멈춰도 종료 코드 0이라 healthcheck에 쓰지 않는다(실측). 옛 모델 잔존은 운영 스크립트의 down 뒤 up과 `gz model --list` 사전 검사로 막는다 | 5s / 5s / 6 / 90s(embedded), 45s(standalone) |
 | bridge | `/clock` 1회 수신 | 5s / 5s / 6 / 20s |
 
 `depends_on`은 xrce-agent -> gazebo -> px4 -> bridge 순으로 `service_healthy`이며, 판정 명령은 상주 서비스가 아닌 `runner`(프로필 `tools`)에서 `compose run`으로 실행한다. `up --wait`는 `startup.stages`의 세 단계로 나눠 부른다. `docker compose up --wait --wait-timeout 240`. `restart`는 모든 서비스에서 `no`다. px4-rc.gzsim(v1.17.0, standalone 분기)은 `/world/<월드>/scene/info` 서비스를 1초 간격 30회 기다리다 초과하거나 gz_bridge 시작에 실패하면 exit 1로 끝나며, 그러면 `up --wait`가 즉시 실패하고 `run_smoke.sh`가 compose logs와 ULog를 artifacts에 모은 뒤 실패한다. 자동 재시작은 플래키를 가리고 standalone에서 `x500_1`이 남아 재스폰이 반복 실패할 수 있어 쓰지 않는다.
@@ -83,17 +81,17 @@ GoogleTest는 다음을 검사한다. 테스트 안에서만 정의한 더미 �
 ## 예외 사항과 가정
 
 - 설계에 적힌 판정은 모두 1차 구현 범위다. 2차로 미루지 않는다. images 전체, embedded의 `info -v` 원문 저장과 Publisher count, px4-out의 `commander check`와 gz_bridge 오류 판정, px4-in의 Subscription count, golden의 `param show`와 `ver all` 저장은 각각 가정의 반증 지점이며, 특히 `param show` 저장값의 `COM_OBL_RC_ACT` = 4와 `COM_RC_IN_MODE` = 4 확인은 그 판정이 없으면 파라미터 이름 오타가 조용히 지나간다.
-- 스모크 타임아웃은 벽시계다. 6단계부터 `/clock`.
-- 1단계의 compose는 손으로 썼고 3단계의 `gen_compose.py`가 대체했다(`docker/compose.smoke.yaml`은 삭제). pytest fixture는 6단계에서 만들고, `tests/support/` 모듈은 1단계부터 만들어 재사용한다.
+- 스모크 타임아웃은 벽시계다.
+- compose는 `gen_compose.py`가 생성한다. `tests/support/` 모듈은 스모크와 통합 테스트가 함께 쓴다.
 - `server.config`는 PX4 소스 `src/modules/simulation/gz_bridge/server.config`와 PX4-gazebo-models 루트의 것이 같다(실측 확인). px4 builder가 diff로 계속 검사한다. gz_plugins(광류, GStreamer 카메라)를 sim-base에 넣지 않는다. OpenCV, GStreamer 의존과 비재현 빌드가 따라오고 x500 기본 모델에는 쓸 곳이 없다.
 - `OffboardControlMode`에는 `MESSAGE_VERSION` 상수가 없고 `VehicleStatus`는 1임이 실측으로 확인되었다. versioned 34개 중 9개가 1, 25개가 0이며 `TrajectorySetpoint`, `VehicleCommand`, `VehicleCommandAck`는 0이다. `ArmingCheckReply.msg`만 등호 앞 공백이 두 칸이라 `.msg`를 읽는 파서는 공백에 관대해야 한다.
-- px4_ros_com에는 release/1.17 브랜치가 없다(release/1.13, 1.15, 1.16, v1.14, main). `PX4_ROS_COM_REF`는 release/1.16 HEAD와 같은 main 커밋으로 고정했다. 4단계에서 확인한 결론: `frame_transforms`는 px4_msgs에 의존하지 않아 태그 호환은 문제가 아니지만 공분산 변환 두 개가 틀리고 동체 변환이 NaN을 다른 축으로 번지게 하므로, `idsim_common`은 래핑하지 않고 변환을 직접 구현한다. 벡터와 쿼터니언 변환은 맞아서 px4_ros_com은 단위 테스트의 비교 기준으로만 쓴다.
-- 1단계에서는 호스트에서 `compose run`으로 ros-ws를 띄우면 `artifacts/`에 root 소유 파일이 생겼다. 3단계부터 생성된 compose가 호스트 uid:gid `user` 매핑을 넣어 해결했다. 3단계부터 px4-out 판정에 `sensor_gps` 좌표가 `fleet.yaml`의 `world.origin`과 일치하는지, `gz model --list`에 `x500_1`이 정확히 하나인지, PX4 로그에 `WARN  [mavlink] bind failed`가 없는지를 더한다.
+- px4_ros_com에는 release/1.17 브랜치가 없다(release/1.13, 1.15, 1.16, v1.14, main). `PX4_ROS_COM_REF`는 release/1.16 HEAD와 같은 main 커밋으로 고정했다. `frame_transforms`는 px4_msgs에 의존하지 않아 태그 호환은 문제가 아니지만 공분산 변환 두 개가 틀리고 동체 변환이 NaN을 다른 축으로 번지게 하므로, `idsim_common`은 래핑하지 않고 변환을 직접 구현한다. 벡터와 쿼터니언 변환은 맞아서 px4_ros_com은 단위 테스트의 비교 기준으로만 쓴다.
+- 생성된 compose가 호스트 uid:gid `user` 매핑을 넣으므로 `artifacts/`에 root 소유 파일이 생기지 않는다. px4-out 판정은 `sensor_gps` 좌표가 `fleet.yaml`의 `world.origin`과 일치하는지, `gz model --list`에 `x500_1`이 정확히 하나인지, PX4 로그에 `WARN  [mavlink] bind failed`가 없는지를 포함한다.
 - 가정: 모델 저장소 커밋은 `PX4_GZ_MODELS_REF`로 고정하고 px4 builder가 서브모듈 커밋과 같은지 검사한다. 런타임 이미지는 `/opt/PX4-Autopilot/Tools/simulation/gz`를 `/opt/px4-gz`로 가리키는 심볼릭 링크로 두어 빌드 때 박힌 gz_env.sh 경로를 살린다.
 - 가정: `GZ_IP=127.0.0.1`을 빼면 gz-transport 디스커버리가 불안정하다(`make` 타깃이 이 값을 넣어 주는 것을 근거로 한 추측). 스모크는 명시하고 간다.
 - 가정: `server.idsim.config`가 없으면 센서 시스템이 올라오지 않아 EKF가 수렴하지 않는다(PX4 소스 읽기 기반). px4-out의 `commander check`가 반증 지점이다. `COM_RC_IN_MODE=4`에서 `commander check`가 통과하는지도 같은 지점에서 본다.
 - SITL 파라미터는 `config/px4/sitl_params.env`가 단일 출처이며 값마다 근거 주석을 둔다. Offboard 손실 시 동작 파라미터의 이름은 `COM_OBL_RC_ACT`(4 = Land)다. `COM_OBL_ACT`라는 파라미터는 v1.17.0에 없고, 잘못된 이름은 rcS의 `param set`이 오류만 찍고 넘어가 기본값(Position)이 남으므로 이름 오타는 조용한 실패가 된다. golden의 `param show` 저장값에서 이 이름의 값이 4인지 확인한다.
-- 4단계부터 공통 SITL 파라미터에 `UXRCE_DDS_SYNCT=0`이 있다(PX4 timestamp를 시뮬레이션 시간 축에 둔다). px4-out의 `param show` 판정이 저장값 0을 확인한다. 이 값에서 `timesync_status` 토픽은 그래프와 골든에 남지만 데이터가 오지 않으므로 golden의 `hz` 측정 대상에서 뺀다.
+- 공통 SITL 파라미터에 `UXRCE_DDS_SYNCT=0`이 있다(PX4 timestamp를 시뮬레이션 시간 축에 둔다). px4-out의 `param show` 판정이 저장값 0을 확인한다. 이 값에서 `timesync_status` 토픽은 그래프와 골든에 남지만 데이터가 오지 않으므로 golden의 `hz` 측정 대상에서 뺀다.
 - 가정: `/proc/net/udp`에서 에이전트 포트의 행이 보인다(st 값은 보지 않는다). images에서 확인한다.
 
 ## 로컬 빌드

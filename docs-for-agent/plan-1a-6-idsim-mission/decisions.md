@@ -1,8 +1,8 @@
 # 1a 6단계 idsim_mission 설계 결정 (architect, 2026-11-11)
 
-입력: `opinion-px4.md`(스택 5 실측), `opinion-ros2.md`(스택 6 실측), `opinion-test.md`(실측 없음), `opinion-devops.md`(조회만), 충돌 지점 재질문 답 다섯 건(px4, ros2, test, devops, logging. 아래 "재질문 결과 요약"). reviewer 검증(조건부. 필수 7건, 권고 10건)과 사용자 결정 3건(2026-11-11, 호출한 쪽이 전달)을 반영한 확정본이다. 무엇이 바뀌었는지는 "확정 개정 요약"에 있다. 구현은 이 문서를 따른다. `docs/`와 코드는 이 문서로 고치지 않았다. 반영할 곳은 "문서 반영 목록"에 있다. `progress.md`는 호출한 쪽이 갱신한다.
+입력: px4-engineer 의견서(git 이력)(스택 5 실측), ros2-engineer 의견서(git 이력)(스택 6 실측), test-engineer 의견서(git 이력)(실측 없음), devops-engineer 의견서(git 이력)(조회만), 충돌 지점 재질문 답 다섯 건(px4, ros2, test, devops, logging. 아래 "재질문 결과 요약"). reviewer 검증(조건부. 필수 7건, 권고 10건)과 사용자 결정 3건(2026-11-11, 호출한 쪽이 전달)을 반영한 확정본이다. 무엇이 바뀌었는지는 "확정 개정 요약"에 있다. 구현은 이 문서를 따른다. `docs/`와 코드는 이 문서로 고치지 않았다. 반영할 곳은 "문서 반영 목록"에 있다. `progress.md`는 호출한 쪽이 갱신한다.
 
-2026-11-11에 px4-engineer의 P3b 착수 전 승인 검토(`approval-px4-p3b.md`. 승인 2건, 수정 조건부 3건, 반대 없음, 실측 run 20261111-030155-k5)를 반영했다. 바뀐 곳과 계약, golden, 상수에 주는 영향은 "px4-engineer 승인 반영"에 있다. 그 반영(PR #21)에 대한 reviewer 검증(조건부. 필수 5건, 권고 6건)과 사용자 결정 2건을 같은 날 다시 반영했다("PR #21 reviewer 검증 반영"). 이 개정에서 상수 `REASON_EXTERNAL_DISARM = 14`가 더해졌다. 그 개정(PR #23)에 대한 px4-engineer 확인(`approval-px4-p3b-review.md`. 승인 3건, 수정 조건부 2건, 반대 없음)과 reviewer 검증(조건부. 필수 3건)도 반영했다("PR #23 검토 반영"). 같은 날 P3a 실험 결과(`p3a-results.md`)가 쟁점 2의 전제(컨테이너 autostart)를 깨서 쟁점 2를 다시 결정했다("P3a 결과 반영"). 그 재결정에 대한 devops-engineer 의견(`opinion-devops-selfstart.md`. 반대 없음, 조건 다섯)과 reviewer 최종 확인(조건부. 필수 3건)도 반영했다("쟁점 2 재결정의 검토 반영"). 이어서 ros2-engineer의 timer 확인과 test-engineer의 조건부 승인(`approval-test-p3.md`. 선결 C1-C6)을 반영했다("확인 예정의 처리"). 마지막으로 px4-engineer가 남은 네 항목을 확인했고(`approval-px4-p3b-final.md`. 반대 없음) 그 결과를 반영해 확인 예정을 모두 닫았다. 감시 표의 순위만 재실측 (4) 전까지 잠정이다.
+2026-11-11에 px4-engineer의 P3b 착수 전 승인 검토(px4-engineer P3b 착수 전 승인 검토(git 이력). 승인 2건, 수정 조건부 3건, 반대 없음, 실측 run 20261111-030155-k5)를 반영했다. 바뀐 곳과 계약, golden, 상수에 주는 영향은 "px4-engineer 승인 반영"에 있다. 그 반영(PR #21)에 대한 reviewer 검증(조건부. 필수 5건, 권고 6건)과 사용자 결정 2건을 같은 날 다시 반영했다("PR #21 reviewer 검증 반영"). 이 개정에서 상수 `REASON_EXTERNAL_DISARM = 14`가 더해졌다. 그 개정(PR #23)에 대한 px4-engineer 확인(px4-engineer PR #23 반영 확인(git 이력). 승인 3건, 수정 조건부 2건, 반대 없음)과 reviewer 검증(조건부. 필수 3건)도 반영했다("PR #23 검토 반영"). 같은 날 P3a 실험 결과(P3a 실행 확인 결과(git 이력))가 쟁점 2의 전제(컨테이너 autostart)를 깨서 쟁점 2를 다시 결정했다("P3a 결과 반영"). 그 재결정에 대한 devops-engineer 의견(devops-engineer 쟁점 2 재결정 검토(git 이력). 반대 없음, 조건 다섯)과 reviewer 최종 확인(조건부. 필수 3건)도 반영했다("쟁점 2 재결정의 검토 반영"). 이어서 ros2-engineer의 timer 확인과 test-engineer의 조건부 승인(test-engineer P3 조건부 승인(git 이력). 선결 C1-C6)을 반영했다("확인 예정의 처리"). 마지막으로 px4-engineer가 남은 네 항목을 확인했고(px4-engineer 최종 확인(git 이력). 반대 없음) 그 결과를 반영해 확인 예정을 모두 닫았다. 감시 표의 순위만 재실측 (4) 전까지 잠정이다.
 
 ## 확정 개정 요약 (2026-11-11)
 
@@ -20,7 +20,7 @@ reviewer 필수 7건의 처리
 | 3 | M5의 의미 넓히기와 "상수는 나중에 더하면 된다"의 모순 | (나)를 골랐다. 고정 전인 지금 상수 `REASON_DISARM_FAILED = 13`을 더한다. REASON_MODE_SWITCH_FAILED의 의미는 넓히지 않는다 | 계약 변경 절 M5 |
 | 4 | 지면 근접 취소(X2)의 "계속 내려앉아 disarm"은 확인된 사실이 아니다 | [추정]으로 내렸다. CANCELED 뒤 이어 보낸 `[LAND]`가 PRECONDITION_FAILED가 될 수 있음을 적었다. 7단계 고정 전 필수 재실측을 넘김 목록에 넣었다. 2026-11-11 실측으로 이륙 단계와 0.5 m 호버에서는 내려앉지 않음이 확인되어 문장을 고쳤다("px4-engineer 승인 반영") | 쟁점 3 M3, 넘김 목록 |
 | 5 | 시간 추정에 실측이 없다 | P4 완료 기준에 15분과 RTF 0.7 기준, 넘으면 판정을 느슨하게 하지 않고 올린다. U2 기록에 미실측 표시. `wall_cap`과 RTF의 관계 | 쟁점 10, 11, README.md |
-| 6 | 의견서의 음차 | `opinion-devops.md` 55, 152행과 `opinion-ros2.md` 99행의 "키"를 key로 고쳤다(내용은 그대로) | 의견서 |
+| 6 | 의견서의 음차 | devops-engineer 의견서(git 이력) 55, 152행과 ros2-engineer 의견서(git 이력) 99행의 "키"를 key로 고쳤다(내용은 그대로) | 의견서 |
 | 7 | file-ownership.md 반영 목록의 누락 | snapshot 헤더, 패키지 `test/`, `px4_raw.py`의 px4 필수 승인, 전이 표와 타임아웃 기본값의 승인자를 더했다 | 문서 반영 목록 |
 
 reviewer 권고 10건의 처리: 모두 받았다.
@@ -46,7 +46,7 @@ reviewer 권고 10건의 처리: 모두 받았다.
 
 ## px4-engineer 승인 반영 (2026-11-11)
 
-입력은 `approval-px4-p3b.md`다. 확인 방법은 PX4 v1.17.0 태그 원문 대조와 스택 5 실측(run 20261111-030155-k5. 경우마다 1-3회, 16 vCPU 호스트)이다. 다섯 항목 중 승인 2건(2, 5), 수정 조건부 3건(1, 3, 4)이고 반대는 없다. 수정 조건은 모두 문장 수정이고 이 개정에 반영했다. 이것으로 쟁점 4의 "P3b 착수 전 px4-engineer 승인 항목"이 닫혔다. 반영은 PR #21로 main에 들어갔다. px4-engineer는 반영된 문장과 뒤의 개정을 2026-11-11에 다시 확인했다(`approval-px4-p3b-review.md`. "PR #23 검토 반영"). 실측이 없는 경로 둘(지상 setpoint 발행 중의 Hold, 이륙 직후 landed가 아직 true인 구간의 지상 setpoint와 disarm)은 닫힌 것이 아니고 필수 재실측 대상이다. P3b는 이 두 경로를 표대로 구현하되 재실측 결과로 바뀔 수 있다.
+입력은 px4-engineer P3b 착수 전 승인 검토(git 이력)다. 확인 방법은 PX4 v1.17.0 태그 원문 대조와 스택 5 실측(run 20261111-030155-k5. 경우마다 1-3회, 16 vCPU 호스트)이다. 다섯 항목 중 승인 2건(2, 5), 수정 조건부 3건(1, 3, 4)이고 반대는 없다. 수정 조건은 모두 문장 수정이고 이 개정에 반영했다. 이것으로 쟁점 4의 "P3b 착수 전 px4-engineer 승인 항목"이 닫혔다. 반영은 PR #21로 main에 들어갔다. px4-engineer는 반영된 문장과 뒤의 개정을 2026-11-11에 다시 확인했다(px4-engineer PR #23 반영 확인(git 이력). "PR #23 검토 반영"). 실측이 없는 경로 둘(지상 setpoint 발행 중의 Hold, 이륙 직후 landed가 아직 true인 구간의 지상 setpoint와 disarm)은 닫힌 것이 아니고 필수 재실측 대상이다. P3b는 이 두 경로를 표대로 구현하되 재실측 결과로 바뀔 수 있다.
 
 승인 항목 다섯
 
@@ -78,15 +78,15 @@ architect가 정한 것
   - 기각: REASON_EXTERNAL_MODE_CHANGE 유지. "끝난 뒤 상태가 위험한가" 하나를 기준으로 삼으면 유지할 수 있다(지상 disarm은 안전한 쪽이다). 그러나 M5에 적은 기준은 위험 여부가 아니라 상태와 다음 동작의 차이였다. 결정을 지키려고 기준을 뒤에 좁히지 않는다. 상수는 고정 전후 모두 추가만 하므로 두 선택 다 되돌릴 수 없는데, 쓰이지 않는 구분은 해가 없고 묶인 의미는 영영 가를 수 없다.
   - 기각: 늘 REASON_FAILSAFE(공중 disarm 행과 대칭이지만 운용자가 지상에서 disarm한 것을 기체 이상으로 읽게 만든다), REASON_INTERNAL(Executor 내부 오류가 아니다).
   - 한계: "external"은 추론이다. Executor가 아는 것은 "`failsafe`가 false인데 Executor가 보내지 않은 disarm"뿐이고 원인은 모른다(`latest_disarming_reason`은 판정에 쓰지 않는다). REASON_EXTERNAL_MODE_CHANGE도 같은 수준의 추론이다. 의미 문장에는 원인이 아니라 관측을 적는다.
-  - px4-engineer는 처음에 EXTERNAL_MODE_CHANGE를 제안했고 확인에서 그 제안을 철회하고 상수 추가를 승인했다(`approval-px4-p3b-review.md` 2번. 다음 동작이 다르다는 같은 이유).
+  - px4-engineer는 처음에 EXTERNAL_MODE_CHANGE를 제안했고 확인에서 그 제안을 철회하고 상수 추가를 승인했다(px4-engineer PR #23 반영 확인(git 이력) 2번. 다음 동작이 다르다는 같은 이유).
   - 이름에 남는 문제(7단계에 1a 고정 전 다시 본다): 의미 문장이 "원인은 판정하지 않는다"인데 이름은 external이다. 다시 볼 때의 시나리오로 `COM_DISARM_LAND` 자동 disarm을 넣는다(TAKEOFF가 뜬 뒤 어떤 이유로 지면에 내려앉아 PX4가 스스로 disarm한 경우. 외부 주체가 없는데 EXTERNAL_DISARM이 나온다).
 - 지상 disarm 확인의 타임아웃 이름: `mode_confirm_timeout`을 그대로 쓴다. px4-engineer가 권고로만 낸 `disarm_confirm_timeout`은 만들지 않는다. 값이 같고(3 s) M5의 계약 문장이 이미 `mode_confirm_timeout`을 가리킨다. 값이 갈려야 할 실측이 나오면 그때 나눈다(노드 파라미터라 계약 변경이 아니다).
-- 지상 setpoint와 발행 규칙의 관계(architect가 채운 문장. px4-engineer 확인 2026-11-11, `approval-px4-p3b-review.md` 3번 승인. 보강 문장은 쟁점 3 M5): 지상 setpoint로 바꿔 발행하는 것은 그 tick에 발행 중일 때뿐이다. 발행 규칙에 따라 이미 멈춘 발행(예: LAND 항목에서 AUTO_LAND를 관측한 뒤의 취소, Hold를 관측한 뒤 지상 판정이 올라간 경우)은 지상 arm 분기에서도 다시 켜지 않고 disarm만 재전송한다. Offboard가 아닌 모드에서 setpoint를 발행하지 않는다는 규칙이 앞선다.
-- 감시 표의 행 우선순위(architect가 채운 문장. px4-engineer 확인 2026-11-11, `approval-px4-p3b-review.md` 2번 승인. 재실측 (4) 전까지는 잠정): 한 tick에 여러 행이 맞으면 순위가 앞선 행이 이긴다. 순위는 쟁점 4의 감시 표에 번호로 적었고 근거도 거기에 있다. 앞 판의 근거 "단위 테스트가 표와 한 줄씩 대조할 수 있게"는 순서가 있어야 하는 이유일 뿐 그 순서가 옳은 이유가 아니었다(reviewer). 철회한다.
+- 지상 setpoint와 발행 규칙의 관계(architect가 채운 문장. px4-engineer 확인 2026-11-11, px4-engineer PR #23 반영 확인(git 이력) 3번 승인. 보강 문장은 쟁점 3 M5): 지상 setpoint로 바꿔 발행하는 것은 그 tick에 발행 중일 때뿐이다. 발행 규칙에 따라 이미 멈춘 발행(예: LAND 항목에서 AUTO_LAND를 관측한 뒤의 취소, Hold를 관측한 뒤 지상 판정이 올라간 경우)은 지상 arm 분기에서도 다시 켜지 않고 disarm만 재전송한다. Offboard가 아닌 모드에서 setpoint를 발행하지 않는다는 규칙이 앞선다.
+- 감시 표의 행 우선순위(architect가 채운 문장. px4-engineer 확인 2026-11-11, px4-engineer PR #23 반영 확인(git 이력) 2번 승인. 재실측 (4) 전까지는 잠정): 한 tick에 여러 행이 맞으면 순위가 앞선 행이 이긴다. 순위는 쟁점 4의 감시 표에 번호로 적었고 근거도 거기에 있다. 앞 판의 근거 "단위 테스트가 표와 한 줄씩 대조할 수 있게"는 순서가 있어야 하는 이유일 뿐 그 순서가 옳은 이유가 아니었다(reviewer). 철회한다.
 - 필수 재실측의 X3(이륙한 적 없는 지상 armed에서 발행 중단)은 남긴다. 이번 run은 X3을 실측하지 않았고 추가 문제 1의 설명도 [소스]에 기댄다.
-- "disarm 전송 뒤에 받은 표본"의 기준(px4-engineer 확인 2026-11-11, `approval-px4-p3b-review.md` 1번 승인과 보강, reviewer 필수 2 반영): 표본의 수신 tick이 이 분기의 첫 disarm 전송 tick보다 크고(tick 번호 비교. `수신 tick > 전송 tick`), `vehicle_status.timestamp`가 그 첫 전송에 실은 `Px4Timestamp`보다 엄격히 뒤(>)인 표본만 센다(두 조건 모두. 비교 대상은 재전송마다 새로 생기는 값이 아니라 첫 전송의 값이다). 3회 연속의 계수: 직전에 센 표본과 `timestamp`가 같은 표본은 건너뛴다(되돌리지도 더하지도 않는다. tick당 표본은 최대 1개이므로 같은 표본을 다음 tick에 다시 본 경우다). DISARMED가 아닌 표본은 계수를 0으로 되돌린다. `timestamp`가 줄어든 표본은 세지 않는다. 3회 연속은 서로 다른 `timestamp` 3개다. 두 값은 같은 축이다([소스] `vehicle_status.timestamp`는 `Commander.cpp` 1943행 근처에서 publish 직전의 `hrt_absolute_time()`이고 SITL lockstep에서 sim 시간이다).
+- "disarm 전송 뒤에 받은 표본"의 기준(px4-engineer 확인 2026-11-11, px4-engineer PR #23 반영 확인(git 이력) 1번 승인과 보강, reviewer 필수 2 반영): 표본의 수신 tick이 이 분기의 첫 disarm 전송 tick보다 크고(tick 번호 비교. `수신 tick > 전송 tick`), `vehicle_status.timestamp`가 그 첫 전송에 실은 `Px4Timestamp`보다 엄격히 뒤(>)인 표본만 센다(두 조건 모두. 비교 대상은 재전송마다 새로 생기는 값이 아니라 첫 전송의 값이다). 3회 연속의 계수: 직전에 센 표본과 `timestamp`가 같은 표본은 건너뛴다(되돌리지도 더하지도 않는다. tick당 표본은 최대 1개이므로 같은 표본을 다음 tick에 다시 본 경우다). DISARMED가 아닌 표본은 계수를 0으로 되돌린다. `timestamp`가 줄어든 표본은 세지 않는다. 3회 연속은 서로 다른 `timestamp` 3개다. 두 값은 같은 축이다([소스] `vehicle_status.timestamp`는 `Commander.cpp` 1943행 근처에서 publish 직전의 `hrt_absolute_time()`이고 SITL lockstep에서 sim 시간이다).
   - 이 기준이 막는 것은 하나다. disarm이 처리되기 전의 DISARMED 표본을 세는 것. [소스] arm과 disarm은 같은 `vehicle_command` 토픽의 FIFO이고 Commander는 주기마다 하나씩 처리한다(`Commander.cpp` 1884-1898행). 늦게 도착한 arm이 disarm 뒤에 처리되는 일은 없다. 잘못 세려면 표본 간격 약 0.5 s의 3회 연속, 곧 약 1 s 동안 arm이 처리되지 않아야 한다.
-  - "엄격히 뒤"는 방어층이다(px4-engineer 확인 2026-11-11, `approval-px4-p3b-final.md` C2). [소스] `vehicle_status.timestamp`는 publish 직전의 `hrt_absolute_time()`이라 단조 증가한다. 같으면 같은 표본을 다시 본 것이고 줄어드는 것은 PX4 재시작이나 시계 되감김뿐이다. 전달 지연 동안 이미 publish된 표본이 "뒤" 조건을 만족할 수 있지만 그 표본이 DISARMED면 기체는 실제로 disarm 상태라 오판정이 아니다. 남는 위험은 늦게 처리된 arm 하나인데 위 FIFO 순서 때문에 disarm 뒤에 처리되는 arm은 없다.
+  - "엄격히 뒤"는 방어층이다(px4-engineer 확인 2026-11-11, px4-engineer 최종 확인(git 이력) C2). [소스] `vehicle_status.timestamp`는 publish 직전의 `hrt_absolute_time()`이라 단조 증가한다. 같으면 같은 표본을 다시 본 것이고 줄어드는 것은 PX4 재시작이나 시계 되감김뿐이다. 전달 지연 동안 이미 publish된 표본이 "뒤" 조건을 만족할 수 있지만 그 표본이 DISARMED면 기체는 실제로 disarm 상태라 오판정이 아니다. 남는 위험은 늦게 처리된 arm 하나인데 위 FIFO 순서 때문에 disarm 뒤에 처리되는 arm은 없다.
   - 노드 시계의 지연: 크기는 [추정]이다. 앞 판이 적은 "[실측] 최대 180 ms"는 "노드 sim 시각 - `vehicle_status.timestamp`", 곧 받은 표본이 묵은 정도이지 노드 시계가 늦은 크기가 아니다(reviewer). 철회한다. 재실측 (5)에서 부호 있는 분포를 기록한다.
 
 계약, golden, 상수에 주는 영향
@@ -106,7 +106,7 @@ PR #21(위 승인 반영)에 대한 reviewer 판정은 조건부였다(px4 보�
 
 사용자 결정(2026-11-11, 호출한 쪽이 전달)
 - U4: replay job의 trigger는 지금 정하지 않는다. replay job을 만드는 Phase 2에서 정하고, `docs/architecture.md` 277행과 `docs/roadmap.md` 59행은 그때 고친다.
-- U5: px4-engineer의 반영 확인은 이 개정이 끝난 뒤 다시 받는다. px4-engineer의 읽기 전용 확인은 앞으로 sonnet으로 받는다(px4-engineer의 기본 모델 opus의 예외. 사용자가 2026-11-11에 정한 일반 규칙이다. 실측과 구현, 설계 토론에는 적용하지 않는다). 확인은 2026-11-11에 끝났고(`approval-px4-p3b-review.md`) 결과는 "PR #23 검토 반영"에 있다.
+- U5: px4-engineer의 반영 확인은 이 개정이 끝난 뒤 다시 받는다. px4-engineer의 읽기 전용 확인은 앞으로 sonnet으로 받는다(px4-engineer의 기본 모델 opus의 예외. 사용자가 2026-11-11에 정한 일반 규칙이다. 실측과 구현, 설계 토론에는 적용하지 않는다). 확인은 2026-11-11에 끝났고(px4-engineer PR #23 반영 확인(git 이력)) 결과는 "PR #23 검토 반영"에 있다.
 
 필수 5건의 처리
 
@@ -125,15 +125,15 @@ PR #21(위 승인 반영)에 대한 reviewer 판정은 조건부였다(px4 보�
 | 1 | 재실측의 "좁혔다"는 범위가 늘었으니 고친다. arm 전송 직후 취소의 경쟁을 재실측에 더한다. 실측 스크립트를 저장소에 둘지 | 수용. "다시 정했다"로 고쳤다. 경쟁 실측을 더했다. 스크립트의 보관은 px4-engineer와 test-engineer가 정하도록 넘김 목록에 적었다 |
 | 2 | "arm을 한 번이라도 보냈으면"의 파급을 단위 테스트로 | 수용. test-engineer 구현 지시에 셋을 적었다. "disarm 전송 뒤 받은 표본"의 기준을 한 줄로 정했다(잠정). ITEM_TIMEOUT의 지상 disarm 분기는 1a에서 닿지 않으므로 전용 테스트를 요구하지 않는다 |
 | 3 | LAND 항목 ITEM_TIMEOUT 문장에 `[LAND]` 단독 미션의 예외 | 수용. 단서를 달았다 |
-| 4 | 재전송 표의 NAV_LAND 행과 LAND 대비책 disarm의 타임아웃 | 수용. 채웠다(architect가 채운 문장. px4-engineer 확인 2026-11-11, `approval-px4-p3b-review.md` 5번 승인) |
-| 5 | 쟁점 10 표 앞 다섯 행의 근거 출처 | 수용. `opinion-px4.md`의 절 번호를 적었다 |
+| 4 | 재전송 표의 NAV_LAND 행과 LAND 대비책 disarm의 타임아웃 | 수용. 채웠다(architect가 채운 문장. px4-engineer 확인 2026-11-11, px4-engineer PR #23 반영 확인(git 이력) 5번 승인) |
+| 5 | 쟁점 10 표 앞 다섯 행의 근거 출처 | 수용. px4-engineer 의견서(git 이력)의 절 번호를 적었다 |
 | 6 | README의 "P1 진행 중" | 사실이라 그대로 둔다 |
 
 ## PR #23 검토 반영 (2026-11-11)
 
 PR #23(위 reviewer 검증 반영)에 검토 둘이 왔고 같은 PR에 반영했다.
 
-px4-engineer 확인(`approval-px4-p3b-review.md`. U5. 이 확인은 사용자 결정으로 sonnet으로 받는다(px4-engineer의 기본 모델 opus의 예외. 사용자가 2026-11-11에 직접 골랐다)): 승인 3건, 수정 조건부 2건, 반대 없음. PX4 v1.17.0 태그 원문 대조이고 새 실측은 없다. 이것으로 앞 개정의 확인 예정 표시를 모두 닫았다. 감시 표의 순위만 재실측 (4) 전까지 잠정으로 남는다.
+px4-engineer 확인(px4-engineer PR #23 반영 확인(git 이력). U5. 이 확인은 사용자 결정으로 sonnet으로 받는다(px4-engineer의 기본 모델 opus의 예외. 사용자가 2026-11-11에 직접 골랐다)): 승인 3건, 수정 조건부 2건, 반대 없음. PX4 v1.17.0 태그 원문 대조이고 새 실측은 없다. 이것으로 앞 개정의 확인 예정 표시를 모두 닫았다. 감시 표의 순위만 재실측 (4) 전까지 잠정으로 남는다.
 
 | 번호 | 대상 | 판정 | 반영 |
 | --- | --- | --- | --- |
@@ -167,7 +167,7 @@ reviewer 권고의 처리
 
 ## P3a 결과 반영 (2026-11-11)
 
-입력은 `p3a-results.md`다(ros2-engineer, 스택 6 run 20261111-030924-k6, launch_ros 0.26.13).
+입력은 P3a 실행 확인 결과(git 이력)다(ros2-engineer, 스택 6 run 20261111-030924-k6, launch_ros 0.26.13).
 
 | 항목 | 결과 | 처리 |
 | --- | --- | --- |
@@ -188,7 +188,7 @@ reviewer 권고의 처리
 
 ## 쟁점 2 재결정의 검토 반영 (2026-11-11)
 
-devops-engineer 의견(`opinion-devops-selfstart.md`. 읽기 전용 검토, 반대 없음). 받은 것은 쟁점 2와 devops 구현 지시, README의 P4 완료 기준에 넣었다.
+devops-engineer 의견(devops-engineer 쟁점 2 재결정 검토(git 이력). 읽기 전용 검토, 반대 없음). 받은 것은 쟁점 2와 devops 구현 지시, README의 P4 완료 기준에 넣었다.
 
 | 항목 | 내용 | 반영 |
 | --- | --- | --- |
@@ -202,7 +202,7 @@ devops-engineer 의견(`opinion-devops-selfstart.md`. 읽기 전용 검토, 반�
 | ERROR 로그 | 자기 전이 실패 로그는 grep할 수 있는 고정 접두어의 한 줄 | 채택. 쟁점 2 |
 | 표시 파일 | 지금은 필요 없다. 다시 볼 조건: CI에서 probe 평균이 7 s를 넘거나 probe 부하로 RTF가 0.7 기준에 걸릴 때 | 채택(두지 않는다) |
 
-reviewer 최종 확인(조건부. 필수 3건). 앞선 조건(golden 두 줄씩, disarm 표본의 AND 기준, U5의 모델 예외)과 px4-engineer 확인의 반영은 확인됐고, `p3a-results.md`의 launch_ros 원인 분석은 이미지의 소스(0.26.13, `load_composable_nodes.py` 245행, `matches_node_name.py`)와 일치했다.
+reviewer 최종 확인(조건부. 필수 3건). 앞선 조건(golden 두 줄씩, disarm 표본의 AND 기준, U5의 모델 예외)과 px4-engineer 확인의 반영은 확인됐고, P3a 실행 확인 결과(git 이력)의 launch_ros 원인 분석은 이미지의 소스(0.26.13, `load_composable_nodes.py` 245행, `matches_node_name.py`)와 일치했다.
 
 | 번호 | 지적 | 처리 |
 | --- | --- | --- |
@@ -210,7 +210,7 @@ reviewer 최종 확인(조건부. 필수 3건). 앞선 조건(golden 두 줄씩,
 | 2 | exit 1 허용이 넓다(launch 인자 누락도 rc 1). `stop_signal`의 이유 문장이 `init: true` 구성과 맞지 않는다 | exit 1을 보아 넘기는 것은 stop을 요청한 뒤에 한정했다. 이유 문장을 `init: true` 구성의 실측으로 바꿨다. P4 검증의 회수와 조건을 적었다 |
 | 3 | 자기 전이 일회 timer의 시계가 적혀 있지 않다 | 벽시계 일회 timer로 정했다. 벽시계 예외 목록에 넣었다. P3a 시험 코드도 벽시계 timer였다(ros2-engineer 확인. "확인 예정의 처리") |
 
-reviewer 권고의 처리: 모두 받았다. 재실측 (5)의 회수, 통과 기준, 결과 파일, 판정자(넘김 목록). 실측 스크립트의 저장 위치는 P4 선행 조건(`progress.md` 미해결). test 지시에 "test-engineer 확인 예정". goal 실행 중 stop의 종료 사건 수신 여부를 P4 stop 검증에. 쟁점 7의 기전 문장과 0/400의 상한. 결정 요약의 "launch autostart는 Jazzy에서"를 "컨테이너 autostart는 launch_ros 0.26.13에서"로. `p3a-results.md`의 upstream rolling 문장에 [미확인]. 음차 표기 셋을 이 문서와 `p3a-results.md`, README에서 고쳤다(px4-engineer 근거 파일은 원문 그대로 둔다).
+reviewer 권고의 처리: 모두 받았다. 재실측 (5)의 회수, 통과 기준, 결과 파일, 판정자(넘김 목록). 실측 스크립트의 저장 위치는 P4 선행 조건(`progress.md` 미해결). test 지시에 "test-engineer 확인 예정". goal 실행 중 stop의 종료 사건 수신 여부를 P4 stop 검증에. 쟁점 7의 기전 문장과 0/400의 상한. 결정 요약의 "launch autostart는 Jazzy에서"를 "컨테이너 autostart는 launch_ros 0.26.13에서"로. P3a 실행 확인 결과(git 이력)의 upstream rolling 문장에 [미확인]. 음차 표기 셋을 이 문서와 P3a 실행 확인 결과(git 이력), README에서 고쳤다(px4-engineer 근거 파일은 원문 그대로 둔다).
 
 ## 확인 예정의 처리 (2026-11-11)
 
@@ -218,7 +218,7 @@ reviewer 권고의 처리: 모두 받았다. 재실측 (5)의 회수, 통과 기
 
 ros2-engineer(닫힘): P3a 시험 코드의 자기 전이는 `create_wall_timer(0 ms)`였다. `/clock`이 없는 실행에서도 fire해 configure가 성공했고 activate는 2.000 s 뒤 FAILURE였다. 결정에 반대가 없다. 노드 시계 timer면 `/clock`의 부재를 configure 실패와 구분하지 못한다. 주의 둘을 쟁점 2에 넣었다(콜백 첫 줄의 `cancel()`, on_activate가 executor를 막는 동안의 `/clock` 수신).
 
-test-engineer(`approval-test-p3.md`. 조건부 승인. 선결 C1-C6). C1-C5를 반영했으므로 P3 단위 테스트 목록의 "test-engineer 확인 예정"을 닫는다.
+test-engineer(test-engineer P3 조건부 승인(git 이력). 조건부 승인. 선결 C1-C6). C1-C5를 반영했으므로 P3 단위 테스트 목록의 "test-engineer 확인 예정"을 닫는다.
 
 | 번호 | 조건 | 처리 | 위치 |
 | --- | --- | --- | --- |
@@ -235,12 +235,12 @@ architect가 정한 것
 - C4 DISARM의 그 밖의 거부 ack(DENIED 등): 그 자리에서 끝내지 않는다. `landed`가 true인 동안 재전송을 이어 가고 `mode_confirm_timeout`에 REASON_DISARM_FAILED(정리 중이었으면 원래 reason)로 끝내며 마지막 ack의 결과를 `detail`에 적는다. 이유: 성공의 판정은 ack가 아니라 `arming_state`다. 일찍 끝내도 기체는 arm으로 남을 뿐이라 얻는 것이 없고, 3 s 안의 재전송이 받아들여질 수 있다. ARM은 다르다(거부되면 일찍 끝내도 기체가 지상 disarm이라 안전하다). px4-engineer 확인을 받았다(동작 승인. 아래).
 - C4 재전송 표의 "같다": NAV_LAND(M4의 Land 경로)는 NAV_LAND(LAND 항목) 행과 같다는 뜻이고(force라 거부가 없다), DISARM(LAND 대비책)은 DISARM(지상 arm 분기) 행과 같다는 뜻이다. ARM 행을 가리키지 않는다. 표에 풀어 적었다.
 - C5 종료의 충돌: test-engineer의 권고를 받았다. 종료는 먼저 정해진 것이 이긴다. 같은 tick이면 ABORTED 사유, 완료, 취소 순이다. 종료 뒤의 cancel은 무시한다. 세부는 쟁점 3에 있다.
-- `approval-test-p3.md` 2절 (ii)의 의도 확인: OFFBOARD이고 ARMED인 채 `failsafe == true`인 표본은 어느 행에도 걸리지 않고 goal을 끝내지 않는다. 표대로가 의도다. "failsafe를 보면 즉시 멈춘다"는 문장이 가리킨 것은 failsafe로 OFFBOARD를 벗어난 표본(순위 6)이고, 문장을 그렇게 고쳤다. 근거: 발행 규칙은 `nav_state`가 OFFBOARD인 동안 발행하는 것이고, 발행을 멈춰야 하는 이유(멈추지 않으면 failsafe Land 중인 기체가 Offboard로 돌아간다)는 OFFBOARD를 벗어난 뒤에만 생긴다. [소스]로는 이 조합이 정상 상태에서 나오지 않는다(None과 Warn이 아니면 failsafe 동작이 모드를 바꾼다). 그 표본의 `failsafe`는 순위 5의 이력에 기록된다. px4-engineer 확인을 받았다(승인. v1.17.0에서는 이 조합이 나오지 않아 이력 가지는 방어용이다. 아래).
+- test-engineer P3 조건부 승인(git 이력) 2절 (ii)의 의도 확인: OFFBOARD이고 ARMED인 채 `failsafe == true`인 표본은 어느 행에도 걸리지 않고 goal을 끝내지 않는다. 표대로가 의도다. "failsafe를 보면 즉시 멈춘다"는 문장이 가리킨 것은 failsafe로 OFFBOARD를 벗어난 표본(순위 6)이고, 문장을 그렇게 고쳤다. 근거: 발행 규칙은 `nav_state`가 OFFBOARD인 동안 발행하는 것이고, 발행을 멈춰야 하는 이유(멈추지 않으면 failsafe Land 중인 기체가 Offboard로 돌아간다)는 OFFBOARD를 벗어난 뒤에만 생긴다. [소스]로는 이 조합이 정상 상태에서 나오지 않는다(None과 Warn이 아니면 failsafe 동작이 모드를 바꾼다). 그 표본의 `failsafe`는 순위 5의 이력에 기록된다. px4-engineer 확인을 받았다(승인. v1.17.0에서는 이 조합이 나오지 않아 이력 가지는 방어용이다. 아래).
 - on_activate의 `/clock` 대기(2 s)는 배선 테스트용 param으로 만들지 않는다. 벽시계 예외 그대로 두고, 배선 테스트는 가짜 PX4 발행자와 함께 `/clock`을 발행한다.
 
 test-engineer가 더한 테스트와 P4 기록 방법은 담당자별 구현 지시(test-engineer)와 README의 P4 완료 기준에 넣었다.
 
-px4-engineer 최종 확인(`approval-px4-p3b-final.md`. PX4 v1.17.0 원문 대조, 새 실측 없음. 반대 없음). 이것으로 px4-engineer 확인 예정을 모두 닫는다. 감시 표 순위의 "재실측 (4) 전까지 잠정"은 그대로다.
+px4-engineer 최종 확인(px4-engineer 최종 확인(git 이력). PX4 v1.17.0 원문 대조, 새 실측 없음. 반대 없음). 이것으로 px4-engineer 확인 예정을 모두 닫는다. 감시 표 순위의 "재실측 (4) 전까지 잠정"은 그대로다.
 
 | 번호 | 대상 | 판정 | 반영 |
 | --- | --- | --- | --- |
@@ -318,7 +318,7 @@ px4-engineer 최종 확인(`approval-px4-p3b-final.md`. PX4 v1.17.0 원문 대�
 - devops D6(trigger): 공개 저장소의 표준 hosted runner가 무료라는 근거는 GitHub Docs "About billing for GitHub Actions"인데 오늘 원문을 다시 확인하지 않았다. 선택지별 단점은 "사용자 결정 필요" U2.
 - logging L1(recorder): 미도입에 동의. regex 기록에는 오프셋 메타데이터와 미션 경계가 없어 Phase 2 replay 입력으로 다시 쓸 수 없다. 6단계가 지켜 둘 것: `artifacts/runs/<id>/bag/` 이름 예약, 수집 순서 맨 앞에 recorder 정지 자리, trace 표본에 수신 ROS 시각과 PX4 `timestamp`(us)를 함께 기록. logging은 `MissionEvent`를 TRANSIENT_LOCAL로 발행하자고도 했는데 받지 않았다(쟁점 7).
 - px4 X1(실험 C와 `[LAND]`의 근거): [실측] 실험 C 때 setpoint 발행은 켜져 있었다. "AUTO_LOITER, armed, 발행 없음에서 NAV_LAND"도 [실측] 1회 있다(run3: 32 ms 뒤 AUTO_LAND, 9.03 s 뒤 landed, 11.05 s 뒤 DISARMED). `[LAND]` 한 항목 미션의 근거로 쓸 수 있다. 다만 EKF gate 직후에 보내는 순서 자체는 실측과 다르다.
-- px4 X2(지면 바로 위의 Hold): [소스] `MulticopterPositionControl.cpp` 501-519행. `ground_contact`가 참이면 모드와 무관하게 추력을 0으로 만든다. 그래서 Hold가 받아들여져도 계속 내려앉고, landed 뒤 `COM_DISARM_LAND`로 자동 disarm된다. 기체에 위험은 없다. 요구 둘: Hold 확인 창에서 본 DISARMED를 "공중 disarm = FAILSAFE"로 분류하지 않는다(landed 뒤의 disarm은 지상 disarm이다), CANCELED 뒤 기체가 지상에 disarm 상태로 남을 수 있다는 것을 기대 결과로 적는다. `ground_contact`가 거짓이면 그 높이에서 호버한다([추정]). reviewer 검증 뒤 "계속 내려앉아 disarm"은 쟁점 3 M3에서 [추정]으로 내렸다. 2026-11-11 실측(`approval-px4-p3b.md` 추가 문제 4)으로 이 [추정]은 이륙 단계와 0.5 m 호버에 대해 반증됐다. Hold에서는 `ground_contact`가 서지 않아 기체가 ARMED, landed false로 머문다.
+- px4 X2(지면 바로 위의 Hold): [소스] `MulticopterPositionControl.cpp` 501-519행. `ground_contact`가 참이면 모드와 무관하게 추력을 0으로 만든다. 그래서 Hold가 받아들여져도 계속 내려앉고, landed 뒤 `COM_DISARM_LAND`로 자동 disarm된다. 기체에 위험은 없다. 요구 둘: Hold 확인 창에서 본 DISARMED를 "공중 disarm = FAILSAFE"로 분류하지 않는다(landed 뒤의 disarm은 지상 disarm이다), CANCELED 뒤 기체가 지상에 disarm 상태로 남을 수 있다는 것을 기대 결과로 적는다. `ground_contact`가 거짓이면 그 높이에서 호버한다([추정]). reviewer 검증 뒤 "계속 내려앉아 disarm"은 쟁점 3 M3에서 [추정]으로 내렸다. 2026-11-11 실측(px4-engineer P3b 착수 전 승인 검토(git 이력) 추가 문제 4)으로 이 [추정]은 이륙 단계와 0.5 m 호버에 대해 반증됐다. Hold에서는 `ground_contact`가 서지 않아 기체가 ARMED, landed false로 머문다.
 - px4 X3(이륙한 적 없는 지상 armed, OFFBOARD에서 발행 중단): [소스] 1 s 뒤 AUTO_LAND, `failsafe` true가 되고, 이륙한 적이 없어 land 자동 disarm이 없으며 `COM_DISARM_PRFLT=-1`이라 armed인 채 남는다. 실측은 없다. 이 상태의 강제가 아닌 disarm은 받아들여진다. ABORTED 전에 disarm을 한 번 더 보내기를 권한다.
 - px4 X4(감시 표의 빈 조합): [소스] `Commander.cpp` 2369-2372행. `failsafe`가 거짓이면 `nav_state`는 사용자 의도와 같으므로 정상 상태에서는 나오지 않는 조합이다. 방어용 분류는 REASON_FAILSAFE(사용자 의도가 OFFBOARD로 남아 있다는 것은 아무도 모드 변경을 요청하지 않았다는 뜻이다).
 - px4 X5(T의 flag 판정): [소스] `offboardCheck.cpp`의 `data_is_recent` 경로를 지난다. `failsafe_flags`는 5 Hz 상한으로 나간다. 조건 둘: `offboard_control_mode`에 `position=true`를 넣는다, `local_position_invalid`가 거짓일 때만 의미가 있다(대조군 단계가 이것을 걸러 준다). [실측] 시동 해제 상태에서는 신호가 없어도 failsafe가 걸리지 않았다. 바뀌는 것은 `pre_flight_checks_pass`뿐이다.
@@ -348,7 +348,7 @@ px4-engineer 최종 확인(`approval-px4-p3b-final.md`. PX4 v1.17.0 원문 대�
 결정: 실행 형태
 - 언어는 C++17. 패키지 `idsim_mission`(ament_cmake) 하나에 라이브러리 셋: `idsim_mission_core`(ROS 비의존. 검증, 상태기, 종료 결과), `idsim_mission_px4`(px4_msgs -> snapshot 어댑터), `mission_executor_component`(lifecycle 노드 껍질). 이것은 언어 선택이 아니라 기존 결정(architecture.md의 "핵심 노드는 C++")의 적용이다.
 - 기체마다 compose 서비스 `ops-N` 하나. command는 `ros2 launch idsim_mission vehicle_ops.launch.py namespace:=/px4_N executor_name:=mission_executor params_file:=/opt/idsim/artifacts/runs/<id>/params/ops-N.yaml`. 노드 이름의 출처는 생성기 하나다. 값 `mission_executor`는 생성기의 상수이고, 생성기가 같은 값으로 `stack.json`의 `executor_node`와 healthcheck를 만든다. launch 파일은 생성하지 않는 정적 파일이고 `ComposableNodeContainer(component_container_isolated, 이름 ops_container)`와 그 안에 load하는 컴포넌트 `idsim_mission::MissionExecutorNode`(이름은 인자 `executor_name`의 값) 하나만 담는다. launch의 `autostart`는 쓰지 않는다(P3a 결과. 아래 "전이"). launch 파일은 `executor_name`에 기본값을 두지 않고 노드 이름 문자열을 직접 적지 않는다. remap은 두지 않는다. launch에는 `output='screen'`과 컨테이너의 `on_exit=Shutdown()`을 건다.
-- 전이(2026-11-11 재결정. `p3a-results.md`): 전이를 거는 주체는 노드 자신이다. Executor는 생성자에서 만든 벽시계 일회 timer(`create_wall_timer`, 0 ms)로 `configure()`를 부르고, 성공하면 `activate()`를 부른다. 각각 한 번이고 재시도하지 않는다(launch autostart가 하려던 것과 같다). fixture, compose command, launch는 전이를 걸지 않는다.
+- 전이(2026-11-11 재결정. P3a 실행 확인 결과(git 이력)): 전이를 거는 주체는 노드 자신이다. Executor는 생성자에서 만든 벽시계 일회 timer(`create_wall_timer`, 0 ms)로 `configure()`를 부르고, 성공하면 `activate()`를 부른다. 각각 한 번이고 재시도하지 않는다(launch autostart가 하려던 것과 같다). fixture, compose command, launch는 전이를 걸지 않는다.
   - timer의 시계: 벽시계여야 한다. 노드 시계(`use_sim_time`) timer는 `/clock`이 오기 전에는 fire하지 않으므로, `/clock`이 없으면 전이를 시도하지도 않아 ERROR 로그 없이 `unconfigured`에 남는다. 이 timer는 판정에 쓰지 않는 trigger이고 벽시계 예외 목록(문서 반영 목록의 시간 기준 문장)에 넣는다. P3a 시험 코드의 자기 전이도 `create_wall_timer(0 ms)`였다(ros2-engineer 확인 2026-11-11. `/clock`이 없는 실행에서도 fire해 configure가 성공했고 activate는 2.000 s 뒤 FAILURE였다). 주의 둘: (1) 콜백의 첫 줄에서 timer를 `cancel()`한다. 0 ms 벽시계 timer는 취소하지 않으면 계속 다시 fire한다. (2) on_activate는 이 timer 콜백 안에서 최대 2 s 동안 executor를 막는다. 그동안에도 `/clock`은 TimeSource의 clock thread(`use_clock_thread` 기본 true)가 받으므로 대기가 풀린다([실측] 대기 중에 `/clock`이 도착한 경우 1.350 s 뒤 성공). NodeOptions에서 `use_clock_thread`를 끄지 않는다.
   - 끄는 param: 선언 param `lifecycle.self_start`(bool, 기본 true, 읽기 전용. 생성자에서만 읽는다). 생성기는 이 key를 params 파일에 만들지 않는다(식별값만 생성한다는 규칙 그대로). 단위 테스트와 노드 배선 테스트는 NodeOptions의 parameter override로 false를 주고 전이를 직접 건다. false여도 lifecycle 서비스는 그대로라 손으로 전이할 수 있다.
   - 실패 시: 프로세스를 끝내지 않는다. 노드는 실패한 자리(`unconfigured` 또는 `inactive`)에 남고, 어느 전이가 왜 실패했는지 ERROR 로그 한 줄을 고정 접두어로 남긴다(grep할 수 있게. 접두어 문자열은 ros2-engineer가 정하고 devops-engineer에게 알린다). 드러나는 길은 compose healthcheck(`active`로 시작하지 않음)와 `sim_stack.sh`의 노드 단계 실패 때 출력하는 `ops-N` 로그 끝과 `.State.Health.Log`다. `run_sitl.sh`는 둘 다 아티팩트에 넣는다.
@@ -428,20 +428,20 @@ M4(Hold 확인 뒤 발행 중단, ack 거부의 처리)
 M5(지상 disarm 실패)
 - 지상 arm 분기: 지상 setpoint를 발행하면서(아래) 강제가 아닌 disarm을 재전송하며 DISARMED 3회 연속을 기다린다. disarm의 TEMPORARILY_REJECTED ack는 그 자체로 실패가 아니고 `landed`가 true인 동안 재전송을 이어 간다. 확인되면 발행을 멈추고 CANCELED. 대기 중 `landed`가 false가 되면 공중 분기로 넘어간다. landed인 채 `mode_confirm_timeout`을 넘기면 발행을 멈추고 disarm을 한 번 더 보낸 뒤 ABORTED, REASON_DISARM_FAILED. 이때 기체는 지상에 arm 상태로 남을 수 있고([소스] 이륙한 적이 없으면 offboard 손실 Land 뒤에도 자동 disarm이 없다. 실측 없음) `detail`에 그 사실을 적는다.
 - 근거: 강제가 아닌 disarm은 지상 판정이 아니면 거부된다([실측] px4 4.1 D). 이륙 램프가 막 시작된 경계에서만 생기는 분기이고, 그때 기체는 사실상 공중이므로 공중 분기로 보내는 것이 맞다.
-- 이 분기에서 유지하는 setpoint(px4-engineer가 2026-11-11에 확정한 문장. `approval-px4-p3b.md` 3번): 지상 arm 분기에 들어간 tick에 `trajectory_setpoint`를 "지상 setpoint"로 바꾼다. 지상 setpoint는 그 tick의 `vehicle_local_position` x, y, z에서 z만 +0.5 m(NED, 아래쪽)이고 yaw는 그 tick의 heading이다. position과 yaw만 유한값이고 나머지는 NaN이며, `offboard_control_mode`는 position만 true다(헬퍼 그대로). 20 Hz 발행을 유지한 채 disarm을 재전송한다. DISARMED 3회 연속이면 발행을 멈추고 CANCELED. 대기 중 `landed`가 false가 되면 공중 분기로 넘어가되, setpoint는 TAKEOFF 목표점으로 되돌리지 않고 지상 setpoint를 유지한 채 Hold를 보낸다. Hold를 처음 관측하면 발행을 멈춘다. disarm의 TEMPORARILY_REJECTED ack는 그 자체로 실패가 아니다. `landed`가 true인 동안 재전송을 이어 간다.
+- 이 분기에서 유지하는 setpoint(px4-engineer가 2026-11-11에 확정한 문장. px4-engineer P3b 착수 전 승인 검토(git 이력) 3번): 지상 arm 분기에 들어간 tick에 `trajectory_setpoint`를 "지상 setpoint"로 바꾼다. 지상 setpoint는 그 tick의 `vehicle_local_position` x, y, z에서 z만 +0.5 m(NED, 아래쪽)이고 yaw는 그 tick의 heading이다. position과 yaw만 유한값이고 나머지는 NaN이며, `offboard_control_mode`는 position만 true다(헬퍼 그대로). 20 Hz 발행을 유지한 채 disarm을 재전송한다. DISARMED 3회 연속이면 발행을 멈추고 CANCELED. 대기 중 `landed`가 false가 되면 공중 분기로 넘어가되, setpoint는 TAKEOFF 목표점으로 되돌리지 않고 지상 setpoint를 유지한 채 Hold를 보낸다. Hold를 처음 관측하면 발행을 멈춘다. disarm의 TEMPORARILY_REJECTED ack는 그 자체로 실패가 아니다. `landed`가 true인 동안 재전송을 이어 간다.
   - [소스] `MulticopterPositionControl.cpp` 466-472행: 이륙 의도는 setpoint z < 현재 z일 때만 켜진다(엄격 비교). 504-520행: 이륙 전이면 추력이 0이다. 0.5 m는 z 잡음(+-0.1 m)의 5배 여유다.
   - [실측] run 20261111-030155-k5. G(처음부터 지상 setpoint로 arm, 2회): 상승은 최대 0.05 m, `landed`는 계속 true, disarm부터 DISARMED까지 4-12 ms. K(목표점을 유지한 채 disarm, 1회): disarm이 거부되고 4.2 m 올라갔다. reviewer가 우려한 경우가 실제로 일어난다. H(목표점으로 arm한 뒤 1.5 s와 2.5 s에 지상 setpoint로 바꿈, 2회): 바꾸는 순간 이미 `landed`가 false였고(높이 0.07 m 이하) disarm은 TEMPORARILY_REJECTED였다. 지상 setpoint로 상승은 0.2 m 이하로 막혔지만 `landed`는 6 s 동안 돌아오지 않았다. 정리는 Hold가 아니라 NAV_LAND로 했다(3.4-3.5 s 뒤 disarm). 위 문장의 "공중 분기로 넘어가 지상 setpoint를 유지한 채 Hold"는 실측이 없다.
   - 실측이 없는 두 경로(reviewer 필수 1. 필수 재실측. P3b는 위 문장대로 구현하되 재실측 결과로 바뀔 수 있다): (가) 지상 setpoint 발행 중에 보낸 Hold. X2a의 Hold는 TAKEOFF 목표점 발행 중이었다. (나) TAKEOFF 목표점 발행 중이고 `landed`가 아직 true인 구간(첫 ARMED 뒤 약 0-1.3 s)에서 지상 setpoint로 바꾸고 disarm. G는 처음부터 지상 setpoint였고 H는 바꿀 때 이미 landed false였다. (나)가 "이륙 직후 취소"의 정상 경로다.
   - 기각: 발행을 멈춘 뒤 disarm. 마지막 setpoint의 timestamp + 1 s 동안 이륙 의도가 남고(466-467행), 그 뒤에는 offboard 손실 Land가 걸려 상태가 하나 더 생긴다. 기각: TAKEOFF 목표점 유지(실측 K).
   - 0.5 m는 `src/px4/` 어댑터의 상수이고 노드 파라미터로 만들지 않는다. core는 이 값을 직접 적지 않는다(넘기는 방법은 ros2-engineer와 px4-engineer가 snapshot 경계에서 정한다).
-  - 발행 규칙과의 관계(architect가 채운 문장. px4-engineer 확인 2026-11-11, `approval-px4-p3b-review.md` 3번 승인): 지상 setpoint로 바꿔 발행하는 것은 그 tick에 발행 중일 때뿐이다. 발행 규칙에 따라 이미 멈춘 발행은 이 분기에서도 다시 켜지 않고 disarm만 재전송한다.
+  - 발행 규칙과의 관계(architect가 채운 문장. px4-engineer 확인 2026-11-11, px4-engineer PR #23 반영 확인(git 이력) 3번 승인): 지상 setpoint로 바꿔 발행하는 것은 그 tick에 발행 중일 때뿐이다. 발행 규칙에 따라 이미 멈춘 발행은 이 분기에서도 다시 켜지 않고 disarm만 재전송한다.
     - px4-engineer 보강 문장: 발행이 멈춘 뒤에는 `trajectory_setpoint`를 바꾸지 않으므로 이륙 의도에 영향이 없다. 이 규칙은 "멈춘 발행은 항상 `nav_state`가 OFFBOARD가 아닌 것을 본 뒤"라는 불변식에 기댄다. LAND 항목의 ITEM_TIMEOUT처럼 OFFBOARD인 채 멈추는 경우는 이 규칙의 적용 대상이 아니다(지상 arm이면 offboard 손실 Land가 내린다).
     - [소스] `MulticopterPositionControl.cpp` 464-467행: 이륙 의도는 `flag_control_offboard_enabled`일 때만 `_setpoint.timestamp + 1 s` 안의 setpoint로 켜진다. `Commander.cpp` 644-662행: 강제가 아닌 disarm은 `landed || maybe_landed`일 때 받는다. 노드가 본 `landed == true`는 수락의 충분조건이다.
 - 같은 규칙을 지상 arm 정리 전부에 쓴다: 취소, PREPARING 실패, ITEM_TIMEOUT의 지상 arm 분기, 그리고 아래의 "arm을 보낸 뒤" 경우.
-- 지상 disarm 분기의 상태 끊김과 거부 ack(test-engineer C4. architect 결정. px4-engineer 확인 2026-11-11, `approval-px4-p3b-final.md` 3번 승인, 4번 동작 승인): `vehicle_status`가 `link_timeout` 동안 없으면 발행을 멈추고 disarm을 한 번 더 보낸 뒤 끝낸다. 취소 중이었으면 ABORTED, REASON_LINK_LOST이고, PREPARING 실패나 ITEM_TIMEOUT의 정리 중이었으면 원래 reason을 유지하고 `detail`에 적는다. `link_timeout`이 `mode_confirm_timeout`보다 짧으므로 표본이 아예 없으면 LINK_LOST가 먼저이고, 표본은 오는데 기준을 만족하는 DISARMED가 3회 차지 않으면 REASON_DISARM_FAILED다. disarm의 거부 ack는 TEMPORARILY_REJECTED든 그 밖의 것(DENIED 등)이든 그 자리에서 끝내지 않는다. `landed`가 true인 동안 재전송을 이어 가고 타임아웃에 끝내며 마지막 ack의 결과를 `detail`에 적는다(성공의 판정은 ack가 아니라 `arming_state`다).
+- 지상 disarm 분기의 상태 끊김과 거부 ack(test-engineer C4. architect 결정. px4-engineer 확인 2026-11-11, px4-engineer 최종 확인(git 이력) 3번 승인, 4번 동작 승인): `vehicle_status`가 `link_timeout` 동안 없으면 발행을 멈추고 disarm을 한 번 더 보낸 뒤 끝낸다. 취소 중이었으면 ABORTED, REASON_LINK_LOST이고, PREPARING 실패나 ITEM_TIMEOUT의 정리 중이었으면 원래 reason을 유지하고 `detail`에 적는다. `link_timeout`이 `mode_confirm_timeout`보다 짧으므로 표본이 아예 없으면 LINK_LOST가 먼저이고, 표본은 오는데 기준을 만족하는 DISARMED가 3회 차지 않으면 REASON_DISARM_FAILED다. disarm의 거부 ack는 TEMPORARILY_REJECTED든 그 밖의 것(DENIED 등)이든 그 자리에서 끝내지 않는다. `landed`가 true인 동안 재전송을 이어 가고 타임아웃에 끝내며 마지막 ack의 결과를 `detail`에 적는다(성공의 판정은 ack가 아니라 `arming_state`다).
   - 끝내기 전에 한 번 더 보내는 disarm도 강제가 아닌 disarm이다. 강제 disarm(param2 21196)은 어디에서도 쓰지 않는다. [소스] 강제가 아닌 disarm은 `landed || maybe_landed`가 아니면 거부되므로(`Commander.cpp` 638-662행) 공중 기체를 끄지 않는다. 발행을 멈춘 뒤의 offboard 손실 동작은 지상이면 Land와 자동 disarm, 공중이면 하강이다.
   - [소스] v1.17.0의 ARM_DISARM 처리(`Commander.cpp` 969-980행)는 유효한 param1에 ACCEPTED와 TEMPORARILY_REJECTED만 돌려준다. 그 밖의 ack(DENIED, UNSUPPORTED 등)는 방어용이며 같은 규칙(재전송, 타임아웃에 종료)을 쓴다. 대상이 어긋난 명령은 ack 없이 버려지고 타임아웃이 처리한다. ARM의 "그 밖의 거부는 ARM_REJECTED"도 같은 이유로 방어용이다(arm의 DENIED도 TEMPORARILY_REJECTED로 돌아온다. 549행). 이 경로들의 테스트는 합성 ack로만 한다.
-- arm을 보낸 뒤의 지상 분기(`approval-px4-p3b.md` 추가 문제 1): 이 goal에서 arm을 한 번이라도 보냈으면 지상 분기는 `arming_state`와 무관하게 disarm 분기(지상 setpoint + disarm + disarm 전송 뒤에 받은 DISARMED 3회 연속)를 거친다. "전송 뒤에 받은"의 기준: 표본의 수신 tick이 이 분기의 첫 disarm 전송 tick보다 크고(tick 번호 비교. `수신 tick > 전송 tick`), `vehicle_status.timestamp`가 그 첫 전송에 실은 `Px4Timestamp`보다 엄격히 뒤(>)인 표본만 센다(두 조건 모두. 비교 대상은 재전송마다 새로 생기는 값이 아니라 첫 전송의 값이다). 3회 연속의 계수: 직전에 센 표본과 `timestamp`가 같은 표본은 건너뛴다(되돌리지도 더하지도 않는다. tick당 표본은 최대 1개이므로 같은 표본을 다음 tick에 다시 본 경우다). DISARMED가 아닌 표본은 계수를 0으로 되돌린다. `timestamp`가 줄어든 표본은 세지 않는다. 3회 연속은 서로 다른 `timestamp` 3개다(근거와 한계는 "px4-engineer 승인 반영"). arm 재전송은 취소나 실패를 정한 tick에 즉시 멈춘다. 이유: P6에서 보낸 arm이 아직 처리되지 않았거나 status에 반영되기 전이면 snapshot은 DISARMED다. 여기서 "바로 끝"으로 발행을 멈추면 그 뒤 arm이 처리되어 기체가 OFFBOARD에서 신호 없이 armed가 되고 offboard 손실 Land로 들어간다. 이륙 이력이 없어 자동 disarm이 없으므로 지상에 armed로 남는다([소스] `Commander.cpp` 2290, 2294행. `COM_DISARM_PRFLT=-1`. X3과 같은 상태이고 실측은 없다). 비용은 약 1 s다. 이미 DISARMED인 기체에 보낸 disarm은 ACCEPTED다([소스] `Commander.cpp` 640-642, 976-980행. [실측] D 1회).
+- arm을 보낸 뒤의 지상 분기(px4-engineer P3b 착수 전 승인 검토(git 이력) 추가 문제 1): 이 goal에서 arm을 한 번이라도 보냈으면 지상 분기는 `arming_state`와 무관하게 disarm 분기(지상 setpoint + disarm + disarm 전송 뒤에 받은 DISARMED 3회 연속)를 거친다. "전송 뒤에 받은"의 기준: 표본의 수신 tick이 이 분기의 첫 disarm 전송 tick보다 크고(tick 번호 비교. `수신 tick > 전송 tick`), `vehicle_status.timestamp`가 그 첫 전송에 실은 `Px4Timestamp`보다 엄격히 뒤(>)인 표본만 센다(두 조건 모두. 비교 대상은 재전송마다 새로 생기는 값이 아니라 첫 전송의 값이다). 3회 연속의 계수: 직전에 센 표본과 `timestamp`가 같은 표본은 건너뛴다(되돌리지도 더하지도 않는다. tick당 표본은 최대 1개이므로 같은 표본을 다음 tick에 다시 본 경우다). DISARMED가 아닌 표본은 계수를 0으로 되돌린다. `timestamp`가 줄어든 표본은 세지 않는다. 3회 연속은 서로 다른 `timestamp` 3개다(근거와 한계는 "px4-engineer 승인 반영"). arm 재전송은 취소나 실패를 정한 tick에 즉시 멈춘다. 이유: P6에서 보낸 arm이 아직 처리되지 않았거나 status에 반영되기 전이면 snapshot은 DISARMED다. 여기서 "바로 끝"으로 발행을 멈추면 그 뒤 arm이 처리되어 기체가 OFFBOARD에서 신호 없이 armed가 되고 offboard 손실 Land로 들어간다. 이륙 이력이 없어 자동 disarm이 없으므로 지상에 armed로 남는다([소스] `Commander.cpp` 2290, 2294행. `COM_DISARM_PRFLT=-1`. X3과 같은 상태이고 실측은 없다). 비용은 약 1 s다. 이미 DISARMED인 기체에 보낸 disarm은 ACCEPTED다([소스] `Commander.cpp` 640-642, 976-980행. [실측] D 1회).
 - 기각: REASON_MODE_SWITCH_FAILED의 의미 넓히기(px4 권고였다. 위 "계약 변경 여부"의 이유로 받지 않는다), REASON_ARM_REJECTED(이름이 arm 거부라 disarm에 쓰면 PREPARING의 arm 거부와 섞인다), REASON_INTERNAL(Executor 내부 오류가 아니다).
 - PREPARING 실패의 정리도 같은 절차다: 발행을 멈추기 전에 지상 arm이거나 이 goal에서 arm을 보낸 적이 있으면 지상 setpoint로 바꾸고 disarm을 보내 확인한다(`COM_DISARM_PRFLT=-1`). 이때의 reason은 원래의 실패 사유를 유지하고, disarm이 확인되지 않았으면 `detail`에 적는다.
 
@@ -449,7 +449,7 @@ M5(지상 disarm 실패)
 - 종료는 먼저 정해진 것이 이긴다. 종료가 정해진 tick 뒤의 표본과 cancel은 결과를 바꾸지 않는다. 종료 사건은 정확히 1건이다.
 - 같은 tick에 둘 이상이 정해지면 ABORTED 사유, 완료(SUCCEEDED), 취소 순이다. 예: LAND에서 DISARMED 3번째 표본과 cancel이 같은 tick이면 SUCCEEDED다. 감시 표의 행과 cancel이 같은 tick이면 그 행의 ABORTED다. ABORTED 사유가 둘이면 감시 표의 순위를 따른다.
 - "정해진다"의 시점은 정리가 끝난 때가 아니라 사유가 생긴 tick이다. ITEM_TIMEOUT이나 PREPARING 실패의 정리(Hold, disarm 확인) 중에 온 cancel은 결과를 바꾸지 않고 ABORTED와 원래 reason으로 끝난다(정리 절차는 취소와 같은 분기라 기체 동작도 같다). 반대로 CANCELING 중에 항목 `timeout`이 지나도 취소 경로로 끝난다(CANCELED, 또는 그 분기가 정한 ABORTED).
-- 전제(px4-engineer 확인 2026-11-11, `approval-px4-p3b-final.md` C5): 종료가 정해져 끝나는 시점에는 발행이 멈춰 있고 명령 재전송이 지워져 있다. 그래야 종료 뒤의 cancel을 무시해도 남는 동작이 없다. ABORTED 사유가 완료보다 앞서는 것은 안전 쪽이다(같은 tick에 `landed` false의 DISARMED(순위 4)와 완료 후보가 겹치면 FAILSAFE가 이겨야 공중 disarm이 성공으로 기록되지 않는다).
+- 전제(px4-engineer 확인 2026-11-11, px4-engineer 최종 확인(git 이력) C5): 종료가 정해져 끝나는 시점에는 발행이 멈춰 있고 명령 재전송이 지워져 있다. 그래야 종료 뒤의 cancel을 무시해도 남는 동작이 없다. ABORTED 사유가 완료보다 앞서는 것은 안전 쪽이다(같은 tick에 `landed` false의 DISARMED(순위 4)와 완료 후보가 겹치면 FAILSAFE가 이겨야 공중 disarm이 성공으로 기록되지 않는다).
 - 이유: 취소는 "지금 하는 것을 멈추라"는 요청이고, 이미 끝났거나 끝나기로 정해진 미션에는 멈출 것이 없다. 실제로 일어난 일을 result가 말하게 한다. cancel이 받아들여진 goal을 SUCCEEDED나 ABORTED로 끝내는 것이 rclcpp_action에서 허용되는지는 [추정]이고(기억에 기댄다) ros2-engineer가 노드 배선 테스트에서 한 건으로 확인한다. 허용되지 않으면 architect에게 알린다.
 
 구현 지시
@@ -457,7 +457,7 @@ M5(지상 disarm 실패)
 
 ## 쟁점 4. PX4 절차 (전이 표)
 
-px4 의견서 1-4절을 채택한다. 상태기 구현의 정본은 아래 표이고, 값과 술어의 근거는 `opinion-px4.md`다.
+px4 의견서 1-4절을 채택한다. 상태기 구현의 정본은 아래 표이고, 값과 술어의 근거는 px4-engineer 의견서(git 이력)다.
 
 미션의 정적 검증(INVALID_MISSION. `validate_mission`)
 - 계약: 항목 1개 이상, `type`이 `TYPE_*`, `timeout` > 0, 쓰지 않는 서브메시지는 기본값, 서브메시지 값의 범위(`height_m` > 0, `acceptance_m` > 0, `duration` > 0이고 `timeout`보다 짧다, `YawSetpoint.mode` 유효, 유한값), `mission_id` 정규식.
@@ -495,12 +495,12 @@ PREPARING(첫 항목이 LAND): P0 -> 시작 조건(armed이고 `landed == false`
 
 - 모든 항목은 `timeout`을 넘기면 ITEM_TIMEOUT. 이때의 정리(px4-engineer 승인 2026-11-11, 수정 조건 넷 반영): setpoint 항목이면 취소와 같이 그 tick의 snapshot으로 분기를 고르고 매 tick 다시 고른다. 공중이면 Hold 분기(확인되지 않으면 Land를 보낸다), 지상 arm이면 disarm 분기(지상 setpoint. 쟁점 3 M5), 지상 disarm이면 바로 끝낸다(이 goal에서 arm을 보낸 적이 있으면 disarm 분기를 거친다. 1a에서 setpoint 항목이 있는 미션은 늘 arm을 보낸 뒤다). 어느 분기든 결과는 ABORTED이고 reason은 ITEM_TIMEOUT을 유지하며, Hold나 disarm이 확인되지 않았으면 `detail`에 적는다(REASON_MODE_SWITCH_FAILED나 REASON_DISARM_FAILED로 바꾸지 않는다).
   - LAND 항목의 ITEM_TIMEOUT(px4-engineer 문장): NAV_LAND 재전송을 멈춘다. 아직 발행 중이면(AUTO_LAND를 한 번도 관측하지 못함) 발행을 멈춘다. 그 뒤는 PX4의 offboard 손실 Land(`COM_OBL_RC_ACT=4`)가 내린다. Hold는 보내지 않는다. landed인 채 ARMED였으면 `detail`에 적는다.
-    - `[LAND]` 한 항목 미션의 예외(px4-engineer 확인 2026-11-11, `approval-px4-p3b-review.md` 4번의 문장으로 바꿨다): 이 미션은 발행한 적이 없고 기체가 OFFBOARD가 아니므로 offboard 손실 Land가 걸리지 않는다. AUTO_LAND를 관측하지 못한 채 ITEM_TIMEOUT이 되는 것은 항목 `timeout`이 `mode_confirm_timeout`보다 짧을 때뿐이다. 이때 NAV_LAND가 도착하지 않았다면 기체는 있던 모드(보통 Hold)에, 도착했다면 AUTO_LAND(위치가 무효면 DESCEND)로 PX4가 착륙을 이어 간다. 어느 쪽인지 `detail`에 적는다. AUTO_LAND를 확인한 뒤의 ITEM_TIMEOUT도 PX4가 착륙을 이어 간다. [소스] `Commander.cpp` 1093-1110행(NAV_LAND는 force라 사용자 의도가 즉시 AUTO_LAND로 바뀐다), 1089-1091행(Land를 쓸 수 없는 상태면 DESCEND로 대체).
+    - `[LAND]` 한 항목 미션의 예외(px4-engineer 확인 2026-11-11, px4-engineer PR #23 반영 확인(git 이력) 4번의 문장으로 바꿨다): 이 미션은 발행한 적이 없고 기체가 OFFBOARD가 아니므로 offboard 손실 Land가 걸리지 않는다. AUTO_LAND를 관측하지 못한 채 ITEM_TIMEOUT이 되는 것은 항목 `timeout`이 `mode_confirm_timeout`보다 짧을 때뿐이다. 이때 NAV_LAND가 도착하지 않았다면 기체는 있던 모드(보통 Hold)에, 도착했다면 AUTO_LAND(위치가 무효면 DESCEND)로 PX4가 착륙을 이어 간다. 어느 쪽인지 `detail`에 적는다. AUTO_LAND를 확인한 뒤의 ITEM_TIMEOUT도 PX4가 착륙을 이어 간다. [소스] `Commander.cpp` 1093-1110행(NAV_LAND는 force라 사용자 의도가 즉시 AUTO_LAND로 바뀐다), 1089-1091행(Land를 쓸 수 없는 상태면 DESCEND로 대체).
   - 지상 arm 분기에서 TAKEOFF가 `timeout`까지 땅을 뜨지 못했다는 것은 사실상 이륙 의도가 켜지지 않은 경우다(timestamp 문제 등. [소스] `MulticopterPositionControl.cpp` 466-467행). 이때 Takeoff 상태는 ready_for_takeoff에 머물러 disarm이 바로 받아들여진다([실측] G).
   - 지상 arm 분기가 필요한 이유(reviewer): TAKEOFF가 뜨지 못한 채 `timeout`이 되면 기체는 지상 arm이다. 여기서 Hold만 받고 끝내면 기체가 지상에 arm으로 남는다([소스] 이륙 이력이 없어 자동 disarm이 없다. `Commander.cpp` 2290, 2294행. `COM_DISARM_PRFLT=-1`). 그 상태에서는 `[LAND]`도 PRECONDITION_FAILED다.
 - `latest_disarming_reason`은 판정에 쓰지 않는다([실측][소스] 메시지 상수가 내부 enum과 어긋난다).
 
-P3b 착수 전 px4-engineer 승인 항목(reviewer 권고 3, 4): 2026-11-11에 다섯 모두 닫혔다(`approval-px4-p3b.md`. 판정과 반영 위치는 "px4-engineer 승인 반영"). PR #21로 main에 들어갔으므로 상태기 구현(P3b)을 시작할 수 있다.
+P3b 착수 전 px4-engineer 승인 항목(reviewer 권고 3, 4): 2026-11-11에 다섯 모두 닫혔다(px4-engineer P3b 착수 전 승인 검토(git 이력). 판정과 반영 위치는 "px4-engineer 승인 반영"). PR #21로 main에 들어갔으므로 상태기 구현(P3b)을 시작할 수 있다.
 - ITEM_TIMEOUT 뒤의 정리: 수정 조건부 승인. 위 문장.
 - TAKEOFF의 시작 조건("지상이고 DISARMED". 지상 arm이면 PRECONDITION_FAILED): 승인.
 - 지상 arm 분기에서 발행할 setpoint: 지상 setpoint로 확정(쟁점 3 M5).
@@ -522,31 +522,31 @@ P3b 착수 전 px4-engineer 승인 항목(reviewer 권고 3, 4): 2026-11-11에 �
 | 7 | `nav_state != OFFBOARD`이고 `failsafe == false`이고 `nav_state_user_intention != OFFBOARD` | EXTERNAL_MODE_CHANGE | 발행 즉시 중단, ABORTED |
 | 8 | `nav_state != OFFBOARD`이고 `failsafe == false`이고 `nav_state_user_intention == OFFBOARD` | FAILSAFE(방어용. [소스] 정상 상태에서는 나오지 않는다) | 발행 즉시 중단, ABORTED |
 
-- 한 tick에 여러 행이 맞으면 순위가 앞선 행이 이긴다. 순위는 같은 tick의 동률만 가른다. 조건이 엇갈려 시작하면(어느 tick에 한 행만 맞고 다음 tick에 순위가 앞선 행이 맞는 경우) 먼저 맞은 행이 그 tick에 goal을 끝내고, 그 뒤의 표본은 효과가 없다. 표 머리의 "들어감은 3회 연속, 벗어남은 1회"를 행별로 적으면: 순위 1, 2, 4-8은 모두 1회 판정이다(실패 한 번, 어긋난 표본 하나, 해당 표본 하나). 순위 3만 누적이다(마지막 `vehicle_status` 수신 뒤 ROS 시각으로 `link_timeout`). 3회 연속은 이 표가 아니라 확인(OFFBOARD, ARMED, AUTO_LOITER, AUTO_LAND, DISARMED)에 쓴다. 이 순위는 px4-engineer가 승인했고(px4-engineer 확인 2026-11-11, `approval-px4-p3b-review.md` 2번) 재실측 (4) 전까지는 잠정이다. 근거는 셋이다.
+- 한 tick에 여러 행이 맞으면 순위가 앞선 행이 이긴다. 순위는 같은 tick의 동률만 가른다. 조건이 엇갈려 시작하면(어느 tick에 한 행만 맞고 다음 tick에 순위가 앞선 행이 맞는 경우) 먼저 맞은 행이 그 tick에 goal을 끝내고, 그 뒤의 표본은 효과가 없다. 표 머리의 "들어감은 3회 연속, 벗어남은 1회"를 행별로 적으면: 순위 1, 2, 4-8은 모두 1회 판정이다(실패 한 번, 어긋난 표본 하나, 해당 표본 하나). 순위 3만 누적이다(마지막 `vehicle_status` 수신 뒤 ROS 시각으로 `link_timeout`). 3회 연속은 이 표가 아니라 확인(OFFBOARD, ARMED, AUTO_LOITER, AUTO_LAND, DISARMED)에 쓴다. 이 순위는 px4-engineer가 승인했고(px4-engineer 확인 2026-11-11, px4-engineer PR #23 반영 확인(git 이력) 2번) 재실측 (4) 전까지는 잠정이다. 근거는 셋이다.
   - 순위 1-3은 나머지 행의 입력을 믿을 수 없게 하는 조건이다. 시각을 만들 수 없으면 발행 자체가 안 되고, 식별이 어긋난 `vehicle_status`는 이 기체의 것이 아닐 수 있으며, 상태가 끊기면 아래 행이 읽을 값이 없다. 앞 판은 식별 불일치가 아래에 있어 남의 기체의 표본으로 FAILSAFE가 먼저 나갈 수 있었다(reviewer).
   - 순위 4-5(arming 상태)가 6-8(모드)보다 앞이다. disarm된 뒤의 `nav_state`는 확인된 사실이 없다. px4 보고의 "지상에서 외부 disarm되면 `nav_state`는 OFFBOARD로 남는다"는 실측이 없고, 한 표본이라도 OFFBOARD를 벗어나면 모드 행이 먼저 걸려 방어용 FAILSAFE(순위 8)가 된다(reviewer). arming 상태를 먼저 보면 `nav_state`가 어떻게 되든 같은 reason이 나온다.
   - 순위 6-8은 조건이 서로 겹치지 않아 그 안의 순서는 뜻이 없다. 순위 4와 5도 겹치지 않는다.
-  - 순위 5의 `failsafe` 가지(px4-engineer 수정 조건을 reviewer 지적으로 다시 적었다. px4-engineer 확인 2026-11-11, `approval-px4-p3b-final.md` 1번 승인): 지금 표본의 `failsafe`만 보면 자동 disarm에서는 이 가지가 걸리지 않는다. [소스] `Commander.cpp` 1843행 `handleAutoDisarm()`이 1866행 근처 `handleModeIntentionAndFailsafe()`보다 앞에서 disarm하고, 후자는 `state.armed = isArmed()`(2346행 근처)로 읽으며 `framework.cpp` 452-455행은 disarm이면 `Action::None`이다. 그래서 자동 disarm 주기의 첫 DISARMED 표본은 `failsafe == false`이고 `nav_state`는 의도로 되돌아가 있다.
+  - 순위 5의 `failsafe` 가지(px4-engineer 수정 조건을 reviewer 지적으로 다시 적었다. px4-engineer 확인 2026-11-11, px4-engineer 최종 확인(git 이력) 1번 승인): 지금 표본의 `failsafe`만 보면 자동 disarm에서는 이 가지가 걸리지 않는다. [소스] `Commander.cpp` 1843행 `handleAutoDisarm()`이 1866행 근처 `handleModeIntentionAndFailsafe()`보다 앞에서 disarm하고, 후자는 `state.armed = isArmed()`(2346행 근처)로 읽으며 `framework.cpp` 452-455행은 disarm이면 `Action::None`이다. 그래서 자동 disarm 주기의 첫 DISARMED 표본은 `failsafe == false`이고 `nav_state`는 의도로 되돌아가 있다.
     - px4-engineer의 앞 문장은 "이 항목 실행 중 `failsafe == true`이거나 `nav_state`가 OFFBOARD가 아닌 표본을 한 번이라도 본 적이 있으면 FAILSAFE"였다. 그런데 이 표는 벗어남을 1회로 판정하므로 OFFBOARD가 아닌 ARMED 표본은 순위 6-8에서 그 tick에 goal을 끝낸다. 앞선 표본의 "OFFBOARD 아님" 이력은 생길 수 없다(reviewer. px4-engineer도 앞 문장이 틀렸다고 확인했다).
     - 정한 것: 이력에 지금의 DISARMED 표본을 넣지 않는다. 그 표본의 `nav_state`는 보지 않는다. 넣으면 외부 disarm 뒤 `nav_state`가 OFFBOARD를 떠나는 경우가 모두 FAILSAFE가 되어 EXTERNAL_DISARM이 나오지 않게 되고, 순위 4-5를 모드 행보다 앞에 둔 이유(disarm 뒤의 `nav_state`는 확인된 사실이 아니다)와도 어긋난다.
     - 이 가지가 걸리는 경우(px4-engineer 문장): 이 표본의 `failsafe`가 true인 DISARMED는 명령 disarm과 failsafe 동작 Disarm(`COM_OBL_RC_ACT`가 Disarm인 경우, GCS 손실 Disarm. `Commander.cpp` 2375-2377행)에서 나온다. 앞선 표본의 `failsafe` 이력은 v1.17.0에서 OFFBOARD인 채로는 생기지 않으므로([소스]) 이 가지는 방어용이다. failsafe 동작 Disarm에서는 `nav_state`가 OFFBOARD로 남고 `landed`에 따라 순위 4나 5의 FAILSAFE가 된다. 이 프로젝트의 SITL 파라미터는 Land라 이 경로에 닿지 않는다.
     - 이력 가지의 테스트는 합성 표본으로만 할 수 있다(실제 PX4 v1.17.0에서는 만들 수 없다).
     - 덮지 못하는 경우: failsafe Land로 OFFBOARD를 벗어난 ARMED 표본을 노드가 놓친 채 자동 disarm된 경우뿐이다. [소스] failsafe가 걸리는 주기에 `nav_state`와 `failsafe`가 바뀌면 `vehicle_status`가 즉시 publish되고(`Commander.cpp` 1941-1945행) 자동 disarm(`COM_DISARM_LAND` 2 s)은 그 뒤이므로, 그 표본은 보통 순위 6에서 goal을 끝낸다. 놓치는 것은 수신이 끊겼거나, tick당 최신 표본 1개 모델에서 50 ms 안에 표본이 연달아 온 경우다. 그때의 첫 DISARMED 표본은 외부 disarm과 구별할 값이 없어 EXTERNAL_DISARM이 된다. 의미 문장이 "원인은 판정하지 않는다"이므로 틀린 말이 되지는 않는다.
-- disarm 분류의 고정 규칙(px4-engineer 조건. `approval-px4-p3b.md` 5번): disarm의 분류(지상 대 공중)는 처음 관측한 DISARMED 표본의 tick에, 그때까지 받은 최신 `landed` 값으로 정하고 고정한다. 뒤에 오는 `landed` 표본으로 바꾸지 않는다. 이 규칙은 감시 표의 두 DISARMED 행, LAND 감시의 완료 우선 규칙, 취소의 Hold 확인 창에서 본 DISARMED에 모두 쓴다. 근거: [소스] `MulticopterLandDetector.cpp` 249, 287, 296행(`return !_armed || ...`)과 318-320행(LNDMC_TRIG_TIME/3 지연). 공중에서 disarm돼도 약 0.33 s 뒤 `landed`가 true로 바뀌어 발행된다. 고정하지 않으면 공중 disarm이 지상 disarm(CANCELED 또는 완료)으로 잘못 분류될 수 있다.
-- 지상 DISARMED 행(순위 5. `approval-px4-p3b.md` 추가 문제 3): TAKEOFF가 뜨기 전에 외부에서 disarm되면 모드 행에 걸리지 않을 수 있다. 이 행이 없으면 ITEM_TIMEOUT까지 발행이 이어진다. disarm 뒤의 `nav_state`는 확인된 사실이 아니다. px4-engineer가 앞 보고의 "`nav_state`는 OFFBOARD로 남는다"를 [소스]에 기댄 추정으로 정정했다(`approval-px4-p3b-review.md`. `UserModeIntention.cpp` 78-84행과 94-101행, `framework.cpp` 452-455행. OFFBOARD가 `modePreventsArming`에 걸리는지는 확인하지 못했다). 실측(재실측 (4)) 전에는 사실로 쓰지 않으며, 순위 4-5를 모드 행보다 앞에 둔 것이 이 불확실성을 덮는다. reason을 새 상수 REASON_EXTERNAL_DISARM으로 둔 이유는 "px4-engineer 승인 반영"의 architect 결정에 있다.
+- disarm 분류의 고정 규칙(px4-engineer 조건. px4-engineer P3b 착수 전 승인 검토(git 이력) 5번): disarm의 분류(지상 대 공중)는 처음 관측한 DISARMED 표본의 tick에, 그때까지 받은 최신 `landed` 값으로 정하고 고정한다. 뒤에 오는 `landed` 표본으로 바꾸지 않는다. 이 규칙은 감시 표의 두 DISARMED 행, LAND 감시의 완료 우선 규칙, 취소의 Hold 확인 창에서 본 DISARMED에 모두 쓴다. 근거: [소스] `MulticopterLandDetector.cpp` 249, 287, 296행(`return !_armed || ...`)과 318-320행(LNDMC_TRIG_TIME/3 지연). 공중에서 disarm돼도 약 0.33 s 뒤 `landed`가 true로 바뀌어 발행된다. 고정하지 않으면 공중 disarm이 지상 disarm(CANCELED 또는 완료)으로 잘못 분류될 수 있다.
+- 지상 DISARMED 행(순위 5. px4-engineer P3b 착수 전 승인 검토(git 이력) 추가 문제 3): TAKEOFF가 뜨기 전에 외부에서 disarm되면 모드 행에 걸리지 않을 수 있다. 이 행이 없으면 ITEM_TIMEOUT까지 발행이 이어진다. disarm 뒤의 `nav_state`는 확인된 사실이 아니다. px4-engineer가 앞 보고의 "`nav_state`는 OFFBOARD로 남는다"를 [소스]에 기댄 추정으로 정정했다(px4-engineer PR #23 반영 확인(git 이력). `UserModeIntention.cpp` 78-84행과 94-101행, `framework.cpp` 452-455행. OFFBOARD가 `modePreventsArming`에 걸리는지는 확인하지 못했다). 실측(재실측 (4)) 전에는 사실로 쓰지 않으며, 순위 4-5를 모드 행보다 앞에 둔 것이 이 불확실성을 덮는다. reason을 새 상수 REASON_EXTERNAL_DISARM으로 둔 이유는 "px4-engineer 승인 반영"의 architect 결정에 있다.
 - 방어용 분류(순위 8)는 px4-engineer 승인. [소스] `framework.h` 150행: `inFailsafe`는 None과 Warn이 아닐 때 참이다. `framework.cpp` 684-690행: None과 Warn에서는 `nav_state`가 사용자 의도와 같다. `Commander.cpp` 2369-2372, 2388행.
-- OFFBOARD이고 ARMED인 채 `failsafe == true`인 표본은 어느 행에도 걸리지 않고 goal을 끝내지 않는다. 표대로가 의도다(architect 확인. `approval-test-p3.md` 2절 (ii). px4-engineer 확인 2026-11-11, `approval-px4-p3b-final.md` 2번 승인). [소스]로는 정상 상태에서 나오지 않는다. None과 Warn이 아니면 failsafe 동작이 모드를 바꾼다. 예외는 Disarm(같은 주기에 DISARMED 표본이 된다)과 Terminate(`nav_state`가 TERMINATION이 된다)다. `COM_FAIL_ACT_T`의 지연 중에는 선택된 동작이 Hold라 AUTO_LOITER와 `failsafe` true로 순위 6에 걸린다. 만약 나왔다면 goal을 계속하는 것이 안전하다. 모드를 바꾸지 않는 failsafe이고, 발행을 멈추면 offboard 손실 failsafe를 스스로 일으킨다. 다음 표본의 모드 이탈은 순위 6-8이 잡는다. 그 표본의 `failsafe`는 순위 5의 이력에 남는다.
+- OFFBOARD이고 ARMED인 채 `failsafe == true`인 표본은 어느 행에도 걸리지 않고 goal을 끝내지 않는다. 표대로가 의도다(architect 확인. test-engineer P3 조건부 승인(git 이력) 2절 (ii). px4-engineer 확인 2026-11-11, px4-engineer 최종 확인(git 이력) 2번 승인). [소스]로는 정상 상태에서 나오지 않는다. None과 Warn이 아니면 failsafe 동작이 모드를 바꾼다. 예외는 Disarm(같은 주기에 DISARMED 표본이 된다)과 Terminate(`nav_state`가 TERMINATION이 된다)다. `COM_FAIL_ACT_T`의 지연 중에는 선택된 동작이 Hold라 AUTO_LOITER와 `failsafe` true로 순위 6에 걸린다. 만약 나왔다면 goal을 계속하는 것이 안전하다. 모드를 바꾸지 않는 failsafe이고, 발행을 멈추면 offboard 손실 failsafe를 스스로 일으킨다. 다음 표본의 모드 이탈은 순위 6-8이 잡는다. 그 표본의 `failsafe`는 순위 5의 이력에 남는다.
 - failsafe로 OFFBOARD를 벗어난 표본(순위 6)을 보면 즉시 멈추는 이유: [실측] offboard 손실 Land 중에 발행만 다시 시작하자 모드 명령 없이 0.07 s 만에 OFFBOARD로 돌아갔다(1회). Executor가 발행을 이어 가면 착륙 중인 기체가 다시 올라간다.
 - LAND 항목(WAITING_MODE)의 감시는 세 구간으로 나뉜다. px4-engineer가 세 구간과 완료 우선 규칙을 승인했고(2026-11-11) 보강 문장 셋을 반영했다.
   - 확인 전(NAV_LAND를 보낸 뒤 AUTO_LAND 3회 연속까지): 모드 이탈 판정을 하지 않는다. 항목 시작 때의 `nav_state`는 AUTO_LAND가 아니기 때문이다(정식 미션이면 OFFBOARD, `[LAND]` 한 항목 미션이면 보통 AUTO_LOITER). 이 구간에서 보는 것은 `mode_confirm_timeout`(MODE_SWITCH_FAILED), 상태 없음(LINK_LOST), 항목 `timeout`뿐이다. 발행 규칙은 이 구간에서도 그대로 적용한다. OFFBOARD도 AUTO_LAND도 아닌 표본을 보면 발행을 멈추고 다시 켜지 않는다. 이탈 판정은 하지 않고 NAV_LAND 재전송과 `mode_confirm_timeout`만 이어 간다.
   - AUTO_LAND 확인(3회 연속)은 `failsafe` 값과 무관하게 `nav_state == AUTO_LAND`로 센다. offboard 손실 Land 중인 기체에 보낸 `[LAND]`도, 흔들림 뒤 발행 중단으로 생긴 failsafe Land도 정상 경로다.
   - 처음 관측과 3회 연속 사이의 흔들림: AUTO_LAND를 한 번 본 뒤 다른 모드 표본이 오면 연속 계수를 0으로 되돌릴 뿐 이탈로 보지 않는다. 멈춘 발행은 다시 켜지 않고(켜면 Offboard로 돌아갈 수 있다) NAV_LAND 재전송을 이어 가며, `mode_confirm_timeout`은 NAV_LAND를 처음 보낸 시각부터 그대로 흐른다.
   - 확인 뒤: 모드 이탈 판정은 ARMED인 동안만 적용한다. ARMED인데 AUTO_LAND에서 벗어나 다른 모드가 되면 EXTERNAL_MODE_CHANGE(`failsafe`이면 FAILSAFE).
-  - 어느 구간에서든 DISARMED이고 `landed`이면 `nav_state`가 무엇이든 이탈로 보지 않고 완료 계수(DISARMED 3회 연속)가 우선한다. 이유: [실측] 자동 disarm과 동시에 `nav_state`가 AUTO_LAND를 떠나 사용자 의도의 모드로 돌아간다(`UserModeIntention`의 disarm 처리. `opinion-px4.md` 44행). 1회 이탈 규칙을 그대로 쓰면 정상 착륙이 EXTERNAL_MODE_CHANGE로 끝난다. `landed`가 아닌 채 DISARMED는 FAILSAFE다. 여기의 `landed`는 위 disarm 분류의 고정 규칙으로 읽는다.
+  - 어느 구간에서든 DISARMED이고 `landed`이면 `nav_state`가 무엇이든 이탈로 보지 않고 완료 계수(DISARMED 3회 연속)가 우선한다. 이유: [실측] 자동 disarm과 동시에 `nav_state`가 AUTO_LAND를 떠나 사용자 의도의 모드로 돌아간다(`UserModeIntention`의 disarm 처리. px4-engineer 의견서(git 이력) 44행). 1회 이탈 규칙을 그대로 쓰면 정상 착륙이 EXTERNAL_MODE_CHANGE로 끝난다. `landed`가 아닌 채 DISARMED는 FAILSAFE다. 여기의 `landed`는 위 disarm 분류의 고정 규칙으로 읽는다.
   - 완료 우선 규칙이 두 경우를 다 덮는 근거([소스] px4-engineer): 정상 착륙에서 "ARMED인데 AUTO_LAND가 아닌" 표본은 나오지 않는다. 자동 disarm(`Commander.cpp` 1843행 handleAutoDisarm, 675행 onDisarm)이 같은 주기의 `nav_state` 계산(1866, 2369-2372행)과 발행(1945행)보다 앞서므로 DISARMED와 새 `nav_state`가 한 표본에 같이 온다. 대비책 disarm처럼 명령으로 내는 disarm은 `nav_state` 계산 뒤에 처리되어(1898행) "DISARMED + AUTO_LAND" 표본이 한 번 나온 다음 `nav_state`가 바뀐다.
 - CANCELING 중에는 위 표를 쓰지 않고 쟁점 3의 분기만 본다.
 
-명령 재전송 규칙(px4-engineer가 정한 값. `approval-px4-p3b.md`): 대기 중인 명령은 한 번에 하나다. 분기나 단계가 바뀌는 tick에 이전 명령의 재전송을 즉시 지운다. ack는 `command`와 `target`으로 맞춘다. 주기는 `command_resend_period`(0.5 s)다.
+명령 재전송 규칙(px4-engineer가 정한 값. px4-engineer P3b 착수 전 승인 검토(git 이력)): 대기 중인 명령은 한 번에 하나다. 분기나 단계가 바뀌는 tick에 이전 명령의 재전송을 즉시 지운다. ack는 `command`와 `target`으로 맞춘다. 주기는 `command_resend_period`(0.5 s)다.
 
 | 명령 | 재전송을 멈추는 때 | 거부 ack |
 | --- | --- | --- |
@@ -560,7 +560,7 @@ P3b 착수 전 px4-engineer 승인 항목(reviewer 권고 3, 4): 2026-11-11에 �
 
 - 같은 명령을 여러 번 받아도 결과가 같다. 이미 disarm된 기체에 보낸 disarm은 ACCEPTED다([소스] `Commander.cpp` 640-642, 976-980행. [실측] D).
 - arm을 보낸 뒤의 DISARM 확인은 disarm 전송 뒤에 받은 표본만 센다(쟁점 3 M5).
-- px4-engineer의 표는 NAV_LAND와 DISARM이 한 행씩이었다. 경우를 가른 행(M4의 Land 경로, LAND 대비책)과 NAV_LAND 행의 `mode_confirm_timeout`은 이 문서의 다른 곳에 이미 있던 규칙을 architect가 표에 옮긴 것이다(px4-engineer 확인 2026-11-11, `approval-px4-p3b-review.md` 5번 승인. 강제가 아닌 disarm은 `landed || maybe_landed`가 아니면 거부되므로 대비책 disarm이 공중 기체를 끌 위험은 없다).
+- px4-engineer의 표는 NAV_LAND와 DISARM이 한 행씩이었다. 경우를 가른 행(M4의 Land 경로, LAND 대비책)과 NAV_LAND 행의 `mode_confirm_timeout`은 이 문서의 다른 곳에 이미 있던 규칙을 architect가 표에 옮긴 것이다(px4-engineer 확인 2026-11-11, px4-engineer PR #23 반영 확인(git 이력) 5번 승인. 강제가 아닌 disarm은 `landed || maybe_landed`가 아니면 거부되므로 대비책 disarm이 공중 기체를 끌 위험은 없다).
 
 끝난 뒤 기체 상태(7단계 `docs/interface.md`의 reason별 "ABORTED 뒤 기체 상태" 표에 넣을 줄. 표 전체는 7단계에 px4-engineer와 만든다)
 
@@ -623,7 +623,7 @@ px4-engineer의 수용 조건(모두 받는다): core는 px4_msgs를 include하�
 - 통합 테스트의 goal 전 gate(모두 `/clock` 기준 상한 안에서): `/clock` 수신과 `now() > 0`, 자기 `mission_event` 구독의 `get_publisher_count() >= 1`, PX4 구독들의 `get_publisher_count() >= 1`, action client의 `server_is_ready()`, 기대 sysid의 `vehicle_status` 표본 1회 이상, 시나리오의 사전조건(지상, disarmed. `nav_state` 값은 사전조건에 넣지 않는다).
 - 순서 규칙(필수 조건이다. [실측] P3a): 테스트는 `mission_event` 구독을 action client보다 먼저, 같은 노드(같은 participant)에서 만든다. 순서를 어기면 ACCEPTED가 빠진다(대조군 87/400. 새 프로세스 71/200, 새 노드 16/200). `tests/support`의 해당 코드에 이유를 주석으로 남긴다. 구독과 client를 다른 프로세스에 두는 구성은 재지 않았고 쓰지 않는다.
 - 구독 쪽 `get_publisher_count() >= 1` gate는 사건 수신을 보장하지 않는다([실측] 누락 87건이 모두 이 조건을 만족했다). gate에는 남기되 "사건이 온다"의 근거로 쓰지 않는다. 수신을 받치는 것은 위 순서 규칙이다.
-- 누락 계수 실험(P3a, ros2-engineer): "구독 생성 -> client 생성 -> 즉시 goal"을 200회 돌려 ACCEPTED 사건이 빠진 횟수를 센다(gate 없이 가장 나쁜 순서). 결과를 progress에 남기고, 0이 아니면 이 쟁점을 다시 연다. 결과(`p3a-results.md`): 0/400(새 프로세스 200회, 새 노드 200회). 이 쟁점을 다시 열지 않는다.
+- 누락 계수 실험(P3a, ros2-engineer): "구독 생성 -> client 생성 -> 즉시 goal"을 200회 돌려 ACCEPTED 사건이 빠진 횟수를 센다(gate 없이 가장 나쁜 순서). 결과를 progress에 남기고, 0이 아니면 이 쟁점을 다시 연다. 결과(P3a 실행 확인 결과(git 이력)): 0/400(새 프로세스 200회, 새 노드 200회). 이 쟁점을 다시 열지 않는다.
 - graph 조회(`count_publishers`, `get_publishers_info_by_topic`)는 맺어짐의 판정에 쓰지 않는다. 계약 QoS의 대조(Executor의 `mission_event` 발행이 RELIABLE, VOLATILE인지)에만 쓴다.
 - lifecycle `get_state` 호출은 gate에 넣지 않는다.
 - goal 응답은 accepted인데 ACCEPTED 사건이 없으면 `EVENT_MISSING`으로 실패시키고 재시도하지 않는다. Executor는 ACCEPTED를 낼 때 사건 발행자의 `get_subscription_count()`를 debug 로그에 남긴다.
@@ -678,18 +678,18 @@ U1 결정에 따라 D는 1a 필수이고 `[LAND]` 한 항목 미션이 1a 노드
 
 | 이름 | 값 | 근거 |
 | --- | --- | --- |
-| `ready_timeout` | 30 s | 준비까지 약 7 s의 4배, discovery 1.1 s 포함(`opinion-px4.md` 1.2절, 7.2절). px4의 `ekf_ready_timeout`을 P0까지 덮게 이름을 바꿨다 |
-| `offboard_signal_timeout` | 2 s | 10회 발행 0.5 s + 여유(`opinion-px4.md` 1.1절, 7.2절) |
-| `mode_confirm_timeout` | 3 s | 3회 연속 약 1.0 s, 표본 1개 유실 때 1.5 s, 명령 1회 유실 0.5 s(`opinion-px4.md` 1.1절, 7.2절) |
-| `arm_timeout` | 5 s | ARMED 3회 연속 약 1.5 s + TEMPORARILY_REJECTED 재시도(`opinion-px4.md` 1.1절, 7.2절) |
-| `hold_confirm_timeout` | 3 s | `opinion-px4.md` 4.1절(실측), 4.3절(권고), 7.2절 |
+| `ready_timeout` | 30 s | 준비까지 약 7 s의 4배, discovery 1.1 s 포함(px4-engineer 의견서(git 이력) 1.2절, 7.2절). px4의 `ekf_ready_timeout`을 P0까지 덮게 이름을 바꿨다 |
+| `offboard_signal_timeout` | 2 s | 10회 발행 0.5 s + 여유(px4-engineer 의견서(git 이력) 1.1절, 7.2절) |
+| `mode_confirm_timeout` | 3 s | 3회 연속 약 1.0 s, 표본 1개 유실 때 1.5 s, 명령 1회 유실 0.5 s(px4-engineer 의견서(git 이력) 1.1절, 7.2절) |
+| `arm_timeout` | 5 s | ARMED 3회 연속 약 1.5 s + TEMPORARILY_REJECTED 재시도(px4-engineer 의견서(git 이력) 1.1절, 7.2절) |
+| `hold_confirm_timeout` | 3 s | px4-engineer 의견서(git 이력) 4.1절(실측), 4.3절(권고), 7.2절 |
 | 지상 disarm 확인(M5) | 3 s | `mode_confirm_timeout`을 그대로 쓴다(이름을 따로 두지 않는다. architect). [실측] disarm부터 DISARMED까지 4-12 ms + 3회 연속 약 1.0 s |
 | `link_timeout` | 2 s | `vehicle_status` 최소 2 Hz의 4주기 |
 | `land_disarm_fallback_delay` | 5 s | [소스] `COM_DISARM_LAND` 기본값 2 s(이 프로젝트는 바꾸지 않는다) + 3 s. PX4 파라미터를 노드가 읽지 않으므로 값을 따로 둔다 |
 | `command_resend_period` | 0.5 s | [실측] run 20261111-030155-k5에서 ack 1건 유실. `check_px4.py`와 같은 값이다 |
 | 지상 setpoint z 오프셋 | +0.5 m | 노드 파라미터가 아니라 `src/px4/` 어댑터 상수다(쟁점 3 M5) |
 
-값은 px4-engineer가 2026-11-11에 최종으로 낸 것이다(`approval-px4-p3b.md`. 쟁점 6의 규칙에 따라 px4-engineer가 정하고 변경의 필수 승인자다). 명령별 재전송 규칙은 쟁점 4에 있다.
+값은 px4-engineer가 2026-11-11에 최종으로 낸 것이다(px4-engineer P3b 착수 전 승인 검토(git 이력). 쟁점 6의 규칙에 따라 px4-engineer가 정하고 변경의 필수 승인자다). 명령별 재전송 규칙은 쟁점 4에 있다.
 
 통합 테스트의 미션 값(테스트 입력): TAKEOFF 5 m, `acceptance_m` 0.3, timeout 20 s([실측] 6.2-7.6 s). LOITER 5 s, timeout 10 s. LAND timeout 30 s([실측] 10.9-11.1 s). goal 결과 대기 90 s(ROS 시각).
 
@@ -750,13 +750,13 @@ ros2-engineer
 - P2: 쟁점 5의 표.
 - P3a: autostart를 실행해 확인(시험 컴포넌트로 configure, activate, `wait_until_started`), 콜드 기동의 첫 `/clock` 수신 시간, ACCEPTED 누락 계수 실험 200회(쟁점 7).
 - P3b 이후: `idsim_mission` 패키지. P3b는 "P3b 착수 전 px4-engineer 승인 항목"이 닫힌 뒤에 시작한다(2026-11-11에 닫혔고 PR #21로 main에 들어갔다). 실측이 없는 두 경로(지상 setpoint 발행 중의 Hold, 이륙 직후 `landed`가 true인 구간의 지상 setpoint와 disarm), 감시 표의 행 순위, "disarm 전송 뒤 받은 표본"의 기준은 표대로 구현하되 재실측과 px4-engineer 확인으로 바뀔 수 있다. 바뀌어도 고칠 곳이 한곳이 되게 둔다. core는 쟁점 4의 전이 표와 쟁점 3의 취소 분기를 `step()` 하나로(입력은 snapshot과 지금 ROS 시각, 출력은 setpoint 유무, 명령 목록, feedback, 종료 결과). 종료 결과는 한 구조체에서 action result와 종료 사건을 둘 다 채운다. `handle_goal`은 항상 `ACCEPT_AND_EXECUTE`. 사건의 `stamp`는 노드 clock의 ROS 시각. 이름 상수(`Mission::ACTION_NAME`, `MissionEvent::TOPIC_NAME`)는 상대 이름으로 쓰고 namespace 범위 static 초기화식에 쓰지 않는다. 설계 노트(패키지 README 또는 헤더 주석)에 구현 규칙(`ACCEPT_AND_EXECUTE`만, 판정 순서)을 적는다.
-- P3a는 끝났다(2026-11-11. `p3a-results.md`). 결과에 따라 Executor는 자기 전이(`lifecycle.self_start`)로 구현한다(쟁점 2).
+- P3a는 끝났다(2026-11-11. P3a 실행 확인 결과(git 이력)). 결과에 따라 Executor는 자기 전이(`lifecycle.self_start`)로 구현한다(쟁점 2).
 - P3 완료 조건의 수동 확인: 스택 위에서 `ops` 컨테이너를 손으로 띄워 자기 전이로 active가 되는지(launch에서 `autostart`를 뺀 형태로. P4 전에는 CI에 없다). `lifecycle.self_start`가 false이면 `unconfigured`에 머무는 것도 본다.
 - P4, P5 검토: launch와 params의 대응, foxglove params.
 
 px4-engineer
-- P3b 전: 쟁점 4의 "P3b 착수 전 px4-engineer 승인 항목" 다섯을 닫는다(완료 2026-11-11. `approval-px4-p3b.md`).
-- P3: `px4/` 디렉터리 셋(어댑터와 그 테스트. 지상 setpoint z 오프셋 0.5 m 상수 포함). 전이 표와 상태기 단위 테스트의 승인. architect가 채운 문장(지상 setpoint는 발행 중일 때만, 감시 표의 행 순위, "disarm 전송 뒤 받은 표본"의 기준, `[LAND]` 단독 미션의 ITEM_TIMEOUT 단서, 재전송 표에 옮긴 행)과 `REASON_EXTERNAL_DISARM`은 2026-11-11에 확인했다(`approval-px4-p3b-review.md`). 구현 때 확인할 것: 대비책 disarm은 `landed == true`이고 `land_disarm_fallback_delay`가 지난 뒤에만 시작한다.
+- P3b 전: 쟁점 4의 "P3b 착수 전 px4-engineer 승인 항목" 다섯을 닫는다(완료 2026-11-11. px4-engineer P3b 착수 전 승인 검토(git 이력)).
+- P3: `px4/` 디렉터리 셋(어댑터와 그 테스트. 지상 setpoint z 오프셋 0.5 m 상수 포함). 전이 표와 상태기 단위 테스트의 승인. architect가 채운 문장(지상 setpoint는 발행 중일 때만, 감시 표의 행 순위, "disarm 전송 뒤 받은 표본"의 기준, `[LAND]` 단독 미션의 ITEM_TIMEOUT 단서, 재전송 표에 옮긴 행)과 `REASON_EXTERNAL_DISARM`은 2026-11-11에 확인했다(px4-engineer PR #23 반영 확인(git 이력)). 구현 때 확인할 것: 대비책 disarm은 `landed == true`이고 `land_disarm_fallback_delay`가 지난 뒤에만 시작한다.
 - P4 머지 전: 필수 재실측 (2), (3), (5)(넘김 목록).
 - 7단계 고정 전: 필수 재실측(넘김 목록).
 - P2 검토: setpoint 헬퍼와 빌더의 필드 표.
@@ -765,8 +765,8 @@ px4-engineer
 
 test-engineer
 - P3 승인: core 단위 테스트의 구조(전이 표 대조, status와 reason 대응표, 사건 == result).
-- P3 단위 테스트에 넣을 것("이 goal에서 arm을 보낸 적이 있으면 disarm 분기"의 파급. 작성은 ros2-engineer, 구조 승인은 test-engineer. test-engineer 조건부 승인 2026-11-11, `approval-test-p3.md`. 선결 C1-C5를 반영해 확인 예정을 닫았다. 아래 "test-engineer가 더한 것"까지가 목록이다): (1) LAND가 자동 disarm으로 막 끝나려는 시점(DISARMED 표본이 1-2회 온 뒤)의 취소가 disarm 분기를 거쳐 CANCELED로 끝난다. (2) disarm을 보낸 뒤 `mode_confirm_timeout` 안에 기준을 만족하는 DISARMED가 3회 차지 않으면 REASON_DISARM_FAILED다. (3) 첫 disarm 전송 tick 전에 받은 DISARMED 표본, `timestamp`가 명령의 `Px4Timestamp`와 같거나 앞선 표본, 같은 `timestamp`가 다시 온 표본은 세지 않는다. 감시 표는 순위마다 한 건, 두 행이 같은 tick에 함께 맞는 경우 한 건 이상, 엇갈려 시작하는 경우(먼저 맞은 행이 이긴다) 한 건, 순위 5의 이력 가지(앞선 표본에서 OFFBOARD인 채 `failsafe == true`를 본 뒤의 지상 DISARMED는 FAILSAFE) 한 건, 이 표본의 `nav_state`가 OFFBOARD가 아니어도 순위 5의 결과가 같다는 것 한 건. ITEM_TIMEOUT의 "지상 disarm이면 바로 끝" 분기는 1a에서 닿지 않으므로(setpoint 항목은 늘 arm 뒤다) 전용 테스트를 요구하지 않고, 대신 "arm을 보낸 뒤 DISARMED snapshot에서의 ITEM_TIMEOUT은 disarm 분기를 거친다"를 한 건 둔다.
-- test-engineer가 더한 것(`approval-test-p3.md` 2절, 3절. P3. 작성은 ros2-engineer, `test/px4/`는 px4-engineer)
+- P3 단위 테스트에 넣을 것("이 goal에서 arm을 보낸 적이 있으면 disarm 분기"의 파급. 작성은 ros2-engineer, 구조 승인은 test-engineer. test-engineer 조건부 승인 2026-11-11, test-engineer P3 조건부 승인(git 이력). 선결 C1-C5를 반영해 확인 예정을 닫았다. 아래 "test-engineer가 더한 것"까지가 목록이다): (1) LAND가 자동 disarm으로 막 끝나려는 시점(DISARMED 표본이 1-2회 온 뒤)의 취소가 disarm 분기를 거쳐 CANCELED로 끝난다. (2) disarm을 보낸 뒤 `mode_confirm_timeout` 안에 기준을 만족하는 DISARMED가 3회 차지 않으면 REASON_DISARM_FAILED다. (3) 첫 disarm 전송 tick 전에 받은 DISARMED 표본, `timestamp`가 명령의 `Px4Timestamp`와 같거나 앞선 표본, 같은 `timestamp`가 다시 온 표본은 세지 않는다. 감시 표는 순위마다 한 건, 두 행이 같은 tick에 함께 맞는 경우 한 건 이상, 엇갈려 시작하는 경우(먼저 맞은 행이 이긴다) 한 건, 순위 5의 이력 가지(앞선 표본에서 OFFBOARD인 채 `failsafe == true`를 본 뒤의 지상 DISARMED는 FAILSAFE) 한 건, 이 표본의 `nav_state`가 OFFBOARD가 아니어도 순위 5의 결과가 같다는 것 한 건. ITEM_TIMEOUT의 "지상 disarm이면 바로 끝" 분기는 1a에서 닿지 않으므로(setpoint 항목은 늘 arm 뒤다) 전용 테스트를 요구하지 않고, 대신 "arm을 보낸 뒤 DISARMED snapshot에서의 ITEM_TIMEOUT은 disarm 분기를 거친다"를 한 건 둔다.
+- test-engineer가 더한 것(test-engineer P3 조건부 승인(git 이력) 2절, 3절. P3. 작성은 ros2-engineer, `test/px4/`는 px4-engineer)
   - 위 (1)은 DISARMED 1회와 2회의 두 경우로 나누고(3번째와 같은 tick의 취소는 종료의 충돌 규칙으로 SUCCEEDED), "발행이 이미 멈춘 상태이므로 지상 setpoint를 새로 켜지 않는다"를 단정한다. (2)는 표본이 아예 없는 경우(LINK_LOST 경계)와 묵은 `timestamp`의 DISARMED가 계속 오는 경우로 나눈다. 종료 시점이 첫 전송 시각 + `mode_confirm_timeout`인지(경계의 `>`와 `>=`를 정해 단정), 종료 직전의 disarm 재전송, `landed`가 false로 바뀌면 공중 분기. (3)에는 늦게 처리된 arm의 경합([ARMED, DISARMED, DISARMED, ARMED]에서 계수가 되돌아감)을 넣는다.
   - disarm 분류의 고정 규칙: 첫 DISARMED 때 `landed`가 false였다가 뒤에 true가 되어도 FAILSAFE 유지, 반대도 지상 유지. 적용처 셋(감시 표의 두 행, LAND 완료 우선, 취소의 Hold 확인 창)에 각 한 건.
   - PREPARING 실패의 정리: arm을 보낸 뒤 ARM_REJECTED, `arm_timeout`, `offboard_signal_timeout` 등으로 실패하면 지상 setpoint + disarm, 원래 reason 유지, disarm 미확인은 `detail`. 한 건씩.
@@ -779,7 +779,7 @@ test-engineer
   - 노드 쪽: `lifecycle.self_start`의 대조군 쌍(같은 spin 횟수에서 true는 active, false는 `unconfigured`). 이어서 직접 건 configure와 activate의 성공, goal 실행 중 deactivate 거부, on_shutdown이 실행 중인 goal을 ABORTED, REASON_INTERNAL로 끝내고 사건을 내는지. 배선 테스트는 `/clock`도 발행한다(on_activate의 2 s 대기는 param으로 만들지 않는다).
   - 구조: 시나리오를 tick 열(snapshot 열)로 쓰는 작은 헬퍼. 테스트 이름에 감시 표의 순위. 표의 행 수와 parametrize 수가 같다는 단정 한 건. core 소스에 `chrono`의 `clock::now`와 `rclcpp`가 없다는 grep 검사를 lint에 넣는다(devops-engineer와).
   - 단위 테스트는 합성한 `timestamp`만 검사한다. 실제 시계 관계(`vehicle_status.timestamp`와 `Px4Timestamp`)는 재실측 (5)의 분포만이 확인한다.
-- P4의 실측 기록(`approval-test-p3.md` 4절. stop 검증, 결함 주입, px4 재실측에 공통)
+- P4의 실측 기록(test-engineer P3 조건부 승인(git 이력) 4절. stop 검증, 결함 주입, px4 재실측에 공통)
   - 측정 스크립트는 `tests/sitl/measure/`에 둔다(소유 test-engineer, 절차의 필수 승인자 px4-engineer. C6). px4 재실측 (2), (3), (5)가 P4 머지 조건이므로 P4의 선행 작업이다.
   - 시도마다 기계가 읽는 행을 남긴다(`measure_<항목>.tsv` 또는 jsonl): run id, commit과 dirty, 이미지 key, 시도 번호, 주입 조건과 trigger, 결과, ROS 시각과 벽시계 소요, 종료 코드, ULog 경로. 실패한 시도를 빼지 않고 재시도하지 않는다. 위치는 `run_sitl.sh`와 같은 아티팩트 디렉터리다. 통과 기준은 실행 전에 요약 파일 머리에 적는다. trigger는 sleep이 아니라 이벤트(feedback phase, `landed` 표본)다.
   - 회수의 한계를 적는다. 10회 중 0건은 실패율의 95% 상한이 약 26%라는 뜻이다(3/n). "10/10 통과"를 "플래키 없음"으로 쓰지 않는다.
@@ -793,7 +793,7 @@ test-engineer
 devops-engineer
 - P0: lint, unit trigger 정리(`pull_request` + `push: main`).
 - P1: `Dockerfile.ros-ws`, `versions.env`, `docker-bake.hcl`. 빌드 뒤 이미지 크기를 실측해 알린다.
-- P4의 `ops-N` 서비스와 기동, 정지 경로(P3a 결과와 `opinion-devops-selfstart.md`. 쟁점 2의 값 그대로)
+- P4의 `ops-N` 서비스와 기동, 정지 경로(P3a 결과와 devops-engineer 쟁점 2 재결정 검토(git 이력). 쟁점 2의 값 그대로)
   - `ops-N`: `init: true`, `stop_signal: SIGINT`, `stop_grace_period: 10s`, healthcheck(`interval` 10s, `timeout` 10s, `retries` 2, `start_period` 20s, `start_interval` 2s, 안쪽 `timeout 8`, 출력 남김).
   - 상주 ros-ws 서비스(bridge, P5의 foxglove)와 xrce-agent에 `init: true`. 같은 PR에서 하고 생성기 golden 4종이 함께 바뀐다. 바꾸기 전후의 down 시간을 1회씩 잰다.
   - runner: wrapper의 `timeout`이 보낸 SIGTERM이 PID 1인 pytest에서 버려지는지 1회 확인하고 `init: true` 또는 `timeout -s INT -k 30`으로 고친다(test-engineer와).
@@ -819,7 +819,7 @@ reviewer: 이 문서의 검증("reviewer가 검증할 가정")과 PR마다의 �
 | 받는 쪽 | 시점 | 항목 |
 | --- | --- | --- |
 | px4-engineer | (2), (3), (5)는 P4 머지 전(필수. 근거는 "PR #23 검토 반영"). 나머지는 7단계 고정 전(필수) | 재실측(2026-11-11에 다시 정했다. 이륙 단계와 0.5 m 호버의 Hold는 run 20261111-030155-k5로 표본이 생겼고, 새로 드러난 미실측 조합이 더해졌다). Hold로 끝난 상태의 관찰은 60 s 이상으로 한다. (1) AUTO_LAND 하강 중 0.3 m 아래에서의 취소 3회: 내려앉는지 호버하는지, CANCELED 뒤의 상태, landed인 채 armed로 남는 경우가 있는지. (2) 지상 setpoint 발행 중의 Hold 3회: H와 같은 조건에서 NAV_LAND 대신 Hold를 보내고 처음 관측한 순간 발행을 멈춘다. 이어서 "Hold를 확인하고 발행을 멈춘 뒤 `landed`가 true인 상태에서 disarm" 3회(수락 여부, 고도 변화 0.2 m 이하인지). (3) 이륙 직후의 지상 setpoint와 disarm 3회: TAKEOFF 목표점으로 arm한 뒤 `landed`가 아직 true인 구간(약 0.3-1.0 s)에 지상 setpoint로 바꾸고 disarm. 보내는 시점은 sleep이 아니라 `landed` 표본에 맞춘 조건으로 잡는다(px4-engineer 권고). (4) 감시 표 순위의 확인: G처럼 지상 setpoint로 arm한 뒤 다른 source로 disarm하고, 뒤따르는 표본의 `nav_state`, `failsafe`, `nav_state_user_intention`을 기록한다. failsafe Land 뒤 자동 disarm의 첫 DISARMED 표본과 명령 disarm(대비책)의 첫 표본도 기록한다(`failsafe`, `nav_state`, `nav_state_user_intention`, `landed`). 선택 항목: failsafe 동작이 Disarm인 경로(`COM_OBL_RC_ACT`를 Disarm으로 둔 실행)의 DISARMED 표본이 예상(`failsafe` true, `nav_state` OFFBOARD)과 같은지. 이 프로젝트의 파라미터(Land)로는 닿지 않아 필수가 아니다. (5) arm 전송 직후 취소의 경쟁(추가 문제 1): arm을 보낸 직후(0-0.2 s)에 지상 setpoint와 disarm을 보내고 끝난 상태가 DISARMED인지. 10회 이상. 통과 기준은 전부에서 `mode_confirm_timeout` 안에 기준을 만족하는 DISARMED 3회가 차고, 상승이 0.2 m 이하이며, 지상에 armed로 남은 회가 없는 것이다. 모든 `vehicle_status` 표본의 (`timestamp`, 노드가 받은 ROS 시각, 같은 시점의 `/clock`)을 기록해 `timestamp - Px4Timestamp`의 부호 있는 분포를 구한다. (6) 표본 늘리기: Hold 실험 B(offboard 손실 failsafe 중 Hold)와 C(NAV_LAND 중 Hold), 이번 run의 G, H, X2a, X2b를 각 3회 이상. 높이 0.06-0.37 m 사이의 Hold 포함. (7) X3(이륙한 적 없는 지상 armed에서 발행 중단) 1회. (8) Executor가 보낸 `[LAND]`(지면 근처 Hold에서. P3 뒤에 가능). 결과가 M3, M4, M5의 문장이나 감시 표와 다르면 고정 전에 고친다. 결과 파일은 `docs-for-agent/plan-1a-6-idsim-mission/remeasure-px4.md`(run id, 항목별 회수와 값). 측정은 px4-engineer, 표와의 대조와 통과 판정은 architect, 근거 확인은 reviewer다. (2)와 (3)의 통과 기준은 3회 모두 이 문서의 표대로 끝나는 것이다 |
-| test-engineer, px4-engineer | P4의 선행 작업(닫힘 2026-11-11: 위치와 소유를 정했다) | 측정 스크립트는 `tests/sitl/measure/`에 둔다. 소유는 test-engineer이고 절차는 px4-engineer가 필수 승인자다(`approval-test-p3.md` C6). 재실측 (2), (3), (5)가 P4 머지 조건이므로 스크립트가 먼저 있어야 한다 |
+| test-engineer, px4-engineer | P4의 선행 작업(닫힘 2026-11-11: 위치와 소유를 정했다) | 측정 스크립트는 `tests/sitl/measure/`에 둔다. 소유는 test-engineer이고 절차는 px4-engineer가 필수 승인자다(test-engineer P3 조건부 승인(git 이력) C6). 재실측 (2), (3), (5)가 P4 머지 조건이므로 스크립트가 먼저 있어야 한다 |
 | architect | 7단계 | `docs/interface.md`: M1-M5(M3은 2026-11-11에 고친 문장), `REASON_DISARM_FAILED`와 `REASON_EXTERNAL_DISARM`의 의미(1a 고정 전에 두 상수의 이름과 의미 문장을 한 번 더 본다. EXTERNAL_DISARM은 "원인은 판정하지 않는다"와 이름의 불일치를 `COM_DISARM_LAND` 자동 disarm 시나리오로 따진다), 감시 표의 행 순위(재실측 (4) 뒤), disarm 분류의 고정 규칙, "공중"과 "지상"이 `landed` 값이라는 용어 주석, reason별 "ABORTED 뒤 기체 상태" 표(px4-engineer와. 쟁점 4의 "끝난 뒤 기체 상태" 줄 포함), 공중에서 끝나는 미션은 "고정 전"(U3), source 표, 발행 규칙(Offboard가 아닌 모드에서는 setpoint를 발행하지 않는다), 5단계 `decisions.md` 쟁점 9와 이 문서의 관계. `last_item_index` 구분 필드 불요 확인 |
 | architect, px4, ros2 | 1b 설계 토론 | 공중에서 끝나는 미션의 종료 동작(권고: Hold 확인 뒤 SUCCEEDED), setpoint 항목으로 시작하는 공중 시작 미션(Offboard 재진입), 1a 임시 제한(마지막이 LAND, 첫 항목 제한)의 해제 |
 | ros2-engineer, devops-engineer | 1b | `bridge.yaml` 생성(표적과 함께), world ENU <-> 로컬 NED 변환이 상태기 입력 직전 한 곳에 들어가는 구조 |
@@ -958,8 +958,8 @@ px4-engineer 승인 반영(PR #21) 뒤 reviewer가 본 지점과 결과: 조건�
 1. reviewer가 위 "재확인이 필요한 지점"을 본다.
 2. P0, P1, P2, P3a를 시작한다(README.md의 순서).
 3. (닫힘 2026-11-11) px4-engineer가 "P3b 착수 전 승인 항목"을 닫았다(PR #21). P3b를 시작할 수 있다.
-3b. (완료 2026-11-11) 후속 개정(PR #23)에 대한 px4-engineer 확인을 받아 반영했다(U5. `approval-px4-p3b-review.md`).
+3b. (완료 2026-11-11) 후속 개정(PR #23)에 대한 px4-engineer 확인을 받아 반영했다(U5. px4-engineer PR #23 반영 확인(git 이력)).
 3d. (완료 2026-11-11) P3a. 컨테이너 autostart가 동작하지 않아 쟁점 2를 자기 전이로 다시 결정했다.
-3e. (완료 2026-11-11) px4-engineer의 최종 확인(`approval-px4-p3b-final.md`)으로 확인 예정을 모두 닫았다. P3b를 시작한다.
+3e. (완료 2026-11-11) px4-engineer의 최종 확인(px4-engineer 최종 확인(git 이력))으로 확인 예정을 모두 닫았다. P3b를 시작한다.
 3c. px4-engineer의 필수 재실측 (2), (3), (5)는 P4 머지 전에, 나머지는 7단계 고정 전에 끝낸다.
 4. GHCR Public 확인(사용자).

@@ -4,7 +4,7 @@
 
 | 파일 | 담당 |
 | --- | --- |
-| `docker/versions.env`, `docker/docker-bake.hcl`, `docker/Dockerfile.ros-base`, `docker/Dockerfile.ros-ws`, `docker/Dockerfile.xrce-agent`, `docker/ros-ws-entrypoint.sh`, `docker/compose.smoke.yaml`, `docker/README.md`, `tests/smoke/run_smoke.sh`, `.gitignore`, `.github/workflows/`, `tools/ci/`, `ruff.toml`, `.hadolint.yaml`, `.yamllint.yaml`, `tools/qgc.sh`, `tools/gen_compose.py`(`viz` 프로필 생성 포함), `tools/gen_compose.sh`, `tools/sim_stack.sh`, `config/fleet.yaml`(인터페이스 검토 px4-engineer, sim-engineer, ros2-engineer), `tests/tools/`(초안. 승인은 test-engineer), `README.md`(저장소 루트), `tools/check_host.sh`, `tools/ros_ws.sh`, `.github/workflows/unit.yml` | devops-engineer |
+| `docker/versions.env`, `docker/docker-bake.hcl`, `docker/Dockerfile.ros-base`, `docker/Dockerfile.ros-ws`, `docker/Dockerfile.xrce-agent`, `docker/ros-ws-entrypoint.sh`, `docker/README.md`, `tests/smoke/run_smoke.sh`, `.gitignore`, `.github/workflows/`, `tools/ci/`, `ruff.toml`, `.hadolint.yaml`, `.yamllint.yaml`, `tools/qgc.sh`, `tools/gen_compose.py`(`viz` 프로필 생성 포함), `tools/gen_compose.sh`, `tools/sim_stack.sh`, `config/fleet.yaml`(인터페이스 검토 px4-engineer, sim-engineer, ros2-engineer), `tests/tools/`(초안. 승인은 test-engineer), `README.md`(저장소 루트), `tools/check_host.sh`, `tools/ros_ws.sh`, `.github/workflows/unit.yml` | devops-engineer |
 | `docker/Dockerfile.px4`, `docker/px4/px4-rc.mavlink`, `config/px4/sitl_params.env`, `tests/smoke/check_px4.py`, `tests/smoke/check_px4_pxh.py`, `ros_ws/src/idsim_mission/include/idsim_mission/px4/`, `ros_ws/src/idsim_mission/src/px4/`, `ros_ws/src/idsim_mission/test/px4/` | px4-engineer |
 | `docker/Dockerfile.sim-base`, `ros_ws/src/idsim_sim/`(Gazebo GUI 설정 `gui.config`, gazebo와 gz-gui wrapper `scripts/` 포함) | sim-engineer |
 | `config/cyclonedds.xml`, `ros_ws/src/idsim_common/`, 루트 `.clang-format`, `.clang-tidy`, `tests/smoke/capture.sh`, `tools/to_interface.py`, `docs/interface.md` 초안, `ros_ws/src/idsim_mission/`(launch, `include/idsim_mission/core/snapshot.hpp` 포함. 아래 px4-engineer 몫 제외) | ros2-engineer |
@@ -13,7 +13,7 @@
 
 골든 파일(`tests/fixtures/px4/<태그>/`)의 내용 변경은 px4-engineer와 ros2-engineer가 diff를 승인한다.
 
-계약 golden(`ros_ws/src/idsim_interfaces/test/golden/`)의 내용 변경은 계약 변경이므로 architect가 diff를 승인한다. 고정된 파일의 직접 정의 golden(`golden/direct/`)이 바뀌는 PR에는 `docs/interface.md`와 `docs-for-agent/progress.md` 결정 기록이 함께 들어가야 한다. 갱신 절차(`IDSIM_UPDATE_GOLDEN=1`은 `tools/ros_ws.sh shell` 안에서만, 자동 갱신 없음)와 `test/test_contract.py`의 구조는 test-engineer가 승인한다.
+계약 golden(`ros_ws/src/idsim_interfaces/test/golden/`)의 내용 변경은 계약 변경이므로 architect가 diff를 승인한다. 고정된 파일의 직접 정의 golden(`golden/direct/`)이 바뀌는 PR에는 `docs/interface.md`의 갱신이 함께 들어가야 하고, 변경 근거는 PR 본문에 적는다. 갱신 절차(`IDSIM_UPDATE_GOLDEN=1`은 `tools/ros_ws.sh shell` 안에서만, 자동 갱신 없음)와 `test/test_contract.py`의 구조는 test-engineer가 승인한다.
 
 ## idsim_mission의 승인 규칙
 
