@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // 기체 식별 타입과 vehicle_status 대조. 순수 함수만 시험한다.
-// 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 5.
+// 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 5. VehicleId는
+// docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5.
 
 #include <gtest/gtest.h>
 
@@ -26,6 +27,7 @@
 
 using idsim_common::IdentityCheck;
 using idsim_common::SystemId;
+using idsim_common::VehicleId;
 using idsim_common::VehicleIdentity;
 using idsim_common::VehicleNamespace;
 
@@ -35,6 +37,8 @@ static_assert(!std::is_default_constructible_v<SystemId>);
 static_assert(!std::is_constructible_v<SystemId, int>);
 static_assert(!std::is_constructible_v<SystemId, std::uint8_t>);
 static_assert(!std::is_default_constructible_v<VehicleIdentity>);
+static_assert(!std::is_default_constructible_v<VehicleId>);
+static_assert(!std::is_constructible_v<VehicleId, std::string>);
 
 TEST(VehicleNamespace, AcceptsAbsoluteNamespaces)
 {
@@ -101,4 +105,41 @@ TEST(VehicleIdentity, Verify)
   EXPECT_STREQ(idsim_common::to_string(IdentityCheck::Match), "Match");
   EXPECT_STREQ(idsim_common::to_string(IdentityCheck::SystemIdMismatch), "SystemIdMismatch");
   EXPECT_STREQ(idsim_common::to_string(IdentityCheck::ComponentIdMismatch), "ComponentIdMismatch");
+}
+
+TEST(VehicleId, AcceptsSingleToken)
+{
+  for (const std::string ok : {"px4_1", "px4_12", "a", "_x", "Px4_A"}) {
+    std::string error;
+    const auto id = VehicleId::parse(ok, &error);
+    ASSERT_TRUE(id.has_value()) << ok << ": " << error;
+    EXPECT_EQ(id->str(), ok);
+  }
+}
+
+TEST(VehicleId, RejectsInvalid)
+{
+  // 빈 문자열, 앞 "/", 여러 토큰, 끝 빗금, rmw 노드 이름 규칙 위반(숫자 시작, '-', 공백, '~', '{').
+  for (const std::string bad :
+       {"", "/", "/px4_1", "px4_1/", "fleet/px4_1", "a/b", "1px4", "px4-1", "px4 1", "~px4",
+        "{x}"}) {
+    std::string error;
+    EXPECT_FALSE(VehicleId::parse(bad, &error).has_value()) << "'" << bad << "'";
+    EXPECT_FALSE(error.empty()) << "'" << bad << "'";
+  }
+  EXPECT_FALSE(VehicleId::parse("a/b").has_value());
+}
+
+TEST(VehicleId, MatchesNamespace)
+{
+  const auto id = VehicleId::parse("px4_1");
+  ASSERT_TRUE(id.has_value());
+  EXPECT_TRUE(id->matches(*VehicleNamespace::parse("/px4_1")));
+  EXPECT_FALSE(id->matches(*VehicleNamespace::parse("/px4_2")));
+  EXPECT_FALSE(id->matches(*VehicleNamespace::parse("/px4_11")));
+  EXPECT_FALSE(id->matches(*VehicleNamespace::parse("/px4")));
+  // 여러 토큰 네임스페이스는 마지막 토큰이 같아도 맞지 않는다(N이나 토큰을 해석하지 않는다).
+  EXPECT_FALSE(id->matches(*VehicleNamespace::parse("/fleet/px4_1")));
+  EXPECT_EQ(*id, *VehicleId::parse("px4_1"));
+  EXPECT_NE(*id, *VehicleId::parse("px4_2"));
 }

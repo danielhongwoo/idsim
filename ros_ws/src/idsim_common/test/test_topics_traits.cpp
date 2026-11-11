@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 토픽 기술자의 방향과 발행 허용 trait 전수 검사, 허용 목록 명시 비교, msg_version 규칙.
+// 토픽 기술자의 방향과 발행 허용 trait 전수 검사, 허용 목록 명시 비교, msg_version 규칙,
+// options 인자의 컴파일 확인.
 // 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 2.
 
 #include <gtest/gtest.h>
@@ -98,6 +99,25 @@ using StatusCallback = std::function<void(std::shared_ptr<const px4_msgs::msg::V
 [[maybe_unused]] const auto kSubscriptionLifecycle =
   &px4::create_subscription<topics::VehicleStatus, rclcpp_lifecycle::LifecycleNode, StatusCallback>;
 
+// ---- 양성: options 인자(callback group 지정)를 넘기는 호출이 컴파일된다. 부르지는 않는다 ----
+template <class NodeT>
+void create_with_options(NodeT & node, const idsim_common::VehicleNamespace & ns)
+{
+  rclcpp::SubscriptionOptions sub_options;
+  sub_options.callback_group =
+    node.create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  rclcpp::PublisherOptions pub_options;
+  pub_options.callback_group = sub_options.callback_group;
+  [[maybe_unused]] auto sub = px4::create_subscription<topics::VehicleStatus>(
+    node, ns, [](std::shared_ptr<const px4_msgs::msg::VehicleStatus>) {}, sub_options);
+  [[maybe_unused]] auto pub =
+    px4::create_publisher<topics::OffboardControlMode>(node, ns, pub_options);
+}
+
+[[maybe_unused]] const auto kWithOptionsNode = &create_with_options<rclcpp::Node>;
+[[maybe_unused]] const auto kWithOptionsLifecycle =
+  &create_with_options<rclcpp_lifecycle::LifecycleNode>;
+
 }  // namespace
 
 TEST(TopicsTraits, PositiveInstantiation)
@@ -106,6 +126,8 @@ TEST(TopicsTraits, PositiveInstantiation)
   EXPECT_NE(kPublisherLifecycle, nullptr);
   EXPECT_NE(kSubscriptionNode, nullptr);
   EXPECT_NE(kSubscriptionLifecycle, nullptr);
+  EXPECT_NE(kWithOptionsNode, nullptr);
+  EXPECT_NE(kWithOptionsLifecycle, nullptr);
 }
 
 TEST(TopicsTraits, EveryDescriptorDirectionAndPublish)

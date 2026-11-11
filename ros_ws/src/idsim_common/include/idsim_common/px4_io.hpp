@@ -19,6 +19,11 @@
 // - create_publisher: /fmu/in이면서 Allowed인 기술자만. QoS는 px4_in_qos().
 // 세 함수 모두 목록에 등록된 기술자만 받는다. NodeT는 rclcpp::Node와
 // rclcpp_lifecycle::LifecycleNode 둘 다 된다.
+// create_subscription과 create_publisher는 마지막 인자로 SubscriptionOptions, PublisherOptions를
+// 받는다(callback group 지정용, 생략하면 기본값). 이름과 QoS는 options로 바꿀 수 없다.
+// options를 별도 overload가 아니라 기본 인자로 둔 이유: 테스트가 함수 템플릿의 주소를 취해
+// 인스턴스화를 확인하므로(양성 trait 테스트, 음성 컴파일 테스트) overload 집합이 되면
+// 주소가 모호해진다.
 //
 // 이 차단은 실수 방지 수준이며 보안 경계가 아니다. rclcpp를 직접 부르거나 이름 문자열을 직접 쓰는
 // 우회는 lint와 코드 리뷰로 잡는다.
@@ -32,6 +37,8 @@
 #include "idsim_common/px4_topics.hpp"
 #include "idsim_common/qos.hpp"
 #include "idsim_common/vehicle.hpp"
+#include "rclcpp/publisher_options.hpp"
+#include "rclcpp/subscription_options.hpp"
 #include "rosidl_runtime_cpp/traits.hpp"
 
 namespace idsim_common::px4
@@ -60,7 +67,9 @@ std::string topic_name(const VehicleNamespace & ns)
 }
 
 template <class Topic, class NodeT, class Callback>
-auto create_subscription(NodeT & node, const VehicleNamespace & ns, Callback && callback)
+auto create_subscription(
+  NodeT & node, const VehicleNamespace & ns, Callback && callback,
+  const rclcpp::SubscriptionOptions & options = rclcpp::SubscriptionOptions())
 {
   static_assert(
     detail::is_registered_v<Topic>,
@@ -71,11 +80,13 @@ auto create_subscription(NodeT & node, const VehicleNamespace & ns, Callback && 
     rosidl_generator_traits::is_message<typename Topic::Msg>::value,
     "idsim_common: include the full px4_msgs/msg/<name>.hpp for this message type");
   return node.template create_subscription<typename Topic::Msg>(
-    detail::topic_name<Topic>(ns.str()), px4_out_qos(), std::forward<Callback>(callback));
+    detail::topic_name<Topic>(ns.str()), px4_out_qos(), std::forward<Callback>(callback), options);
 }
 
 template <class Topic, class NodeT>
-auto create_publisher(NodeT & node, const VehicleNamespace & ns)
+auto create_publisher(
+  NodeT & node, const VehicleNamespace & ns,
+  const rclcpp::PublisherOptions & options = rclcpp::PublisherOptions())
 {
   static_assert(
     detail::is_registered_v<Topic>,
@@ -89,7 +100,7 @@ auto create_publisher(NodeT & node, const VehicleNamespace & ns)
     rosidl_generator_traits::is_message<typename Topic::Msg>::value,
     "idsim_common: include the full px4_msgs/msg/<name>.hpp for this message type");
   return node.template create_publisher<typename Topic::Msg>(
-    detail::topic_name<Topic>(ns.str()), px4_in_qos());
+    detail::topic_name<Topic>(ns.str()), px4_in_qos(), options);
 }
 
 }  // namespace idsim_common::px4

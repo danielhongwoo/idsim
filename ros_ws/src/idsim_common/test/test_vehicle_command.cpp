@@ -14,6 +14,7 @@
 
 // VehicleCommand 빌더의 필드 표와 ack 매칭 술어.
 // 결정: docs-for-agent/plan-1a-4-idsim-common/decisions.md 쟁점 6. 필드 값은 opinion-px4.md P3 표.
+// make의 source == target 거부: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5.
 
 #include <gtest/gtest.h>
 
@@ -35,6 +36,9 @@ using px4_msgs::msg::VehicleCommand;
 using px4_msgs::msg::VehicleCommandAck;
 
 static_assert(!std::is_default_constructible_v<VehicleCommandBuilder>);
+// 공개 생성자가 없다. 만드는 길은 make 하나다.
+static_assert(
+  !std::is_constructible_v<VehicleCommandBuilder, idsim_common::VehicleIdentity, CommandSource>);
 static_assert(!std::is_default_constructible_v<CommandSource>);
 static_assert(!std::is_constructible_v<CommandSource, int, int>);
 
@@ -56,12 +60,19 @@ Px4Timestamp timestamp()
   return Px4Timestamp::now(clock).value();
 }
 
+idsim_common::VehicleIdentity target()
+{
+  return idsim_common::VehicleIdentity{
+    *idsim_common::VehicleNamespace::parse("/px4_1"), *idsim_common::SystemId::make(2)};
+}
+
 VehicleCommandBuilder builder()
 {
-  return VehicleCommandBuilder(
-    idsim_common::VehicleIdentity{
-      *idsim_common::VehicleNamespace::parse("/px4_1"), *idsim_common::SystemId::make(2)},
-    *CommandSource::make(254, 1));
+  auto b = VehicleCommandBuilder::make(target(), *CommandSource::make(254, 1));
+  if (!b) {
+    throw std::runtime_error("VehicleCommandBuilder::make rejected source 254/1");
+  }
+  return *b;
 }
 
 struct Expected
@@ -193,8 +204,33 @@ TEST(VehicleCommandBuilder, IsAckFor)
   other_component.target_component = 2;
   EXPECT_FALSE(idsim_common::is_ack_for(other_component, cmd));
 
-  // check_px4.py(source 254/1)와 다른 송신자의 ack는 섞이지 않는다.
-  const auto mission_cmd =
-    VehicleCommandBuilder(builder().target(), *CommandSource::make(1, 191)).arm(timestamp());
-  EXPECT_FALSE(idsim_common::is_ack_for(ack, mission_cmd));
+  // check_px4.py(source 254/1)와 Executor(source 254/191)의 ack는 섞이지 않는다.
+  const auto mission =
+    VehicleCommandBuilder::make(builder().target(), *CommandSource::make(254, 191));
+  ASSERT_TRUE(mission.has_value());
+  EXPECT_FALSE(idsim_common::is_ack_for(ack, mission->arm(timestamp())));
+
+  // system이 다른 송신자도 섞이지 않는다.
+  const auto other = VehicleCommandBuilder::make(builder().target(), *CommandSource::make(1, 191));
+  ASSERT_TRUE(other.has_value());
+  EXPECT_FALSE(idsim_common::is_ack_for(ack, other->arm(timestamp())));
+}
+
+TEST(VehicleCommandBuilder, MakeRejectsSourceSystemEqualToTarget)
+{
+  // 대상 sysid 2. source system 2는 component와 무관하게 거부한다.
+  EXPECT_FALSE(VehicleCommandBuilder::make(target(), *CommandSource::make(2, 1)).has_value());
+  EXPECT_FALSE(VehicleCommandBuilder::make(target(), *CommandSource::make(2, 191)).has_value());
+  // source 값 표(1a 6단계 쟁점 4)의 세 주체는 모두 받아들인다.
+  for (const int component : {191, 25, 1}) {
+    const auto b = VehicleCommandBuilder::make(target(), *CommandSource::make(254, component));
+    ASSERT_TRUE(b.has_value()) << component;
+    EXPECT_EQ(b->source().system(), 254);
+    EXPECT_EQ(b->source().component(), component);
+    EXPECT_EQ(b->target().sysid.value(), 2);
+  }
+  // 대상이 254이면 source 254는 거부된다(규칙은 값이 아니라 같음으로 정해진다).
+  const idsim_common::VehicleIdentity target_254{
+    *idsim_common::VehicleNamespace::parse("/px4_253"), *idsim_common::SystemId::make(254)};
+  EXPECT_FALSE(VehicleCommandBuilder::make(target_254, *CommandSource::make(254, 191)).has_value());
 }
