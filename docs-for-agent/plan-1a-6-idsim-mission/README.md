@@ -25,12 +25,13 @@
 | --- | --- | --- |
 | `README.md` | 이 문서. 작업 단위, 순서, 검토, 완료 기준 | 실행 계획 |
 | `decisions.md` | architect 결정 13건(확정본), 확정 개정 요약, 계약 변경 여부와 golden 영향, 재질문 결과 요약, 전이 표, 담당자별 구현 지시, 넘김 목록, 문서 반영 목록, 사용자 결정 3건, reviewer 검증 결과 | 계약. 구현은 이 문서를 따른다 |
-| `p3a-results.md` | ros2-engineer의 P3a 런타임 확인 결과(스택 6. autostart, `/**` params, 첫 `/clock`, ACCEPTED 누락 계수, PID 1 신호) | 근거 |
+| `p3a-results.md` | ros2-engineer의 P3a 실행 확인 결과(스택 6. autostart, `/**` params, 첫 `/clock`, ACCEPTED 누락 계수, PID 1 신호) | 근거 |
 | `opinion-px4.md` | px4-engineer 의견과 실측(스택 5. Offboard 진입, Hold 실험, 발행 중단 규칙, 타임아웃) | 근거 |
 | `approval-px4-p3b-review.md` | px4-engineer의 PR #23 반영 확인(2026-11-11. 원문 대조, 새 실측 없음. 표본 기준, 순위 5의 failsafe 가지, `[LAND]` 단독 미션의 ITEM_TIMEOUT 단서, 재실측에 더할 셋) | 근거 |
 | `approval-px4-p3b.md` | px4-engineer의 P3b 착수 전 승인 항목 다섯 검토(2026-11-11. 스택 5 실측 run 20261111-030155-k5, 타임아웃과 재전송 주기의 최종 값, 추가로 발견한 문제 다섯) | 근거 |
 | `opinion-ros2.md` | ros2-engineer 의견과 실측(스택 6. 패키지 구조, lifecycle, matched 판정, foxglove_bridge 파라미터) | 근거 |
 | `opinion-test.md` | test-engineer 의견(실측 없음. 통합 테스트 구조, 판정 코드, 시나리오) | 근거 |
+| `opinion-devops-selfstart.md` | devops-engineer의 쟁점 2 재결정 검토(2026-11-11. healthcheck 값과 실패 탐지 상한, `stop_signal`과 exit code, 다른 서비스의 `init`, 생성기 성질 테스트) | 근거 |
 | `opinion-devops.md` | devops-engineer 의견과 조회(생성기, 이미지, Lichtblick digest, `sitl` job) | 근거 |
 
 재질문 답 다섯 건(px4, ros2, test, devops, logging)은 파일로 두지 않고 `decisions.md`의 "재질문 결과 요약"에 옮겼다. 의견서의 권고 중 `decisions.md`와 다른 것은 `decisions.md`가 우선한다(`tools/sitl_test.sh`, `mission-N`, FQN params key, `bridge.yaml`, 임시 recorder, LAND 뒤 취소의 REJECT, 즉시 NOT_READY, `MissionEvent`의 TRANSIENT_LOCAL은 채택하지 않았다).
@@ -52,7 +53,7 @@
 | P0. CI trigger 정리 | devops-engineer | lint, unit을 `pull_request` + `push: main`으로(U2) | 없음. 맨 먼저 |
 | P1. 이미지 | devops-engineer | `Dockerfile.ros-ws`에 foxglove_bridge, `versions.env`의 `FOXGLOVE_BRIDGE_VERSION`, bake, 버전 접두 단정. 이미지 크기 실측 | 없음 |
 | P2. `idsim_common` 추가 | ros2-engineer | `VehicleId`, vehicle params 해석, Options overload, position setpoint 헬퍼, 사건 QoS, 빌더 `make`(`decisions.md` 쟁점 5) | 없음. P1과 병렬 |
-| P3. `idsim_mission` | ros2-engineer(껍질, core), px4-engineer(`px4/` 셋), architect(`ExecuteMission.action`의 상수 `REASON_DISARM_FAILED`, `REASON_EXTERNAL_DISARM` 추가와 주석, golden) | P3a autostart 런타임 확인, 콜드 기동의 첫 `/clock` 수신 시간, ACCEPTED 누락 계수 실험 200회. P3b core(검증, 분류 함수, 상태기, 종료 결과)와 단위 테스트. P3c `px4/` 어댑터와 단위 테스트. P3d 노드 껍질, launch, 배선 테스트. P3e `ExecuteMission.action`의 상수 둘 추가(13은 M5, 14는 감시 표의 지상 DISARMED 행)와 주석(M1, M3-M5, 두 상수의 의미), golden 두 파일 | P2. P3b는 `decisions.md` 쟁점 4의 "P3b 착수 전 px4-engineer 승인 항목" 뒤 |
+| P3. `idsim_mission` | ros2-engineer(껍질, core), px4-engineer(`px4/` 셋), architect(`ExecuteMission.action`의 상수 `REASON_DISARM_FAILED`, `REASON_EXTERNAL_DISARM` 추가와 주석, golden) | P3a autostart 실행 확인, 콜드 기동의 첫 `/clock` 수신 시간, ACCEPTED 누락 계수 실험 200회. P3b core(검증, 분류 함수, 상태기, 종료 결과)와 단위 테스트. P3c `px4/` 어댑터와 단위 테스트. P3d 노드 껍질, launch, 배선 테스트. P3e `ExecuteMission.action`의 상수 둘 추가(13은 M5, 14는 감시 표의 지상 DISARMED 행)와 주석(M1, M3-M5, 두 상수의 의미), golden 두 파일 | P2. P3b는 `decisions.md` 쟁점 4의 "P3b 착수 전 px4-engineer 승인 항목" 뒤 |
 | P4. 생성기와 통합 | devops-engineer(생성기, `stack.sh`, `run_smoke.sh`, `check_host.sh`, `build_images.py --mode pull`, `sitl.yml`, `px4-api` 범위), test-engineer(`tests/support/`, `tests/sitl/`), architect(문서 반영) | `decisions.md` 쟁점 1, 2, 7-11 | P1이 main에 들어가 build가 새 key를 올린 뒤, P3 뒤 |
 | P5. viz | devops-engineer | `foxglove`, `lichtblick` 서비스, `LICHTBLICK_IMAGE`, 접속 안내, 브라우저 실접속 확인 | P4 |
 
@@ -97,6 +98,8 @@
   - CI `sitl` job이 통과하고 실패 때 아티팩트가 올라가는 것을 한 번 확인한다(일부러 실패시킨 실행 또는 첫 실패 실행).
   - `artifacts/runs/`에 호스트 사용자 소유가 아닌 파일이 없다.
   - 문서 반영 목록 반영(reviewer 확인).
+  - `ops-N`의 정지와 실패 탐지를 쟀다: stop 검증 10회(goal 실행 중 stop 3회 이상 포함. 유예 안 종료, 정리 로그, exit code 분포, 종료 사건 수신 여부), `vehicle.id`가 빠진 params의 결함 주입으로 unhealthy 보고까지의 시간(예상 약 54 s, 최악 70 s), CI 첫 3회의 probe 시간. 값이 `decisions.md` 쟁점 2와 다르면 architect에게 알린다.
+  - 생성기 성질 테스트 넷(상주 ros-ws 서비스의 `init: true`, `ops-N`의 `stop_signal`과 `stop_grace_period`, params에 `lifecycle.` key 없음, healthcheck FQN과 `executor_node` 일치)이 통과한다.
   - px4-engineer의 필수 재실측 (2), (3), (5)가 끝나 있고 결과가 `decisions.md`의 표와 맞다(다르면 표와 구현을 먼저 고친다).
 - P5: `tools/stack.sh up --viz` 뒤 브라우저에서 Lichtblick이 foxglove_bridge에 붙고 setpoint와 `vehicle_local_position`이 같은 플롯에 놓인다. 두 포트가 127.0.0.1에만 열려 있다.
 - 6단계 전체(roadmap 1a 완료 기준 중 이 단계 몫): 통합 테스트 로컬 3회 연속 통과, CI `sitl` 통과, QGC와 Gazebo GUI로 같은 비행을 사용자가 확인.

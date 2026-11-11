@@ -2,7 +2,7 @@
 
 입력: `opinion-px4.md`(스택 5 실측), `opinion-ros2.md`(스택 6 실측), `opinion-test.md`(실측 없음), `opinion-devops.md`(조회만), 충돌 지점 재질문 답 다섯 건(px4, ros2, test, devops, logging. 아래 "재질문 결과 요약"). reviewer 검증(조건부. 필수 7건, 권고 10건)과 사용자 결정 3건(2026-11-11, 호출한 쪽이 전달)을 반영한 확정본이다. 무엇이 바뀌었는지는 "확정 개정 요약"에 있다. 구현은 이 문서를 따른다. `docs/`와 코드는 이 문서로 고치지 않았다. 반영할 곳은 "문서 반영 목록"에 있다. `progress.md`는 호출한 쪽이 갱신한다.
 
-2026-11-11에 px4-engineer의 P3b 착수 전 승인 검토(`approval-px4-p3b.md`. 승인 2건, 수정 조건부 3건, 반대 없음, 실측 run 20261111-030155-k5)를 반영했다. 바뀐 곳과 계약, golden, 상수에 주는 영향은 "px4-engineer 승인 반영"에 있다. 그 반영(PR #21)에 대한 reviewer 검증(조건부. 필수 5건, 권고 6건)과 사용자 결정 2건을 같은 날 다시 반영했다("PR #21 reviewer 검증 반영"). 이 개정에서 상수 `REASON_EXTERNAL_DISARM = 14`가 더해졌다. 그 개정(PR #23)에 대한 px4-engineer 확인(`approval-px4-p3b-review.md`. 승인 3건, 수정 조건부 2건, 반대 없음)과 reviewer 검증(조건부. 필수 3건)도 반영했다("PR #23 검토 반영"). 같은 날 P3a 실험 결과(`p3a-results.md`)가 쟁점 2의 전제(컨테이너 autostart)를 깨서 쟁점 2를 다시 결정했다("P3a 결과 반영").
+2026-11-11에 px4-engineer의 P3b 착수 전 승인 검토(`approval-px4-p3b.md`. 승인 2건, 수정 조건부 3건, 반대 없음, 실측 run 20261111-030155-k5)를 반영했다. 바뀐 곳과 계약, golden, 상수에 주는 영향은 "px4-engineer 승인 반영"에 있다. 그 반영(PR #21)에 대한 reviewer 검증(조건부. 필수 5건, 권고 6건)과 사용자 결정 2건을 같은 날 다시 반영했다("PR #21 reviewer 검증 반영"). 이 개정에서 상수 `REASON_EXTERNAL_DISARM = 14`가 더해졌다. 그 개정(PR #23)에 대한 px4-engineer 확인(`approval-px4-p3b-review.md`. 승인 3건, 수정 조건부 2건, 반대 없음)과 reviewer 검증(조건부. 필수 3건)도 반영했다("PR #23 검토 반영"). 같은 날 P3a 실험 결과(`p3a-results.md`)가 쟁점 2의 전제(컨테이너 autostart)를 깨서 쟁점 2를 다시 결정했다("P3a 결과 반영"). 그 재결정에 대한 devops-engineer 의견(`opinion-devops-selfstart.md`. 반대 없음, 조건 다섯)과 reviewer 최종 확인(조건부. 필수 3건)도 반영했다("쟁점 2 재결정의 검토 반영").
 
 ## 확정 개정 요약 (2026-11-11)
 
@@ -72,7 +72,7 @@ px4-engineer가 정한 값(쟁점 6의 소유 규칙에 따라 그대로 채택)
 
 architect가 정한 것
 
-- 추가 문제 3의 reason(reviewer 지적 뒤 다시 판단했다): 상수 `REASON_EXTERNAL_DISARM = 14`를 더한다. setpoint 항목 중 지상에서 Executor가 보내지 않은 disarm을 관측하면, `failsafe`가 true이면 REASON_FAILSAFE이고 아니면 REASON_EXTERNAL_DISARM이다. `detail`에 지상 disarm임을 적는다. 의미 문장: "setpoint 항목 실행 중에 Executor가 보내지 않은 disarm이 지상에서 failsafe 없이 관측됐다. 끝난 뒤 기체는 지상에 disarm 상태다. 원인은 판정하지 않는다(외부 명령뿐 아니라 PX4 자체의 disarm과 kill을 포함한다)". `failsafe` 가지의 정확한 조건은 쟁점 4 감시 표의 순위 5다(이 항목 실행 중에 failsafe나 OFFBOARD 이탈을 한 번이라도 봤으면 FAILSAFE). REASON_EXTERNAL_MODE_CHANGE의 의미는 넓히지 않는다(Executor가 요청하지 않은 모드 변화).
+- 추가 문제 3의 reason(reviewer 지적 뒤 다시 판단했다): 상수 `REASON_EXTERNAL_DISARM = 14`를 더한다. setpoint 항목 중 지상에서 Executor가 보내지 않은 disarm을 관측하면, `failsafe`가 true이면 REASON_FAILSAFE이고 아니면 REASON_EXTERNAL_DISARM이다. `detail`에 지상 disarm임을 적는다. 의미 문장: "setpoint 항목 실행 중에 Executor가 보내지 않은 disarm이 지상에서 failsafe 없이 관측됐다. 끝난 뒤 기체는 지상에 disarm 상태다. 원인은 판정하지 않는다(외부 명령뿐 아니라 PX4 자체의 disarm과 kill을 포함한다)". `failsafe` 가지의 정확한 조건은 쟁점 4 감시 표의 순위 5다(이 표본이나 이 항목 실행 중의 앞선 표본에서 `failsafe == true`를 봤으면 FAILSAFE. 잠정). REASON_EXTERNAL_MODE_CHANGE의 의미는 넓히지 않는다(Executor가 요청하지 않은 모드 변화).
   - 앞 판(PR #21)의 결정은 "새 상수 없이 REASON_EXTERNAL_MODE_CHANGE"였고 근거 넷을 댔다. reviewer가 그 근거를 반박했고 받아들인다. 근거 2(상태는 `arming_state`와 `detail`로 읽힌다)와 근거 4(소비자가 없다)는 M5에도 똑같이 적용되어 M5의 상수 추가를 기각하는 논리다. 근거 1(다음 동작이 같다)은 틀렸다. 공중에서 모드가 바뀐 기체에는 TAKEOFF 미션이 PRECONDITION_FAILED이고, 지상에서 disarm된 기체는 TAKEOFF 미션을 받을 수 있다. 앞 판의 근거 넷을 철회한다.
   - 근거: M5 (나)에서 쓴 기준을 그대로 적용한다. (1) 끝난 뒤 기체 상태가 다르다(모드 변화는 보통 공중 armed, 이쪽은 지상 disarm). (2) 읽는 쪽의 다음 동작이 갈린다(위). (3) 한 상수에 묶어 1a에 고정하면 "상수의 의미를 바꾸지 않는다"에 걸려 뒤에 가를 수 없다. (4) 고정 전인 지금의 비용은 golden 두 파일에 한 줄씩이다. (5) 이름과 의미가 맞는다(mode change라는 이름에 disarm을 담지 않는다).
   - 기각: REASON_EXTERNAL_MODE_CHANGE 유지. "끝난 뒤 상태가 위험한가" 하나를 기준으로 삼으면 유지할 수 있다(지상 disarm은 안전한 쪽이다). 그러나 M5에 적은 기준은 위험 여부가 아니라 상태와 다음 동작의 차이였다. 결정을 지키려고 기준을 뒤에 좁히지 않는다. 상수는 고정 전후 모두 추가만 하므로 두 선택 다 되돌릴 수 없는데, 쓰이지 않는 구분은 해가 없고 묶인 의미는 영영 가를 수 없다.
@@ -178,19 +178,45 @@ reviewer 권고의 처리
 | `/**` params | [실측] 컨테이너 노드와 단독 노드 모두에 적용된다. 선언하지 않은 key는 무시되고 `vehicle.id` 누락은 configure FAILURE다 | 결정 그대로. reviewer 판정표 9행 |
 | 첫 `/clock` | [실측] 프로세스 시작부터 최대 0.66 s. on_activate에 들어갈 때는 이미 시작되어 있어 실제 대기는 20/20 0 s. `/clock`이 없으면 2.000 s 뒤 FAILURE | 2 s 그대로. CI 첫 실행에서 다시 잰다 |
 | ACCEPTED 누락 | [실측] 실험군(구독 -> client -> 즉시 goal) 0/400. 대조군(client -> 구독) 87/400. 누락 87건은 모두 Executor 쪽 `get_subscription_count()`가 0이었고, 구독 쪽 `get_publisher_count()`는 800회 모두 1 이상이었다 | 쟁점 7 유지, 보강 |
-| PID 1의 신호 | [실측] PID 1인 launch는 SIGTERM을 무시해 15 s 뒤 SIGKILL된다. SIGINT는 1.7 s에 정리 로그를 남기고 exit 1(각 1-2회) | devops 지시(`stop_signal: SIGINT`) |
+| PID 1의 신호 | [실측] `init` 없이 PID 1인 launch는 SIGTERM을 무시해 15 s 뒤 SIGKILL된다. `init: true`이면 SIGTERM에 0.4-0.5 s 만에 끝나지만 launch의 정리 로그가 없다. SIGINT는 `init` 유무와 무관하게 1.7 s에 정리 로그를 남기고 exit 1(각 1-2회) | devops 지시(`init: true`와 `stop_signal: SIGINT`) |
 
 쟁점 2의 재결정: A를 고른다. 내용과 근거는 쟁점 2에 있다. 함께 정한 것은 셋이다.
 - 자기 전이가 실패하면 프로세스를 끝내지 않고 노드를 그 상태(`unconfigured` 또는 `inactive`)에 남긴다. 재시도하지 않는다. compose healthcheck가 잡는다.
 - 끄는 param은 `lifecycle.self_start`(bool, 기본 true, 읽기 전용)다. 생성기는 이 key를 만들지 않는다. 단위 테스트와 배선 테스트는 false로 둔다.
 - 앞 판이 미리 정해 둔 물러설 자리(단독 실행 파일이 `main`에서 전이)로는 가지 않는다. 그 문장은 컨테이너를 지키는 대안이 없다고 보고 쓴 것이고, A가 실측으로 성립했다.
 
+## 쟁점 2 재결정의 검토 반영 (2026-11-11)
+
+devops-engineer 의견(`opinion-devops-selfstart.md`. 읽기 전용 검토, 반대 없음). 받은 것은 쟁점 2와 devops 구현 지시, README의 P4 완료 기준에 넣었다.
+
+| 항목 | 내용 | 반영 |
+| --- | --- | --- |
+| healthcheck 값 | `interval` 10s, `timeout` 10s, `retries` 2, `start_period` 20s, `start_interval` 2s. 명령 안쪽에 `timeout 8`. 출력을 버리지 않는다(`.State.Health.Log`에 상태가 남는다) | 채택. 쟁점 2 |
+| 실패가 드러나기까지의 상한 | 컨테이너 시작부터 약 54 s, 모든 probe가 timeout까지 가는 최악 70 s([추정]. probe의 직렬 동작은 기억에 기댄다) | 채택. P4에서 결함 주입으로 잰다 |
+| `stop_grace_period` | 10s. `stack.sh`와 `run_smoke.sh`의 `down --timeout 10`이 서비스 값보다 우선하므로 하나로 맞춘다 | 채택(앞 판의 15s를 고친다) |
+| exit code | 컨테이너 exit code를 판정에 쓰지 않는다. stop 전에 `compose ps -a`를 기록해 실행 중 사망과 정상 정리를 순서로 가른다 | 채택. reviewer 필수 2와 합쳤다 |
+| 다른 서비스의 신호 | bridge(`ros2 run`의 python)와 xrce-agent는 PID 1이라 SIGTERM을 버린다([소스] 떠 있는 스택의 신호 마스크. down 시간은 미측정). 상주 ros-ws 서비스와 xrce-agent에 `init: true` | 채택. P4 같은 PR, 생성기 golden 4종 |
+| runner | wrapper의 `timeout`이 보내는 SIGTERM이 PID 1인 pytest에서 버려질 수 있다([추정]) | P4에서 1회 확인하고 `init: true` 또는 `timeout -s INT -k 30` |
+| 생성기 성질 테스트 | 상주 ros-ws 서비스는 모두 `init: true`. `ops-N`은 `stop_signal: SIGINT`와 `stop_grace_period: 10s`. params 파일에 `lifecycle.`로 시작하는 key가 없다. healthcheck의 FQN이 `stack.json`의 `executor_node`와 같다 | 채택 |
+| ERROR 로그 | 자기 전이 실패 로그는 grep할 수 있는 고정 접두어의 한 줄 | 채택. 쟁점 2 |
+| 표시 파일 | 지금은 필요 없다. 다시 볼 조건: CI에서 probe 평균이 7 s를 넘거나 probe 부하로 RTF가 0.7 기준에 걸릴 때 | 채택(두지 않는다) |
+
+reviewer 최종 확인(조건부. 필수 3건). 앞선 조건(golden 두 줄씩, disarm 표본의 AND 기준, U5의 모델 예외)과 px4-engineer 확인의 반영은 확인됐고, `p3a-results.md`의 launch_ros 원인 분석은 이미지의 소스(0.26.13, `load_composable_nodes.py` 245행, `matches_node_name.py`)와 일치했다.
+
+| 번호 | 지적 | 처리 |
+| --- | --- | --- |
+| 1 | 감시 표 순위 5의 "OFFBOARD가 아닌 표본을 본 적"은 앞선 표본에서 생길 수 없다(순위 6-8이 한 표본으로 goal을 끝낸다). 지금의 DISARMED 표본을 이력에 넣는지 정해야 한다 | 넣지 않는다. 살아 있는 경우를 적고 잠정으로 표시했다(px4-engineer 확인 예정). 쟁점 4 |
+| 2 | exit 1 허용이 넓다(launch 인자 누락도 rc 1). `stop_signal`의 이유 문장이 `init: true` 구성과 맞지 않는다 | exit 1을 보아 넘기는 것은 stop을 요청한 뒤에 한정했다. 이유 문장을 `init: true` 구성의 실측으로 바꿨다. P4 검증의 회수와 조건을 적었다 |
+| 3 | 자기 전이 일회 timer의 시계가 적혀 있지 않다 | 벽시계 일회 timer로 정했다. 벽시계 예외 목록에 넣었다. P3a 시험 코드가 어느 쪽이었는지는 ros2-engineer 확인 예정 |
+
+reviewer 권고의 처리: 모두 받았다. 재실측 (5)의 회수, 통과 기준, 결과 파일, 판정자(넘김 목록). 실측 스크립트의 저장 위치는 P4 선행 조건(`progress.md` 미해결). test 지시에 "test-engineer 확인 예정". goal 실행 중 stop의 종료 사건 수신 여부를 P4 stop 검증에. 쟁점 7의 기전 문장과 0/400의 상한. 결정 요약의 "launch autostart는 Jazzy에서"를 "컨테이너 autostart는 launch_ros 0.26.13에서"로. `p3a-results.md`의 upstream rolling 문장에 [미확인]. 음차 표기 셋을 이 문서와 `p3a-results.md`, README에서 고쳤다(px4-engineer 근거 파일은 원문 그대로 둔다).
+
 ## 결정 요약
 
 | 쟁점 | 결정 | 계약 변경 |
 | --- | --- | --- |
 | 1. 스택 기동 주체 | 호스트 wrapper `tests/sitl/run_sitl.sh`가 올리고 내린다. pytest는 `runner` 안에서 돌고 fixture는 붙기만 한다 | 없음(architecture.md 문장 수정) |
-| 2. 노드 실행 형태 | 기체당 서비스 `ops-N`. 정적 launch로 `component_container_isolated`에 Executor 컴포넌트를 load하고, 노드가 스스로 configure와 activate를 건다(`lifecycle.self_start`. launch autostart는 Jazzy에서 동작하지 않는다. P3a). params는 `params/ops-N.yaml`의 `/**`에 식별값만. 스모크는 `--infra-only` | 없음 |
+| 2. 노드 실행 형태 | 기체당 서비스 `ops-N`. 정적 launch로 `component_container_isolated`에 Executor 컴포넌트를 load하고, 노드가 스스로 configure와 activate를 건다(`lifecycle.self_start`. 컨테이너 autostart는 launch_ros 0.26.13에서 동작하지 않는다. P3a). params는 `params/ops-N.yaml`의 `/**`에 식별값만. 스모크는 `--infra-only` | 없음 |
 | 3. 5단계 계약 | 의미 문장 넷(M1-M4)을 고치고 상수 둘(`REASON_DISARM_FAILED = 13`은 M5, `REASON_EXTERNAL_DISARM = 14`는 감시 표의 지상 DISARMED 행)을 더한다 | M1-M4는 의미 변경(고정 전), golden 무변경. 상수 둘은 `ExecuteMission`의 직접 정의와 펼친 정의 golden에 두 줄씩 추가, type hash 무변경 |
 | 4. PX4 실측 사실 | 전부 채택. 전이 표로 고정 | 의미 변경(고정 전), golden 무변경 |
 | 5. `idsim_common` 추가 | `VehicleId`, vehicle params 해석, Options overload, position setpoint 헬퍼, 사건 QoS, 빌더 `make` | 없음 |
@@ -234,7 +260,7 @@ reviewer 권고의 처리
 - ros2 R5(params, launch): `/**` 유지. compose command로 `ros2 launch`를 쓸 때의 함정 셋: launch는 SIGTERM을 받으면 자식에게 SIGINT, 5 s 뒤 SIGTERM, 다시 5 s 뒤 SIGKILL을 보내 기본 유예 10 s를 넘길 수 있다(`stop_grace_period` 15 s), 컨테이너 프로세스가 죽어도 launch는 살아 있다(`on_exit=Shutdown()`), PID 1의 zombie 회수(`init: true`).
 - ros2 R6(bridge): 1a는 CLI 인자 유지, `bridge.yaml` 생성은 1b.
 - ros2 R7(빌더 `make`): 호출처는 `idsim_common` 안의 테스트 두 곳뿐이다. 기존 테스트의 source (254, 1), (1, 191)은 대상 sysid 2와 달라 새 규칙을 통과한다. 거부 테스트 1건을 더한다.
-- ros2 R8(autostart의 원문): [소스] ros-base 이미지의 `/opt/ros/jazzy/lib/python3.12/site-packages/launch_ros/descriptions/composable_lifecycle_node.py` 30-35행(`ComposableLifecycleNode`, `autostart: bool = False`)과 `launch_ros/actions/load_composable_nodes.py` 243-256행(CONFIGURE, ACTIVATE를 한 번씩, 재시도 없음). 런타임 동작은 확인하지 않았다.
+- ros2 R8(autostart의 원문): [소스] ros-base 이미지의 `/opt/ros/jazzy/lib/python3.12/site-packages/launch_ros/descriptions/composable_lifecycle_node.py` 30-35행(`ComposableLifecycleNode`, `autostart: bool = False`)과 `launch_ros/actions/load_composable_nodes.py` 243-256행(CONFIGURE, ACTIVATE를 한 번씩, 재시도 없음). 실행 중 동작은 확인하지 않았다.
 - test T1(wrapper): 수용. 조건: wrapper는 스택을 `tools/stack.sh`로만 올리고 내린다(수집에만 `compose ps/logs/stop`), `--attach`는 down을 부르지 않는다, 바깥 `timeout`은 CI `timeout-minutes`보다 짧다.
 - test T2(시나리오): 순서를 B, C, A, D, T로 바꾸자고 했다(T의 발행자나 신호 손실 상태가 D를 오염하지 않게). 한 스택의 판정 구간은 [추정] sim 90-110 s. 사전조건에 `nav_state` 값을 넣지 않는다. 자기 의견서의 "첫 항목이 TAKEOFF가 아니면 INVALID_MISSION"은 `[LAND]`와 충돌하므로 architect와 ros2가 검증 규칙을 확정해야 한다.
 - test T3(T의 판정): 발행자가 없을 때도 `offboard_control_signal_lost`는 true라 "묵은 timestamp 뒤 true"만으로는 vacuous하다. 대조군 false -> 묵은 timestamp true -> 대조군 복귀 false의 양방향 전이를 단정한다. 발행 전에 발행자의 `get_subscription_count() >= 1`을 확인한다. `failsafe_flags`가 변화 때만 나오면 "N회 연속"을 셀 수 없으므로 px4 확인이 필요하다.
@@ -279,10 +305,12 @@ reviewer 권고의 처리
 결정: 실행 형태
 - 언어는 C++17. 패키지 `idsim_mission`(ament_cmake) 하나에 라이브러리 셋: `idsim_mission_core`(ROS 비의존. 검증, 상태기, 종료 결과), `idsim_mission_px4`(px4_msgs -> snapshot 어댑터), `mission_executor_component`(lifecycle 노드 껍질). 이것은 언어 선택이 아니라 기존 결정(architecture.md의 "핵심 노드는 C++")의 적용이다.
 - 기체마다 compose 서비스 `ops-N` 하나. command는 `ros2 launch idsim_mission vehicle_ops.launch.py namespace:=/px4_N executor_name:=mission_executor params_file:=/opt/idsim/artifacts/runs/<id>/params/ops-N.yaml`. 노드 이름의 출처는 생성기 하나다. 값 `mission_executor`는 생성기의 상수이고, 생성기가 같은 값으로 `stack.json`의 `executor_node`와 healthcheck를 만든다. launch 파일은 생성하지 않는 정적 파일이고 `ComposableNodeContainer(component_container_isolated, 이름 ops_container)`와 그 안에 load하는 컴포넌트 `idsim_mission::MissionExecutorNode`(이름은 인자 `executor_name`의 값) 하나만 담는다. launch의 `autostart`는 쓰지 않는다(P3a 결과. 아래 "전이"). launch 파일은 `executor_name`에 기본값을 두지 않고 노드 이름 문자열을 직접 적지 않는다. remap은 두지 않는다. launch에는 `output='screen'`과 컨테이너의 `on_exit=Shutdown()`을 건다.
-- 전이(2026-11-11 재결정. `p3a-results.md`): 전이를 거는 주체는 노드 자신이다. Executor는 생성자에서 만든 일회 timer(0 ms)로 `configure()`를 부르고, 성공하면 `activate()`를 부른다. 각각 한 번이고 재시도하지 않는다(launch autostart가 하려던 것과 같다). fixture, compose command, launch는 전이를 걸지 않는다.
-  - 끄는 스위치: 선언 param `lifecycle.self_start`(bool, 기본 true, 읽기 전용. 생성자에서만 읽는다). 생성기는 이 key를 params 파일에 만들지 않는다(식별값만 생성한다는 규칙 그대로). 단위 테스트와 노드 배선 테스트는 NodeOptions의 parameter override로 false를 주고 전이를 직접 건다. false여도 lifecycle 서비스는 그대로라 손으로 전이할 수 있다.
-  - 실패 시: 프로세스를 끝내지 않는다. 노드는 실패한 자리(`unconfigured` 또는 `inactive`)에 남고, 어느 전이가 왜 실패했는지 ERROR 로그 한 줄을 남긴다. 드러나는 길은 compose healthcheck(`active`로 시작하지 않음)와 `stack.sh`의 노드 단계 실패 때 출력하는 `ops-N` 로그다.
-  - 실패 시 프로세스를 끝내는 안을 기각한 이유: 컴포넌트가 `rclcpp::shutdown()`을 부르면 컨테이너 프로세스 전체가 내려간다. Phase 2에 같은 컨테이너에 들어올 Collector까지 내리게 되고, 프로세스의 수명을 컴포넌트 하나가 정하는 구조가 된다. 남겨 두면 상태를 조회하고 손으로 전이를 다시 걸 수 있다. 실패가 드러나는 방식이 원래 설계(healthcheck)와 같다. 대가는 실패가 즉시가 아니라 healthcheck 주기 뒤에 드러난다는 것이고, devops-engineer가 healthcheck 시간 값을 정할 때 이 지연의 상한을 함께 본다.
+- 전이(2026-11-11 재결정. `p3a-results.md`): 전이를 거는 주체는 노드 자신이다. Executor는 생성자에서 만든 벽시계 일회 timer(`create_wall_timer`, 0 ms)로 `configure()`를 부르고, 성공하면 `activate()`를 부른다. 각각 한 번이고 재시도하지 않는다(launch autostart가 하려던 것과 같다). fixture, compose command, launch는 전이를 걸지 않는다.
+  - timer의 시계: 벽시계여야 한다. 노드 시계(`use_sim_time`) timer는 `/clock`이 오기 전에는 fire하지 않으므로, `/clock`이 없으면 전이를 시도하지도 않아 ERROR 로그 없이 `unconfigured`에 남는다. 이 timer는 판정에 쓰지 않는 trigger이고 벽시계 예외 목록(문서 반영 목록의 시간 기준 문장)에 넣는다. P3a 시험 코드의 자기 전이 timer가 벽시계였는지는 결과 파일에 적혀 있지 않다(ros2-engineer 확인 예정. 첫 `/clock` 관측용 1 ms timer는 벽시계라고 적혀 있다).
+  - 끄는 param: 선언 param `lifecycle.self_start`(bool, 기본 true, 읽기 전용. 생성자에서만 읽는다). 생성기는 이 key를 params 파일에 만들지 않는다(식별값만 생성한다는 규칙 그대로). 단위 테스트와 노드 배선 테스트는 NodeOptions의 parameter override로 false를 주고 전이를 직접 건다. false여도 lifecycle 서비스는 그대로라 손으로 전이할 수 있다.
+  - 실패 시: 프로세스를 끝내지 않는다. 노드는 실패한 자리(`unconfigured` 또는 `inactive`)에 남고, 어느 전이가 왜 실패했는지 ERROR 로그 한 줄을 고정 접두어로 남긴다(grep할 수 있게. 접두어 문자열은 ros2-engineer가 정하고 devops-engineer에게 알린다). 드러나는 길은 compose healthcheck(`active`로 시작하지 않음)와 `stack.sh`의 노드 단계 실패 때 출력하는 `ops-N` 로그 끝과 `.State.Health.Log`다. `run_sitl.sh`는 둘 다 아티팩트에 넣는다.
+  - 실패 시 프로세스를 끝내는 안을 기각한 이유: 컴포넌트가 `rclcpp::shutdown()`을 부르면 컨테이너 프로세스 전체가 내려간다. Phase 2에 같은 컨테이너에 들어올 Collector까지 내리게 되고, 프로세스의 수명을 컴포넌트 하나가 정하는 구조가 된다. 남겨 두면 상태를 조회하고 손으로 전이를 다시 걸 수 있다. 실패가 드러나는 방식이 원래 설계(healthcheck)와 같다. 대가는 실패가 즉시가 아니라 healthcheck 주기 뒤에 드러난다는 것이다. 상한은 컨테이너 시작부터 약 54 s, 최악 70 s다(devops-engineer. [추정]. 아래 healthcheck 값). 실패한 실행에서만 드는 비용이고 `STACK_UP_TIMEOUT` 240 s와 CI 15분 안이다.
+  - 표시 파일(노드가 전이 결과를 파일에 쓰고 healthcheck가 먼저 읽는 안)은 두지 않는다. 컴포넌트와 compose 사이에 경로 계약이 하나 생기고, `ros2 lifecycle get`이라는 직접 신호가 이미 있다. 다시 볼 조건: CI에서 probe 평균이 7 s를 넘거나 probe 부하로 RTF가 0.7 기준에 걸릴 때(devops-engineer).
   - launch 쪽: [실측]은 `ComposableLifecycleNode(autostart=True)`를 둔 채 자기 전이를 켠 형태였다(10/10 active). 구현은 `autostart`를 빼고 load만 하는 형태로 두고(`ComposableNode`를 쓸지 `ComposableLifecycleNode(autostart=False)`를 쓸지는 ros2-engineer가 정한다) P3의 수동 확인에서 그 형태로 active를 다시 확인한다.
 - lifecycle: on_configure에서 params 검증(`vehicle.*` 누락이나 불일치, `use_sim_time` false이면 FAILURE)과 PX4 구독, 발행자, 사건 발행자 생성. on_activate에서 `/clock` 대기(2 s. `wait_until_started`의 벽시계 대기다. [실측] P3a: 프로세스 시작부터 첫 `/clock`까지 최대 0.66 s이고 on_activate에 들어갈 때는 이미 시작되어 있어 실제 대기는 20/20 0 s였다. `/clock`이 없으면 2.000 s 뒤 FAILURE로 `inactive`에 남는다. CI runner에서는 첫 CI 실행에서 다시 재고 2 s가 모자라면 값을 올린다)와 `Px4Timestamp::now` 성공 확인, 20 Hz timer(노드 시계), action 서버 생성. goal 실행 중의 deactivate는 거부. on_shutdown과 on_error는 실행 중인 goal을 ABORTED, REASON_INTERNAL로 끝내고 종료 사건을 낸다. `vehicle_status` 수신과 식별 대조는 activate 조건에 넣지 않는다(쟁점 3 M1).
 - action 서버를 on_activate에서 만든다. 그래서 client의 `server_is_ready`가 active의 근거가 된다([추정]. 쟁점 7).
@@ -293,7 +321,12 @@ reviewer 권고의 처리
 - params 파일은 `artifacts/runs/<id>/params/ops-N.yaml`. key는 `/**`이고 내용은 `use_sim_time: true`, `vehicle.id`, `vehicle.ns`, `vehicle.sysid`뿐이다. 튜닝 값(타임아웃, 주기), `command_source.*`, `lifecycle.self_start`는 생성하지 않고 노드 선언 기본값에 둔다. [실측] P3a: `/**`의 값은 컨테이너 노드에 적용되고 선언하지 않은 key는 LoadNode 오류 없이 무시된다. 패키지 config yaml을 둘째 params 파일로 두지 않는다. 노드는 `vehicle.*`에 기본값을 두지 않아 누락이면 configure가 실패한다.
 - `stack.json`(schema 1 유지, key 추가만): `vehicles[].vehicle_id`, `vehicles[].params_file`(실행 디렉터리 기준 상대 경로), `vehicles[].executor_node`(노드 FQN. healthcheck와 진단용), `run.params_dir`, `startup.node_stages`, `services.ops`. `GENERATOR_VERSION`은 P4에서 3, P5에서 4.
 - `vehicle_id`와 `px4_ns`는 별도 key로 둔다. 지금은 값이 같고 생성기의 불변식 검사가 `vehicle_id == ns[1:]`과 토큰 하나임을 단정한다. `px4_ns`는 PX4 환경변수에 넣는 값이고 `vehicle_id`는 계약 식별자라서 의미가 다르다.
-- `ops-N` 서비스: ros-ws 이미지, 호스트 uid:gid, `ROS_LOG_DIR=<run>/ros_log/ops-N`, `depends_on`은 `bridge`와 `px4-N`(healthy), `restart: no`, `stop_grace_period: 15s`, `init: true`, `stop_signal: SIGINT`(devops가 P4에서 검증. [실측] P3a: PID 1인 launch는 SIGTERM을 무시해 15.5 s 뒤 SIGKILL된다. `--init`과 SIGTERM이면 0.4-0.5 s에 끝나지만 launch의 정리 로그가 없다. SIGINT면 `--init` 유무와 무관하게 1.7 s에 정리 로그를 남기고 끝나며 exit code는 1이다. 각 1-2회). healthcheck는 `ros2 lifecycle get --no-daemon <executor_node>`의 출력이 `active`로 시작하는지([실측] P3a: 출력은 `active [3]`, `inactive [2]`, `unconfigured [1]` 형식이고 `docker exec`로 3.0-4.5 s 걸린다. `timeout`은 10 s 이상. `ROS_LOG_DIR=/tmp/hc`, `start_interval` 사용).
+- `ops-N` 서비스: ros-ws 이미지, 호스트 uid:gid, `ROS_LOG_DIR=<run>/ros_log/ops-N`, `depends_on`은 `bridge`와 `px4-N`(healthy), `restart: no`, `stop_grace_period: 10s`(`stack.sh`와 `run_smoke.sh`의 `down --timeout 10`이 서비스 값보다 우선하므로 하나로 맞춘다. 앞 판의 15s를 고쳤다), `init: true`, `stop_signal: SIGINT`.
+  - `stop_signal`을 SIGINT로 두는 이유([실측] P3a, 각 1-2회): `init: true` 구성에서 SIGTERM이면 0.4-0.5 s에 끝나지만 launch가 바로 죽어 정리 로그가 없다. SIGINT면 `init` 유무와 무관하게 1.7 s에 launch가 자식에게 신호를 넘기고 정리 로그를 남기며 끝난다. Executor의 on_shutdown(실행 중인 goal을 ABORTED로 끝내고 종료 사건을 낸다)이 돌 기회가 SIGINT 쪽에만 있다고 본다([추정]. 실측 없음. P4 stop 검증). `init` 없이 PID 1인 launch가 SIGTERM을 무시해 15.5 s 뒤 SIGKILL되는 것은 `init: true`를 두는 이유다.
+  - exit code: SIGINT로 끝난 launch의 exit code는 정상 정리에서도 1이다([실측]). 컨테이너 exit code는 판정에 쓰지 않는다(판정은 junit과 verdict). exit 1을 보아 넘기는 것은 stop을 요청한 뒤(down 단계)에 한정한다. up 단계와 실행 중의 종료는 코드와 무관하게 실패다(launch 인자 누락도 rc 1이고, 컨테이너 프로세스가 죽으면 `on_exit=Shutdown()`으로 exited가 된다). 둘을 가르는 것은 순서다: (1) stop 전에 `compose ps -a --format json`을 기록하고, (2) 그 시점에 running이 아닌 `ops-N`이 있으면 실패, (3) `compose stop`, (4) `compose logs`(SIGINT 정리 로그 포함), (5) down. stop 뒤의 exit code(1, 130 등)는 기록만 한다. `--abort-on-container-exit`와 `--exit-code-from`은 쓰지 않고, entrypoint에서 exit 1을 0으로 바꾸지 않는다.
+  - healthcheck: `ros2 lifecycle get --no-daemon <executor_node>`의 출력이 `active`로 시작하는지([실측] P3a: 출력은 `active [3]`, `inactive [2]`, `unconfigured [1]` 형식이고 `docker exec`로 3.0-4.5 s 걸린다). 값은 devops-engineer의 것을 채택한다: `interval` 10s, `timeout` 10s, `retries` 2, `start_period` 20s, `start_interval` 2s. 명령은 `/opt/ros/<distro>/setup.sh`만 source하고(`bash -l`과 workspace overlay 없음) `ROS_LOG_DIR=/tmp/hc timeout 8 ros2 lifecycle get --no-daemon <FQN>`의 출력을 echo한 뒤 판정한다. 출력을 버리지 않아 `.State.Health.Log`에 `unconfigured [1]` 같은 상태가 남는다. FQN은 생성기 상수 하나에서 나오고 `stack.json`의 `executor_node`와 같다.
+  - 실패가 드러나기까지의 상한([추정] devops-engineer. probe가 겹치지 않고 앞 probe가 끝난 뒤 `interval`만큼 기다린다는 동작은 기억에 기댄다): 정상은 약 5-6.5 s에 healthy. 자기 전이 실패는 20 + 4.5 + 2 x 14.5 = 약 54 s, 모든 probe가 timeout까지 가면 20 + 10 + 2 x 20 = 70 s. P4에서 결함 주입으로 잰다. `retries` 2는 runner가 `ops-N`의 healthy에 의존하게 되므로 probe 한 번의 흔들림으로 테스트 시작이 실패하지 않게 하려는 값이다. CI 첫 3회에 RTF와 함께 probe 시간을 기록하고, RTF가 0.7 기준에 걸리면 `interval` 30s를 먼저 시험한다.
+  - 다른 서비스: bridge와 xrce-agent도 PID 1이라 SIGTERM을 버린다([소스] 떠 있는 스택의 신호 마스크. down 시간은 미측정이고 지금 약 20 s 이상으로 추정). 상주 ros-ws 서비스(bridge, `ops-N`, P5의 foxglove)와 xrce-agent에 `init: true`를 둔다. `stop_signal: SIGINT`는 launch로 띄우는 `ops-N`에만 둔다(bridge의 `ros2 run`이 SIGINT를 자식에 넘기는지 모른다). P4의 같은 PR에서 고치고 생성기 golden 4종이 함께 바뀐다.
 - `runner`의 `depends_on`을 `bridge`에서 `ops-1..N`으로 바꾼다.
 - 기동 단계: `tools/stack.sh up`은 인프라 3단계 -> 모델 사전 검사 -> 노드 단계. `--infra-only`면 노드 단계를 건너뛴다. `run_smoke.sh`는 `--infra-only`를 쓴다. 노드 단계 전에 `ros_ws/install/idsim_mission/`이 없으면 안내와 함께 실패한다(1a 4단계 넘김).
 - embedded 변형에는 `ops-N`, `foxglove`, `lichtblick`을 만들지 않는다(`/clock` bridge가 없다).
@@ -431,7 +464,7 @@ P3b 착수 전 px4-engineer 승인 항목(reviewer 권고 3, 4): 2026-11-11에 �
 | 2 | 식별 대조 불일치 | INTERNAL(M2) | 발행 중단, ABORTED |
 | 3 | `vehicle_status`가 `link_timeout` 동안 없음 | LINK_LOST | 발행 중단, ABORTED |
 | 4 | DISARMED이고 `landed == false`(아래 고정 규칙으로 읽은 값) | FAILSAFE | 발행 중단, ABORTED |
-| 5 | DISARMED이고 `landed == true`(같은 고정 규칙) | `failsafe == true`이거나, 이 항목 실행 중 `failsafe == true`이거나 `nav_state`가 OFFBOARD가 아닌 표본을 한 번이라도(3회 연속 미달이어도) 본 적이 있으면 FAILSAFE, 아니면 EXTERNAL_DISARM | 발행 중단, ABORTED. `detail`에 지상 disarm임을 적는다 |
+| 5 | DISARMED이고 `landed == true`(같은 고정 규칙) | 이 표본의 `failsafe`가 true이거나, 이 항목 실행 중 앞선 표본에서 `failsafe == true`를 한 번이라도 봤으면 FAILSAFE, 아니면 EXTERNAL_DISARM. 이 표본의 `nav_state`는 보지 않는다(잠정. 아래) | 발행 중단, ABORTED. `detail`에 지상 disarm임을 적는다 |
 | 6 | `nav_state != OFFBOARD`이고 `failsafe == true` | FAILSAFE | 발행 즉시 중단, ABORTED |
 | 7 | `nav_state != OFFBOARD`이고 `failsafe == false`이고 `nav_state_user_intention != OFFBOARD` | EXTERNAL_MODE_CHANGE | 발행 즉시 중단, ABORTED |
 | 8 | `nav_state != OFFBOARD`이고 `failsafe == false`이고 `nav_state_user_intention == OFFBOARD` | FAILSAFE(방어용. [소스] 정상 상태에서는 나오지 않는다) | 발행 즉시 중단, ABORTED |
@@ -440,7 +473,11 @@ P3b 착수 전 px4-engineer 승인 항목(reviewer 권고 3, 4): 2026-11-11에 �
   - 순위 1-3은 나머지 행의 입력을 믿을 수 없게 하는 조건이다. 시각을 만들 수 없으면 발행 자체가 안 되고, 식별이 어긋난 `vehicle_status`는 이 기체의 것이 아닐 수 있으며, 상태가 끊기면 아래 행이 읽을 값이 없다. 앞 판은 식별 불일치가 아래에 있어 남의 기체의 표본으로 FAILSAFE가 먼저 나갈 수 있었다(reviewer).
   - 순위 4-5(arming 상태)가 6-8(모드)보다 앞이다. disarm된 뒤의 `nav_state`는 확인된 사실이 없다. px4 보고의 "지상에서 외부 disarm되면 `nav_state`는 OFFBOARD로 남는다"는 실측이 없고, 한 표본이라도 OFFBOARD를 벗어나면 모드 행이 먼저 걸려 방어용 FAILSAFE(순위 8)가 된다(reviewer). arming 상태를 먼저 보면 `nav_state`가 어떻게 되든 같은 reason이 나온다.
   - 순위 6-8은 조건이 서로 겹치지 않아 그 안의 순서는 뜻이 없다. 순위 4와 5도 겹치지 않는다.
-  - 순위 5의 `failsafe` 가지(px4-engineer 수정 조건): 지금 표본의 `failsafe`만 보면 자동 disarm에서는 이 가지가 거의 걸리지 않는다. [소스] `Commander.cpp` 1843행 `handleAutoDisarm()`이 1866행 근처 `handleModeIntentionAndFailsafe()`보다 앞에서 disarm하고, 후자는 `state.armed = isArmed()`(2344행)로 읽으며 `framework.cpp` 452-455행은 disarm이면 `Action::None`이다. 그래서 자동 disarm 주기의 첫 DISARMED 표본은 `failsafe == false`이고 `nav_state`는 의도로 되돌아가 있다. `failsafe == true`인 DISARMED 표본은 명령으로 낸 disarm(처리가 1898행이라 같은 주기의 표본이 이전 failsafe를 가진다)에서만 나온다. 지면 근처의 짧은 failsafe Land가 자동 disarm으로 끝난 경우를 EXTERNAL_DISARM으로 잘못 분류하지 않도록 이 항목 실행 중의 이력을 함께 본다. 보통은 그 앞의 ARMED 표본에서 순위 6으로 이미 끝난다(벗어남은 1회).
+  - 순위 5의 `failsafe` 가지(px4-engineer 수정 조건을 reviewer 지적으로 다시 적었다. 잠정. px4-engineer 확인 예정): 지금 표본의 `failsafe`만 보면 자동 disarm에서는 이 가지가 거의 걸리지 않는다. [소스] `Commander.cpp` 1843행 `handleAutoDisarm()`이 1866행 근처 `handleModeIntentionAndFailsafe()`보다 앞에서 disarm하고, 후자는 `state.armed = isArmed()`(2344행)로 읽으며 `framework.cpp` 452-455행은 disarm이면 `Action::None`이다. 그래서 자동 disarm 주기의 첫 DISARMED 표본은 `failsafe == false`이고 `nav_state`는 의도로 되돌아가 있다. `failsafe == true`인 DISARMED 표본은 명령으로 낸 disarm(처리가 1898행이라 같은 주기의 표본이 이전 failsafe를 가진다)에서만 나온다.
+    - px4-engineer의 문장은 "이 항목 실행 중 `failsafe == true`이거나 `nav_state`가 OFFBOARD가 아닌 표본을 한 번이라도 본 적이 있으면 FAILSAFE"였다. 그런데 이 표는 벗어남을 1회로 판정하므로 OFFBOARD가 아닌 ARMED 표본은 순위 6-8에서 그 tick에 goal을 끝낸다. 앞선 표본의 "OFFBOARD 아님" 이력은 생길 수 없다(reviewer).
+    - 정한 것: 이력에 지금의 DISARMED 표본을 넣지 않는다. 그 표본의 `nav_state`는 보지 않는다. 넣으면 외부 disarm 뒤 `nav_state`가 OFFBOARD를 떠나는 경우가 모두 FAILSAFE가 되어 EXTERNAL_DISARM이 나오지 않게 되고, 순위 4-5를 모드 행보다 앞에 둔 이유(disarm 뒤의 `nav_state`는 확인된 사실이 아니다)와도 어긋난다.
+    - 그래서 이 가지에서 살아 있는 경우는 둘이다. 이 DISARMED 표본의 `failsafe`가 true인 경우(명령으로 낸 disarm), 그리고 앞선 ARMED 표본에서 `nav_state`가 OFFBOARD인 채 `failsafe == true`였던 경우다.
+    - 덮지 못하는 경우: 지면 근처의 짧은 failsafe Land에서 OFFBOARD를 벗어난 ARMED 표본을 하나도 받지 못한 채 자동 disarm된 경우. 첫 DISARMED 표본은 `failsafe == false`, `nav_state`는 OFFBOARD라 외부 disarm과 구별할 값이 없고 EXTERNAL_DISARM이 된다. 의미 문장이 "원인은 판정하지 않는다"이므로 틀린 말이 되지는 않는다. 재실측 (4)의 기록으로 다시 본다.
 - disarm 분류의 고정 규칙(px4-engineer 조건. `approval-px4-p3b.md` 5번): disarm의 분류(지상 대 공중)는 처음 관측한 DISARMED 표본의 tick에, 그때까지 받은 최신 `landed` 값으로 정하고 고정한다. 뒤에 오는 `landed` 표본으로 바꾸지 않는다. 이 규칙은 감시 표의 두 DISARMED 행, LAND 감시의 완료 우선 규칙, 취소의 Hold 확인 창에서 본 DISARMED에 모두 쓴다. 근거: [소스] `MulticopterLandDetector.cpp` 249, 287, 296행(`return !_armed || ...`)과 318-320행(LNDMC_TRIG_TIME/3 지연). 공중에서 disarm돼도 약 0.33 s 뒤 `landed`가 true로 바뀌어 발행된다. 고정하지 않으면 공중 disarm이 지상 disarm(CANCELED 또는 완료)으로 잘못 분류될 수 있다.
 - 지상 DISARMED 행(순위 5. `approval-px4-p3b.md` 추가 문제 3): TAKEOFF가 뜨기 전에 외부에서 disarm되면 모드 행에 걸리지 않을 수 있다. 이 행이 없으면 ITEM_TIMEOUT까지 발행이 이어진다. disarm 뒤의 `nav_state`는 확인된 사실이 아니다. px4-engineer가 앞 보고의 "`nav_state`는 OFFBOARD로 남는다"를 [소스]에 기댄 추정으로 정정했다(`approval-px4-p3b-review.md`. `UserModeIntention.cpp` 78-84행과 94-101행, `framework.cpp` 452-455행. OFFBOARD가 `modePreventsArming`에 걸리는지는 확인하지 못했다). 실측(재실측 (4)) 전에는 사실로 쓰지 않으며, 순위 4-5를 모드 행보다 앞에 둔 것이 이 불확실성을 덮는다. reason을 새 상수 REASON_EXTERNAL_DISARM으로 둔 이유는 "px4-engineer 승인 반영"의 architect 결정에 있다.
 - 방어용 분류(순위 8)는 px4-engineer 승인. [소스] `framework.h` 150행: `inFailsafe`는 None과 Warn이 아닐 때 참이다. `framework.cpp` 684-690행: None과 Warn에서는 `nav_state`가 사용자 의도와 같다. `Commander.cpp` 2369-2372, 2388행.
@@ -538,7 +575,7 @@ px4-engineer의 수용 조건(모두 받는다): core는 px4_msgs를 include하�
 근거
 - [실측] ros2 M1, M3. QoS가 맞지 않아도 graph에는 발행자가 1로 보이고 구독의 matched 수는 0이다.
 - TRANSIENT_LOCAL을 받지 않는 이유는 5단계와 같다(지난 실행의 사건이 새 구독자에게 현재 사건으로 보인다). logging-engineer가 재질문 답에서 다시 제안했지만 5단계 PR 검토에서 VOLATILE에 동의했던 사안이고 새 근거가 없다. `MissionEvent`의 고정 시점은 Phase 2 완료이므로 Phase 2 기록 설계에서 다시 올릴 수 있다(넘김 목록).
-- 남는 위험([실측] P3a의 대조군에서 실제로 일어났다. 누락 87건 모두 Executor 쪽 `get_subscription_count()`가 0이었다. 순서 규칙을 지킨 실험군에서는 0/400. 순서 규칙이 이 틈을 막는 기전은 [추정]이다: 같은 participant의 endpoint 공지는 만든 순서대로 가므로 client가 보일 때는 앞선 구독도 이미 알려져 있다): DDS의 match는 양쪽이 따로 한다. 구독 쪽이 맺어졌어도 Executor의 writer가 그 구독을 아직 모르면 그 사이의 ACCEPTED는 오지 않는다. 테스트에서 writer 쪽을 볼 방법이 없다. 구독을 session 시작에 걸고 그 뒤 action 서버 준비와 PX4 표본을 더 기다리므로 틈은 작다고 본다. 발생하면 `EVENT_MISSING`과 Executor의 debug 로그가 증거가 되고, 그때 이 쟁점을 다시 연다.
+- 남는 위험([실측] P3a의 대조군에서 실제로 일어났다. 누락 87건 모두 Executor 쪽 `get_subscription_count()`가 0이었다. 순서 규칙을 지킨 실험군에서는 0/400. 0/400은 누락률의 95% 상한 약 0.75%를 뜻하고 16 vCPU 호스트 한 대의 값이다. 순서 규칙이 이 틈을 막는 기전은 [추정]이다: goal 요청이 서버에 닿으려면 서버가 client의 writer를 알아야 하고, 같은 participant에서 그 공지는 먼저 만든 구독의 공지 뒤에 간다. 그래서 goal이 닿았을 때는 서버가 구독도 이미 알고 있다): DDS의 match는 양쪽이 따로 한다. 구독 쪽이 맺어졌어도 Executor의 writer가 그 구독을 아직 모르면 그 사이의 ACCEPTED는 오지 않는다. 테스트에서 writer 쪽을 볼 방법이 없다. 구독을 session 시작에 걸고 그 뒤 action 서버 준비와 PX4 표본을 더 기다리므로 틈은 작다고 본다. 발생하면 `EVENT_MISSING`과 Executor의 debug 로그가 증거가 되고, 그때 이 쟁점을 다시 연다.
 
 ## 쟁점 8. 테스트의 /fmu/in 쓰기
 
@@ -655,7 +692,7 @@ README.md에 있다. 요약: P0(CI trigger 정리) / P1(ros-ws에 foxglove_bridg
 
 ros2-engineer
 - P2: 쟁점 5의 표.
-- P3a: autostart 런타임 확인(시험 컴포넌트로 configure, activate, `wait_until_started`), 콜드 기동의 첫 `/clock` 수신 시간, ACCEPTED 누락 계수 실험 200회(쟁점 7).
+- P3a: autostart를 실행해 확인(시험 컴포넌트로 configure, activate, `wait_until_started`), 콜드 기동의 첫 `/clock` 수신 시간, ACCEPTED 누락 계수 실험 200회(쟁점 7).
 - P3b 이후: `idsim_mission` 패키지. P3b는 "P3b 착수 전 px4-engineer 승인 항목"이 닫힌 뒤에 시작한다(2026-11-11에 닫혔고 PR #21로 main에 들어갔다). 실측이 없는 두 경로(지상 setpoint 발행 중의 Hold, 이륙 직후 `landed`가 true인 구간의 지상 setpoint와 disarm), 감시 표의 행 순위, "disarm 전송 뒤 받은 표본"의 기준은 표대로 구현하되 재실측과 px4-engineer 확인으로 바뀔 수 있다. 바뀌어도 고칠 곳이 한곳이 되게 둔다. core는 쟁점 4의 전이 표와 쟁점 3의 취소 분기를 `step()` 하나로(입력은 snapshot과 지금 ROS 시각, 출력은 setpoint 유무, 명령 목록, feedback, 종료 결과). 종료 결과는 한 구조체에서 action result와 종료 사건을 둘 다 채운다. `handle_goal`은 항상 `ACCEPT_AND_EXECUTE`. 사건의 `stamp`는 노드 clock의 ROS 시각. 이름 상수(`Mission::ACTION_NAME`, `MissionEvent::TOPIC_NAME`)는 상대 이름으로 쓰고 namespace 범위 static 초기화식에 쓰지 않는다. 설계 노트(패키지 README 또는 헤더 주석)에 구현 규칙(`ACCEPT_AND_EXECUTE`만, 판정 순서)을 적는다.
 - P3a는 끝났다(2026-11-11. `p3a-results.md`). 결과에 따라 Executor는 자기 전이(`lifecycle.self_start`)로 구현한다(쟁점 2).
 - P3 완료 조건의 수동 확인: 스택 위에서 `ops` 컨테이너를 손으로 띄워 자기 전이로 active가 되는지(launch에서 `autostart`를 뺀 형태로. P4 전에는 CI에 없다). `lifecycle.self_start`가 false이면 `unconfigured`에 머무는 것도 본다.
@@ -672,14 +709,24 @@ px4-engineer
 
 test-engineer
 - P3 승인: core 단위 테스트의 구조(전이 표 대조, status와 reason 대응표, 사건 == result).
-- P3 단위 테스트에 넣을 것("이 goal에서 arm을 보낸 적이 있으면 disarm 분기"의 파급. 작성은 ros2-engineer, 구조 승인은 test-engineer): (1) LAND가 자동 disarm으로 막 끝나려는 시점(DISARMED 표본이 1-2회 온 뒤)의 취소가 disarm 분기를 거쳐 CANCELED로 끝난다. (2) disarm을 보낸 뒤 `mode_confirm_timeout` 안에 기준을 만족하는 DISARMED가 3회 차지 않으면 REASON_DISARM_FAILED다. (3) 첫 disarm 전송 tick 전에 받은 DISARMED 표본, `timestamp`가 명령의 `Px4Timestamp`와 같거나 앞선 표본, 같은 `timestamp`가 다시 온 표본은 세지 않는다. 감시 표는 순위마다 한 건, 두 행이 같은 tick에 함께 맞는 경우 한 건 이상, 엇갈려 시작하는 경우(먼저 맞은 행이 이긴다) 한 건, 순위 5의 이력 가지(앞서 failsafe나 OFFBOARD 이탈을 본 뒤의 지상 DISARMED는 FAILSAFE) 한 건. ITEM_TIMEOUT의 "지상 disarm이면 바로 끝" 분기는 1a에서 닿지 않으므로(setpoint 항목은 늘 arm 뒤다) 전용 테스트를 요구하지 않고, 대신 "arm을 보낸 뒤 DISARMED snapshot에서의 ITEM_TIMEOUT은 disarm 분기를 거친다"를 한 건 둔다.
+- P3 단위 테스트에 넣을 것("이 goal에서 arm을 보낸 적이 있으면 disarm 분기"의 파급. 작성은 ros2-engineer, 구조 승인은 test-engineer. 이 목록은 architect가 적은 것이고 test-engineer의 의견을 받지 않았다. test-engineer 확인 예정): (1) LAND가 자동 disarm으로 막 끝나려는 시점(DISARMED 표본이 1-2회 온 뒤)의 취소가 disarm 분기를 거쳐 CANCELED로 끝난다. (2) disarm을 보낸 뒤 `mode_confirm_timeout` 안에 기준을 만족하는 DISARMED가 3회 차지 않으면 REASON_DISARM_FAILED다. (3) 첫 disarm 전송 tick 전에 받은 DISARMED 표본, `timestamp`가 명령의 `Px4Timestamp`와 같거나 앞선 표본, 같은 `timestamp`가 다시 온 표본은 세지 않는다. 감시 표는 순위마다 한 건, 두 행이 같은 tick에 함께 맞는 경우 한 건 이상, 엇갈려 시작하는 경우(먼저 맞은 행이 이긴다) 한 건, 순위 5의 이력 가지(앞선 표본에서 OFFBOARD인 채 `failsafe == true`를 본 뒤의 지상 DISARMED는 FAILSAFE) 한 건, 이 표본의 `nav_state`가 OFFBOARD가 아니어도 순위 5의 결과가 같다는 것 한 건. ITEM_TIMEOUT의 "지상 disarm이면 바로 끝" 분기는 1a에서 닿지 않으므로(setpoint 항목은 늘 arm 뒤다) 전용 테스트를 요구하지 않고, 대신 "arm을 보낸 뒤 DISARMED snapshot에서의 ITEM_TIMEOUT은 disarm 분기를 거친다"를 한 건 둔다.
 - P4: `tests/support/`(clock, waiting, probe, judge, mission_client, events, trace, `px4_topic`, `px4_raw`. 판정 함수는 rclpy 없는 순수 코드로 두고 단위 테스트는 lint job의 pytest에서 돈다), `tests/sitl/`(`run_sitl.sh`, conftest, 시나리오), `tests/support/stack.py`의 새 key 접근자. lint job의 pytest가 `tests/sitl/`을 수집하지 않게 한다. 로컬 3회 연속 통과의 실행과 기록.
 - verdict 분류: `TIMEOUT_SIM`, `CLOCK_STALLED`, `CLOCK_SLOW`, `CLOCK_ABSENT`, `NO_PUBLISHER`, `SERVER_ABSENT`, `EVENT_MISSING`, `EVENT_MISMATCH`, `PRECONDITION`, `WRONG_RESULT`, `INFRA_UP`.
 
 devops-engineer
 - P0: lint, unit trigger 정리(`pull_request` + `push: main`).
 - P1: `Dockerfile.ros-ws`, `versions.env`, `docker-bake.hcl`. 빌드 뒤 이미지 크기를 실측해 알린다.
-- P4의 `ops-N` 서비스(P3a 결과): `stop_signal: SIGINT`를 넣고 `compose stop`이 유예 안에 끝나는지와 정리 로그를 확인한다. SIGINT로 끝난 launch의 exit code는 정상 종료에서도 1이므로 wrapper와 수집 코드가 `ops-N`의 exit 1을 실패로 읽지 않게 한다. healthcheck의 `timeout`은 10 s 이상으로 두고(조회 한 번이 3.0-4.5 s), 자기 전이가 실패한 노드가 unhealthy로 드러나기까지의 상한을 `interval`, `retries`, `start_period`로 정해 알린다. 값이 측정과 다르게 나오면 architect에게 알린다.
+- P4의 `ops-N` 서비스와 기동, 정지 경로(P3a 결과와 `opinion-devops-selfstart.md`. 쟁점 2의 값 그대로)
+  - `ops-N`: `init: true`, `stop_signal: SIGINT`, `stop_grace_period: 10s`, healthcheck(`interval` 10s, `timeout` 10s, `retries` 2, `start_period` 20s, `start_interval` 2s, 안쪽 `timeout 8`, 출력 남김).
+  - 상주 ros-ws 서비스(bridge, P5의 foxglove)와 xrce-agent에 `init: true`. 같은 PR에서 하고 생성기 golden 4종이 함께 바뀐다. 바꾸기 전후의 down 시간을 1회씩 잰다.
+  - runner: wrapper의 `timeout`이 보낸 SIGTERM이 PID 1인 pytest에서 버려지는지 1회 확인하고 `init: true` 또는 `timeout -s INT -k 30`으로 고친다(test-engineer와).
+  - exit code: 판정에 쓰지 않는다. stop 전 `compose ps -a --format json` 기록 -> running이 아닌 `ops-N`이 있으면 실패 -> `compose stop` -> `compose logs` -> down. exit 1을 보아 넘기는 것은 stop을 요청한 뒤에 한정한다(쟁점 2).
+  - `stack.sh`는 노드 단계가 실패하면 `ops-N` 로그 끝과 `.State.Health.Log`를 함께 찍는다.
+  - 생성기 성질 테스트 넷: ros-ws 이미지의 상주 서비스는 모두 `init: true`. `ops-N`은 `stop_signal: SIGINT`와 `stop_grace_period: 10s`. 생성된 params 파일에 `lifecycle.`로 시작하는 key가 없다. healthcheck 문자열의 FQN이 `stack.json`의 `executor_node`와 같다.
+  - P4 검증(결과를 progress에 남기고, 값이 아래와 다르면 architect에게 알린다)
+    - stop 검증 10회: 그중 3회 이상은 goal 실행 중에 stop한다. 볼 것은 유예(10 s) 안에 끝나는지, 정리 로그가 있는지, exit code의 분포, goal 실행 중 stop에서 종료 사건(ABORTED, REASON_INTERNAL)이 구독자에게 오는지다(on_shutdown이 SIGINT 뒤에 도는지는 실측이 없다).
+    - 결함 주입 1회 이상: `vehicle.id`가 빠진 params로 `stack.sh up`이 unhealthy를 보고하기까지의 시간(예상 약 54 s, 최악 70 s)과 정상일 때 healthy까지의 시간(예상 약 5-6.5 s).
+    - CI 첫 3회의 probe 시간(`.State.Health.Log`의 Start와 End)을 RTF와 함께 기록한다. runner의 `docker version`을 job 로그에 남긴다(`start_interval`은 Engine 25 이상).
 - P4: 생성기(쟁점 2), `stack.sh`(`--infra-only`, install 검사, 노드 단계 실패 때 `ops-N` 로그 출력), `run_smoke.sh`, `check_host.sh`, `--run-id` 제거, `build_images.py --mode pull`, `sitl.yml`, `px4-api` 범위 확장, 생성기 golden 4종과 전체 트리 비교. 손대는 파일의 음차("키", "잡")를 고친다.
 - P5: `foxglove`, `lichtblick` 서비스와 `LICHTBLICK_IMAGE`, `docker/README.md`의 갱신 절차와 접속 안내.
 
@@ -694,8 +741,8 @@ reviewer: 이 문서의 검증("reviewer가 검증할 가정")과 PR마다의 �
 
 | 받는 쪽 | 시점 | 항목 |
 | --- | --- | --- |
-| px4-engineer | (2), (3), (5)는 P4 머지 전(필수. 근거는 "PR #23 검토 반영"). 나머지는 7단계 고정 전(필수) | 재실측(2026-11-11에 다시 정했다. 이륙 단계와 0.5 m 호버의 Hold는 run 20261111-030155-k5로 표본이 생겼고, 새로 드러난 미실측 조합이 더해졌다). Hold로 끝난 상태의 관찰은 60 s 이상으로 한다. (1) AUTO_LAND 하강 중 0.3 m 아래에서의 취소 3회: 내려앉는지 호버하는지, CANCELED 뒤의 상태, landed인 채 armed로 남는 경우가 있는지. (2) 지상 setpoint 발행 중의 Hold 3회: H와 같은 조건에서 NAV_LAND 대신 Hold를 보내고 처음 관측한 순간 발행을 멈춘다. 이어서 "Hold를 확인하고 발행을 멈춘 뒤 `landed`가 true인 상태에서 disarm" 3회(수락 여부, 고도 변화 0.2 m 이하인지). (3) 이륙 직후의 지상 setpoint와 disarm 3회: TAKEOFF 목표점으로 arm한 뒤 `landed`가 아직 true인 구간(약 0.3-1.0 s)에 지상 setpoint로 바꾸고 disarm. 보내는 시점은 sleep이 아니라 `landed` 표본에 맞춘 조건으로 잡는다(px4-engineer 권고). (4) 감시 표 순위의 확인: G처럼 지상 setpoint로 arm한 뒤 다른 source로 disarm하고, 뒤따르는 표본의 `nav_state`, `failsafe`, `nav_state_user_intention`을 기록한다. failsafe Land 뒤 자동 disarm의 첫 DISARMED 표본과 명령 disarm(대비책)의 첫 표본도 기록한다(`failsafe`, `nav_state`, `nav_state_user_intention`, `landed`). (5) arm 전송 직후 취소의 경쟁(추가 문제 1): arm을 보낸 직후(0-0.2 s)에 지상 setpoint와 disarm을 보내고 끝난 상태가 DISARMED인지. 모든 `vehicle_status` 표본의 (`timestamp`, 노드가 받은 ROS 시각, 같은 시점의 `/clock`)을 기록해 `timestamp - Px4Timestamp`의 부호 있는 분포를 구한다. (6) 표본 늘리기: Hold 실험 B(offboard 손실 failsafe 중 Hold)와 C(NAV_LAND 중 Hold), 이번 run의 G, H, X2a, X2b를 각 3회 이상. 높이 0.06-0.37 m 사이의 Hold 포함. (7) X3(이륙한 적 없는 지상 armed에서 발행 중단) 1회. (8) Executor가 보낸 `[LAND]`(지면 근처 Hold에서. P3 뒤에 가능). 결과가 M3, M4, M5의 문장이나 감시 표와 다르면 고정 전에 고친다 |
-| px4-engineer, test-engineer | 다음 실측 전 | 실측 스크립트를 저장소에 둘지(둔다면 위치와 소유) 정한다. 지금은 임시 파일이라 재실측이 같은 절차로 돈다는 보장이 없다. px4-engineer의 입장은 px4 쪽에 두는 것이다 |
+| px4-engineer | (2), (3), (5)는 P4 머지 전(필수. 근거는 "PR #23 검토 반영"). 나머지는 7단계 고정 전(필수) | 재실측(2026-11-11에 다시 정했다. 이륙 단계와 0.5 m 호버의 Hold는 run 20261111-030155-k5로 표본이 생겼고, 새로 드러난 미실측 조합이 더해졌다). Hold로 끝난 상태의 관찰은 60 s 이상으로 한다. (1) AUTO_LAND 하강 중 0.3 m 아래에서의 취소 3회: 내려앉는지 호버하는지, CANCELED 뒤의 상태, landed인 채 armed로 남는 경우가 있는지. (2) 지상 setpoint 발행 중의 Hold 3회: H와 같은 조건에서 NAV_LAND 대신 Hold를 보내고 처음 관측한 순간 발행을 멈춘다. 이어서 "Hold를 확인하고 발행을 멈춘 뒤 `landed`가 true인 상태에서 disarm" 3회(수락 여부, 고도 변화 0.2 m 이하인지). (3) 이륙 직후의 지상 setpoint와 disarm 3회: TAKEOFF 목표점으로 arm한 뒤 `landed`가 아직 true인 구간(약 0.3-1.0 s)에 지상 setpoint로 바꾸고 disarm. 보내는 시점은 sleep이 아니라 `landed` 표본에 맞춘 조건으로 잡는다(px4-engineer 권고). (4) 감시 표 순위의 확인: G처럼 지상 setpoint로 arm한 뒤 다른 source로 disarm하고, 뒤따르는 표본의 `nav_state`, `failsafe`, `nav_state_user_intention`을 기록한다. failsafe Land 뒤 자동 disarm의 첫 DISARMED 표본과 명령 disarm(대비책)의 첫 표본도 기록한다(`failsafe`, `nav_state`, `nav_state_user_intention`, `landed`). (5) arm 전송 직후 취소의 경쟁(추가 문제 1): arm을 보낸 직후(0-0.2 s)에 지상 setpoint와 disarm을 보내고 끝난 상태가 DISARMED인지. 10회 이상. 통과 기준은 전부에서 `mode_confirm_timeout` 안에 기준을 만족하는 DISARMED 3회가 차고, 상승이 0.2 m 이하이며, 지상에 armed로 남은 회가 없는 것이다. 모든 `vehicle_status` 표본의 (`timestamp`, 노드가 받은 ROS 시각, 같은 시점의 `/clock`)을 기록해 `timestamp - Px4Timestamp`의 부호 있는 분포를 구한다. (6) 표본 늘리기: Hold 실험 B(offboard 손실 failsafe 중 Hold)와 C(NAV_LAND 중 Hold), 이번 run의 G, H, X2a, X2b를 각 3회 이상. 높이 0.06-0.37 m 사이의 Hold 포함. (7) X3(이륙한 적 없는 지상 armed에서 발행 중단) 1회. (8) Executor가 보낸 `[LAND]`(지면 근처 Hold에서. P3 뒤에 가능). 결과가 M3, M4, M5의 문장이나 감시 표와 다르면 고정 전에 고친다. 결과 파일은 `docs-for-agent/plan-1a-6-idsim-mission/remeasure-px4.md`(run id, 항목별 회수와 값). 측정은 px4-engineer, 표와의 대조와 통과 판정은 architect, 근거 확인은 reviewer다. (2)와 (3)의 통과 기준은 3회 모두 이 문서의 표대로 끝나는 것이다 |
+| px4-engineer, test-engineer | 다음 실측 전(재실측 (2), (3), (5)가 P4 머지 조건이므로 P4의 선행 조건이다) | 실측 스크립트를 저장소에 둘지(둔다면 위치와 소유) 정한다. 지금은 임시 파일이라 재실측이 같은 절차로 돈다는 보장이 없다. px4-engineer의 입장은 px4 쪽에 두는 것이다 |
 | architect | 7단계 | `docs/interface.md`: M1-M5(M3은 2026-11-11에 고친 문장), `REASON_DISARM_FAILED`와 `REASON_EXTERNAL_DISARM`의 의미(1a 고정 전에 두 상수의 이름과 의미 문장을 한 번 더 본다. EXTERNAL_DISARM은 "원인은 판정하지 않는다"와 이름의 불일치를 `COM_DISARM_LAND` 자동 disarm 시나리오로 따진다), 감시 표의 행 순위(재실측 (4) 뒤), disarm 분류의 고정 규칙, "공중"과 "지상"이 `landed` 값이라는 용어 주석, reason별 "ABORTED 뒤 기체 상태" 표(px4-engineer와. 쟁점 4의 "끝난 뒤 기체 상태" 줄 포함), 공중에서 끝나는 미션은 "고정 전"(U3), source 표, 발행 규칙(Offboard가 아닌 모드에서는 setpoint를 발행하지 않는다), 5단계 `decisions.md` 쟁점 9와 이 문서의 관계. `last_item_index` 구분 필드 불요 확인 |
 | architect, px4, ros2 | 1b 설계 토론 | 공중에서 끝나는 미션의 종료 동작(권고: Hold 확인 뒤 SUCCEEDED), setpoint 항목으로 시작하는 공중 시작 미션(Offboard 재진입), 1a 임시 제한(마지막이 LAND, 첫 항목 제한)의 해제 |
 | ros2-engineer, devops-engineer | 1b | `bridge.yaml` 생성(표적과 함께), world ENU <-> 로컬 NED 변환이 상태기 입력 직전 한 곳에 들어가는 구조 |
@@ -724,10 +771,12 @@ reviewer: 이 문서의 검증("reviewer가 검증할 가정")과 PR마다의 �
   - 인터페이스 계약 절의 고정 시점 문장: 1a 완료에 고정되는 `ExecuteMission`의 범위에서 "공중에서 끝나는 미션의 종료 동작"을 빼고 1b 완료로(U3).
   - 서비스 표: `ros-ws` 행을 `ops-1 ... ops-N`으로(launch, 컴포넌트 컨테이너, healthcheck). `runner`의 의존.
   - 이미지 표: foxglove_bridge는 P1부터 들어간다는 사실과 버전 단정.
-  - 기술 스택 표의 토픽 시각화 행과 미해결 서술의 "Lichtblick 2.5"를 1.30.0으로, 서브프로토콜 문장은 P5 실접속 결과로.
+  - 216행(`docker/versions.env`에 적는 것의 열거)에 `FOXGLOVE_BRIDGE_VERSION`과 `LLVM_MAJOR`를 더한다(P5에서 `LICHTBLICK_IMAGE`).
+  - 191행과 서비스 표: `ops-N`의 전이 주체가 노드 자신이라는 것(`lifecycle.self_start`), `init: true`와 `stop_signal`.
+  - 기술 스택 표의 토픽 시각화 행(106행)과 미해결 서술의 "Lichtblick 2.5"를 1.30.0으로, 서브프로토콜 문장은 P5 실접속 결과로.
   - 기체 식별 절: params key(`vehicle.id`, `vehicle.ns`, `vehicle.sysid`), `stack.json`의 새 key, 식별 gate의 위치(PREPARING).
   - 인터페이스 계약 절: 취소 의미(M3-M5. Hold로 끝난 기체는 지면 근처여도 ARMED로 머문다는 문장 포함), `REASON_DISARM_FAILED`, `REASON_EXTERNAL_DISARM`, 발행 규칙.
-  - 인터페이스 계약 절의 시간 기준 문장(170행 근처): 판정과 타임아웃은 ROS 시각이라는 원칙에 벽시계 예외 셋을 적는다. on_activate의 `/clock` 첫 수신 대기, 테스트 대기의 `wall_cap`, `CLOCK_STALLED` 판정의 5 s. 셋 다 hang 방지용이고 판정 기준이 아니다.
+  - 인터페이스 계약 절의 시간 기준 문장(170행 근처): 판정과 타임아웃은 ROS 시각이라는 원칙에 벽시계 예외 넷을 적는다. on_activate의 `/clock` 첫 수신 대기, 테스트 대기의 `wall_cap`, `CLOCK_STALLED` 판정의 5 s, Executor의 자기 전이 일회 timer(쟁점 2). 앞의 셋은 hang 방지용이고 넷째는 `/clock`이 오기 전에도 전이를 시도하게 하는 trigger다. 넷 다 판정 기준이 아니다.
   - 디렉터리 구조: `tests/sitl/`, `params/`, `ros_ws/src/idsim_mission/`.
 - `docs/roadmap.md`
   - 리스크 표 95행: "EKF 수렴(`vehicle_local_position.xy_valid`) 대기 후 arm"을 "EKF 준비(`failsafe_flags`의 위치와 고도와 home 무효 flag 넷이 모두 false) 뒤 Offboard, 그다음 arm"으로. 같은 표에 "Offboard가 아닌 모드에서 setpoint를 발행하면 착륙 판정이 늦고 Hold가 끌린다"와 "failsafe 뒤 발행을 재개하면 Offboard로 돌아간다"를 더한다.
@@ -799,12 +848,12 @@ reviewer의 판정은 조건부였다(P1, P2, P3a 착수 가능, P3b는 필수 �
 | 1 | 주석만 고치면 golden 셋이 그대로다 | 성립하되 주의 있음(권고 10: 주석 표현에 따라 `test_contract.py`의 가드가 실패할 수 있다) | 쟁점 3 구현 지시. M5 (나)로 golden 두 파일은 상수 한 줄씩 바뀐다 |
 | 2 | REASON_MODE_SWITCH_FAILED의 의미 넓히기가 5단계 규칙에 걸리지 않는다 | 성립하지 않음(필수 3: "나중에 더하면 된다"와 모순) | (나) 상수 추가로 바꿨다 |
 | 3 | 공중에서 끝나는 미션을 1b로 미루는 것은 알림으로 충분하다 | 성립하지 않음(필수 1: 사용자 결정으로 올린다) | U3으로 확정 |
-| 4 | `ComposableLifecycleNode(autostart=True)`가 Jazzy에 있다 | 확인됨(소스). ros-ws 이미지의 launch_ros 0.26.13 `descriptions/composable_lifecycle_node.py` 30-35행, `actions/load_composable_nodes.py` 243-256행(CONFIGURE, ACTIVATE 한 번씩). 런타임 동작은 미확인 | P3a에서 런타임 확인. 결과: 동작하지 않는다([실측] 5/5 `unconfigured`. API는 있으나 0.26.13이 FQN과 matcher를 잘못 다뤄 전이가 걸리지 않는다). 쟁점 2를 노드의 자기 전이로 다시 결정했다 |
+| 4 | `ComposableLifecycleNode(autostart=True)`가 Jazzy에 있다 | 확인됨(소스). ros-ws 이미지의 launch_ros 0.26.13 `descriptions/composable_lifecycle_node.py` 30-35행, `actions/load_composable_nodes.py` 243-256행(CONFIGURE, ACTIVATE 한 번씩). 실행 중 동작은 미확인 | P3a에서 실행해 확인. 결과: 동작하지 않는다([실측] 5/5 `unconfigured`. API는 있으나 0.26.13이 FQN과 matcher를 잘못 다뤄 전이가 걸리지 않는다). 쟁점 2를 노드의 자기 전이로 다시 결정했다 |
 | 5 | `server_is_ready()`가 active의 근거이고 match의 틈이 작다 | 근거 부족(권고 1: 순서 규칙과 200회 계수 실험) | 쟁점 7. P3a 결과: 순서 규칙을 지키면 누락 0/400, 어기면 87/400. 순서 규칙은 필수 조건이다 |
 | 6 | px4 실측의 표본 수가 M3, M4를 받친다 | 부족(필수 4: 7단계 고정 전 재실측 필수) | 넘김 목록 |
 | 7 | px4의 소스 인용이 v1.17.0과 맞다 | 일부 보정(필수 2: 자동 disarm 때 `nav_state`가 AUTO_LAND를 떠난다. 필수 4: `MulticopterLandDetector.cpp` 229-236행. 권고 4: `MulticopterPositionControl.cpp` 466-472행). 나머지는 확인됨: `UserModeIntention.cpp` 53-60, `modeCheck.cpp` 144-152, `estimatorCheck.cpp` 664-743과 796-821, `offboardCheck.cpp`, `failsafe.cpp` 641, `framework.cpp` 351-360과 504-519, `MulticopterPositionControl.cpp` 466-490과 501-519(`ground_contact` 추력 0), `Commander.cpp` 918, 1093-1110, 2285-2291, 2369-2372, `mode_requirements.cpp` 110-123, `dds_topics.yaml`의 5 Hz와 50 Hz, `VehicleStatus.msg`의 6 = SAFETY_BUTTON | 쟁점 3, 4 |
 | 8 | T의 flag 경로, X2, X3 | X2는 [추정]으로 내림(필수 4). T는 대기 상한 보정(권고 8). X3은 재실측 대상 | 쟁점 3, 9, 넘김 목록 |
-| 9 | `/**` params가 컨테이너 노드에도 적용되고 미선언 key는 무시된다 | 확인됨(소스). `launch_ros/utilities/to_parameters_list.py` 60-63행과 100행이 `/**`를 노드 FQN에 맞춰 LoadNode 요청의 parameters로 넘긴다. 런타임은 미확인 | P3a에서 확인됨([실측] 스택 21회, 오프라인 2회) |
+| 9 | `/**` params가 컨테이너 노드에도 적용되고 미선언 key는 무시된다 | 확인됨(소스). `launch_ros/utilities/to_parameters_list.py` 60-63행과 100행이 `/**`를 노드 FQN에 맞춰 LoadNode 요청의 parameters로 넘긴다. 실행 중 동작은 미확인 | P3a에서 확인됨([실측] 스택 21회, 스택 밖 2회) |
 | 10 | `tests/`의 /fmu/in 예외가 발행 허용 목록의 취지와 맞다 | 조건부(필수 7: `px4_raw.py`의 px4 필수 승인. 권고 7: roadmap 4번 문장에 예외를 적는다. 권고 8: sysid 대조 뒤에만) | 쟁점 8, 문서 반영 목록 |
 | 11 | `sitl` 10-13분과 4 vCPU runner의 실시간성 | 근거 없음(필수 5) | 올림 기준(15분, RTF 0.7) |
 | 12 | `executor_node`의 이름이 두 곳에 있다 | 고칠 것(권고 6) | 생성기가 launch 인자로 넘긴다 |

@@ -1,16 +1,16 @@
-# P3a 런타임 확인 실험 결과
+# P3a 실행 확인 실험 결과
 
-2026-11-11, ros2-engineer. `decisions.md` 쟁점 2(autostart, on_activate의 `/clock` 대기, `/**` params, `executor_name` 인자)와 쟁점 7(ACCEPTED 누락 계수)의 전제를 런타임으로 확인했다. 브랜치 `exp/1a-6-p3a`(main 153a4d6에서). `decisions.md`는 고치지 않았다. 결정이 필요한 항목은 끝의 "결정 영향"에 모았다.
+2026-11-11, ros2-engineer. `decisions.md` 쟁점 2(autostart, on_activate의 `/clock` 대기, `/**` params, `executor_name` 인자)와 쟁점 7(ACCEPTED 누락 계수)의 전제를 실행해서 확인했다. 브랜치 `exp/1a-6-p3a`(main 153a4d6에서). `decisions.md`는 고치지 않았다. 결정이 필요한 항목은 끝의 "결정 영향"에 모았다.
 
 ## 요약
 
 | 항목 | 결론 | 수치 |
 | --- | --- | --- |
-| 1. `ComposableLifecycleNode(autostart=True)` | **동작하지 않는다.** 노드는 load되지만 CONFIGURE를 받지 않고 `unconfigured`에 머문다. 네임스페이스를 `/`로 둬도 같다. 쟁점 2의 전제가 깨졌다 | 오프라인 4회, 스택 1회 모두 `unconfigured [1]` |
+| 1. `ComposableLifecycleNode(autostart=True)` | **동작하지 않는다.** 노드는 load되지만 CONFIGURE를 받지 않고 `unconfigured`에 머문다. 네임스페이스를 `/`로 둬도 같다. 쟁점 2의 전제가 깨졌다 | 스택 밖 4회, 스택 1회 모두 `unconfigured [1]` |
 | 1. 대안 둘의 동작 | 컴포넌트 자기 전이(self-start)와 단독 실행 파일 + `launch_ros.actions.LifecycleNode(autostart=True)` 둘 다 active가 된다 | 스택에서 각 10/10 active |
-| 1. 실패 시 동작 | configure FAILURE, configure 예외, activate FAILURE 모두 노드는 `unconfigured` 또는 `inactive`에 머물고 프로세스와 launch는 살아 있다. launch는 종료하지 않는다 | 오프라인 각 1회 |
+| 1. 실패 시 동작 | configure FAILURE, configure 예외, activate FAILURE 모두 노드는 `unconfigured` 또는 `inactive`에 머물고 프로세스와 launch는 살아 있다. launch는 종료하지 않는다 | 스택 밖 각 1회 |
 | 1. healthcheck | `ros2 lifecycle get --no-daemon <FQN>` 출력은 `active [3]`(정상), `unconfigured [1]`, `inactive [2]`. `docker exec`로 부르면 3.0-4.5 s 걸린다 | 스택 20회 |
-| 2. `/**` params | 컨테이너 안 노드와 단독 노드 모두에 적용된다. 선언하지 않은 key는 LoadNode 오류 없이 무시된다(`has_parameter` false). `vehicle.id` 누락은 configure FAILURE로 드러난다 | 스택 21회(컨테이너 11, 단독 10), 오프라인 2회 |
+| 2. `/**` params | 컨테이너 안 노드와 단독 노드 모두에 적용된다. 선언하지 않은 key는 LoadNode 오류 없이 무시된다(`has_parameter` false). `vehicle.id` 누락은 configure FAILURE로 드러난다 | 스택 21회(컨테이너 11, 단독 10), 스택 밖 2회 |
 | 3. 첫 `/clock` 수신 | 프로세스 시작부터 중앙값 0.368 s, 최대 0.660 s(컨테이너). 노드 생성 뒤 최대 0.054 s. on_activate에 들어갈 때 이미 시계가 시작되어 있어 `wait_until_started` 대기는 20/20 0.000 s. 2 s 값은 이 호스트에서 여유가 크다 | 스택 20회 |
 | 4. ACCEPTED 누락 | 실험군(구독 -> client -> 즉시 goal) **0/200**(새 프로세스), **0/200**(새 노드). 대조군(client -> 구독) **71/200**(새 프로세스), **16/200**(새 노드). 누락 87건 모두 Executor 쪽 `get_subscription_count()`가 0이었고, 구독 쪽 `get_publisher_count()`는 800회 모두 1 이상이었다 | 4 x 200회 |
 
@@ -18,7 +18,7 @@
 
 - 이미지: `idsim/ros-ws:local` = `sha256:85fedc7d9731...`(launch_ros 0.26.13, rclcpp 28.1.22, rmw_cyclonedds_cpp 2.2.4, cyclonedds 0.10.5). 같은 호스트에서 태그가 바뀔 수 있어 실험 중에는 이미지 ID로 고정했다.
 - 스택: `tools/stack.sh up --stack 6`(48.6 s에 준비), run id `20261111-030924-k6`, `ROS_DOMAIN_ID` 26, bridge 이미지도 같은 ID. 끝나고 `tools/stack.sh down --stack 6`. 사용자 스택 `idsim-0`은 건드리지 않았다.
-- 시험 컨테이너: `--network host`, `ROS_DOMAIN_ID=26`, `CYCLONEDDS_URI=file:///opt/idsim/config/cyclonedds.xml`(worktree를 `/opt/idsim`에 읽기 전용 마운트). 스택 밖 오프라인 확인은 `--network none`, 도메인 99, `CYCLONEDDS_URI` 비움.
+- 시험 컨테이너: `--network host`, `ROS_DOMAIN_ID=26`, `CYCLONEDDS_URI=file:///opt/idsim/config/cyclonedds.xml`(worktree를 `/opt/idsim`에 읽기 전용 마운트). 스택 밖 확인은 `--network none`, 도메인 99, `CYCLONEDDS_URI` 비움.
 - 시험 코드는 저장소에 넣지 않았다(scratchpad의 colcon workspace. `ros_ws/src/` 패키지를 만들지 않았다). 구성:
   - `idsim_interfaces`(저장소 사본, 테스트 제외)와 시험 패키지 `p3a_probe`.
   - `p3a::TestExecutor`(C++ lifecycle 컴포넌트, `rclcpp_components_register_node`로 같은 클래스의 단독 실행 파일도 생성). `vehicle.id`, `vehicle.ns`, `vehicle.sysid`를 선언하고 on_configure에서 값, `use_sim_time`, `has_parameter("undeclared_key")`, 선언된 params 목록을 로그에 남긴다. 누락이면 FAILURE. `mission_event` 발행자(RELIABLE, VOLATILE, depth 10)를 만든다. on_activate에서 `get_clock()->wait_until_started(2 s)`(벽시계), 실패면 FAILURE, 성공하면 `execute_mission` action 서버 생성. `handle_accepted`에서 ACCEPTED 사건 발행(발행 직전 `get_subscription_count()`를 로그), 곧바로 `succeed` 후 SUCCEEDED 사건 발행. 생성자에서 1 ms 벽시계 timer로 `get_clock()->started()`를 보아 첫 `/clock` 시각을 로그. 선언 param `self_start`(기본 false)가 true면 생성자의 0 ms 일회 timer가 `configure()`, `activate()`를 부른다.
@@ -40,17 +40,17 @@ ROS_LOG_DIR=/tmp/hc ros2 lifecycle get --no-daemon /px4_1/mission_executor     #
 
 | 형태 | 조건 | 결과 |
 | --- | --- | --- |
-| 컨테이너 + `autostart=True` | 오프라인(ok, missing, throw), `namespace:=/`, 스택(ok, `/clock` 있음) | 5/5 `unconfigured [1]`. on_configure가 한 번도 불리지 않는다. launch 로그는 `Autostart enabled for requested lifecycle node /px4_1mission_executor`(슬래시 빠짐) 한 줄뿐이고 오류도 없다 |
+| 컨테이너 + `autostart=True` | 스택 밖(ok, missing, throw), `namespace:=/`, 스택(ok, `/clock` 있음) | 5/5 `unconfigured [1]`. on_configure가 한 번도 불리지 않는다. launch 로그는 `Autostart enabled for requested lifecycle node /px4_1mission_executor`(슬래시 빠짐) 한 줄뿐이고 오류도 없다 |
 | 컨테이너 + self-start | 스택, ok | 10/10 `active [3]`. 프로세스 시작부터 active까지 0.30-0.64 s |
 | 단독 + `LifecycleNode(autostart=True)` | 스택, ok | 10/10 `active [3]`. 프로세스 시작부터 active까지 0.28-0.60 s |
-| 컨테이너 + self-start | 오프라인, `/clock` 없음 | configure 성공, activate가 2.000 s 기다린 뒤 FAILURE -> `inactive [2]` |
-| 단독 + autostart | 오프라인, `/clock` 없음 | 같음. launch가 `Failed to make transition 'TRANSITION_ACTIVATE'` ERROR 로그 |
+| 컨테이너 + self-start | 스택 밖, `/clock` 없음 | configure 성공, activate가 2.000 s 기다린 뒤 FAILURE -> `inactive [2]` |
+| 단독 + autostart | 스택 밖, `/clock` 없음 | 같음. launch가 `Failed to make transition 'TRANSITION_ACTIVATE'` ERROR 로그 |
 | 둘 다 | `missing.yaml` | configure FAILURE -> `unconfigured [1]`. 단독은 launch가 `Failed to make transition 'TRANSITION_CONFIGURE'` |
 | 둘 다 | `throw.yaml` | rclcpp가 `Caught exception in callback for transition 10`, `Callback returned ERROR during the transition: configure` -> on_error 기본 처리 뒤 `unconfigured [1]` |
 | 컨테이너 | `executor_name` 인자 빠짐 | launch가 바로 실패(rc 1): `Included launch description missing required argument 'executor_name'` |
 
 - 실패한 모든 경우에 컨테이너 프로세스와 launch는 계속 산다. 실패는 healthcheck(`active`로 시작하지 않음)로만 드러난다.
-- 원인([소스], 이미지의 launch_ros 0.26.13): `actions/load_composable_nodes.py`가 `complete_node_name = request.node_namespace + request.node_name`으로 이름을 만들어 `/px4_1mission_executor`가 된다. 또 `LifecycleTransition`이 내는 `ChangeState`의 matcher(`events/matchers/matches_node_name.py`)는 `'/' + 이름`과 `ComposableLifecycleNode.node_name`(치환된 상대 이름 `mission_executor`)을 비교하므로 네임스페이스가 `/`여도 맞지 않는다. `utilities/lifecycle_event_manager.py`도 서비스 이름을 상대 이름(`mission_executor/change_state`)으로 만든다. 그래서 Jazzy 이 판에서는 컨테이너 autostart가 어떤 네임스페이스에서도 동작하지 않는다([실측] 위 5회). upstream rolling의 `load_composable_nodes.py`는 네임스페이스와 이름 사이에 `/`를 넣도록 고쳐져 있으나 matcher 쪽이 고쳐졌는지는 확인하지 않았다. 고쳐진 판이 Jazzy에 들어오기를 기다릴 근거는 없다.
+- 원인([소스], 이미지의 launch_ros 0.26.13): `actions/load_composable_nodes.py`가 `complete_node_name = request.node_namespace + request.node_name`으로 이름을 만들어 `/px4_1mission_executor`가 된다. 또 `LifecycleTransition`이 내는 `ChangeState`의 matcher(`events/matchers/matches_node_name.py`)는 `'/' + 이름`과 `ComposableLifecycleNode.node_name`(치환된 상대 이름 `mission_executor`)을 비교하므로 네임스페이스가 `/`여도 맞지 않는다. `utilities/lifecycle_event_manager.py`도 서비스 이름을 상대 이름(`mission_executor/change_state`)으로 만든다. 그래서 Jazzy 이 판에서는 컨테이너 autostart가 어떤 네임스페이스에서도 동작하지 않는다([실측] 위 5회). [미확인] upstream rolling의 `load_composable_nodes.py`는 네임스페이스와 이름 사이에 `/`를 넣도록 고쳐져 있으나 matcher 쪽이 고쳐졌는지는 확인하지 않았다. 고쳐진 판이 Jazzy에 들어오기를 기다릴 근거는 없다.
 - 단독 `LifecycleNode` action은 FQN을 제대로 다뤄 동작한다(10/10).
 
 ### healthcheck 근거
@@ -61,7 +61,7 @@ ROS_LOG_DIR=/tmp/hc ros2 lifecycle get --no-daemon /px4_1/mission_executor     #
 
 ## 2. `/**` params
 
-- `ok.yaml`로 스택에서 컨테이너(self-start) 11회와 단독 10회, 오프라인 2회(컨테이너 self-start, 단독): `id='px4_1' ns='/px4_1' sysid=2 use_sim_time=1 has_undeclared=0`. 선언 목록은 `clock_wait_s, qos_overrides./clock.subscription.*, self_start, start_type_description_service, throw_in_configure, use_sim_time, vehicle.id, vehicle.ns, vehicle.sysid`이고 `undeclared_key`가 없다. LoadNode는 성공했다(`Loaded node '/px4_1/mission_executor' in container '/px4_1/ops_container'`).
+- `ok.yaml`로 스택에서 컨테이너(self-start) 11회와 단독 10회, 스택 밖 2회(컨테이너 self-start, 단독): `id='px4_1' ns='/px4_1' sysid=2 use_sim_time=1 has_undeclared=0`. 선언 목록은 `clock_wait_s, qos_overrides./clock.subscription.*, self_start, start_type_description_service, throw_in_configure, use_sim_time, vehicle.id, vehicle.ns, vehicle.sysid`이고 `undeclared_key`가 없다. LoadNode는 성공했다(`Loaded node '/px4_1/mission_executor' in container '/px4_1/ops_container'`).
 - `missing.yaml`: `id=''`로 configure FAILURE(위 표).
 - 결론: 쟁점 2의 "`/**` 값이 컨테이너 노드에 적용되고 미선언 key는 무시된다"는 [실측]으로 성립한다. launch 인자의 dict param(`{'self_start': LaunchConfiguration(...)}`)도 bool로 적용되었다.
 
@@ -74,7 +74,7 @@ ROS_LOG_DIR=/tmp/hc ros2 lifecycle get --no-daemon /px4_1/mission_executor     #
 | 컨테이너 + self-start | 10 | 중앙값 0.368 s, 최소 0.300, 최대 0.660 | 중앙값 0.020 s, 최대 0.054 | 10/10 0.000 s(이미 시작) |
 | 단독 + autostart | 10 | 중앙값 0.213 s, 최소 0.136, 최대 0.385 | 중앙값 0.002 s, 최대 0.055 | 10/10 0.000 s |
 
-- on_activate가 `/clock`을 실제로 기다리는 경우도 확인했다(오프라인, 컨테이너 + self-start, 1 s 뒤 `ros2 topic pub -r 100 /clock` 시작): `clock_ok=1 wait_s=1.350`. on_activate가 executor thread를 막는 동안에도 `/clock`은 받는다(rclcpp TimeSource의 clock thread. NodeOptions `use_clock_thread` 기본 true).
+- on_activate가 `/clock`을 실제로 기다리는 경우도 확인했다(스택 밖, 컨테이너 + self-start, 1 s 뒤 `ros2 topic pub -r 100 /clock` 시작): `clock_ok=1 wait_s=1.350`. on_activate가 executor thread를 막는 동안에도 `/clock`은 받는다(rclcpp TimeSource의 clock thread. NodeOptions `use_clock_thread` 기본 true).
 - `/clock`이 없으면 정확히 2.000 s 뒤 false, FAILURE, `inactive`(위 표).
 - 결론: 2 s는 이 호스트에서 최대 관측값의 약 3배 이상이다(on_activate 진입 뒤 실제 대기는 20/20 0). CI runner에서 다시 재는 일(`decisions.md` 쟁점 2)은 그대로 남는다.
 
@@ -118,14 +118,14 @@ ROS_LOG_DIR=/tmp/hc ros2 lifecycle get --no-daemon /px4_1/mission_executor     #
 
 | 안 | 내용 | 실측 | 장점 | 단점 |
 | --- | --- | --- | --- | --- |
-| A. 컴포넌트 자기 전이 | 컨테이너 구성은 그대로 두고, Executor가 생성자에서 0 ms 일회 timer로 `configure()`, 성공하면 `activate()`를 부른다. launch의 `autostart`는 빼거나 false | 10/10 active, 0.30-0.64 s. 실패 시 `unconfigured`/`inactive`에 머문다 | 기체당 컨테이너 하나(Phase 2 Collector 동거)와 isolated executor를 지킨다. launch와 compose command는 그대로. launch_ros 판에 의존하지 않는다 | 전이 주체가 launch가 아니라 노드 자신이다. 단위 테스트와 수동 전이용으로 끄는 스위치가 필요하다(선언 param, 생성기가 만들지 않는 기본값 true. 쟁점 2의 "params에는 식별값만"과 충돌하지 않는다) |
+| A. 컴포넌트 자기 전이 | 컨테이너 구성은 그대로 두고, Executor가 생성자에서 0 ms 일회 timer로 `configure()`, 성공하면 `activate()`를 부른다. launch의 `autostart`는 빼거나 false | 10/10 active, 0.30-0.64 s. 실패 시 `unconfigured`/`inactive`에 머문다 | 기체당 컨테이너 하나(Phase 2 Collector 동거)와 isolated executor를 지킨다. launch와 compose command는 그대로. launch_ros 판에 의존하지 않는다 | 전이 주체가 launch가 아니라 노드 자신이다. 단위 테스트와 수동 전이용으로 끄는 param이 필요하다(선언 param, 생성기가 만들지 않는 기본값 true. 쟁점 2의 "params에는 식별값만"과 충돌하지 않는다) |
 | B. 단독 실행 파일 + `LifecycleNode(autostart=True)` | `rclcpp_components_register_node(... EXECUTABLE ...)`로 같은 클래스의 실행 파일을 만들고 launch의 `LifecycleNode` action이 전이 | 10/10 active, 0.28-0.60 s. 실패 시 launch가 ERROR 로그를 남긴다 | 전이 주체가 launch로 남는다. 첫 `/clock`이 조금 빠르다 | Phase 2에 Collector가 같은 프로세스에 들어갈 수 없다(쟁점 2가 기각한 이유 그대로) |
 | C. 단독 실행 파일이 `main`에서 전이 | `decisions.md`의 물러설 자리 | 측정 안 함(A와 같은 호출) | launch 의존 없음 | B의 단점과 같다 |
 | D. launch에서 `change_state` 서비스를 직접 호출하는 OpaqueFunction이나 `ros2 lifecycle set` 프로세스 | 컨테이너 유지, 전이 주체는 launch | 측정 안 함 | 전이 주체가 launch | launch 코드가 늘고 CLI 프로세스면 participant가 하나 더 생긴다 |
 
 ros2-engineer 권고는 A다. 근거: 쟁점 2가 컨테이너를 고른 이유(Phase 2 Collector 동거, isolated executor)를 지키면서 바뀌는 것이 노드 안의 수십 줄과 launch의 `autostart` 한 줄뿐이고, healthcheck(`ros2 lifecycle get`이 `active`)와 실패 시 동작(노드가 비활성으로 남아 healthcheck가 unhealthy)이 컨테이너 autostart를 가정했을 때와 같다. 결정은 architect 몫이다. 함께 정할 것:
 - 자기 전이가 실패했을 때 프로세스를 끝낼지(`rclcpp::shutdown()` -> 컨테이너 종료 -> `on_exit=Shutdown()`로 launch 종료 -> compose에서 exited)와 비활성으로 남겨 healthcheck가 잡게 할지. 지금 측정한 동작은 후자다. 앞의 것이 실패를 빨리 드러내지만, Phase 2에 같은 컨테이너의 Collector까지 내린다.
-- 끄는 스위치 이름과 기본값(예: 선언 param `lifecycle.self_start`, 기본 true. 단위 테스트는 false).
+- 끄는 param의 이름과 기본값(예: 선언 param `lifecycle.self_start`, 기본 true. 단위 테스트는 false).
 - A를 고르면 `decisions.md`의 "전이를 거는 주체는 launch autostart뿐", launch 파일 설명(`autostart=True`), reviewer 판정표 4행을 고쳐야 한다.
 
 ### 유지되는 전제
