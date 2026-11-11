@@ -52,6 +52,31 @@ private:
   std::string value_;
 };
 
+// 계약 식별자 vehicle_id. 예: "px4_1". ROS 이름 토큰 하나(rmw_validate_node_name 규칙:
+// 비어 있지 않고, 영숫자와 밑줄만, 숫자로 시작하지 않음, "/" 없음)만 받는다.
+// N은 해석하지 않는다.
+// vehicle_id와 기체 네임스페이스는 의미가 다른 값이다(계약 식별자와 PX4 네임스페이스). 지금은
+// ns == "/" + id라는 불변식만 있고, 그것을 matches로 확인한다.
+class VehicleId
+{
+public:
+  // 실패하면 nullopt이고, error가 있으면 이유를 적는다.
+  static std::optional<VehicleId> parse(const std::string & text, std::string * error = nullptr);
+
+  const std::string & str() const { return value_; }
+
+  // ns.str() == "/" + str()인가. "/fleet/px4_1"처럼 토큰이 여럿인 네임스페이스와는 맞지 않는다.
+  bool matches(const VehicleNamespace & ns) const;
+
+  bool operator==(const VehicleId & other) const { return value_ == other.value_; }
+  bool operator!=(const VehicleId & other) const { return value_ != other.value_; }
+
+private:
+  explicit VehicleId(std::string value) : value_(std::move(value)) {}
+
+  std::string value_;
+};
+
 // MAVLink system id. 1-255. 0(브로드캐스트)은 만들 수 없다.
 class SystemId
 {

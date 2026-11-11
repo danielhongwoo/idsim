@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "rmw/validate_namespace.h"
+#include "rmw/validate_node_name.h"
 
 namespace idsim_common
 {
@@ -67,6 +68,39 @@ std::optional<VehicleNamespace> VehicleNamespace::parse(
     return std::nullopt;
   }
   return VehicleNamespace(text);
+}
+
+std::optional<VehicleId> VehicleId::parse(const std::string & text, std::string * error)
+{
+  if (text.empty()) {
+    set_error(error, "vehicle id is empty");
+    return std::nullopt;
+  }
+  if (text.find('/') != std::string::npos) {
+    set_error(error, "vehicle id must be a single name token without '/': '" + text + "'");
+    return std::nullopt;
+  }
+  int result = RMW_NODE_NAME_VALID;
+  std::size_t index = 0;
+  if (rmw_validate_node_name(text.c_str(), &result, &index) != RMW_RET_OK) {
+    set_error(error, "rmw_validate_node_name failed for '" + text + "'");
+    return std::nullopt;
+  }
+  if (result != RMW_NODE_NAME_VALID) {
+    const char * reason = rmw_node_name_validation_result_string(result);
+    set_error(
+      error, "invalid vehicle id '" + text + "': " + (reason != nullptr ? reason : "unknown") +
+               " (index " + std::to_string(index) + ")");
+    return std::nullopt;
+  }
+  return VehicleId(text);
+}
+
+bool VehicleId::matches(const VehicleNamespace & ns) const
+{
+  const std::string & n = ns.str();
+  return n.size() == value_.size() + 1 && n.front() == '/' &&
+         n.compare(1, std::string::npos, value_) == 0;
 }
 
 std::optional<SystemId> SystemId::make(int value)

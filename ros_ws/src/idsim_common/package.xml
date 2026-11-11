@@ -2,7 +2,7 @@
 <package format="3">
   <name>idsim_common</name>
   <version>0.1.0</version>
-  <description>idsim 공통 C++ 라이브러리: PX4 토픽 기술자와 QoS, 좌표 변환, 기체 식별, VehicleCommand 빌더</description>
+  <description>idsim 공통 C++ 라이브러리: PX4 토픽 기술자와 QoS, 좌표 변환, 기체 식별과 params, VehicleCommand 빌더, setpoint 헬퍼, 계약 토픽 QoS</description>
   <maintainer email="27140685+danielhongwoo@users.noreply.github.com">Daniel Hongwoo Lee</maintainer>
   <license>Apache-2.0</license>
 
@@ -11,6 +11,7 @@
 
   <depend>eigen</depend>
   <depend>px4_msgs</depend>
+  <depend>rcl_interfaces</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>rmw</depend>

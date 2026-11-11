@@ -24,23 +24,28 @@ find_package(ament_cmake REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(rcl_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(rmw REQUIRED)
 find_package(rosidl_runtime_cpp REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
+  src/contract_qos.cpp
   src/frames.cpp
+  src/px4_setpoint.cpp
   src/px4_timestamp.cpp
   src/qos.cpp
   src/vehicle.cpp
-  src/vehicle_command.cpp)
+  src/vehicle_command.cpp
+  src/vehicle_params.cpp)
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
 target_link_libraries(${PROJECT_NAME} PUBLIC
   Eigen3::Eigen
   ${px4_msgs_TARGETS}
+  ${rcl_interfaces_TARGETS}
   rclcpp::rclcpp
   rmw::rmw
   rosidl_runtime_cpp::rosidl_runtime_cpp)
@@ -53,7 +58,8 @@ install(TARGETS ${PROJECT_NAME}
   RUNTIME DESTINATION bin)
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(eigen3_cmake_module Eigen3 px4_msgs rclcpp rclcpp_lifecycle rmw rosidl_runtime_cpp)
+ament_export_dependencies(
+  eigen3_cmake_module Eigen3 px4_msgs rcl_interfaces rclcpp rclcpp_lifecycle rmw rosidl_runtime_cpp)
 
 if(BUILD_TESTING)
   # ---- ament 린터: xmllint, lint_cmake, cpplint, copyright만. uncrustify, cppcheck는 쓰지 않는다 ----
@@ -129,6 +135,15 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_vehicle_command test/test_vehicle_command.cpp)
   target_link_libraries(test_vehicle_command ${PROJECT_NAME})
+
+  ament_add_gtest(test_vehicle_params test/test_vehicle_params.cpp)
+  target_link_libraries(test_vehicle_params ${PROJECT_NAME} rclcpp_lifecycle::rclcpp_lifecycle)
+
+  ament_add_gtest(test_px4_setpoint test/test_px4_setpoint.cpp)
+  target_link_libraries(test_px4_setpoint ${PROJECT_NAME} rcl::rcl)
+
+  ament_add_gtest(test_contract_qos test/test_contract_qos.cpp)
+  target_link_libraries(test_contract_qos ${PROJECT_NAME})
 
   # ---- 음성 컴파일 테스트: 빌드가 실패하고 기대한 static_assert 문구가 나와야 통과 ----
   # 타깃은 EXCLUDE_FROM_ALL이라 colcon build에서는 컴파일하지 않고, 테스트가 cmake --build로 부른다.

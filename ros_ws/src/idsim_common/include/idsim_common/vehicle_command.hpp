@@ -14,7 +14,10 @@
 
 // px4_msgs VehicleCommand 빌더와 ack 매칭 술어.
 //
-// 빌더는 대상 기체(VehicleIdentity)와 송신자(CommandSource) 없이 만들 수 없다. 고정 필드:
+// 빌더는 대상 기체(VehicleIdentity)와 송신자(CommandSource) 없이 만들 수 없고, 만드는 길은 make
+// 하나다. make는 source.system()이 대상 sysid와 같으면 거부한다. 그러면 (대상 sysid, 1)처럼
+// 송신자가 대상 autopilot 자신으로 보이는 조합이 원천적으로 막힌다(1a 6단계 쟁점 5,
+// source 값 표). 고정 필드:
 // target_component = 1, from_external = true(false면 PX4가 MAVLink로 재송출한다), confirmation = 0.
 // timestamp는 Px4Timestamp 인자로만 받는다.
 //
@@ -61,7 +64,8 @@ private:
 class VehicleCommandBuilder
 {
 public:
-  VehicleCommandBuilder(VehicleIdentity target, CommandSource source);
+  // source.system() == target.sysid.value()이면 nullopt.
+  static std::optional<VehicleCommandBuilder> make(VehicleIdentity target, CommandSource source);
 
   // 400 COMPONENT_ARM_DISARM, param1 = 1. 강제 시동(21196)은 두지 않는다.
   px4_msgs::msg::VehicleCommand arm(Px4Timestamp timestamp) const;
@@ -80,6 +84,8 @@ public:
   const CommandSource & source() const { return source_; }
 
 private:
+  VehicleCommandBuilder(VehicleIdentity target, CommandSource source);
+
   px4_msgs::msg::VehicleCommand base(std::uint32_t command, Px4Timestamp timestamp) const;
 
   VehicleIdentity target_;

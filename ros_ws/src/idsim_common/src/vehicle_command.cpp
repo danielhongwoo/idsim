@@ -49,6 +49,15 @@ VehicleCommandBuilder::VehicleCommandBuilder(VehicleIdentity target, CommandSour
 {
 }
 
+std::optional<VehicleCommandBuilder> VehicleCommandBuilder::make(
+  VehicleIdentity target, CommandSource source)
+{
+  if (source.system() == target.sysid.value()) {
+    return std::nullopt;
+  }
+  return VehicleCommandBuilder(std::move(target), source);
+}
+
 VehicleCommand VehicleCommandBuilder::base(std::uint32_t command, Px4Timestamp timestamp) const
 {
   VehicleCommand cmd;
