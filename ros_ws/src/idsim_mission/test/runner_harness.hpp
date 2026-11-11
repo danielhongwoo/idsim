@@ -460,6 +460,18 @@ inline void expect_terminated_once(Harness & h, Status status, Reason reason)
   EXPECT_EQ(h.termination_count(), 1);
 }
 
+// 종료 결과. 종료가 없으면(앞선 단정이 실패한 경우) 빈 Termination을 돌려 역참조로 테스트
+// 프로세스가 죽지 않게 한다. detail은 "<no termination>"이다.
+inline const Termination & termination_or_empty(const Harness & h)
+{
+  static const Termination empty = [] {
+    Termination t;
+    t.detail = "<no termination>";
+    return t;
+  }();
+  return h.termination().has_value() ? *h.termination() : empty;
+}
+
 inline bool has_command(const StepOutput & out, CommandKind kind)
 {
   return std::find(out.commands.begin(), out.commands.end(), kind) != out.commands.end();

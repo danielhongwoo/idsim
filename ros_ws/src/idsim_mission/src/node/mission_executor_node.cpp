@@ -474,7 +474,7 @@ void MissionExecutorNode::abort_running_goal(const std::string & why)
   if (view.arm_sent) {
     // 지상 arm 뒤 이륙 전이면 자동 disarm이 없다(COM_DISARM_PRFLT=-1). 강제가 아닌 disarm을 한 번
     // 보낸다. 공중이면 PX4가 거부하고, vehicle_command는 target_system 주소라 다른 기체에 닿지
-    // 않는다(px4-engineer P3d-1).
+    // 않는다.
     const std::optional<idsim_common::Px4Timestamp> stamp =
       idsim_common::Px4Timestamp::now(*get_clock());
     if (
