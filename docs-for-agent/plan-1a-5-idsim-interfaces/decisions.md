@@ -1,6 +1,6 @@
 # 1a 5단계 idsim_interfaces 설계 결정 (architect, 2026-11-10 확정)
 
-입력: `opinion-ros2.md`, `opinion-sim.md`, `opinion-ops.md`, 충돌 지점 재질문 답 네 건(ros2, ops, sim, px4. 아래 "재질문 결과 요약"), reviewer 검증 보고(필수 5건, 권고 8건)와 재확인 보고(비차단 6건), ros2-engineer 추가 실측(accept 뒤 abort, rosbag2의 action 기록), 사용자 결정 2건(2026-11-10). 뒤의 셋이 이 문서를 어떻게 바꿨는지는 "확정 개정 요약"에 있다. 이 문서는 확정본이고 구현은 이 문서를 따른다. 패키지 파일을 만든 뒤 5단계 PR에서 owner 다섯의 검토를 받았고 그 반영은 "5단계 PR owner 검토 반영"에 있다(필드와 상수는 바뀌지 않았다). `docs/` 반영(D)도 끝났다. `progress.md`는 호출한 쪽이 갱신한다.
+입력: 담당자 의견서 셋(ros2, sim, ops. git 이력), 충돌 지점 재질문 답 네 건(ros2, ops, sim, px4. 아래 "재질문 결과 요약"), reviewer 검증 보고(필수 5건, 권고 8건)와 재확인 보고(비차단 6건), ros2-engineer 추가 실측(accept 뒤 abort, rosbag2의 action 기록), 사용자 결정 2건(2026-11-10). 뒤의 셋이 이 문서를 어떻게 바꿨는지는 "확정 개정 요약"에 있다. 이 문서는 확정본이고 구현은 이 문서를 따른다. 패키지 파일을 만든 뒤 5단계 PR에서 owner 다섯의 검토를 받았고 그 반영은 "5단계 PR owner 검토 반영"에 있다(필드와 상수는 바뀌지 않았다). `docs/` 반영(D)도 끝났다. `progress.md`는 호출한 쪽이 갱신한다.
 
 표기: [실측]은 담당자가 이미지에서 직접 확인한 것(reviewer의 재현과 ros2-engineer의 2026-11-10 추가 실측 포함), [소스]는 PX4 v1.17.0 원문(reviewer가 사본의 commit과 blob hash를 v1.17.0 태그와 대조했다), [문서]는 공식 문서나 저장소 문서, [추정]은 확인하지 않은 판단이다. [추정]에 기대는 결정은 해당 쟁점에 따로 적었다.
 
@@ -55,7 +55,7 @@ reviewer 권고 8건의 처리
 | ros2 권고 3 | `direct_definition`의 `"=" in line` 판정은 bounded string이나 공백이 든 기본값에서 어색하다 | 지금은 그런 필드가 없어 고치지 않고 넘김 목록에 적었다(그런 필드를 더하는 PR에서 `_CONSTANT` 정규식 기준으로 바꾼다) | 넘김 목록 |
 | ros2 권고 4 | `<test_depend>ament_index_python</test_depend>` | 반영 | `package.xml`, 쟁점 11 |
 | test 권고 1 | 갱신 모드가 조용히 통과한다 | 반영. 달라진 golden만 쓰고 파일마다 pytest 경고 "golden 갱신됨: <경로>"를 낸다 | `test_contract.py`, 쟁점 10 |
-| test 권고 2 | `opinion-ros2.md`의 갱신 명령 예시는 동작하지 않는다 | 반영. 그 줄에 주석을 달았다 | `opinion-ros2.md` |
+| test 권고 2 | ros2-engineer 의견서(git 이력)의 갱신 명령 예시는 동작하지 않는다 | 반영. 그 줄에 주석을 달았다 | ros2-engineer 의견서(git 이력) |
 
 ## 재질문 결과 요약
 

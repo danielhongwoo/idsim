@@ -68,7 +68,6 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 사용자 결정이나 확인이 필요한 항목.
 
 - GHCR 패키지 5개와 buildcache가 Public인지 설정 화면에서 확인한다. 비공개면 포크 PR과 익명 조회가 거부되어 매번 전체를 다시 빌드한다.
-- 끝난 계획 `docs-for-agent/plan-1a-5-idsim-interfaces/`의 담당자 의견서 세 파일도 지울지. `decisions.md`는 5단계 계약의 정본이라 `docs/interface.md`가 생길 때까지 남긴다.
 
 1a 6단계.
 
