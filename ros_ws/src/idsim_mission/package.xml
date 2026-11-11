@@ -8,6 +8,11 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <!-- px4 어댑터(idsim_mission_px4). core는 아무것에도 의존하지 않는다 -->
+  <depend>idsim_common</depend>
+  <depend>px4_msgs</depend>
+  <depend>rclcpp</depend>
+
   <test_depend>ament_cmake_copyright</test_depend>
   <test_depend>ament_cmake_cpplint</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>
