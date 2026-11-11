@@ -196,6 +196,12 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_configure(
   if (!builder_.has_value()) {
     return fail("configure", "command_source.system must differ from vehicle.sysid");
   }
+  if (t.link_timeout_ns >= t.mode_confirm_timeout_ns) {
+    // 지상 disarm 분기는 link_timeout이 mode_confirm_timeout보다 짧다는 전제로 정했다(C4).
+    RCLCPP_WARN(
+      get_logger(), "link_timeout (%.3f s) is not shorter than mode_confirm_timeout (%.3f s)",
+      ns_to_seconds(t.link_timeout_ns), ns_to_seconds(t.mode_confirm_timeout_ns));
+  }
   create_entities(*vehicle_, *builder_);
   return CallbackReturn::SUCCESS;
 }
@@ -282,7 +288,9 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_activate(
   tick_timer_ = rclcpp::create_timer(
     get_node_base_interface(), get_node_timers_interface(), get_clock(),
     rclcpp::Duration::from_nanoseconds(kTickPeriodNs), [this]() { on_tick(); }, group_);
-  // action 서버는 active에서만 있다(client의 server_is_ready가 active의 근거가 된다).
+  // action 서버는 active에서만 있다(client의 server_is_ready가 active의 근거가 된다). on_error 뒤에
+  // 남은 옛 서버는 새 서버를 만들기 전에 지운다(같은 이름의 서버가 겹치지 않게).
+  action_server_.reset();
   action_server_ = rclcpp_action::create_server<ExecuteMission>(
     this, idsim_interfaces::msg::Mission::ACTION_NAME,
     [this](
@@ -344,6 +352,18 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_error(
 {
   const std::lock_guard<std::mutex> lock(mutex_);
   abort_running_goal("executor error");
+  // unconfigured로 돌아가므로 on_cleanup처럼 비운다. 다음 configure가 구독과 발행자를 새로 만든다.
+  // action 서버는 남겨 둔다(끝낸 goal의 result 요청). 다음 on_activate가 새로 만들기 전에 지운다.
+  if (tick_timer_ != nullptr) {
+    tick_timer_->cancel();
+  }
+  tick_timer_.reset();
+  subs_ = Subscriptions{};
+  pubs_ = Publishers{};
+  clock_port_.reset();
+  builder_.reset();
+  snapshot_ = core::Snapshot{};
+  acks_ = {};
   return CallbackReturn::SUCCESS;
 }
 
@@ -374,10 +394,13 @@ void MissionExecutorNode::handle_accepted(const std::shared_ptr<GoalHandle> & go
   context.mission_id = goal->mission.mission_id;
   context.goal_id = goal_handle->get_goal_id();
   context.item_count = static_cast<std::uint32_t>(goal->mission.items.size());
-  RCLCPP_DEBUG(
-    get_logger(), "goal accepted, mission_event subscriptions: %zu",
-    pubs_.event->get_subscription_count());
-  pubs_.event->publish(accepted_event_msg(context));
+  // on_error 뒤에는 발행자가 없을 수 있다(그 goal은 아래에서 즉시 ABORTED로 끝난다).
+  if (pubs_.event != nullptr) {
+    RCLCPP_DEBUG(
+      get_logger(), "goal accepted, mission_event subscriptions: %zu",
+      pubs_.event->get_subscription_count());
+    pubs_.event->publish(accepted_event_msg(context));
+  }
 
   core::MissionSpec spec = to_mission_spec(goal->mission);
   std::optional<core::Termination> screened =
@@ -410,7 +433,9 @@ void MissionExecutorNode::finish(
   const core::Termination & term)
 {
   context.stamp = stamp_now();
-  pubs_.event->publish(terminal_event_msg(context, term));
+  if (pubs_.event != nullptr) {
+    pubs_.event->publish(terminal_event_msg(context, term));
+  }
   auto result = std::make_shared<ExecuteMission::Result>(to_result_msg(term));
   switch (term.status) {
     case core::Status::kSucceeded:
@@ -441,7 +466,22 @@ void MissionExecutorNode::abort_running_goal(const std::string & why)
   term.items_completed = view.items_completed;
   term.last_item_index = view.stage == core::Stage::kPreparing ? 0 : view.item_index;
   term.detail = why;
-  if (pubs_.event != nullptr && goal_->is_active()) {
+  if (view.arm_sent) {
+    // 지상 arm 뒤 이륙 전이면 자동 disarm이 없다(COM_DISARM_PRFLT=-1). 강제가 아닌 disarm을 한 번
+    // 보낸다. 공중이면 PX4가 거부하고, vehicle_command는 target_system 주소라 다른 기체에 닿지
+    // 않는다(px4-engineer P3d-1).
+    const std::optional<idsim_common::Px4Timestamp> stamp =
+      idsim_common::Px4Timestamp::now(*get_clock());
+    if (
+      pubs_.command != nullptr && pubs_.command->is_activated() && builder_.has_value() &&
+      stamp.has_value()) {
+      pubs_.command->publish(builder_->disarm(*stamp));
+      term.detail += "; disarm sent once, not confirmed; vehicle may remain armed on ground";
+    } else {
+      term.detail += "; disarm could not be sent, vehicle state unknown";
+    }
+  }
+  if (goal_->is_active()) {
     finish(goal_, goal_context_, term);
   }
   runner_.reset();

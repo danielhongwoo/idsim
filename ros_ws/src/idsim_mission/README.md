@@ -37,10 +37,10 @@
 
 lifecycle
 - 생성자: `vehicle.*`를 한 번 선언하고 해석한다(실패는 configure에서 드러난다). `lifecycle.self_start`가 true이면 벽시계 0 ms 일회 timer를 만들고, 그 콜백의 첫 줄에서 timer를 취소한 뒤 `configure()`와 `activate()`를 한 번씩 부른다. 실패하면 그 상태에 남고 `IDSIM_EXECUTOR_START_FAILED: <전이> failed, state <상태>: <이유>` 한 줄을 ERROR로 남긴다(`kStartFailedLogPrefix`). 프로세스는 끝내지 않는다.
-- on_configure: `vehicle.*` 해석 실패, `use_sim_time` false, 노드 네임스페이스와 `vehicle.ns` 불일치, 타임아웃 0 이하, command source 무효나 source == sysid이면 FAILURE. 구독 다섯, PX4 발행자 셋, 사건 발행자, `RosPx4ClockPort`를 만든다.
+- on_configure: `link_timeout`이 `mode_confirm_timeout`보다 짧지 않으면 WARN(지상 disarm 분기의 C4 전제). `vehicle.*` 해석 실패, `use_sim_time` false, 노드 네임스페이스와 `vehicle.ns` 불일치, 타임아웃 0 이하, command source 무효나 source == sysid이면 FAILURE. 구독 다섯, PX4 발행자 셋, 사건 발행자, `RosPx4ClockPort`를 만든다.
 - on_activate: 첫 `/clock`을 벽시계 2 s 기다리고(`wait_until_started`. 파라미터가 아니다) `Px4Timestamp::now`가 되는지 본 뒤 발행자를 켜고, 20 Hz tick timer(노드 시계)와 action 서버를 만든다.
 - on_deactivate: goal 실행 중이면 FAILURE(active에 남는다). 아니면 action 서버와 timer를 없앤다.
-- on_shutdown, on_error, context 종료 직전(pre-shutdown callback): 실행 중인 goal을 ABORTED, REASON_INTERNAL로 끝내고 종료 사건을 낸다. on_shutdown 뒤에도 action 서버는 소멸자까지 남는다(끝낸 goal의 result 요청에 답해야 한다). 그 뒤에 온 goal은 `handle_accepted`가 즉시 ABORTED, REASON_INTERNAL("executor is not active")로 끝낸다.
+- on_shutdown, on_error, context 종료 직전(pre-shutdown callback): 실행 중인 goal을 ABORTED, REASON_INTERNAL로 끝내고 종료 사건을 낸다. 이 goal에서 arm을 보냈으면 새 `Px4Timestamp`로 강제가 아닌 disarm을 한 번 발행하고 `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground"를, 발행할 수 없으면(발행자 비활성, 시간 공급 실패) "disarm could not be sent, vehicle state unknown"을 더한다(px4-engineer P3d-1. 지상 arm 뒤 이륙 전이면 자동 disarm이 없다). on_error는 on_cleanup처럼 구독과 발행자를 비워 다음 configure가 새로 만들게 하고, 남은 action 서버는 다음 on_activate가 새 서버를 만들기 전에 지운다. on_shutdown 뒤에도 action 서버는 소멸자까지 남는다(끝낸 goal의 result 요청에 답해야 한다). 그 뒤에 온 goal은 `handle_accepted`가 즉시 ABORTED, REASON_INTERNAL("executor is not active")로 끝낸다.
 - callback group은 MutuallyExclusive 하나(PX4 구독, tick timer, action 서버). pre-shutdown callback은 다른 thread에서 돌 수 있어 goal 상태와 snapshot은 mutex로 지킨다.
 
 tick 순서: `begin_tick` -> `select_ack` -> `step` -> `to_px4_messages(out, builder, port.stamp())` -> 오류면 ERROR 로그 -> `offboard_control_mode`, `trajectory_setpoint`, 명령 순 발행 -> feedback -> 종료면 사건과 result. tick 번호는 goal이 없어도 하나씩 오른다. 구독 callback은 "다음 step의 tick 번호"와 노드 시계 ROS 시각을 표본에 적는다.
@@ -140,6 +140,6 @@ px4-engineer 검토(2026-11-11, P3b 구현)에서 1-8, 10-12, 14-18은 승인, 9
 | `test_runner_cleanup.cpp` | 취소 분기, Hold와 Land 경로, 지상 disarm 확인과 C4, ITEM_TIMEOUT 정리, 원인 3 x snapshot 3 교차표, 정리 중 식별 불일치 |
 | `test_runner_conflicts.cpp` | 종료의 충돌 규칙(C5), `Px4Timestamp` 공급 실패 |
 | `node/test_contract_constants.cpp` | core 값과 메시지 상수(REASON_* 13, 14 포함, TYPE_*, MODE_*, PHASE_*, STATUS_*), yaw 식과 idsim_common/frames, 변환의 result == 사건 |
-| `node/test_executor_node.cpp` | 한 프로세스 배선(노드, 가짜 PX4, /clock thread, action client): self_start 대조군 쌍, 직접 configure/activate, configure 실패 둘, 정상 경로 SUCCEEDED와 무효 경로 INVALID_MISSION(사건 ACCEPTED가 앞, 종료 사건 1건, result와 같은 값), goal 중 deactivate 거부와 on_shutdown의 ABORTED INTERNAL, cancel을 받아들인 goal의 abort 허용(rclcpp_action) |
+| `node/test_executor_node.cpp` | 한 프로세스 배선(노드, 가짜 PX4, /clock thread, action client): self_start 대조군 쌍, 직접 configure/activate, configure 실패 둘, 정상 경로 SUCCEEDED와 무효 경로 INVALID_MISSION(사건 ACCEPTED가 앞, 종료 사건 1건, result와 같은 값), goal 중 deactivate 거부와 on_shutdown의 ABORTED INTERNAL, 종료 때 disarm(arm 뒤 1개, arm 전 0개), PREPARING 중 취소의 CANCELED, 두 번째 goal의 BUSY, cancel을 받아들인 goal의 abort 허용(rclcpp_action) |
 
 PX4 v1.17.0에서 나오지 않는 방어 경로(OFFBOARD이고 ARMED인 채 failsafe, 순위 5의 이력, 순위 8, DISARM과 ARM의 그 밖의 거부 ack)는 합성 표본과 합성 ack로만 시험하고 테스트 주석에 그렇게 적었다. 단위 테스트는 합성 timestamp만 검사한다. 실제 시계 관계는 재실측 (5)만 확인한다.

@@ -21,6 +21,8 @@
 //   (GOTO -> INVALID_MISSION). 사건은 ACCEPTED가 앞이고 종료 사건은 1건이며 result와 같은 값.
 // - rclcpp_action에서 cancel을 받아들인 goal을 abort로 끝낼 수 있는지(decisions.md 쟁점 3 C5의
 //   [추정] 확인).
+// - PREPARING 중 취소의 CANCELED, 실행 중 두 번째 goal의 BUSY, 종료 때의 disarm 한 번(arm 뒤 1개,
+//   arm 전 0개. px4-engineer P3d-1).
 // 시계: 별도 thread가 /clock을 발행한다(on_activate의 2 s 대기는 파라미터가 아니다). 사건 구독은
 // action client보다 먼저, 같은 노드에서 만든다(쟁점 7 순서 규칙).
 
@@ -204,6 +206,9 @@ public:
 
   bool armed() const { return armed_; }
   int commands() const { return commands_; }
+  int disarms() const { return disarms_; }
+  int offboards() const { return offboards_; }
+  bool react_offboard{true};  // false면 Offboard 요청에 반응하지 않는다(P5에 머문다)
 
 private:
   void on_command(const px4_msgs::msg::VehicleCommand & cmd)
@@ -211,8 +216,14 @@ private:
     using VC = px4_msgs::msg::VehicleCommand;
     using VS = px4_msgs::msg::VehicleStatus;
     ++commands_;
+    if (cmd.command == VC::VEHICLE_CMD_COMPONENT_ARM_DISARM && cmd.param1 == 0.0F) {
+      ++disarms_;
+    }
     if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 6.0F) {
-      nav_ = VS::NAVIGATION_STATE_OFFBOARD;
+      ++offboards_;
+      if (react_offboard) {
+        nav_ = VS::NAVIGATION_STATE_OFFBOARD;
+      }
     } else if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 4.0F) {
       nav_ = VS::NAVIGATION_STATE_AUTO_LOITER;
     } else if (cmd.command == VC::VEHICLE_CMD_COMPONENT_ARM_DISARM && cmd.param1 == 1.0F) {
@@ -244,6 +255,8 @@ private:
   std::int64_t land_start_ns_{0};
   std::int64_t last_publish_ns_{0};
   int commands_{0};
+  int disarms_{0};
+  int offboards_{0};
 };
 
 class ExecutorNodeTest : public ::testing::Test
@@ -545,6 +558,131 @@ TEST_F(ExecutorNodeTest, CanceledGoalCanBeAborted)
   held->abort(std::make_shared<ExecuteMission::Result>());
   ASSERT_TRUE(spin_until([&] { return done; }, std::chrono::seconds(10), nullptr));
   EXPECT_EQ(code, rclcpp_action::ResultCode::ABORTED);
+}
+
+// ---- P3d 검토 보완 ----
+
+TEST_F(ExecutorNodeTest, CancelInPreparingIsCanceled)
+{
+  // test-engineer N1: PX4 표본 없이 PREPARING(P0)에 둔 goal을 취소하면 바로 CANCELED,
+  // REASON_NONE이고 CANCELED 종료 사건이 result와 같다.
+  auto node = make_executor(true);
+  auto test_node = std::make_shared<rclcpp::Node>("test_client");
+  Client client(test_node);
+  executor_->add_node(node->get_node_base_interface());
+  executor_->add_node(test_node);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      return client.client()->action_server_is_ready() &&
+             test_node->count_publishers("/px4_1/mission_event") >= 1;
+    },
+    std::chrono::seconds(10), nullptr));
+  client.send(standard_goal());
+  ASSERT_TRUE(spin_until(
+    [&] { return node->goal_active() && client.handle_ != nullptr; }, std::chrono::seconds(10),
+    nullptr));
+  client.client()->async_cancel_goal(client.handle_);
+  ASSERT_TRUE(spin_until(
+    [&] { return client.has_result_ && client.events().size() >= 2; }, std::chrono::seconds(10),
+    nullptr));
+  EXPECT_EQ(client.result_.code, rclcpp_action::ResultCode::CANCELED);
+  EXPECT_EQ(client.result_.result->reason, ExecuteMission::Result::REASON_NONE);
+  expect_events_match_result(client.events(), client.result_, MissionEvent::STATUS_CANCELED);
+  EXPECT_FALSE(node->goal_active());
+}
+
+TEST_F(ExecutorNodeTest, SecondGoalIsBusy)
+{
+  // 실행 중에 온 두 번째 goal: ACCEPTED 사건 뒤 즉시 ABORTED, REASON_BUSY. 첫 goal은 계속된다.
+  auto node = make_executor(true);
+  auto test_node = std::make_shared<rclcpp::Node>("test_client");
+  Client first(test_node);
+  Client second(test_node);
+  executor_->add_node(node->get_node_base_interface());
+  executor_->add_node(test_node);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      return second.client()->action_server_is_ready() &&
+             test_node->count_publishers("/px4_1/mission_event") >= 1;
+    },
+    std::chrono::seconds(10), nullptr));
+  first.send(standard_goal());
+  ASSERT_TRUE(spin_until([&] { return node->goal_active(); }, std::chrono::seconds(10), nullptr));
+  second.send(standard_goal());
+  ASSERT_TRUE(spin_until(
+    [&] { return second.has_result_ && second.events().size() >= 3; }, std::chrono::seconds(10),
+    nullptr));
+  EXPECT_EQ(second.result_.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(second.result_.result->reason, ExecuteMission::Result::REASON_BUSY);
+  EXPECT_EQ(second.feedback_, 0);
+  EXPECT_FALSE(first.has_result_);
+  EXPECT_TRUE(node->goal_active());
+  // 사건: 첫 goal ACCEPTED, 둘째 goal ACCEPTED, 둘째 goal ABORTED(BUSY) 순서.
+  std::vector<MissionEvent> busy;
+  for (const MissionEvent & e : second.events()) {
+    if (e.goal_id == second.result_.goal_id) {
+      busy.push_back(e);
+    }
+  }
+  expect_events_match_result(busy, second.result_, MissionEvent::STATUS_ABORTED);
+  const std::vector<MissionEvent> all = second.events();
+  EXPECT_EQ(all[0].status, MissionEvent::STATUS_ACCEPTED);
+  EXPECT_NE(all[0].goal_id, second.result_.goal_id);
+}
+
+class ShutdownDisarmTest : public ExecutorNodeTest
+{
+protected:
+  // goal을 시작해 until이 참일 때 shutdown하고, 그 뒤 PX4가 받은 disarm 수와 detail을 본다.
+  void run(
+    bool react_offboard, const std::function<bool(const FakePx4 &)> & until, int expected_disarms,
+    const char * expected_detail)
+  {
+    auto node = make_executor(true);
+    auto test_node = std::make_shared<rclcpp::Node>("test_client");
+    Client client(test_node);
+    FakePx4 px4(test_node, *clock_);
+    px4.react_offboard = react_offboard;
+    executor_->add_node(node->get_node_base_interface());
+    executor_->add_node(test_node);
+    ASSERT_TRUE(spin_until(
+      [&] {
+        return client.client()->action_server_is_ready() &&
+               test_node->count_publishers("/px4_1/mission_event") >= 1;
+      },
+      std::chrono::seconds(10), &px4));
+    client.send(standard_goal());
+    ASSERT_TRUE(spin_until([&] { return until(px4); }, std::chrono::seconds(20), &px4));
+    ASSERT_TRUE(node->goal_active());
+    const int before = px4.disarms();
+    EXPECT_EQ(node->shutdown().id(), State::PRIMARY_STATE_FINALIZED);
+    ASSERT_TRUE(spin_until(
+      [&] { return client.has_result_ && client.events().size() >= 2; }, std::chrono::seconds(10),
+      &px4));
+    spin_count(50);
+    EXPECT_EQ(px4.disarms() - before, expected_disarms);
+    EXPECT_EQ(client.result_.result->reason, ExecuteMission::Result::REASON_INTERNAL);
+    if (expected_detail != nullptr) {
+      EXPECT_NE(client.result_.result->detail.find(expected_detail), std::string::npos)
+        << client.result_.result->detail;
+    } else {
+      EXPECT_EQ(client.result_.result->detail.find("disarm"), std::string::npos)
+        << client.result_.result->detail;
+    }
+    expect_events_match_result(client.events(), client.result_, MissionEvent::STATUS_ABORTED);
+  }
+};
+
+TEST_F(ShutdownDisarmTest, AfterArmSendsOneDisarm)
+{
+  // px4-engineer P3d-1: arm을 보낸 뒤의 종료는 강제가 아닌 disarm을 정확히 한 번 보낸다.
+  run(true, [](const FakePx4 & px4) { return px4.armed(); }, 1, "may remain armed");
+}
+
+TEST_F(ShutdownDisarmTest, BeforeArmSendsNoDisarm)
+{
+  // P3-P5(arm 전)의 종료는 disarm을 보내지 않는다.
+  run(false, [](const FakePx4 & px4) { return px4.offboards() >= 1; }, 0, nullptr);
 }
 
 }  // namespace
