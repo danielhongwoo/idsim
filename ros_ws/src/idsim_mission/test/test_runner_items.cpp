@@ -329,7 +329,9 @@ TEST(ItemTimeout, LoiterTimerStartsAtTakeoffCompletion)
   // B3. LOITER의 timeout은 앞 항목(TAKEOFF)이 끝난 tick부터 흐른다. duration < timeout(검증)이라
   // LOITER의 ITEM_TIMEOUT은 duration이 정확하면 닿지 않는다. 그래서 duration을 timeout보다 한
   // tick 짧게 두고 경계로 잰다. timer가 한 tick이라도 일찍 시작했다면 완료 tick에 ITEM_TIMEOUT이
-  // 먼저 맞는다(같은 tick이면 ITEM_TIMEOUT이 완료보다 앞).
+  // 먼저 맞는다(같은 tick이면 ITEM_TIMEOUT이 완료보다 앞). 이 시험은 일찍 시작한 경우만 잡는다.
+  // 늦게 시작한 경우는 완료도 함께 늦어져 같은 결과가 나오므로 잡지 못한다(완료 시각은
+  // Loiter.KeepsSetpointAndEndsAfterDuration이 본다).
   MissionSpec m = standard_mission();
   m.items[1].timeout = seconds(10);
   m.items[1].loiter.duration = Duration{9, 950000000U};

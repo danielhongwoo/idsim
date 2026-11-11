@@ -8,10 +8,10 @@
 | --- | --- | --- | --- | --- |
 | `idsim_mission_core` | 미션 검증, `TYPE_*` 분류, 상태기(`MissionRunner`), 종료 결과 | 없음(C++17 표준 라이브러리만) | ros2-engineer. `core/snapshot.hpp`와 상태기 전이 표는 px4-engineer 필수 승인 | P3b(이 단계) |
 | `idsim_mission_px4` | px4_msgs -> snapshot 변환, 명령 목록 -> `VehicleCommand`와 setpoint | core, `idsim_common`, px4_msgs | px4-engineer(`include/idsim_mission/px4/`, `src/px4/`, `test/px4/`) | P3c |
-| `mission_executor_component` | lifecycle 노드 껍질, action 서버, 사건 발행, launch | core, px4 어댑터, rclcpp | ros2-engineer | P3d |
+| `mission_executor_component` | lifecycle 노드 껍질 `idsim_mission::MissionExecutorNode`(컴포넌트), action 서버, 사건 발행, 계약 메시지 변환(`node/conversion.hpp`) | core, px4 어댑터, idsim_interfaces, rclcpp_lifecycle, rclcpp_action, rclcpp_components | ros2-engineer | P3d |
 
 - `idsim_mission_core`는 어떤 ROS 패키지도 링크하지 않는다(CMake 대상에 링크가 없다). 단위 테스트는 gtest와 core만 링크한다. ctest의 `core_purity`가 core 소스에 `clock::now`, `clock_gettime`, `gettimeofday`, `std::time`, `this_thread`, `getenv`, `rclcpp`, `px4_msgs`, `idsim_common`, `idsim_interfaces`, `builtin_interfaces` 문자열이 없는지 본다(주석 줄 제외). `core_purity_negative`는 금지 문자열을 심은 임시 파일로 검사기 자체가 그 수만큼 잡는지 본다.
-- core는 `idsim_interfaces`의 메시지를 쓰지 않고 같은 값을 다시 적는다(`core/types.hpp`의 `Reason`, `item_type`, `FeedbackPhase`, `core/termination.hpp`의 `event_status`). 값이 메시지 상수와 같은지는 P3d의 노드 쪽 gtest가 교차 검사한다(13, 14는 P3e가 메시지에 더한다).
+- core는 `idsim_interfaces`의 메시지를 쓰지 않고 같은 값을 다시 적는다(`core/types.hpp`의 `Reason`, `item_type`, `FeedbackPhase`, `core/termination.hpp`의 `event_status`). 값이 메시지 상수와 같은지는 `test/node/test_contract_constants.cpp`가 교차 검사한다(13, 14 포함). core의 `enu_to_ned_yaw`, `wrap_pi`가 `idsim_common/frames`와 같은 값인지도 같은 파일이 본다.
 
 ## core와 어댑터의 경계
 
@@ -28,6 +28,26 @@
   - `CommandKind` -> `VehicleCommandBuilder`: `kSetModeOffboard` -> `set_mode_offboard`, `kSetModeHold` -> `set_mode_hold`, `kArm` -> `arm`, `kDisarm` -> `disarm`(강제가 아님), `kNavLand` -> `land`.
   - `SetpointOut.kind == kGround`이면 어댑터가 z에 지상 setpoint 오프셋 +0.5 m(NED 아래쪽, 어댑터 상수)를 더한다. core는 그 값을 모른다.
   - 노드는 `Px4ClockPort::now_us`가 그 tick에 만든 `Px4Timestamp` 객체를 보관해 두고 그 객체로 명령과 setpoint를 만든다(`Px4Timestamp`는 시계에서만 만들 수 있다).
+
+## 노드 껍질(P3d)
+
+실행: `ros2 launch idsim_mission vehicle_ops.launch.py namespace:=/px4_N executor_name:=<이름> params_file:=<파일>`. launch는 `component_container_isolated`(이름 `ops_container`)에 컴포넌트 하나를 load하고(`ComposableNode`, autostart 없음), `output='screen'`, 컨테이너에 `on_exit=Shutdown()`을 건다. 세 인자 모두 기본값이 없다. params 예시는 `config/ops.example.yaml`(생성기가 만드는 `/**`의 넷: `use_sim_time`, `vehicle.id`, `vehicle.ns`, `vehicle.sysid`).
+
+파라미터(모두 읽기 전용, 생성기는 만들지 않는다): `lifecycle.self_start`(bool, 기본 true), `command_source.system`(254), `command_source.component`(191), 타임아웃 여덟(`ready_timeout`, `offboard_signal_timeout`, `mode_confirm_timeout`, `arm_timeout`, `hold_confirm_timeout`, `link_timeout`, `land_disarm_fallback_delay`, `command_resend_period`. 초 단위 double, 기본값은 `core/config.hpp`).
+
+lifecycle
+- 생성자: `vehicle.*`를 한 번 선언하고 해석한다(실패는 configure에서 드러난다). `lifecycle.self_start`가 true이면 벽시계 0 ms 일회 timer를 만들고, 그 콜백의 첫 줄에서 timer를 취소한 뒤 `configure()`와 `activate()`를 한 번씩 부른다. 실패하면 그 상태에 남고 `IDSIM_EXECUTOR_START_FAILED: <전이> failed, state <상태>: <이유>` 한 줄을 ERROR로 남긴다(`kStartFailedLogPrefix`). 프로세스는 끝내지 않는다.
+- on_configure: `vehicle.*` 해석 실패, `use_sim_time` false, 노드 네임스페이스와 `vehicle.ns` 불일치, 타임아웃 0 이하, command source 무효나 source == sysid이면 FAILURE. 구독 다섯, PX4 발행자 셋, 사건 발행자, `RosPx4ClockPort`를 만든다.
+- on_activate: 첫 `/clock`을 벽시계 2 s 기다리고(`wait_until_started`. 파라미터가 아니다) `Px4Timestamp::now`가 되는지 본 뒤 발행자를 켜고, 20 Hz tick timer(노드 시계)와 action 서버를 만든다.
+- on_deactivate: goal 실행 중이면 FAILURE(active에 남는다). 아니면 action 서버와 timer를 없앤다.
+- on_shutdown, on_error, context 종료 직전(pre-shutdown callback): 실행 중인 goal을 ABORTED, REASON_INTERNAL로 끝내고 종료 사건을 낸다. on_shutdown 뒤에도 action 서버는 소멸자까지 남는다(끝낸 goal의 result 요청에 답해야 한다). 그 뒤에 온 goal은 `handle_accepted`가 즉시 ABORTED, REASON_INTERNAL("executor is not active")로 끝낸다.
+- callback group은 MutuallyExclusive 하나(PX4 구독, tick timer, action 서버). pre-shutdown callback은 다른 thread에서 돌 수 있어 goal 상태와 snapshot은 mutex로 지킨다.
+
+tick 순서: `begin_tick` -> `select_ack` -> `step` -> `to_px4_messages(out, builder, port.stamp())` -> 오류면 ERROR 로그 -> `offboard_control_mode`, `trajectory_setpoint`, 명령 순 발행 -> feedback -> 종료면 사건과 result. tick 번호는 goal이 없어도 하나씩 오른다. 구독 callback은 "다음 step의 tick 번호"와 노드 시계 ROS 시각을 표본에 적는다.
+
+구독 QoS와 ack: PX4 토픽의 QoS는 `idsim_common::px4::px4_out_qos()`(BEST_EFFORT, VOLATILE, KEEP_LAST 5)로 고정이고 바꾸지 않는다(idsim_common이 qos_overrides도 끈다. PX4 writer가 BEST_EFFORT라 RELIABLE로는 붙지 않는다). ack는 PX4 쪽 큐가 4라 한 tick에 여럿 올 수 있으므로, 노드는 command 묶음(DO_SET_MODE, ARM_DISARM, NAV_LAND)별로 최신 ack 하나를 두고 tick마다 대기 중인 명령의 묶음 것만 Snapshot에 넣는다. 다른 묶음의 ack가 대기 중인 명령의 거부를 덮지 않는다. 같은 묶음 안에서 한 tick에 둘이 오면 나중 것이 남는다(거부가 ACCEPTED에 덮이면 타임아웃이 잡는다. 안전 방향).
+
+feedback: phase나 항목이 바뀐 tick에는 바로, 그 밖에는 10 tick(0.5 s, 2 Hz)마다 낸다(`kFeedbackEveryTicks`).
 
 ## 구현 규칙
 
@@ -105,7 +125,7 @@ px4-engineer 검토(2026-11-11, P3b 구현)에서 1-8, 10-12, 14-18은 승인, 9
 
 ## 테스트
 
-`test/`의 core 단위 테스트는 gtest와 core만 링크한다(노드와 DDS 참가자를 만들지 않는다). 노드가 필요한 테스트(lifecycle, 배선, 메시지 상수 교차 검사)는 P3d에서 더한다.
+`test/`의 core 단위 테스트는 gtest와 core만 링크한다(노드와 DDS 참가자를 만들지 않는다). `test/px4/`는 어댑터(px4-engineer), `test/node/`는 노드 껍질 테스트다.
 
 | 파일 | 내용 |
 | --- | --- |
@@ -119,5 +139,7 @@ px4-engineer 검토(2026-11-11, P3b 구현)에서 1-8, 10-12, 14-18은 승인, 9
 | `test_runner_land.cpp` | LAND 세 구간, 완료 우선, 대비책 disarm, LAND의 ITEM_TIMEOUT 변형 |
 | `test_runner_cleanup.cpp` | 취소 분기, Hold와 Land 경로, 지상 disarm 확인과 C4, ITEM_TIMEOUT 정리, 원인 3 x snapshot 3 교차표, 정리 중 식별 불일치 |
 | `test_runner_conflicts.cpp` | 종료의 충돌 규칙(C5), `Px4Timestamp` 공급 실패 |
+| `node/test_contract_constants.cpp` | core 값과 메시지 상수(REASON_* 13, 14 포함, TYPE_*, MODE_*, PHASE_*, STATUS_*), yaw 식과 idsim_common/frames, 변환의 result == 사건 |
+| `node/test_executor_node.cpp` | 한 프로세스 배선(노드, 가짜 PX4, /clock thread, action client): self_start 대조군 쌍, 직접 configure/activate, configure 실패 둘, 정상 경로 SUCCEEDED와 무효 경로 INVALID_MISSION(사건 ACCEPTED가 앞, 종료 사건 1건, result와 같은 값), goal 중 deactivate 거부와 on_shutdown의 ABORTED INTERNAL, cancel을 받아들인 goal의 abort 허용(rclcpp_action) |
 
 PX4 v1.17.0에서 나오지 않는 방어 경로(OFFBOARD이고 ARMED인 채 failsafe, 순위 5의 이력, 순위 8, DISARM과 ARM의 그 밖의 거부 ack)는 합성 표본과 합성 ack로만 시험하고 테스트 주석에 그렇게 적었다. 단위 테스트는 합성 timestamp만 검사한다. 실제 시계 관계는 재실측 (5)만 확인한다.

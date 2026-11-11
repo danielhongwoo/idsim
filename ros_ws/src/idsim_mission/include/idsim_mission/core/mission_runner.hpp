@@ -139,6 +139,12 @@ public:
   const MissionSpec & mission() const { return mission_; }
 
 private:
+  // 단위 테스트가 닿지 않는 방어 경로(정리 첫 tick의 식별 불일치)를 합성하려고 둔다.
+  friend class MissionRunnerTestAccess;
+  // 지금 tick에 취소의 정리를 시작한다(step의 단계 처리 없이). MissionRunnerTestAccess만 부른다.
+  StepOutput begin_cancel_without_stage(
+    const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock);
+
   struct Tick;
   struct AckView
   {

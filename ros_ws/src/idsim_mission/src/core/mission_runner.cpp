@@ -130,6 +130,19 @@ StepOutput MissionRunner::step(
   return out;
 }
 
+StepOutput MissionRunner::begin_cancel_without_stage(
+  const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock)
+{
+  StepOutput out;
+  if (stage_ == Stage::kDone) {
+    return out;
+  }
+  Tick t(input, snapshot, clock, out);
+  begin_cleanup(t, CleanupCause::kCancel, Reason::kNone, "");
+  finalize(t);
+  return out;
+}
+
 // ---- PREPARING ----
 
 void MissionRunner::step_preparing(Tick & t)

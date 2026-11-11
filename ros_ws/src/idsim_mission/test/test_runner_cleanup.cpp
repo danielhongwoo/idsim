@@ -30,6 +30,25 @@
 
 #include "runner_harness.hpp"
 
+namespace idsim_mission::core
+{
+
+// 방어 경로 합성용(mission_runner.hpp의 friend). 정리를 시작하는 tick에 식별이 어긋난 표본을
+// 넣는다. 실제로는 그 tick의 단계(P0-P6, 감시 표, LAND)가 같은 표본의 식별을 먼저 보므로
+// 닿지 않는다.
+class MissionRunnerTestAccess
+{
+public:
+  static StepOutput begin_cancel(
+    MissionRunner & runner, const TickInput & input, const Snapshot & snapshot,
+    Px4ClockPort & clock)
+  {
+    return runner.begin_cancel_without_stage(input, snapshot, clock);
+  }
+};
+
+}  // namespace idsim_mission::core
+
 namespace idsim_mission::core::test
 {
 namespace
@@ -608,6 +627,30 @@ TEST(TakeoffTimeout, DisarmedSnapshotAfterArmReselectsGroundDisarm)
   EXPECT_NE(h.termination()->detail.find("disarm confirmed"), std::string::npos);
 }
 
+TEST(UntrustedSample, FirstCleanupTickEndsAndDisarmsIfArmSent)
+{
+  // R5. 방어 경로(합성): 정리의 첫 tick에 식별 불일치면 분기를 고를 수 없어 끝낸다. 취소는
+  // ABORTED, INTERNAL이고 arm을 보냈으면 강제가 아닌 disarm을 한 번 보낸다.
+  Harness h(standard_mission());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.world.identity = IdentityCheck::kMismatch;
+  h.push_world_samples();
+  TickInput input;
+  input.tick = h.tick_no;
+  input.now_ns = h.now_ns;
+  input.cancel_requested = true;
+  h.clock.now_ns = h.now_ns;
+  const StepOutput out =
+    MissionRunnerTestAccess::begin_cancel(h.mutable_runner(), input, h.snapshot, h.clock);
+  ASSERT_TRUE(out.termination.has_value());
+  EXPECT_EQ(out.termination->status, Status::kAborted);
+  EXPECT_EQ(out.termination->reason, Reason::kInternal);
+  EXPECT_NE(out.termination->detail.find("may remain armed"), std::string::npos);
+  EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kDisarm});
+  EXPECT_FALSE(out.setpoint.has_value());
+  EXPECT_TRUE(h.runner().done());
+}
+
 // ---- 교차표의 원인 축(상태기 수준. B4): (취소, ITEM_TIMEOUT, PREPARING 실패) x
 // (공중 ARMED, 지상 ARMED, 지상 DISARMED이고 arm 보냄) ----
 
@@ -691,6 +734,7 @@ std::vector<CauseCell> cause_cells()
        h.world.arming = Arming::kDisarmed;
        h.tick();
      },
+     // 정리가 시작되지 않으므로 branch와 cause 칸은 쓰지 않는 자리표시다(kNone, kCancel).
      false, Branch::kNone, CleanupCause::kCancel, Status::kAborted, Reason::kExternalDisarm},
     {"PreparingFailure_AirArmed",
      [deny_arm](Harness & h) {

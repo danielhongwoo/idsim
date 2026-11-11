@@ -54,8 +54,30 @@ target_link_libraries(idsim_mission_px4 PUBLIC
   rclcpp::rclcpp)
 # ---- px4 어댑터 끝 ----
 
+# ---- 노드 껍질(P3d): lifecycle 컴포넌트 idsim_mission::MissionExecutorNode ----
+find_package(idsim_interfaces REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(rclcpp_components REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
+add_library(mission_executor_component SHARED
+  src/node/conversion.cpp
+  src/node/mission_executor_node.cpp)
+target_include_directories(mission_executor_component PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
+target_link_libraries(mission_executor_component PUBLIC
+  idsim_mission_px4
+  ${idsim_interfaces_TARGETS}
+  ${lifecycle_msgs_TARGETS}
+  rclcpp_action::rclcpp_action
+  rclcpp_components::component
+  rclcpp_lifecycle::rclcpp_lifecycle)
+rclcpp_components_register_nodes(mission_executor_component "idsim_mission::MissionExecutorNode")
+install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
+
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
-install(TARGETS idsim_mission_core idsim_mission_px4
+install(TARGETS idsim_mission_core idsim_mission_px4 mission_executor_component
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -63,6 +85,8 @@ install(TARGETS idsim_mission_core idsim_mission_px4
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(idsim_common px4_msgs rclcpp)  # px4 어댑터
+ament_export_dependencies(
+  idsim_interfaces lifecycle_msgs rclcpp_action rclcpp_components rclcpp_lifecycle)  # 노드 껍질
 
 if(BUILD_TESTING)
   # ---- ament 린터: xmllint, lint_cmake, cpplint, copyright만(idsim_common과 같다) ----
@@ -134,6 +158,15 @@ if(BUILD_TESTING)
     ament_add_gtest(${_test} test/px4/${_test}.cpp)
     target_link_libraries(${_test} idsim_mission_px4)
   endforeach()
+
+  # ---- 노드 껍질 테스트(P3d) ----
+  # 메시지 상수와 idsim_common 식의 교차 검사(노드 없음).
+  ament_add_gtest(test_contract_constants test/node/test_contract_constants.cpp)
+  target_link_libraries(test_contract_constants mission_executor_component)
+  # 배선 테스트: 한 프로세스 안에서 노드, 가짜 PX4, /clock 발행자, action client.
+  find_package(rosgraph_msgs REQUIRED)
+  ament_add_gtest(test_executor_node test/node/test_executor_node.cpp TIMEOUT 180)
+  target_link_libraries(test_executor_node mission_executor_component ${rosgraph_msgs_TARGETS})
 endif()
 
 ament_package()

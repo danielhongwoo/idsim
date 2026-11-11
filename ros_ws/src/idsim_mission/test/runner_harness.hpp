@@ -335,6 +335,7 @@ public:
 
   RunnerView view() const { return runner_.view(); }
   const MissionRunner & runner() const { return runner_; }
+  MissionRunner & mutable_runner() { return runner_; }
   const Config & config() const { return config_; }
 
   // 지금까지의 출력
