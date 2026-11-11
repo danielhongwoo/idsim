@@ -21,7 +21,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 | 3 `config/fleet.yaml`과 `tools/gen_compose.py` | 완료 |
 | 4 `idsim_common` | 완료 |
 | 5 `idsim_interfaces` | 완료. 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md` |
-| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0(CI trigger), P1(ros-ws 이미지의 foxglove_bridge), P2(`idsim_common` 추가), P3a(런타임 확인)는 완료. P3(`idsim_mission` 패키지) 구현 중. P4(생성기, 통합 테스트, `sitl` job, 문서)와 P5(viz)는 시작 전 |
+| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0(CI trigger), P1(ros-ws 이미지의 foxglove_bridge), P2(`idsim_common` 추가), P3a(런타임 확인)는 완료. P3(`idsim_mission` 패키지)는 구현과 담당자 승인, reviewer 검토, CI가 끝나 PR #27로 머지를 기다린다(승인 내역과 넘기는 항목은 PR #27 본문). P4(생성기, 통합 테스트, `sitl` job, 문서)와 P5(viz)는 시작 전 |
 | 7 `docs/interface.md` | 시작 전 |
 
 환경.
@@ -53,14 +53,25 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. 1a 6단계 P3 `idsim_mission` 패키지(ros2-engineer. `px4/` 디렉터리는 px4-engineer. `ExecuteMission.action`의 상수 둘과 golden은 architect). 머지 전에 px4-engineer의 필수 승인과 reviewer 검토를 받는다.
-2. P4의 선행 작업: 측정 스크립트를 `tests/sitl/measure/`에 만든다(test-engineer, 절차 승인 px4-engineer). px4-engineer의 필수 재실측 (2), (3), (5)는 P4 머지 조건이다(`plan-1a-6-idsim-mission/decisions.md` 넘김 목록).
-3. P4 생성기와 통합(devops-engineer, test-engineer, architect의 문서 반영). `ops-N` 서비스, params와 `stack.json` key, `tests/sitl/`, CI `sitl` job, `build_images.py --mode pull`.
-4. P5 viz(devops-engineer). `foxglove`와 `lichtblick` 서비스, 브라우저 실접속 확인.
-5. 6단계 마무리: 통합 테스트 로컬 3회 연속 통과, CI `sitl` 통과, 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인.
-6. P3 PR이 머지되면 `plan-1a-6-idsim-mission/decisions.md`를 지금 유효한 계약만으로 다시 쓴다(architect).
-7. 1a 7단계 `docs/interface.md`. ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 계약 고정 전에 px4-engineer의 나머지 필수 재실측이 끝나야 한다.
-8. CI 후속 PR. `Dockerfile.px4`의 pip 고정과 `PX4_OPTICAL_FLOW_REF` 반영, `ls | grep` 정리(px4-engineer). `Dockerfile.sim-base`의 `GZ_APT_KEY_FPR` 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 이미지 key 재료 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 key에서 뺀 것이 "같은 key는 같은 바이트"의 예외라는 점 포함). `image_keys.py`가 bake 블록의 tags와 공백까지 해시하는 것 정리(devops-engineer).
+1. PR #27(P3) 머지. 머지되면 위 표의 P3를 완료로 고친다.
+2. `plan-1a-6-idsim-mission/decisions.md`를 지금 유효한 계약만 담은 한 판으로 다시 쓴다(architect). 개정 절을 본문에 녹이고 다음을 반영한다. 근거는 PR #27 본문 "넘기는 것".
+   - 446행 근처: 식별 불일치로 끝나는 PREPARING 실패는 정리 분기를 고르지 않고, arm을 보냈으면 disarm을 한 번 보낸 뒤 확인 없이 끝낸다.
+   - M1, M2: 발행 시작(P3) 전의 식별 불일치는 NOT_READY, 그 뒤(P3-P6, 실행, 정리)는 INTERNAL. NOT_READY로 끝난 goal은 setpoint와 명령을 보내지 않았다.
+   - 545행 근처: LAND 확인 전 구간의 `mode_confirm_timeout`은 DISARMED 계수 중에도 흐른다.
+   - 553행 근처: 거부 ack는 ACCEPTED와 IN_PROGRESS가 아닌 것이다.
+   - 773행 근처: 정리 분기 교차표는 상태기 수준 원인 3 x snapshot 3(`CauseCrossTable`)과 고르기 순수 함수의 snapshot 5종(`test_confirm_rules.cpp`)이다.
+   - 615행 근처: 어댑터 단위 테스트는 필드 대응과 enum 매핑을 합성 값과 전 범위 순회로 검사한다. 실측 값과의 일치는 재실측 (2), (3), (5)와 P4 SITL 시나리오가 맡는다.
+   - C5: 정리 분기의 확인 대 타임아웃도 같은 tick이면 타임아웃이 이긴다(만료는 >=).
+   - 구현에서 정한 것 19건(패키지 `ros_ws/src/idsim_mission/README.md`) 중 계약으로 올릴 것: 9, 10, 11, 13, 19, 1과 2.
+3. P4의 선행 작업: 측정 스크립트를 `tests/sitl/measure/`에 만든다(test-engineer, 절차 승인 px4-engineer). px4-engineer의 필수 재실측 (2), (3), (5)는 P4 머지 조건이다(`plan-1a-6-idsim-mission/decisions.md` 넘김 목록). 재실측 (3)에는 arm 전송부터 ARMED 3회까지 모든 표본의 `nav_state`, `failsafe`를, (2)와 (3)에는 `landed` 전환 횟수와 간격을 함께 기록한다.
+4. P4 착수 전 설계 토론(architect 주재, px4-engineer, ros2-engineer). P4 머지 조건이다.
+   - P6에서 ARMED를 본 뒤 OFFBOARD가 아닌 표본을 보면 발행을 멈추고 끝낸다(방향은 정해졌다). reason과 "arm 전이 중 정상 경로에서 OFFBOARD가 아닌 표본이 나오는지"를 정한다.
+   - 정리 분기 전체의 상한(취소는 유한 시간 안에 끝난다). 상한값, 상한에서의 reason과 마지막 동작. 지금은 지상 분기와 공중 분기가 바뀔 때마다 분기 타이머가 다시 시작한다.
+5. P4 생성기와 통합(devops-engineer, test-engineer, architect의 문서 반영). `ops-N` 서비스, params와 `stack.json` key, `tests/sitl/`, CI `sitl` job, `build_images.py --mode pull`. 함께 할 것: `idsim_mission/config/ops.example.yaml`의 손으로 쓴 식별자를 지우거나 install에서 빼기, 노드 이름 기본값 `mission_executor`와 생성기의 대조, CI 첫 몇 회의 노드 테스트(`test_executor_node`) 소요 기록(벽시계 1 ms당 sim 2 ms라 runner가 느리면 LINK_LOST로 흔들릴 수 있다. 흔들리면 재시도나 상한 늘리기로 덮지 않는다).
+6. P5 viz(devops-engineer). `foxglove`와 `lichtblick` 서비스, 브라우저 실접속 확인.
+7. 6단계 마무리: 통합 테스트 로컬 3회 연속 통과, CI `sitl` 통과, 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인.
+8. 1a 7단계 `docs/interface.md`. ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 계약 고정 전에 px4-engineer의 나머지 필수 재실측이 끝나야 한다. 6단계에서 넘어온 것: reason별 ABORTED 뒤 기체 상태 표(INTERNAL은 지상 arm으로 남거나 이륙 램프 중이면 offboard 손실 Land, NOT_READY는 손대지 않음, LAND의 MODE_SWITCH_FAILED 뒤 지상 disarm일 수 있음), 아무것도 하지 않은 goal의 취소가 Hold나 disarm을 보내는 동작의 재검토(ops-service-engineer 포함. failsafe Land 중인 기체를 Hold로 세울 수 있다).
+9. CI 후속 PR. `Dockerfile.px4`의 pip 고정과 `PX4_OPTICAL_FLOW_REF` 반영, `ls | grep` 정리(px4-engineer). `Dockerfile.sim-base`의 `GZ_APT_KEY_FPR` 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 이미지 key 재료 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 key에서 뺀 것이 "같은 key는 같은 바이트"의 예외라는 점 포함). `image_keys.py`가 bake 블록의 tags와 공백까지 해시하는 것 정리(devops-engineer).
 
 ## 미해결 사항
 
@@ -87,7 +98,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 빌드와 CI.
 
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
-- 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 8).
+- 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 9).
 - apt 미러: 지정 미러가 막히면 콜드 빌드가 실패한다. apt `Acquire::Retries` 미적용. CI에서는 Canonical 노드의 동기화 시차로 apt 단계가 간헐적으로 실패할 수 있다(대안: apt 단계 재시도, CI 미러 변경). GHCR 이미지를 받아 태그하는 `build_images.py --mode pull`은 P4에서 만든다.
 - `docker/Dockerfile.px4` 132행 주석이 없는 문서 이름 `smoke-test-phase1a.md`를 가리킨다. 주석만 고쳐도 px4 이미지 key가 바뀌므로 다음에 그 파일을 바꿀 때 `smoke-test.md`로 함께 고친다(px4-engineer).
 - `.github/workflows/build.yml`, `build-images.yml`, `tools/ci/image_keys.py`, `tools/ci/build_images.py`에 음차("키", "잡")가 남아 있다. 다음에 고칠 때 바꾼다.
@@ -124,10 +135,26 @@ Phase 2와 3 전에 정할 것.
 
 ## 새 개발 PC에서 시작할 때
 
-1. 호스트 조건과 환경 구성 순서는 저장소 루트 `README.md`의 "호스트 조건"과 "빠른 시작"을 따른다(`tools/check_host.sh`, 이미지 빌드, 스모크 images, px4-out, px4-in, clock). `tools/ci/lint.sh all`과 `tools/ros_ws.sh ci`가 통과해야 한다.
-2. 같은 호스트에 다른 ROS 2 스택, Gazebo, compose 프로젝트가 있는지 먼저 본다(`docker ps`, `docker compose ls`). 겹치면 스택 번호 k(`--stack k` 또는 `IDSIM_STACK_INDEX`)를 바꾼다.
-3. PR을 올리려면 gh(GitHub CLI)에 로그인한다(`gh auth login`).
-4. 사용자 전역 규칙은 저장소 밖에 있다: `~/.claude/CLAUDE.md`(커밋과 PR에 공동 저자 줄을 넣지 않는다). 새 PC에도 같은 파일을 둔다.
+1. 저장소를 받는다(`git clone https://github.com/danielhongwoo/idsim.git`). 작업은 main에서 브랜치를 만들어 한다. 열린 브랜치와 PR은 `gh pr list`로 본다.
+2. 호스트 조건과 환경 구성 순서는 저장소 루트 `README.md`의 "호스트 조건"과 "빠른 시작"을 따른다(`tools/check_host.sh`, 이미지, 스모크 images, px4-out, px4-in, clock). 이어서 `tools/ci/lint.sh all`과 `tools/ros_ws.sh ci`가 통과해야 한다.
+3. 이미지는 로컬 빌드(`python3 tools/ci/build_images.py --mode load`, 콜드 약 22분) 대신 GHCR에서 받아 쓸 수 있다. `--mode pull`이 생기기 전에는 손으로 받는다. key는 `python3 tools/ci/image_keys.py`가 보여 주고, main build가 그 key를 올린 뒤에만 받을 수 있다.
+
+```
+python3 tools/ci/image_keys.py
+for img in ros-base ros-ws xrce-agent sim-base px4; do
+  key=$(python3 tools/ci/image_keys.py | awk -v i="$img" '$1==i{print $2}')
+  docker pull "ghcr.io/danielhongwoo/idsim/${img}:${key}"
+  docker tag "ghcr.io/danielhongwoo/idsim/${img}:${key}" "idsim/${img}:local"
+done
+```
+
+4. 같은 호스트에 다른 ROS 2 스택, Gazebo, compose 프로젝트가 있는지 먼저 본다(`docker ps`, `docker compose ls`). 겹치면 스택 번호 k(`--stack k` 또는 `IDSIM_STACK_INDEX`)를 바꾼다.
+5. PR을 올리려면 gh(GitHub CLI)에 로그인한다(`gh auth login`). `gh pr edit`는 이 저장소에서 GraphQL Projects(classic) 오류로 실패하므로 PR 본문은 `gh api -X PATCH repos/danielhongwoo/idsim/pulls/<번호> -F body=@<파일>`로 고친다.
+6. 저장소 밖에 있던 것.
+   - 사용자 전역 규칙 `~/.claude/CLAUDE.md`: 커밋 메시지와 PR 본문에 Co-Authored-By 같은 공동 저자 줄이나 생성 도구 표기를 넣지 않는다. 새 PC에도 같은 파일을 둔다.
+   - Claude Code 메모리(`~/.claude/projects/<저장소>/memory/`)는 옮겨지지 않는다. 거기 있던 규칙(공동 저자 줄 금지, 기술 용어 영문 표기, 문서는 현재 상태만, px4-engineer의 sonnet 예외)은 모두 `CLAUDE.md`와 이 파일의 "운영 규칙"에 있다.
+   - 담당자 검토 보고는 저장소 파일로 두지 않는다. 지난 검토 내용은 PR 본문에 있다(P3은 PR #27).
+   - 로컬 `artifacts/`(스모크와 실측 기록)는 옮겨지지 않는다. 필요한 값은 PR 본문과 `tests/fixtures/`에 있다.
 
 ## 갱신 규칙
 
