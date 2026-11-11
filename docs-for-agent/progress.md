@@ -47,6 +47,7 @@
 - 2026-11-11: 3단계 사용자 육안 확인 2건 완료. 1a 6단계(이륙-호버-착륙 노드와 통합 테스트) 설계 결정 확정(브랜치 `docs/1a-6-plan`, 계획과 계약은 `docs-for-agent/plan-1a-6-idsim-mission/`의 README.md와 decisions.md). 다음은 P0(CI trigger), P1(ros-ws 이미지 foxglove_bridge), P2(`idsim_common` 추가), P3a(autostart 런타임 확인) 착수. P3b(상태기)는 px4-engineer 승인 항목 뒤.
 - 2026-11-11: 1a 6단계 P0 완료(PR #19 머지). lint와 unit의 trigger를 `pull_request` + `push: main`으로 정리했고, main에서는 실행마다 concurrency group을 달리해 push마다 결과가 남는다. PR이 없는 브랜치 push에는 CI가 돌지 않는다.
 - 2026-11-11: px4-engineer가 P3b 착수 전 승인 항목 다섯을 검토했다(승인 2건, 수정 조건부 3건, 반대 없음. 스택 5 실측 run 20261111-030155-k5). 근거는 `docs-for-agent/plan-1a-6-idsim-mission/approval-px4-p3b.md`, 반영은 같은 디렉터리 `decisions.md`의 "px4-engineer 승인 반영"(브랜치 `docs/1a-6-p3b-approval`). 이 PR이 머지되면 P3b를 시작할 수 있다. P1, P2, P3a는 진행 중이다.
+- 2026-11-11: 위 반영은 PR #21로 main에 들어갔다(P3b 착수 가능). PR #21에 대한 reviewer 판정은 조건부(필수 5건, 권고 6건)였고 머지 전에 반영되지 않아 후속 PR(브랜치 `docs/1a-6-p3b-review`)로 반영한다. px4-engineer의 반영 확인은 이 개정 뒤에 다시 받는다(사용자 결정).
 - 다음 작업:
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
   2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
@@ -80,7 +81,7 @@
 
 | Phase | 상태 | 마지막 갱신 | 비고 |
 | --- | --- | --- | --- |
-| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계 완료(PR #10, 사용자 육안 확인 2026-11-11 완료). 4단계 완료(PR #15, `docs-for-agent/plan-1a-4-idsim-common/`). 5단계 완료(PR #17, `docs-for-agent/plan-1a-5-idsim-interfaces/`). 6단계 설계 결정 확정, 구현 전(`docs-for-agent/plan-1a-6-idsim-mission/`. P0 완료(PR #19), P1, P2, P3a 진행 중, px4-engineer 승인 항목은 닫혔고 반영 PR 머지 뒤 P3b) | 2026-11-11 | 스모크 설계는 `docs/smoke-test.md` |
+| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계 완료(PR #10, 사용자 육안 확인 2026-11-11 완료). 4단계 완료(PR #15, `docs-for-agent/plan-1a-4-idsim-common/`). 5단계 완료(PR #17, `docs-for-agent/plan-1a-5-idsim-interfaces/`). 6단계 설계 결정 확정, 구현 전(`docs-for-agent/plan-1a-6-idsim-mission/`. P0 완료(PR #19), P1, P2, P3a 진행 중, px4-engineer 승인 항목은 닫혔고(PR #21) P3b 착수 가능. reviewer 조건은 후속 PR) | 2026-11-11 | 스모크 설계는 `docs/smoke-test.md` |
 | 1b | 시작 전 | 2026-11-06 | |
 | 2 | 시작 전 | 2026-11-06 | |
 | 3 | 시작 전 | 2026-11-06 | |
@@ -201,6 +202,8 @@
 - 2026-11-11: 1a 6단계 설계 토론(의견 px4, ros2, test, devops. architect 결정과 재질문 다섯 건, reviewer 검증 조건부 -> 개정). 결정은 `docs-for-agent/plan-1a-6-idsim-mission/decisions.md`. 요지: 호스트 wrapper `tests/sitl/run_sitl.sh`가 스택을 올리고 fixture는 붙기만 한다, 기체당 `ops-N` 서비스(component_container_isolated, autostart lifecycle), Offboard 먼저 arm 나중, EKF 준비는 `failsafe_flags` 넷, Offboard 아닌 모드에서는 setpoint 발행 중단(px4 실측), `MissionEvent`는 VOLATILE 유지, 5단계 계약의 의미 변경 M1-M5(고정 전)와 `REASON_DISARM_FAILED = 13` 상수 추가(golden 두 파일 한 줄씩), PR 분할 P0-P5.
 - 2026-11-11: 1a 6단계 사용자 결정. U1 공중 취소 시나리오 D와 `[LAND]` 한 항목 미션을 1a 필수에 넣는다. U2 `sitl`은 PR 머리 커밋마다(draft, 문서만 바뀐 PR 제외)와 main push, lint와 unit trigger도 `pull_request` + `push: main`으로 맞춘다. U3 공중에서 끝나는 미션(마지막 항목이 LAND가 아님)의 종료 동작은 1b로 미루고 1a 노드는 INVALID_MISSION으로 거부한다(5단계 사용자 결정 1의 1a 고정 범위에서 이 조각을 뺐다). `idsim_mission` 소유는 ros2-engineer(`px4/` 디렉터리는 px4-engineer)로 `CLAUDE.md`와 `.claude/agents/`에 반영. 문서의 "러너, 트리거, 게이트"는 runner, trigger, gate로 쓴다. px4-engineer 운용 방법은 그대로 둔다.
 - 2026-11-11: 1a 6단계 px4-engineer 승인 반영(architect). P3b 착수 전 승인 항목 다섯이 닫혔다. 요지: 지상 arm 정리는 TAKEOFF 목표점이 아니라 지상 setpoint(그 tick의 위치에서 z만 +0.5 m, NED. 어댑터 상수)를 발행하며 disarm한다(목표점을 유지하면 disarm이 거부되고 4.2 m 올라간다. 실측 K). 이 goal에서 arm을 한 번이라도 보냈으면 지상에서 DISARMED로 보여도 disarm 확인을 거친다(arm 전송 뒤의 경쟁). disarm의 지상 대 공중 분류는 처음 관측한 DISARMED 표본의 tick에 고정한다. LAND 감시 보강 셋, LAND 항목의 ITEM_TIMEOUT은 Hold 없이 발행과 재전송만 멈춘다. 타임아웃과 재전송 규칙은 px4 값 그대로 채택. 지면 근처 Hold는 내려앉지 않고 ARMED, landed false로 머문다(실측 3회, 12 s)는 것이 확인되어 M3의 계약 문장 둘을 고쳤고, 필수 재실측은 AUTO_LAND 하강 중 0.3 m 아래 취소와 표본 늘리기(X3 유지)로 좁혔다. architect 결정: setpoint 항목 중 지상에서 Executor가 보내지 않은 disarm은 새 상수 없이 `failsafe`이면 REASON_FAILSAFE, 아니면 REASON_EXTERNAL_MODE_CHANGE로 끝낸다(다음 동작이 같고, 끝난 뒤 상태가 안전하며, 원인을 Executor가 모르고, 가른 값의 소비자가 없다). `REASON_*` 상수와 golden은 바뀌지 않는다(`REASON_DISARM_FAILED = 13` 하나 그대로). 지상 disarm 확인은 `mode_confirm_timeout`을 그대로 쓴다. 상세는 `docs-for-agent/plan-1a-6-idsim-mission/decisions.md`.
+- 2026-11-11: PR #21 reviewer 검증(조건부) 반영(architect). 위 항목에서 바뀐 것. 1) setpoint 항목 중 지상에서 Executor가 보내지 않은 disarm의 reason을 새 상수 `REASON_EXTERNAL_DISARM = 14`로 바꿨다(`failsafe`이면 REASON_FAILSAFE). 앞 결정(EXTERNAL_MODE_CHANGE에 묶기)의 근거가 M5의 상수 추가도 기각하는 논리였고 다음 동작도 같지 않았기 때문이다. M5 (나)와 같은 기준(끝난 뒤 상태와 다음 동작이 다르고, 고정 뒤에는 가를 수 없다)을 적용했다. 6단계가 더하는 상수는 13과 14 둘이고 golden은 `ExecuteMission`의 두 파일에 두 줄씩이다(P3e). 2) 비행 중 감시 표에 행 순위를 두었다(잠정): `Px4Timestamp` 실패, 식별 불일치, LINK_LOST, DISARMED 두 행, 모드 세 행 순. 3) 실측이 없는 두 경로(지상 setpoint 발행 중의 Hold, 이륙 직후 landed가 true인 구간의 지상 setpoint와 disarm)는 닫힌 것이 아니다. P3b는 표대로 구현하되 재실측으로 바뀔 수 있다. 4) M3 계약 문장의 실측 범위를 좁혀 적고(Hold 종료 표본 2회, 12 s 관찰, 스크립트 명령) 미확인 목록을 두었다. 필수 재실측은 여덟 항목으로 다시 정했다. architect가 채운 문장과 새 상수는 개정 뒤 px4-engineer 확인을 받는다.
+- 2026-11-11: 사용자 결정 2건. U4 replay job의 trigger는 지금 정하지 않고 replay job을 만드는 Phase 2에서 정한다. `docs/architecture.md` 277행과 `docs/roadmap.md` 59행은 그때 고친다. U5 px4-engineer의 반영 확인은 architect 개정이 끝난 뒤 다시 받는다.
 
 ## 미해결 사항
 
@@ -230,7 +233,9 @@
 - reviewer PR 전 검토 결과(2026-11-10). 결함 주입 실험에서 음성 컴파일 4건, 골든 양방향 일치, 3곳 일치 테스트가 실제로 실패를 잡았다. 머지 차단 3건(테스트의 버전 리터럴, architecture.md ros-ws 설명, 음차)은 모두 반영했다. 권고 중 반영한 것: px4-api 패턴 확대, unit.yml key 계산 실패 검사, ros_ws.sh errexit 주석, 묵은 test_results로 테스트 수가 집계되던 문제 수정(사실로 확인됨. `do_test`가 colcon test 전에 결과를 지운다), 테스트 2곳 정리.
 - PX4 timestamp와 `/clock`이 같은 축이라는 주장은 1회 실측과 구조 논증만 있고 회귀 판정은 6단계 failsafe 테스트까지 없다. S5에 `vehicle_status.timestamp`와 `/clock`의 차이 상한 판정을 넣을지 px4-engineer와 test-engineer가 검토한다.
 - px4-api 검사는 C++과 `.py`만 본다. 6단계에서 params, remap yaml이 생기면 범위를 다시 본다.
-- (2026-11-11) `docs/architecture.md` 276-277행과 `docs/roadmap.md` 59행의 "모든 push" 문장은 P0(PR #19) 뒤 틀린 문장이 되었다. P4 문서 반영 목록에 넣었다(`docs-for-agent/plan-1a-6-idsim-mission/decisions.md`의 문서 반영 목록. architect가 P4 PR에서 고친다).
+- (2026-11-11) `docs/architecture.md` 276행(테스트 층 표의 단위 행)의 "모든 push"는 P0(PR #19) 뒤 틀린 문장이 되었다. 같은 표 머리(274행)의 음차 "트리거"와 함께 P4 문서 반영 목록에 넣었다(`docs-for-agent/plan-1a-6-idsim-mission/decisions.md`. architect가 P4 PR에서 고친다).
+- (2026-11-11) replay job trigger는 Phase 2에서 정함(사용자 결정 2026-11-11). `docs/architecture.md` 277행과 `docs/roadmap.md` 59행의 "모든 push"는 그때 고친다.
+- (2026-11-11) 1a 6단계 필수 재실측(px4-engineer, 7단계 고정 전. `decisions.md` 넘김 목록의 여덟 항목)과 px4-engineer의 반영 확인(개정 뒤 px4 확인 예정)이 남아 있다.
 - 이 PR이 손대지 않은 `.github/workflows/build.yml`, `build-images.yml`, `tools/ci/image_keys.py`, `tools/ci/build_images.py`에 음차("키", "잡")가 남아 있다. 다음에 고칠 때 바꾼다.
 - px4-engineer가 이 프로젝트 작업에서 안전장치 오류로 반복 중단된다(이번 3회, 설계 토론 때 architect와 reviewer 포함 3회). PX4 인터페이스 작업의 운용 방법이 필요하다. 사용자가 오탐으로 신고하기로 했다(Request ID req_011CgtyuPphfbHiy5z6LYHwa, req_011Cgu1vZ83zmpEFgTFRgHSX, req_011Cgu4CY2zeGbKJuHzw7Gf4). 6단계 전에 결과를 보고 운용 방법을 다시 정한다. 2026-11-11 사용자 결정: 운용 방법은 그대로 둔다(px4-engineer를 계속 호출하고, 중단되면 같은 방식으로 대응).
 - clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다. tidy 대상은 `src/`의 소스이고 헤더는 소스가 include할 때만 검사되는데 `src/`가 이 두 헤더를 include하지 않기 때문이다. 헤더 전용 검사를 둘지, `test/`를 tidy 대상에 넣을지 정해야 한다(ros2-engineer와 devops-engineer).
