@@ -9,7 +9,7 @@
 | 1a | 환경 검증, CI 골격, 공통 라이브러리, 이륙과 착륙 | `docker/` 이미지 5종, 스모크 골든 파일, `config/fleet.yaml`과 생성 스크립트, CI lint/build/unit job, `idsim_common`, `idsim_interfaces`, `/clock` 브리지, 이륙-호버-착륙 Offboard 통합 테스트, `docs/interface.md`, `tools/qgc.sh`와 compose `viz` 프로필(Gazebo GUI, foxglove_bridge, Lichtblick) |
 | 1b | 미션 시퀀스와 표적 추종 | `idsim_mission`, `idsim_sim`(월드, 표적 Actor, 표적 어댑터), 단일 기체 미션 통합 테스트 |
 | 2 | 텔레메트리 수집 + 로그/리플레이 | `idsim_telemetry`, `idsim_logger`, WebSocket 페이지, `replay` 프로필, 기록물 인덱스 CLI, replay CI job |
-| 3 | 멀티 기체 Fleet + Mission Planning | 3대 compose 생성, `idsim_fleet`, gRPC API, Rust 게이트웨이, 시나리오 러너, 3대 배분과 재배분 nightly 테스트 |
+| 3 | 멀티 기체 Fleet + Mission Planning | 3대 compose 생성, `idsim_fleet`, gRPC API, Rust 게이트웨이, 시나리오 runner, 3대 배분과 재배분 nightly 테스트 |
 
 각 Phase는 앞 Phase의 완료 기준을 만족한 뒤 시작한다. Phase 1a에서 만드는 공통 라이브러리, 기체 식별 규칙, 인터페이스 계약이 이후 모든 Phase의 토대이므로, Phase 3에서 재사용이 안 되면 Phase 1a 설계로 돌아간다. 인터페이스 계약은 정의를 Phase 1a에서 전부 만들되, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춰 나눈다. 1a 완료에 공통 규칙, `ExecuteMission`, TAKEOFF, LOITER, LAND 항목. 1b 완료에 `TargetState`, GOTO, TRACK_ENTITY, RTL 항목. Phase 2 완료에 `VehicleState`와 `MissionEvent`. 묶음별 범위와 "고정"의 정의는 architecture.md의 인터페이스 계약 절에 있다. 가장 큰 리스크 두 가지(버전 조합, 컨테이너 간 DDS)는 Phase 1a 안에서 닫는다.
 
@@ -67,7 +67,7 @@
 3. `idsim_fleet` Fleet Manager (C++). 기체 레지스트리(`VehicleState` 수신으로 등록, `/clock` 기준 미수신 타임아웃으로 이탈 감지. 구독 대상을 params의 기체 목록으로 정할지 그래프에서 찾을지는 Phase 3 착수 때 정한다. 어느 쪽이든 그래프 항목의 생성과 소멸로 등록이나 이탈을 판정하지 않는다), 전체 기체 상태 집계, 미션 큐와 배분(가용 기체 중 표적에 가장 가까운 기체 선택 정도의 단순 규칙), 미션 상태 추적(대기 -> 배분 -> 실행 -> 완료/실패). gRPC 서버 스레드와 rclcpp executor라는 두 이벤트 루프가 공유하는 상태는 단일 뮤텍스로 보호하고, 설계 문서에 어떤 스레드가 어떤 상태를 쓰는지 표로 적는다.
 4. gRPC API (`proto/fleet.proto`). `ListVehicles`, `StreamVehicleStates`(server streaming), `StreamMissionEvents`(server streaming), `SubmitMission`, `AbortMission`, `GetMissionStatus`. Protobuf `VehicleState`와 ROS msg의 변환은 `idsim_fleet` 변환 모듈 한 곳에서만 하고 왕복 단위 테스트를 둔다. Python 클라이언트 CLI로 호출.
 5. 브라우저 게이트웨이 (`gateway/`, Rust). tonic으로 Fleet Manager의 두 스트림을 구독해 WebSocket으로 중계하고, 미션 제출과 중단을 HTTP JSON으로 받아 gRPC로 넘기며, Phase 2 페이지를 정적으로 서빙한다. ROS 2 비의존이므로 cargo만으로 빌드하고 단위 테스트는 gRPC 서버 목으로 한다. Phase 2에서 고정한 WebSocket JSON 스키마를 그대로 지킨다.
-6. 시나리오 정의. `missions/scenario_*.yaml`에 기체 수, 초기 배치, 표적 Actor 경로, 미션 목록을 한 파일로. 시나리오 러너(Python)가 `config/fleet.yaml` 생성 -> compose 생성 -> `up --wait` -> 미션 제출 -> 기록 -> 판정까지 한 번에.
+6. 시나리오 정의. `missions/scenario_*.yaml`에 기체 수, 초기 배치, 표적 Actor 경로, 미션 목록을 한 파일로. 시나리오 runner(Python)가 `config/fleet.yaml` 생성 -> compose 생성 -> `up --wait` -> 미션 제출 -> 기록 -> 판정까지 한 번에.
 7. 검증. 시나리오 "3대, 표적 2개, 동시 배분"에서 두 미션이 서로 다른 기체에 배분되고 모두 완료되는지, 한 기체의 px4 컨테이너를 강제 종료했을 때 Fleet Manager가 이탈을 감지하고 미션을 다른 기체에 재배분하는지를 pytest로. 배분 규칙은 단위 테스트로 먼저 덮고, SITL 테스트는 nightly 전용. QGroundControl에 3대가 `MAV_SYS_ID`로 구분되어 모두 표시되는지는 확인 항목이며 판정에는 넣지 않는다.
 
 완료 기준: 3대 시나리오가 headless로 nightly에서 통과하고, 재배분 테스트가 통과하며, 기록물 하나에 3대 모두의 토픽이 네임스페이스로 구분되어 들어 있다.
@@ -87,7 +87,7 @@ PC 한 대에서 Gazebo + PX4 3대 + 노드들을 돌리면 CPU가 부족할 수
 | 컨테이너 간 DDS 데이터 미수신 | 토픽은 보이나 데이터가 안 오거나 간헐적으로 끊김 | rmw를 CycloneDDS로 고정해 공유 메모리 전송 경로를 없애고, `network_mode: host`, `config/cyclonedds.xml`에 유니캐스트 피어 명시(인터페이스는 고정하지 않음. 에이전트가 호스트 인터페이스 주소만 광고한다) |
 | 같은 호스트의 스택 충돌 | 개발자 둘 또는 병렬 CI job이 서로의 토픽과 포트를 봄 | 생성 인자 k로 `ROS_DOMAIN_ID`, 에이전트 포트, MAVLink 포트 분리 |
 | 스택 둘의 MAVLink 포트 충돌 | 오프셋이 없으면 스택 k가 달라도 같은 N의 PX4가 같은 로컬 포트(18570+N, 14580+N)에 bind해 두 번째 스택이 `bind failed` 경고를 내고(실측) GCS 14550도 공유된다 | PATH 앞의 idsim용 `px4-rc.mavlink`가 스택 오프셋 1000k를 적용하고, 스모크가 px4 로그에 `bind failed`가 없음을 판정한다. `MAV_SYS_ID`는 스택 간에 같아 QGC 하나는 한 번에 한 스택만 본다는 제약을 `docs/interface.md`에 적는다 |
-| 시작 순서 | gazebo 전에 px4가 스폰을 시도해 실패, 테스트 플래키 | healthcheck + `depends_on` 조건 + `compose up --wait` |
+| 시작 순서 | gazebo 전에 px4가 스폰을 시도해 실패, 테스트 flaky | healthcheck + `depends_on` 조건 + `compose up --wait` |
 | 시간 기준 불일치 | 라이브와 리플레이의 판정이 다름 | 정식 기준은 `/clock`, 기록은 `--use-sim-time`, `/clock` 미기록 |
 | PC 성능 | 3대 시나리오에서 Gazebo 물리 스텝 드롭, PX4 타이밍 경고 | headless 기본, `PX4_SIM_SPEED_FACTOR` 조절, 카메라와 라이다 없는 기본 x500 모델 사용, 표적은 Actor |
 | Offboard 모드 진입 실패 | 기체가 arm되지 않거나 바로 페일세이프 | setpoint를 20 Hz로, 모드 전환 전 최소 10회 발행, EKF 수렴(`vehicle_local_position.xy_valid`) 대기 후 arm, `COM_OBL_RC_ACT` 명시 |

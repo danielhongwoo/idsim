@@ -598,7 +598,7 @@ feedback 주기는 계약이 아니다. 참고값은 전이 시점과 2 Hz 이�
   - 필드는 끝에 추가만 한다. 기존 필드의 이름, 타입, 의미, 단위를 바꾸지 않는다. 고정 전인 파일에서는 첫 소비자의 구현에서 드러난 문제에 한해 바꿀 수 있다. 고정 여부는 파일 단위이고 판정은 직접 정의 golden으로 한다("고정 시점과 범위 구분").
   - 상수 값은 재사용하지 않는다. enum 값과 비트는 추가만 한다.
   - "예약 필드"를 미리 두지 않는다(CDR은 위치 기반이라 자리를 잡아도 호환이 생기지 않는다).
-  - 계약 변경 PR에는 golden 갱신, `docs/interface.md`, `progress.md` 결정 기록, (Phase 3 뒤) proto와 왕복 테스트, 영향받는 replay fixture 갱신이 함께 들어가고 architect 승인이 필요하다.
+  - 계약 변경 PR에는 golden 갱신, `docs/interface.md`, PR 본문의 결정 근거, (Phase 3 뒤) proto와 왕복 테스트, 영향받는 replay fixture 갱신이 함께 들어가고 architect 승인이 필요하다.
 - Protobuf 스키마 규칙(스키마 설계는 architect, 파일은 Phase 3 착수 때 ops-service-engineer가 만든다. 1a에 코드 생성 도구를 들이지 않는다)
   - 패키지는 `idsim.fleet.v1`, 파일은 `proto/idsim/fleet/v1/`. 깨는 변경은 v2로만 한다.
   - 필드 번호는 ROS 필드 순서(1부터)와 같다. 번호는 재사용하지 않고 지운 필드는 `reserved`로 막는다.

@@ -143,7 +143,7 @@ http 미러만 가능하다(베이스 이미지에 CA 인증서가 없어 https 
 UBUNTU_APT_MIRROR=http://archive.ubuntu.com/ubuntu python3 tools/ci/build_images.py --mode load
 ```
 
-CI(`build-images.yml`)는 러너가 미국에 있어 위 방식으로 우분투 기본 미러를 쓴다. `tools/check_host.sh`의 미러 검사도 같은 값을 읽는다.
+CI(`build-images.yml`)는 runner가 미국에 있어 위 방식으로 우분투 기본 미러를 쓴다. `tools/check_host.sh`의 미러 검사도 같은 값을 읽는다.
 
 스택 올리기와 내리기. 저장소 루트에서 실행한다. `up` 한 번이 생성, 떠 있던 같은 스택 내리기, 두 단계 `up --wait`(gazebo까지 올린 뒤 이 스택의 모델이 Gazebo에 남아 있지 않은지 확인하고 나머지를 올린다)를 모두 한다. 실패하면 에이전트의 `bind error`와 px4의 `bind failed`를 찾아 알려 준다.
 

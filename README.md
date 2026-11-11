@@ -13,7 +13,7 @@ idsim은 Interceptor Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, RO
 | 저장소 경로 | 공백과 아스키 밖 문자가 없어야 한다(생성기 `PATH_SAFE_RE`가 거부한다) |
 | 도구 | git, python3 (표준 라이브러리만 사용. 3.12에서 확인, 하한 3.10), curl, sha256sum |
 | 디스크 | 30GB 이상 권장. 근거: 이미지 5종 합 약 8.6GB(공유 레이어 중복 포함이라 실제 점유는 더 작다) + px4 builder 단계 7.7GB + buildkit 캐시 |
-| 메모리 | 16GB 이상. 개발 VM 31GB와 CI 러너 16GB에서 확인했고 그 아래는 미실측 |
+| 메모리 | 16GB 이상. 개발 VM 31GB와 CI runner 16GB에서 확인했고 그 아래는 미실측 |
 | 선택 | gh (PR을 올리거나 합칠 때), 화면 확인용 X11 또는 XWayland 데스크톱 |
 
 조건은 `tools/check_host.sh`가 점검한다. 시스템을 바꾸지 않고 조회만 하며, 외부 네트워크 검사는 `--offline`으로 건너뛴다.
@@ -34,7 +34,7 @@ tests/smoke/run_smoke.sh clock
 | 명령 | 하는 일 |
 | --- | --- |
 | `tools/check_host.sh` | 호스트가 위 조건을 갖췄는지, 포트와 미러 접근에 문제가 없는지 본다 |
-| `python3 tools/ci/build_images.py --mode load` | 이미지 5종을 로컬에 빌드한다. 콜드 빌드는 CI 러너에서 약 22분이다 |
+| `python3 tools/ci/build_images.py --mode load` | 이미지 5종을 로컬에 빌드한다. 콜드 빌드는 CI runner에서 약 22분이다 |
 | `tests/smoke/run_smoke.sh images` | 이미지 버전과 `docker/versions.env`의 일치를 본다. 스택을 올리지 않는다 |
 | `tests/smoke/run_smoke.sh px4-out` | 운용과 같은 구성(Gazebo 분리)에서 기체 스폰, PX4 -> ROS 방향 토픽, `commander check`를 본다 |
 | `tests/smoke/run_smoke.sh px4-in` | ROS -> PX4 방향. arm/disarm 왕복과 `trajectory_setpoint` 구독을 본다. 미션 노드가 이 방향으로 명령과 setpoint를 보낸다 |

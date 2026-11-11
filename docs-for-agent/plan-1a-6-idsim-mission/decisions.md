@@ -279,7 +279,7 @@ px4-engineer 최종 확인(px4-engineer 최종 확인(git 이력). PX4 v1.17.0 �
 - 이 변경의 절차 근거(5단계 `decisions.md`): 110행 "상수는 고정 전후 모두 추가만 한다. 상수의 의미는 그 상수를 처음 쓰는 소비자가 생기는 묶음과 함께 고정된다", 112행 "고정 전에는 첫 소비자의 구현에서 드러난 문제가 변경 사유로 인정된다", 598행(필드와 의미의 변경 규칙. 고정 여부는 파일 단위, 판정은 직접 정의 golden), 630행(지상 취소에서 disarm이 거부되거나 확인되지 않을 때의 분기를 6단계 px4-engineer에 넘김), 680행(Hold 실패와 지상 disarm 정책은 6단계 실험 결과에 따라 1a 고정 전에 바뀔 수 있다고 사용자에게 알림). `ExecuteMission.action`은 아직 고정 전이고 첫 소비자(6단계 Executor)의 설계에서 드러난 분기다.
 - M5에서 (가) "REASON_MODE_SWITCH_FAILED의 의미를 넓히고 뒤에 가르지 않는다"가 아니라 (나) 상수 추가를 고른 이유: 두 경우는 ABORTED 뒤의 기체 상태가 다르다. Hold 실패는 Executor가 Land를 보내 기체가 내려오는 중이고, 지상 disarm 실패는 기체가 지상에 arm 상태로 남는다. 읽는 쪽(Fleet, 운용자)의 다음 동작이 갈린다. (가)로 가면 1a에 고정된 뒤에는 "상수의 의미를 바꾸지 않는다"에 걸려 영영 가를 수 없다. 앞 판의 "상수는 나중에 더하면 된다"는 논리는 이 점에서 틀렸으므로 철회한다(나중에 더하면 기존 상수의 의미가 좁아진다). 고정 전인 지금은 golden 두 줄의 비용뿐이다.
 - 나머지(M1-M4와 전이 표)는 의미 변경(고정 전)이고 golden은 바뀌지 않는다. 반영할 곳은 `ExecuteMission.action`의 주석(주석은 직접 정의 golden에 들어가지 않는다), 7단계 `docs/interface.md`, `docs/architecture.md` 인터페이스 계약 절이다.
-- 계약 golden이 바뀌는 PR(P3)에는 architect 승인과 `progress.md` 결정 기록이 함께 들어간다(file-ownership.md). `docs/interface.md`는 7단계에 만들어지므로 그때 반영한다.
+- 계약 golden이 바뀌는 PR(P3)에는 architect 승인이 필요하고 결정 근거는 PR 본문에 적는다(file-ownership.md). `docs/interface.md`는 7단계에 만들어지므로 그때 반영한다.
 - `last_item_index`의 "항목 시작 전 실패" 구분 필드(5단계에서 6단계로 넘긴 검토 항목): 의견서 넷 어디에서도 필요가 나오지 않았다. 더하지 않는다. P3 구현이 끝날 때 한 번 더 확인하고 7단계에서 닫는다.
 
 변경 다섯 건(쟁점 3에 근거).
@@ -841,8 +841,6 @@ reviewer: 이 문서의 검증("reviewer가 검증할 가정")과 PR마다의 �
   - 테스트 절의 통합 테스트 구조: "pytest fixture가 `docker compose up --wait`로 스택을 올리고"를 "호스트 wrapper `tests/sitl/run_sitl.sh`가 `tools/sim_stack.sh`로 스택을 올리고 내리며, pytest는 `runner` 안에서 돌고 fixture는 이미 뜬 스택에 붙어 준비 상태를 검증한다"로. "fixture가 active 전이를 기다릴 수 있게"는 "compose healthcheck가 active를 확인한다"로.
   - 테스트 절의 판정 기준: "도달은 `vehicle_local_position`과 setpoint 거리"를 "goal의 목표값과 `vehicle_local_position`"으로.
   - CI 절 (4) `sitl`: 실패 산출물을 ULog, compose logs, ros_log, 판정 trace로, "MCAP 업로드는 Phase 2부터". "PR당 1회"를 "PR 머리 커밋당 1회, 자동 재시도 없음"으로(U2).
-  - 276행(테스트 층 표의 단위 행의 실행 시점 "모든 push"): P0(PR #19) 뒤 틀린 문장이다. "PR 머리 커밋마다와 main push"로(U2. PR이 없는 브랜치 push에는 돌지 않는다). 277행(리플레이 통합 행)은 아직 없는 replay job의 계획이라 여기서 고치지 않는다(U4. Phase 2).
-  - 274행(같은 표의 머리)의 음차 "트리거"를 trigger로.
   - 283행 (1) `lint`: `px4-api` 검사의 넓힌 범위(yaml, 생성기 golden params, `tests/sitl`, `tests/support`와 예외 파일).
   - 191행(시작 순서와 healthcheck)과 193행(컨테이너 사용자)의 `ros-ws` 서비스 이름을 `ops-N`으로, 노드 단계와 lifecycle healthcheck.
   - 인터페이스 계약 절의 고정 시점 문장: 1a 완료에 고정되는 `ExecuteMission`의 범위에서 "공중에서 끝나는 미션의 종료 동작"을 빼고 1b 완료로(U3).
@@ -886,7 +884,7 @@ reviewer: 이 문서의 검증("reviewer가 검증할 가정")과 PR마다의 �
 ```
 
 - `docs-for-agent/file-ownership.md`(호출한 쪽): "idsim_mission의 승인 규칙" 절에 한 줄을 더한다. "`tests/sitl/measure/`(실측 스크립트)는 test-engineer 소유이고 측정 절차의 변경은 px4-engineer가 필수 승인자다."
-- `docs-for-agent/progress.md`(호출한 쪽): 결정 기록, "Lichtblick 2.5.2" 정정, 닫히는 미해결 항목(6단계로 넘김 4건, clock의 `/clock` 판정, `px4-api` 범위, `start_interval` 하한, `--run-id`, `--mode pull`), "다음 작업 5"의 bridge 설정 파일은 1b로.
+- `docs-for-agent/progress.md`(호출한 쪽): 현재 상태 갱신, "Lichtblick 2.5.2" 정정, 닫히는 미해결 항목(6단계로 넘김 4건, clock의 `/clock` 판정, `px4-api` 범위, `start_interval` 하한, `--run-id`, `--mode pull`), "다음 작업 5"의 bridge 설정 파일은 1b로.
 - `CLAUDE.md` 담당자 표와 `.claude/agents/`(사용자 승인 2026-11-11, 호출한 쪽이 반영 완료)
   - `CLAUDE.md` 표의 ros2-engineer 소유 영역: "`idsim_common`, `config/cyclonedds.xml`"에 "`idsim_mission`(`px4/` 디렉터리 제외)"를 더한다.
   - `CLAUDE.md` 표의 px4-engineer 소유 영역: "`idsim_mission`의 PX4 인터페이스"를 "`idsim_mission`의 `px4/` 디렉터리(어댑터), 상태기 전이 표의 필수 승인"으로.

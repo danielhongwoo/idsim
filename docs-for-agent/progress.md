@@ -36,8 +36,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 담당자 구성과 모델 선택의 기본은 `CLAUDE.md`에 있다. 아래는 그 밖에 지금 적용되는 규칙이다.
 
 - 문서에는 지금 유효한 것만 둔다. 이력(누가 언제 무엇을 왜 바꿨는지, 실측 run, 검토 경과)은 커밋 메시지와 PR 본문에 적는다(사용자 결정).
-- px4-engineer의 읽기 전용 확인과 정형 작업은 sonnet으로 부른다(사용자 결정. 기본 모델 opus의 예외). 실측, 구현, 설계 토론에는 적용하지 않는다.
-- px4-engineer 호출이 모델 안전장치 오류로 중단되어도 운용 방법을 바꾸지 않는다(사용자 결정). 계속 호출하고, 중단되면 다시 호출한다. 그래도 답을 받지 못한 검토 항목은 미결로 적고 architect에게 알린다.
+- px4-engineer의 모델 선택 예외는 `CLAUDE.md` 모델 선택 규칙의 "사용자 예외"를 따른다(읽기 전용 확인과 정형 작업은 sonnet, 안전장치로 중단된 기본 모델 호출은 sonnet으로 다시 부른다).
 - 실험용 스택 번호는 px4 5, ros2 6, test 7, devops 8이다. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
 - 관련 owner의 승인 없이 머지하지 않는다. `idsim_mission`의 전이 표와 상태기 단위 테스트는 px4-engineer가 필수 승인자다(`file-ownership.md`).
 
@@ -83,9 +82,11 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 - `COM_RC_IN_MODE`가 4라 QGC 수동 모드와 가상 조이스틱은 쓸 수 없다(ros2-engineer 초안, px4-engineer 확인).
 - QGC 하나는 한 번에 한 스택만 본다는 제약, 포트와 식별자 표, SIH 변형의 `PX4_HOME_*` 주의.
+- 4단계(`idsim_common`) 계약: QoS 표(reliability와 durability는 계약, depth는 계약 밖), 좌표계, timestamp 기준(`UXRCE_DDS_SYNCT=0`, `Px4Timestamp` 규칙, `timesync_status`는 SYNCT=0에서 DDS timesync 데이터가 없다), sysid 대조 규칙, 공개 /fmu/in 목록과 허용 절차(`docs/architecture.md`), "발행 차단은 실수 방지 수준이며 보안 경계가 아니다".
 
 빌드와 CI.
 
+- 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
 - 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 8).
 - apt 미러: 지정 미러가 막히면 콜드 빌드가 실패한다. apt `Acquire::Retries` 미적용. CI에서는 Canonical 노드의 동기화 시차로 apt 단계가 간헐적으로 실패할 수 있다(대안: apt 단계 재시도, CI 미러 변경). GHCR 이미지를 받아 태그하는 `build_images.py --mode pull`은 P4에서 만든다.
 - `docker/Dockerfile.px4` 132행 주석이 없는 문서 이름 `smoke-test-phase1a.md`를 가리킨다. 주석만 고쳐도 px4 이미지 key가 바뀌므로 다음에 그 파일을 바꿀 때 `smoke-test.md`로 함께 고친다(px4-engineer).
@@ -99,6 +100,8 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 시뮬레이션과 화면 도구.
 
+- `idsim_common/vehicle_command.hpp` 주석의 "`from_external=false`면 MAVLink로 재송출"은 소스 행(PX4 v1.17.0 `COMMAND_LONG.hpp` 89행 근처)을 주석에 적지 않았다. 6단계 실측 또는 다음 수정 때 확인한다(ros2-engineer).
+- QGC가 기체에 연결된 상태에서 `qgc.sh`의 TERM 종료 동작은 실측하지 않았다.
 - Gazebo GUI 깜빡임(VMware 3D 가속을 켠 상태). `QSG_RENDER_LOOP=basic`과 `vblank_mode=1`의 효과는 확인되지 않았다. 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
 - `ros_ws/src/idsim_sim/scripts/gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"는 표현이 부정확하다(sim-engineer).
 - `qgc.sh`의 sha256 불일치 시 종료 코드 1 경로는 실행으로 확인하지 않았다.
@@ -107,6 +110,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 1b 전에 정할 것.
 
+- takeoff 빌더와 `goto_setpoint` 공개 검토(`idsim_common`, ros2-engineer와 px4-engineer). TargetState -> setpoint 변환 위치와 원점 이동 변환 함수.
 - 다대 원점 판정의 pose 보정 방식(`check_px4 --expect-pose-enu` 또는 `stack.json`의 기체별 기대 위경도). 지금 `--expect-origin`은 1대 기준이다(architect, test-engineer).
 - 기체별 EKF 원점은 월드 원점이 아니라 스폰 지점이다. 월드 ENU `TargetState`를 기체 NED setpoint로 바꾸는 입력과, 커스텀 월드에서 `world.origin`과 SDF `<spherical_coordinates>`의 일치를 검사하는 주체를 정한다. 월드 SDF에 `<plugin>`이 하나라도 있으면 서버 설정 파일이 무시된다.
 - bridge healthcheck는 `/clock` 1회 수신을 유지하고 표적 어댑터 판정은 별도 단계로 둔다. 커스텀 모델은 `GZ_SIM_RESOURCE_PATH`에 `/opt/idsim/sim/models`를 더해야 한다.

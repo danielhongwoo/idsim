@@ -15,7 +15,7 @@
 // Offboard position setpoint 헬퍼. offboard_control_mode와 trajectory_setpoint는
 // 이 두 함수로만 만든다.
 //
-// 1a는 position 제어만 쓴다(1a 4단계 넘김 (2), 6단계 쟁점 5). 고정하는 필드:
+// 1a는 position 제어만 쓴다(1a 4단계 넘김 (2)는 git 이력, 6단계 쟁점 5). 고정하는 필드:
 // - offboard_control_mode: position = true, 나머지 여섯 flag(velocity, acceleration, attitude,
 //   body_rate, thrust_and_torque, direct_actuator) = false.
 // - trajectory_setpoint: position(NED, m)과 yaw(NED, rad)는 유한값. velocity, acceleration, jerk,

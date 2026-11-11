@@ -52,7 +52,7 @@ compose 프로젝트 이름. 모든 compose 파일은 `name:`을 명시한다(�
 | px4 | `px4-uxrce_dds_client --instance 1 status \| grep -q 'Running, connected'`. 명령의 종료 코드는 연결 상태를 반영하지 않으므로(v1.17.0 `src/modules/uxrce_dds_client/uxrce_dds_client.cpp`의 `print_status`가 항상 0을 돌려준다) 문자열로 판정. `px4-gz_bridge status`는 연결 상태를 출력하지 않고 Gazebo가 멈춰도 종료 코드 0이라 healthcheck에 쓰지 않는다(실측). 옛 모델 잔존은 운영 스크립트의 down 뒤 up과 `gz model --list` 사전 검사로 막는다 | 5s / 5s / 6 / 90s(embedded), 45s(standalone) |
 | bridge | `/clock` 1회 수신 | 5s / 5s / 6 / 20s |
 
-`depends_on`은 xrce-agent -> gazebo -> px4 -> bridge 순으로 `service_healthy`이며, 판정 명령은 상주 서비스가 아닌 `runner`(프로필 `tools`)에서 `compose run`으로 실행한다. `up --wait`는 `startup.stages`의 세 단계로 나눠 부른다. `docker compose up --wait --wait-timeout 240`. `restart`는 모든 서비스에서 `no`다. px4-rc.gzsim(v1.17.0, standalone 분기)은 `/world/<월드>/scene/info` 서비스를 1초 간격 30회 기다리다 초과하거나 gz_bridge 시작에 실패하면 exit 1로 끝나며, 그러면 `up --wait`가 즉시 실패하고 `run_smoke.sh`가 compose logs와 ULog를 artifacts에 모은 뒤 실패한다. 자동 재시작은 플래키를 가리고 standalone에서 `x500_1`이 남아 재스폰이 반복 실패할 수 있어 쓰지 않는다.
+`depends_on`은 xrce-agent -> gazebo -> px4 -> bridge 순으로 `service_healthy`이며, 판정 명령은 상주 서비스가 아닌 `runner`(프로필 `tools`)에서 `compose run`으로 실행한다. `up --wait`는 `startup.stages`의 세 단계로 나눠 부른다. `docker compose up --wait --wait-timeout 240`. `restart`는 모든 서비스에서 `no`다. px4-rc.gzsim(v1.17.0, standalone 분기)은 `/world/<월드>/scene/info` 서비스를 1초 간격 30회 기다리다 초과하거나 gz_bridge 시작에 실패하면 exit 1로 끝나며, 그러면 `up --wait`가 즉시 실패하고 `run_smoke.sh`가 compose logs와 ULog를 artifacts에 모은 뒤 실패한다. 자동 재시작은 flaky를 가리고 standalone에서 `x500_1`이 남아 재스폰이 반복 실패할 수 있어 쓰지 않는다.
 
 ## 산출물 위치와 골든 파일 형식
 
@@ -62,9 +62,9 @@ compose 프로젝트 이름. 모든 compose 파일은 `name:`을 명시한다(�
 - `qos/<상대 토픽>.txt`: `reliability`, `durability`, `history`, `depth` 네 줄, 발행자 값.
 - `env.txt`: `PX4_TAG`, `PX4_MSGS_REF`, `RMW_IMPLEMENTATION`, `XRCE_AGENT_TAG` 네 줄. 호스트명과 시각은 넣지 않는다. 값은 `versions.env`가 아니라 실행 중인 이미지의 빌드 ENV에서 읽는다.
 
-이미지의 빌드 버전 ENV. 각 Dockerfile은 자기가 받은 버전 ARG를 `IDSIM_BUILD_<키>` ENV로 남긴다. px4는 `IDSIM_BUILD_PX4_TAG`, ros-ws는 `IDSIM_BUILD_PX4_MSGS_REF`와 `IDSIM_BUILD_PX4_ROS_COM_REF`, xrce-agent는 `IDSIM_BUILD_XRCE_AGENT_TAG`, sim-base는 `IDSIM_BUILD_GZ_RELEASE`와 `IDSIM_BUILD_PX4_GZ_MODELS_REF`. `run_smoke.sh`는 images 전에 각 컨테이너의 이 값을 `versions.env`와 대조해 하나라도 다르면 실패한다. `versions.env`만 올리고 이미지를 다시 빌드하지 않은 채 옛 이미지의 측정값이 새 태그의 골든으로 저장되는 것을 막기 위해서다.
+이미지의 빌드 버전 ENV. 각 Dockerfile은 자기가 받은 버전 ARG를 `IDSIM_BUILD_<key>` ENV로 남긴다. px4는 `IDSIM_BUILD_PX4_TAG`, ros-ws는 `IDSIM_BUILD_PX4_MSGS_REF`와 `IDSIM_BUILD_PX4_ROS_COM_REF`, xrce-agent는 `IDSIM_BUILD_XRCE_AGENT_TAG`, sim-base는 `IDSIM_BUILD_GZ_RELEASE`와 `IDSIM_BUILD_PX4_GZ_MODELS_REF`. `run_smoke.sh`는 images 전에 각 컨테이너의 이 값을 `versions.env`와 대조해 하나라도 다르면 실패한다. `versions.env`만 올리고 이미지를 다시 빌드하지 않은 채 옛 이미지의 측정값이 새 태그의 골든으로 저장되는 것을 막기 위해서다.
 
-원시(비추적): `artifacts/runs/<실행 id>/smoke/`(같은 디렉터리에 생성된 `compose.yaml`, `stack.json`, `px4-N/log/`의 ULog가 있다. 실행 id는 `--run-id`, 없으면 `--run-dir`의 basename, 둘 다 없으면 `<UTC YYYYmmdd-HHMMSS>-k<k>`이고 스모크는 `<UTC>-k<k>-<단계>`). `hz` 측정값은 골든이 아니라 여기와 `docs/interface.md`의 참고 범위값에만 적고, 측정 조건(태그, 속도 배수, 벽시계 여부)을 병기한다. CI에서는 이 디렉터리를 잡 아티팩트로 올린다.
+원시(비추적): `artifacts/runs/<실행 id>/smoke/`(같은 디렉터리에 생성된 `compose.yaml`, `stack.json`, `px4-N/log/`의 ULog가 있다. 실행 id는 `--run-id`, 없으면 `--run-dir`의 basename, 둘 다 없으면 `<UTC YYYYmmdd-HHMMSS>-k<k>`이고 스모크는 `<UTC>-k<k>-<단계>`). `hz` 측정값은 골든이 아니라 여기와 `docs/interface.md`의 참고 범위값에만 적고, 측정 조건(태그, 속도 배수, 벽시계 여부)을 병기한다. CI에서는 이 디렉터리를 job artifact로 올린다.
 
 사람이 읽는 요약(토픽 표, QoS, 파라미터, 주기 참고값)은 `tools/to_interface.py`가 골든과 원시 산출물에서 만들어 `docs/interface.md` 초안으로 넘긴다.
 
@@ -104,5 +104,5 @@ docker buildx bake -f docker/docker-bake.hcl ros-base xrce-agent --load
 ```
 
 - 타깃은 `ros-base`, `sim-base`, `px4`, `ros-ws`, `xrce-agent` 다섯 개다. 의존 이미지(`sim-base`는 `ros-base`, `px4`는 `sim-base`, `ros-ws`는 `ros-base`)는 bake의 named context로 연결되므로 하나만 지정해도 필요한 베이스가 먼저 빌드된다.
-- 로컬 태그는 `idsim/<이미지>:local`. 레지스트리 태그는 `${REGISTRY}/<이미지>:<키>`이며 `<키>`는 환경변수 `KEY`(로컬 기본값 `local`, CI에서는 Dockerfile과 `versions.env` 해시)다.
+- 로컬 태그는 `idsim/<이미지>:local`. 레지스트리 태그는 `${REGISTRY}/<이미지>:<key>`이며 `<key>`는 환경변수 `KEY`(로컬 기본값 `local`, CI에서는 Dockerfile과 `versions.env` 해시)다.
 - 빌드 인자는 기본값이 없다. `versions.env`를 내보내지 않으면 빌드가 실패한다.

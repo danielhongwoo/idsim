@@ -21,7 +21,7 @@
 | `README.md` | 이 문서. 작업 단위, 순서, 검토, 완료 기준 | 실행 계획 |
 | `decisions.md` | architect 결정 11건(확정본), 확정 개정 요약(reviewer 필수 5건과 권고 8건의 처리), 메시지와 action의 필드 목록, 담당자별 구현 지시, 넘김 목록, 사용자 결정 2건의 결과 | 계약. 구현은 이 문서를 따른다 |
 
-담당자 의견서와 재질문 답은 git 이력에 있다. 결론은 `decisions.md`에 있고 `decisions.md`가 우선한다.
+담당자 의견서는 git 이력에 있다(`git show b02f28f:docs-for-agent/plan-1a-5-idsim-interfaces/opinion-<담당>.md`). 결론은 `decisions.md`에 있고 `decisions.md`가 우선한다.
 
 ## 범위
 
