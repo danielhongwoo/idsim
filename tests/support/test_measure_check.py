@@ -500,7 +500,9 @@ def test_excluded_rows_do_not_hide_other_unjudged_rows_or_exit1():
 
 def test_window_missed_row_with_armed_violation_is_exit_one():
     # live 판정: 위반이 있으면 WINDOW_MISSED가 아니라 FAIL이라 제외하지 않는다
-    f = {"landed_at_cancel": False, "armed_non_offboard": 1}
+    f = {"landed_at_cancel": False, "armed_non_offboard": 1, "end_reason": "DISARMED", "climb_m": 0.0,
+         "cleanup_total_s": 1.0, "armed_after_end": False, "final_disarmed": True,
+         "height_at_cancel_m": 0.2}
     v = mj.judge_attempt("3", f)
     assert v.verdict == "FAIL" and not v.ok
     rows = [srow("3", i, "PASS") for i in (1, 2, 3)] + [srow("3", 4, v.verdict)]

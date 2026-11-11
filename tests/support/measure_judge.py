@@ -475,6 +475,20 @@ class Verdict:
     kind: str = ""
 
 
+def median_z(pos, end_us, window_s=1.0, min_n=5):
+    """지상 기준 높이: (end_us - window_s, end_us] 동안 vehicle_local_position z(NED, m)의 중앙값과 표본 수.
+
+    pos: (수신 ROS 시각 us, x, y, z, ...) 목록. z 잡음이 0.1 m 수준이라 표본 하나를 기준으로 쓰면 상승
+    0.2 m 기준의 여유가 절반으로 줄 수 있어서 중앙값을 쓴다. 표본이 min_n개 미만이면 (None, 표본 수)다.
+    """
+    zs = sorted(p[3] for p in pos if end_us - window_s * US < p[0] <= end_us)
+    n = len(zs)
+    if n < min_n:
+        return None, n
+    mid = n // 2
+    return (zs[mid] if n % 2 else (zs[mid - 1] + zs[mid]) / 2.0), n
+
+
 def neighbor_gap_s(times_us, start_us, end_us=None):
     """관찰 구간 (start_us, end_us]에서 이웃한 표본 사이의 최대 간격(s)과 그 수.
 
@@ -534,7 +548,9 @@ def judge_attempt(item, f):
 
     통과 기준(정본: decisions.md 넘김 목록의 px4-engineer 행)
       공통(3, 5, armed): OFFBOARD가 아닌 ARMED 표본이 0개(첫 Hold 전송 전까지). (2a)는 기록만 한다.
-      3은 취소 시점에 landed가 true였어야 한다(아니면 WINDOW_MISSED. 통과로 세지 않는다)
+      3은 취소 시점에 landed가 true였어야 한다. 아니면 창을 놓친 회지만 창과 무관한 기준(위 3, 5의 기준과
+          Hold 종료의 60 s 관찰)은 전부 적용하고, 위반이 있으면 FAIL, 관찰 표본이 모자라면 INCONCLUSIVE,
+          모두 만족하면 WINDOW_MISSED(유효 시도에도 not-pass에도 넣지 않는다)
       2a: Hold(AUTO_LOITER 3회 연속)를 관측, 정리 총 소요 9 s 미만
       2b: landed가 true에 닿으면 M3_CONTRADICTED(exit 1. M3 문장과 다른 관측). disarm 수락과 고도 변화는
           facts에 그대로 기록한다. 닿지 못하면(관찰 --observe-s) 관찰 중 모든 표본이 ARMED이고
@@ -571,14 +587,18 @@ def judge_attempt(item, f):
             return Verdict(False, "INCONCLUSIVE", missing)
         return Verdict(True, "PASS", [])
 
-    if item == "3" and not f["landed_at_cancel"]:
-        # 창을 놓친 시도는 자극이 성립하지 않은 회라 통과로도 시도 수로도 세지 않는다. 다만 이 회에서
-        # 기준과 다른 관측(OFFBOARD가 아닌 ARMED)이 나왔으면 빼지 않고 FAIL이다.
-        if f["armed_non_offboard"] != 0:
-            return Verdict(False, "FAIL", [
-                "OFFBOARD가 아닌 ARMED 표본 %d개" % f["armed_non_offboard"],
-                "취소 시점에 landed가 이미 false(창을 놓친 회지만 위반이 있어 제외하지 않음)"])
-        return Verdict(False, "WINDOW_MISSED", ["취소 시점에 landed가 이미 false(이륙 직후 창을 놓침)"])
+    # 창을 놓친 회((3)에서 취소 시점에 landed가 이미 false)는 자극이 성립하지 않은 회라 유효 시도에도
+    # not-pass에도 넣지 않는다. 그러나 창과 무관한 기준은 전부 적용한다. 순서: 기준 위반이 하나라도 있으면
+    # FAIL -> 위반이 없고 Hold로 끝났는데 관찰 표본이 하한 미달이거나 값이 없으면 INCONCLUSIVE ->
+    # 아니면 WINDOW_MISSED. DISARMED 종료는 요구하지 않는다(Hold 종료나 지상 종료 모두 가능).
+    missed = item == "3" and not f["landed_at_cancel"]
+
+    def missed_verdict():
+        how = "Hold" if f["end_reason"] == "HOLD" else "지상 %s" % f["end_reason"]
+        return Verdict(False, "WINDOW_MISSED", [
+            "취소 시점에 landed가 이미 false(이륙 직후 창을 놓침). 끝난 방식 %s, 정리 총 소요 %s s, 상승 %s m, "
+            "취소 시 높이 %s m" % (how, f["cleanup_total_s"], f["climb_m"], f["height_at_cancel_m"])])
+
     if item in ("3", "5", "armed"):
         need(f["armed_non_offboard"] == 0,
              "OFFBOARD가 아닌 ARMED 표본 %d개" % f["armed_non_offboard"])
@@ -622,6 +642,8 @@ def judge_attempt(item, f):
             prob = _sampling_problem(f, "hold_observe_")
             if prob is not None:
                 return Verdict(False, "INCONCLUSIVE", [prob])
+            if missed:
+                return missed_verdict()
             return Verdict(False, "HOLD_END", ["Hold로 끝남(전이 표에 있는 종료). 60 s 동안 M3의 상태를 유지"])
         need(f["end_reason"] == "DISARMED",
              "DISARMED 3회 미확인(end_reason=%s)" % f["end_reason"])
@@ -631,7 +653,10 @@ def judge_attempt(item, f):
             return Verdict(False, "INCONCLUSIVE",
                            ["arm 수락 증거(전송 뒤 ARMED 표본 또는 ULog logged message)가 없음. ack는 증거가 아니다"],
                            kind="ARM_EVIDENCE")
-        return fin()
+        v = fin()
+        if missed and v.verdict == "PASS":
+            return missed_verdict()
+        return v
     if item == "armed":
         need(f["armed3_reached"], "ARMED 3회 확인에 도달하지 못함")
         need(f["flight_armed_non_offboard"] == 0,

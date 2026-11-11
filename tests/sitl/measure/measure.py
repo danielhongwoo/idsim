@@ -45,6 +45,8 @@ px4-engineer 행이다.
   1  기준과 다른 관측(verdict FAIL, M3_CONTRADICTED)이나 ARMED 위반(어느 부류든)이 있음. 문서의 기대가
      반증됐다는 뜻이며 PX4 결함이라는 뜻이 아니다. 2보다 앞선다. M3_CONTRADICTED는 2b에서 landed가
      true에 닿은 경우로 M3 문장과 다른 관측이다(disarm 수락과 고도 변화는 facts에 기록).
+     지상 기준 높이(climb_m의 기준)는 arm 직전 1 s의 vehicle_local_position z 중앙값이고 표본 수가 facts의
+     ref_z_samples에 남는다(5개 미만이면 PRECONDITION).
   2  기계가 판정하지 않음: COND_NOT_REACHED, HOLD_END, INCONCLUSIVE, WINDOW_MISSED, PRECONDITION,
      ERROR, CLOCK_STALLED, 유효 시도(PASS, FAIL, M3_CONTRADICTED) 수 부족, 행 0개, commit unknown이나
      image key 없음, 처리하지 못한 예외. 자극이 성립하지 않은 회((3)의 WINDOW_MISSED)는 유효 시도에도
@@ -102,10 +104,13 @@ CRITERIA = {
         "시도 3회 모두 위 기준을 만족해야 통과한다. 3회는 실패율 95% 상한이 약 100%라 실패 없음의 증거가 아니다.",
     ],
     "item3": [
-        "TAKEOFF 목표점으로 arm한 뒤 첫 ARMED 표본에서 landed가 true인 시도만 창 안이다. 아니면 WINDOW_MISSED로 "
-        "자극이 성립하지 않은 회라 유효 시도에도 not-pass에도 넣지 않고 따로 센다(그 회에서 OFFBOARD가 아닌 "
-        "ARMED 표본이 나오면 제외하지 않고 FAIL). 시도 수는 실행 전에 정하고 결과를 보고 더하지 않는다. "
-        "그 시점에 지상 setpoint로 바꾸고 disarm.",
+        "TAKEOFF 목표점으로 arm한 뒤 첫 ARMED 표본에서 landed가 true인 시도만 창 안이다. 아니면 자극이 성립하지 "
+        "않은 회지만 창과 무관한 기준(OFFBOARD가 아닌 ARMED 0개, 정리 총 소요 9 s 미만, 상승 0.2 m 이하, "
+        "TIMEOUT_GROUND/TIMEOUT_HOLD/LIMIT/DISARMED_AIR는 FAIL, 지상 종료면 끝난 뒤 ARMED 없음과 마지막 DISARMED, "
+        "Hold 종료면 60 s M3 상태와 표본 조건)을 전부 적용한다. 위반이 있으면 FAIL(1), Hold 종료의 관찰 표본이 "
+        "모자라면 INCONCLUSIVE(2), 모두 만족하면 WINDOW_MISSED로 유효 시도에도 not-pass에도 넣지 않고 끝난 방식별로 "
+        "따로 센다(취소 시 높이를 facts와 요약에 남긴다). DISARMED 종료는 요구하지 않는다. 시도 수는 실행 전에 "
+        "정하고 결과를 보고 더하지 않는다. 그 시점에 지상 setpoint로 바꾸고 disarm.",
         "mode_confirm_timeout(3 s) 안에 DISARMED 3회, 상승 0.2 m 이하, 정리 총 소요 9 s 미만, "
         "OFFBOARD가 아닌 ARMED 표본 0개(구간 끝 = min(ARMED 3회 확인, 정리 종료, 측정기의 첫 Hold 전송)), "
         "끝난 뒤 지상에 armed로 남지 않음.",
@@ -260,7 +265,20 @@ def prepare(rig, args):
     ok, _ = send_until(rig, "offboard", conf, mj.MODE_CONFIRM_TIMEOUT_S)
     if not ok:
         raise Precondition("OFFBOARD 3회 미확인")
+    # 지상 기준 높이는 arm 직전 1 s의 vehicle_local_position z 중앙값이다(z 잡음 0.1 m 수준). 표본이 5개
+    # 미만이면 PRECONDITION.
+    z_med, z_n = mj.median_z(raw.pos, raw.now_us(), 1.0, 5)
+    if z_med is None:
+        raise Precondition("지상 기준 높이를 정할 vehicle_local_position 표본이 %d개뿐(5개 미만)" % z_n)
+    ref["z_first_sample"] = ref["z"]
+    ref["z"] = z_med
+    ref["z_n"] = z_n
     return ref
+
+
+def ref_facts(ref):
+    """지상 기준 높이(중앙값)와 그 표본 수를 facts에 남긴다."""
+    return {"ref_z_m": ref["z"], "ref_z_samples": ref["z_n"], "ref_z_first_sample_m": ref["z_first_sample"]}
 
 
 def ground_setpoint(raw):
@@ -451,6 +469,7 @@ def attempt_item5(rig, args, a):
     model = run_cleanup(rig, cancel_us)
     tail = observe_tail(rig, model.end_us, args.tail_s)
     f = cleanup_facts(raw, model, arm_recv, ref["z"], tail)
+    f.update(ref_facts(ref))
     f.update(armed_facts(raw, idx_s, arm_recv, model.end_us, cutoff_us=first_hold_recv(model)))
     fd = f["first_disarm_send"]
     f.update(ack_facts(raw, arm_recv, None if fd is None else fd[0], first_hold_recv(model)))
@@ -501,6 +520,7 @@ def attempt_item3(rig, args, a):
     z_end = raw.last_pos()[3]
     tail = observe_tail(rig, model.end_us, args.hold_observe_s if hold_case else args.tail_s)
     f = cleanup_facts(raw, model, arm_recv, ref["z"], tail)
+    f.update(ref_facts(ref))
     if hold_case:
         f.update(hold_observe_facts(raw, model.end_us, z_end))
     f.update(armed_facts(raw, idx_s, arm_recv, model.end_us, cutoff_us=first_hold_recv(model)))
@@ -535,6 +555,7 @@ def attempt_item2(rig, args, a):
     model = run_cleanup(rig, cancel_us)       # landed false -> A 분기: 지상 setpoint 유지 + Hold
     hold_end = model.end_us
     f = cleanup_facts(raw, model, arm_recv, ref["z"], (False, False))
+    f.update(ref_facts(ref))
     f.update(armed_facts(raw, idx_s, arm_recv, model.end_us, cutoff_us=first_hold_recv(model)))
     f.update(ack_facts(raw, arm_recv, None, first_hold_recv(model)))
     f.update({"arm_send": [arm_recv, arm_ts], "height_at_cancel_m": height,
@@ -631,6 +652,7 @@ def attempt_armed(rig, args, a):
     arm_recv, arm_ts = first
     end_us = conf.confirmed_at.recv_ros_us if ok else raw.now_us()
     f = armed_facts(raw, idx_s, arm_recv, end_us)
+    f.update(ref_facts(ref))
     f.update({"arm_send": [arm_recv, arm_ts], "arm_ack": raw.acks_between(400, arm_recv)})
     if not ok:
         e = Precondition("ARMED 3회 확인을 5 s 안에 채우지 못함(arm ack %s)" % f["arm_ack"])
@@ -738,6 +760,17 @@ def write_extra_summary(fh, item, rows):
             sum(1 for r in rows if r["item"] == "2b" and r["verdict"] == "M3_CONTRADICTED")))
         if any(c.startswith("  시도") and "(나)" in c for c in cases):
             fh.write("!! (나)가 있다: M3 문장(Hold로 끝난 기체는 스스로 내려앉지 않는다)과 다르다. architect에게 올린다.\n")
+    if item == "item3":
+        missed = [r for r in rows if r["item"] == "3" and r["verdict"] == "WINDOW_MISSED"]
+        by_end = {}
+        for r in missed:
+            how = "Hold" if r["facts"]["end_reason"] == "HOLD" else "지상 %s" % r["facts"]["end_reason"]
+            by_end[how] = by_end.get(how, 0) + 1
+        fh.write("창을 놓친 회(WINDOW_MISSED) 끝난 방식별 횟수: %s\n" % (by_end if by_end else "없음"))
+        for r in missed:
+            f = r["facts"]
+            fh.write("  시도 %d: 취소 시 높이 %s m, 상승 %s m, 정리 총 소요 %s s\n" % (
+                r["attempt"], f["height_at_cancel_m"], f["climb_m"], f["cleanup_total_s"]))
     if item in ("item3", "item5"):
         from collections import Counter
         sub = "3" if item == "item3" else "5"

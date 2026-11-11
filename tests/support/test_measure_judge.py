@@ -440,8 +440,11 @@ def test_judge_attempt_3_pass_and_each_fail_reason():
 def test_judge_attempt_3_window_missed_is_not_pass_and_not_fail():
     f = good3()
     f["landed_at_cancel"] = False
+    f["height_at_cancel_m"] = 0.31
     v = mj.judge_attempt("3", f)
     assert not v.ok and v.verdict == "WINDOW_MISSED"
+    assert "지상 DISARMED" in v.reasons[0] and "1.2 s" in v.reasons[0] and "0.05 m" in v.reasons[0]
+    assert "취소 시 높이 0.31 m" in v.reasons[0]
 
 
 def test_judge_attempt_climb_boundary_is_inclusive_and_time_boundary_exclusive():
@@ -821,11 +824,104 @@ def test_judge_run_excluded_verdicts_are_not_other_nor_counted_valid():
 
 
 def test_judge_3_window_missed_with_armed_violation_is_fail_not_excluded():
-    v = mj.judge_attempt("3", {"landed_at_cancel": False, "armed_non_offboard": 2})
-    assert v.verdict == "FAIL" and "제외하지 않음" in v.reasons[1]
-    v = mj.judge_attempt("3", {"landed_at_cancel": False, "armed_non_offboard": 0})
+    v = mj.judge_attempt("3", dict(good3(), landed_at_cancel=False, armed_non_offboard=2))
+    assert v.verdict == "FAIL" and "OFFBOARD" in v.reasons[0]
+    v = mj.judge_attempt("3", dict(good3(), landed_at_cancel=False, height_at_cancel_m=0.3))
     assert v.verdict == "WINDOW_MISSED" and v.verdict in mj.EXCLUDED_VERDICTS
 
 
 def test_neighbor_gap_docstring_states_start_axis_approximation():
     assert "ROS 수신 시각이다" in mj.neighbor_gap_s.__doc__
+
+
+# --- 6차: 창을 놓친 회에도 창과 무관한 기준을 적용한다 --------------------------------
+
+
+def missed3(**kw):
+    return dict(good3(), landed_at_cancel=False, height_at_cancel_m=0.2, **kw)
+
+
+def missed_hold(**kw):
+    return dict(hold3(), landed_at_cancel=False, height_at_cancel_m=0.2, **kw)
+
+
+def test_window_missed_plus_other_violations_are_fail():
+    for kw in ({"end_reason": "LIMIT"}, {"end_reason": "TIMEOUT_GROUND"}, {"end_reason": "TIMEOUT_HOLD"},
+                {"end_reason": "DISARMED_AIR"}, {"cleanup_total_s": 9.0}, {"cleanup_total_s": 12.0},
+                {"climb_m": 0.21}, {"armed_after_end": True}, {"final_disarmed": False}):
+        v = mj.judge_attempt("3", missed3(**kw))
+        assert v.verdict == "FAIL" and not v.ok, kw
+
+
+def test_window_missed_ground_end_is_window_missed_and_does_not_require_disarmed_end_reason():
+    assert mj.judge_attempt("3", missed3()).verdict == "WINDOW_MISSED"
+
+
+def test_window_missed_with_fail_makes_exit_one_even_with_three_passes():
+    rows = [{"item": "3", "attempt": i, "verdict": "PASS"} for i in (1, 2, 3)]
+    v = mj.judge_attempt("3", missed3(end_reason="LIMIT"))
+    rows.append({"item": "3", "attempt": 4, "verdict": v.verdict})
+    from tests.support import measure_check as mc
+    assert v.verdict == "FAIL" and mc.run_status(rows, 3) == 1
+
+
+def test_window_missed_hold_end_with_m3_state_is_window_missed():
+    v = mj.judge_attempt("3", missed_hold())
+    assert v.verdict == "WINDOW_MISSED" and "Hold" in v.reasons[0]
+    from tests.support import measure_check as mc
+    rows = [{"item": "3", "attempt": i, "verdict": "PASS"} for i in (1, 2, 3)]
+    rows.append({"item": "3", "attempt": 4, "verdict": v.verdict})
+    assert mc.run_status(rows, 3) == 0
+
+
+def test_window_missed_hold_end_violations_are_fail():
+    for kw in ({"hold_observe_all_armed_loiter": False}, {"hold_observe_landed_false": False},
+               {"hold_observe_dz_m": 0.21}, {"climb_m": 0.21}, {"cleanup_total_s": 9.0},
+               {"armed_non_offboard": 1}):
+        assert mj.judge_attempt("3", missed_hold(**kw)).verdict == "FAIL", kw
+
+
+def test_window_missed_hold_end_with_short_observation_is_inconclusive_and_exit_two():
+    v = mj.judge_attempt("3", missed_hold(hold_observe_span_s=59.0))
+    assert v.verdict == "INCONCLUSIVE"
+    v2 = mj.judge_attempt("3", missed_hold(hold_observe_status_gap_ts_s=2.5))
+    assert v2.verdict == "INCONCLUSIVE"
+    from tests.support import measure_check as mc
+    rows = [{"item": "3", "attempt": i, "verdict": "PASS"} for i in (1, 2, 3)]
+    rows.append({"item": "3", "attempt": 4, "verdict": v.verdict})
+    assert mc.run_status(rows, 3) == 2
+
+
+def test_window_missed_missing_values_are_inconclusive():
+    assert mj.judge_attempt("3", missed3(climb_m=None)).verdict == "INCONCLUSIVE"
+
+
+# --- 지상 기준 높이: z 중앙값 -----------------------------------------------------
+
+
+def pos_at(t_ms, z):
+    return (t_ms * 1000, 0.0, 0.0, z, 0.0, True, True)
+
+
+def test_median_z_odd_even_and_outlier_robust():
+    pos = [pos_at(1000 + i * 10, z) for i, z in enumerate((0.05, -0.05, 0.9, 0.0, 0.02))]
+    z, n = mj.median_z(pos, 1100 * 1000, 1.0, 5)
+    assert n == 5 and z == pytest.approx(0.02)                 # 이상치 0.9가 영향을 주지 않는다
+    pos = [pos_at(1000 + i * 10, z) for i, z in enumerate((0.0, 0.1, 0.2, 0.3, 0.4, 0.5))]
+    z, n = mj.median_z(pos, 1100 * 1000, 1.0, 5)
+    assert n == 6 and z == pytest.approx(0.25)
+
+
+def test_median_z_window_is_last_second_only_and_end_inclusive():
+    pos = [pos_at(100, 9.0)] + [pos_at(2000 + i * 100, 0.1) for i in range(5)]
+    z, n = mj.median_z(pos, 2400 * 1000, 1.0, 5)               # (1400, 2400] ms
+    assert n == 5 and z == pytest.approx(0.1)
+    z, n = mj.median_z(pos, 2399 * 1000, 1.0, 5)               # 마지막 표본이 창 밖
+    assert z is None and n == 4
+
+
+def test_median_z_too_few_samples_is_none():
+    pos = [pos_at(1000 + i * 10, 0.0) for i in range(4)]
+    assert mj.median_z(pos, 1100 * 1000, 1.0, 5) == (None, 4)
+    assert mj.median_z([], 1000, 1.0, 5) == (None, 0)
+    assert mj.median_z(pos, 1100 * 1000, 1.0, 4)[0] == 0.0

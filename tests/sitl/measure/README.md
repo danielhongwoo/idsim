@@ -32,7 +32,7 @@ tests/sitl/measure/run_measure.sh [--stack 7] [--attempts N] [--keep] item2|item
 최종 verdict가 PASS도 제외도 아닌 행이 하나라도 있으면(INCONCLUSIVE, HOLD_END, ERROR, CLOCK_STALLED, PRECONDITION 등) PASS 횟수를 채워도 종료 코드 0이 아니라 2다(FAIL이나 `M3_CONTRADICTED`가 있으면 1이 앞선다).
 
 자극이 성립하지 않은 회는 유효 시도에도 not-pass 집계에도 넣지 않는다. 행과 횟수는 기록하고 요약과 `final_summary.json`(`n_excluded`, (5)는 지연값별)에 따로 적는다. 종료 코드는 나머지 행으로 정한다(유효 PASS가 최소 횟수 이상이고 다른 행이 없으면 0, 유효 시도가 모자라면 2).
-- (3)의 `WINDOW_MISSED`: 취소 시점에 `landed`가 이미 false였던 회.
+- (3)의 `WINDOW_MISSED`: 취소 시점에 `landed`가 이미 false였던 회. 창과 무관한 기준은 전부 적용한다(`OFFBOARD`가 아닌 ARMED 0개, 정리 총 소요 9 s 미만, 상승 0.2 m 이하, TIMEOUT_GROUND/TIMEOUT_HOLD/LIMIT/DISARMED_AIR는 FAIL, 지상 종료면 끝난 뒤 ARMED 없음과 마지막 DISARMED, Hold 종료면 60 s M3 상태와 표본 조건). 위반이 있으면 FAIL(1), Hold 종료의 관찰 표본이 모자라면 INCONCLUSIVE(2), 모두 만족하면 `WINDOW_MISSED`다. DISARMED 종료는 요구하지 않는다. 요약에 끝난 방식별 횟수와 회별 취소 시 높이가 적힌다.
 - (5)의 `ARM_NOT_ACCEPTED`: `crosscheck.py`의 최종 판정(ULog 교차 확인 뒤)에서도 arm 수락 증거가 없는 회. `measure.py` 단독의 "증거 미확인"(`INCONCLUSIVE`)은 여전히 2이고, 빼는 것은 최종 판정 단계에서만이다.
 - 그 회에서 기준과 다른 관측(OFFBOARD가 아닌 ARMED 표본 등)이 나오면 빼지 않고 FAIL(종료 코드 1)이다. 다른 INCONCLUSIVE(관찰 표본 부족, 값 없음)와 `PRECONDITION`은 제외 대상이 아니다.
 - 시도 수는 실행 전에 정한다. 결과를 보고 시도를 더하지 않는다(유효 시도가 모자라면 2이고 새 실행이다).
@@ -79,6 +79,8 @@ ARMED 기준은 ARMED 3회 확인까지 간 실행이 10회 이상이어야 `eno
 - `final_summary.json` 최종 판정 기준의 항목별 시도 수, 유효 시도 수, PASS 횟수, 지연값별 집계.
 - `crosscheck_<item>.json`, `armed_criterion.json` ULog 교차 확인과 ARMED 기준의 부류별 합산(`classes`: `px4_direct`, `scenario_a`). `armed` 항목은 ARMED 3회 확인부터 NAV_LAND 전송까지의 구간도 ULog로 대조한다. ULog를 못 읽은 행이나 측정되지 않은 행이 있으면 `passed`는 false다. 출력에 ULog 안 `Armed by external command` 줄 총수가 있다.
 - `stop_exit.txt` `compose stop -t 15` 뒤 서비스별 종료 코드(px4의 137은 KILL, ULog가 닫히지 않았을 수 있다).
+
+상승(`climb_m`)의 기준인 지상 높이는 arm 직전 1 s의 `vehicle_local_position` z 중앙값이다(z 잡음이 0.1 m 수준이라 한 표본이면 0.2 m 기준의 여유가 줄어서). 표본 수는 `facts.ref_z_samples`에 남고 5개 미만이면 `PRECONDITION`이다.
 
 ## 규칙
 
