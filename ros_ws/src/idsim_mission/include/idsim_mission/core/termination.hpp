@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // 종료 결과. goal 하나의 끝은 Termination 하나로 정하고, action result와 종료 사건
-// (MissionEvent)은 둘 다 이 객체에서 만든다(decisions.md 담당자별 구현 지시 ros2-engineer).
+// (MissionEvent)은 둘 다 이 객체에서 만든다(종료 사건은 정확히 1건. decisions.md 쟁점 3 "종료의
+// 충돌 규칙").
 // 노드는 to_result와 to_terminal_event의 값을 메시지에 옮기기만 한다. 사건의 stamp, vehicle_id,
 // mission_id, goal_id는 노드가 채운다.
 //

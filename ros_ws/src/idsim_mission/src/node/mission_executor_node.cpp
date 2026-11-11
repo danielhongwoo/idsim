@@ -197,11 +197,16 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_configure(
     return fail("configure", "command_source.system must differ from vehicle.sysid");
   }
   if (t.link_timeout_ns >= t.mode_confirm_timeout_ns) {
-    // 지상 disarm 분기는 link_timeout이 mode_confirm_timeout보다 짧다는 전제로 정했다(C4).
+    // 지상 disarm 분기는 link_timeout이 mode_confirm_timeout보다 짧다는 전제로 정했다
+    // (decisions.md 쟁점 3 M5 "지상 disarm 분기의 상태 끊김과 거부 ack").
     RCLCPP_WARN(
       get_logger(), "link_timeout (%.3f s) is not shorter than mode_confirm_timeout (%.3f s)",
       ns_to_seconds(t.link_timeout_ns), ns_to_seconds(t.mode_confirm_timeout_ns));
   }
+  // 정리의 상한(decisions.md 쟁점 3 M6)은 노드 파라미터가 아니라 파생값이라 계산값을 남긴다.
+  RCLCPP_INFO(
+    get_logger(), "cleanup cap %.3f s (hold_confirm_timeout + 3 x mode_confirm_timeout)",
+    ns_to_seconds(core::cleanup_cap_ns(t)));
   create_entities(*vehicle_, *builder_);
   return CallbackReturn::SUCCESS;
 }

@@ -19,8 +19,8 @@
 //   종료 사건을 낸다.
 // - 배선: 가짜 PX4 발행자로 정상 한 경로(TAKEOFF, LOITER, LAND -> SUCCEEDED)와 무효 한 경로
 //   (GOTO -> INVALID_MISSION). 사건은 ACCEPTED가 앞이고 종료 사건은 1건이며 result와 같은 값.
-// - rclcpp_action에서 cancel을 받아들인 goal을 abort로 끝낼 수 있는지(decisions.md 쟁점 3 C5의
-//   [추정] 확인).
+// - rclcpp_action에서 cancel을 받아들인 goal을 abort로 끝낼 수 있는지(decisions.md 쟁점 3 "종료의
+//   충돌 규칙"의 rclcpp_action 허용 확인).
 // - PREPARING 중 취소의 CANCELED, 실행 중 두 번째 goal의 BUSY, 종료 때의 disarm 한 번(arm 뒤 1개,
 //   arm 전 0개. px4-engineer P3d-1).
 // 시계: 별도 thread가 /clock을 발행한다(on_activate의 2 s 대기는 파라미터가 아니다). 사건 구독은
