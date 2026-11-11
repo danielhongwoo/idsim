@@ -708,9 +708,9 @@ void MissionRunner::step_cleanup(Tick & t)
     publishing_ = false;
     clear_pending();
     if (choice == CleanupChoice::kGround) {
-      send_once(t, CommandKind::kDisarm);
-      finish(
-        t, Outcome::kLinkLost, "vehicle_status lost during ground disarm; disarm not confirmed");
+      std::string what = "vehicle_status lost during ground disarm; disarm not confirmed";
+      send_final(t, CommandKind::kDisarm, what);
+      finish(t, Outcome::kLinkLost, what);
     } else {
       finish(t, Outcome::kLinkLost, "vehicle_status lost");
     }
@@ -790,12 +790,13 @@ void MissionRunner::end_at_cleanup_cap(Tick & t, bool on_ground)
     finish(t, Outcome::kCapGround, what);
     return;
   }
-  send_final(t, CommandKind::kNavLand, what);
+  const bool sent = send_final(t, CommandKind::kNavLand, what);
   if (hold_observed_) {
-    // 발행한 적이 있으면 Hold를 처음 관측한 tick에 발행을 멈췄다(발행 규칙).
+    // 발행한 적이 있으면 Hold를 처음 관측한 tick에 발행을 멈췄다(발행 규칙). NAV_LAND를 보내지
+    // 못했으면 Hold로 남는다.
     what +=
       publish_count_ > 0 ? "; Hold was observed and publishing stopped" : "; Hold was observed";
-    what += ", vehicle stays in Hold if NAV_LAND is lost";
+    what += sent ? ", vehicle stays in Hold if NAV_LAND is lost" : ", vehicle stays in Hold";
   }
   finish(t, Outcome::kCapAir, what);
 }
@@ -866,11 +867,10 @@ void MissionRunner::run_ground(Tick & t)
     const std::string last_ack = pending_.has_ack ? ack_result_name(pending_.last_ack) : "none";
     publishing_ = false;
     clear_pending();
-    send_once(t, CommandKind::kDisarm);
-    finish(
-      t, Outcome::kDisarmFailed,
-      "disarm not confirmed within mode_confirm_timeout (last DISARM ack: " + last_ack +
-        "); vehicle may remain armed on ground");
+    std::string what =
+      "disarm not confirmed within mode_confirm_timeout (last DISARM ack: " + last_ack + ")";
+    send_final(t, CommandKind::kDisarm, what);
+    finish(t, Outcome::kDisarmFailed, what);
     return;
   }
   if (disarm_confirm_.count() >= kConfirmSamples) {
@@ -1098,7 +1098,7 @@ void MissionRunner::send(Tick & t, CommandKind kind)
   acted_ = true;
 }
 
-void MissionRunner::send_final(Tick & t, CommandKind kind, std::string & detail)
+bool MissionRunner::send_final(Tick & t, CommandKind kind, std::string & detail)
 {
   // 끝나는 tick에 확인 없이 한 번 보내는 명령. 이 tick의 Px4Timestamp를 먼저 물어, 만들 수 없으면
   // 명령을 버리고 그 사실을 detail에 적는다(결과는 유지한다).
@@ -1108,13 +1108,14 @@ void MissionRunner::send_final(Tick & t, CommandKind kind, std::string & detail)
     if (kind == CommandKind::kDisarm) {
       detail += ", may remain armed on ground";
     }
-    return;
+    return false;
   }
   send_once(t, kind);
   detail += "; " + name + " sent once, not confirmed";
   if (kind == CommandKind::kDisarm) {
     detail += "; vehicle may remain armed on ground";
   }
+  return true;
 }
 
 void MissionRunner::send_once(Tick & t, CommandKind kind)

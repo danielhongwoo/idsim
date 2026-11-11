@@ -170,6 +170,9 @@ TEST(TimestampPort, FailureOnFinalDisarmDropsCommandKeepsResult)
   const StepOutput end = h.tick();
   EXPECT_TRUE(end.commands.empty());
   expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("disarm not sent (Px4Timestamp unavailable)"), std::string::npos) << detail;
+  EXPECT_EQ(detail.find("sent once"), std::string::npos) << detail;
 }
 
 TEST(TimestampPort, DetailSaysStateUnknownAfterActing)
