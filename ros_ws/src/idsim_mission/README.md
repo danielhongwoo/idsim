@@ -1,0 +1,122 @@
+# idsim_mission
+
+기체 하나의 Mission Executor. `ExecuteMission` action 서버(`/<vehicle_id>/execute_mission`)로 미션을 받아 PX4 Offboard로 실행하고, goal마다 접수와 종료 사건(`mission_event`)을 낸다. 설계 결정의 정본은 `docs-for-agent/plan-1a-6-idsim-mission/decisions.md`(쟁점 2, 3, 4, 6, 10)다. 이 문서는 구현 규칙과 경계를 적는 설계 노트다.
+
+## 구성
+
+| 대상 | 내용 | 의존 | 소유 | 단계 |
+| --- | --- | --- | --- | --- |
+| `idsim_mission_core` | 미션 검증, `TYPE_*` 분류, 상태기(`MissionRunner`), 종료 결과 | 없음(C++17 표준 라이브러리만) | ros2-engineer. `core/snapshot.hpp`와 상태기 전이 표는 px4-engineer 필수 승인 | P3b(이 단계) |
+| `idsim_mission_px4` | px4_msgs -> snapshot 변환, 명령 목록 -> `VehicleCommand`와 setpoint | core, `idsim_common`, px4_msgs | px4-engineer(`include/idsim_mission/px4/`, `src/px4/`, `test/px4/`) | P3c |
+| `mission_executor_component` | lifecycle 노드 껍질, action 서버, 사건 발행, launch | core, px4 어댑터, rclcpp | ros2-engineer | P3d |
+
+- `idsim_mission_core`는 어떤 ROS 패키지도 링크하지 않는다(CMake 대상에 링크가 없다). 단위 테스트는 gtest와 core만 링크한다. ctest의 `core_purity`가 core 소스에 `clock::now`, `rclcpp`, `px4_msgs`, `idsim_common`, `idsim_interfaces`, `builtin_interfaces` 문자열이 없는지 본다(주석 줄 제외).
+- core는 `idsim_interfaces`의 메시지를 쓰지 않고 같은 값을 다시 적는다(`core/types.hpp`의 `Reason`, `item_type`, `FeedbackPhase`, `core/termination.hpp`의 `event_status`). 값이 메시지 상수와 같은지는 P3d의 노드 쪽 gtest가 교차 검사한다(13, 14는 P3e가 메시지에 더한다).
+
+## core와 어댑터의 경계
+
+경계는 `include/idsim_mission/core/snapshot.hpp` 하나다. 헤더 머리 주석에 px4_msgs 필드와의 대응표가 있고 P3c는 그 표대로 채운다. 요약:
+
+- 입력: tick 번호, 그 tick의 ROS 시각, `Snapshot`(토픽마다 최신 표본 하나), `Px4ClockPort`(실패할 수 있는 `Px4Timestamp` 공급). core는 벽시계와 rclcpp를 부르지 않는다(decisions.md 쟁점 6 C1).
+  - `Snapshot.status`(vehicle_status): `timestamp_us`, `received_tick`, `received_ns`, 식별 대조 결과와 불일치 설명, `Arming`, `NavMode`(nav_state와 사용자 의도. OFFBOARD, AUTO_LOITER, AUTO_LAND, 그 밖), `failsafe`.
+  - `Snapshot.land`(vehicle_land_detected): `landed`.
+  - `Snapshot.position`(vehicle_local_position): x, y, z, heading(NED), `z_valid`.
+  - `Snapshot.flags`(failsafe_flags): `ekf_ready`(무효 flag 넷이 모두 false. 술어는 어댑터), `offboard_signal_lost`.
+  - `Snapshot.ack`(vehicle_command_ack, target이 이 Executor인 것만): command 묶음(DO_SET_MODE, ARM_DISARM, NAV_LAND)과 result.
+  - `received_tick`은 "그 표본을 처음 볼 수 있는 step의 tick 번호"다. 그래서 step k에서 낸 명령의 응답은 `received_tick > k`다.
+- 출력(`StepOutput`): `px4_timestamp_us`(이 tick의 명령과 setpoint에 실을 값), `setpoint`(있으면 이 tick에 `offboard_control_mode`(position만)와 `trajectory_setpoint`를 발행), `commands`(`CommandKind` 목록. 재전송도 여기에 나온다), `feedback`, `termination`.
+  - `CommandKind` -> `VehicleCommandBuilder`: `kSetModeOffboard` -> `set_mode_offboard`, `kSetModeHold` -> `set_mode_hold`, `kArm` -> `arm`, `kDisarm` -> `disarm`(강제가 아님), `kNavLand` -> `land`.
+  - `SetpointOut.kind == kGround`이면 어댑터가 z에 지상 setpoint 오프셋 +0.5 m(NED 아래쪽, 어댑터 상수)를 더한다. core는 그 값을 모른다.
+  - 노드는 `Px4ClockPort::now_us`가 그 tick에 만든 `Px4Timestamp` 객체를 보관해 두고 그 객체로 명령과 setpoint를 만든다(`Px4Timestamp`는 시계에서만 만들 수 있다).
+
+## 구현 규칙
+
+action 서버(P3d)
+- `handle_goal`은 항상 `ACCEPT_AND_EXECUTE`다. 거절(REJECT)은 쓰지 않는다. 받을 수 없는 goal은 받아들인 뒤 즉시 ABORTED로 끝낸다.
+- `handle_accepted`는 접수 사건을 낸 뒤 `screen_goal`(core)로 즉시 판정한다. 순서는 VEHICLE_ID_MISMATCH -> INVALID_MISSION -> BUSY다. 이 셋은 feedback 0건이다. PX4 상태에 달린 판정(수신, 식별 대조, EKF gate)은 즉시 하지 않고 PREPARING에서 `ready_timeout` 안에 기다린다(M1. NOT_READY 앞에 PHASE_PREPARING feedback이 나갈 수 있다).
+- `handle_cancel`은 항상 받아들인다. 다음 tick부터 `TickInput.cancel_requested`를 true로 넘기고 분기는 core가 고른다.
+- 종료는 `Termination` 하나로 정하고 action result(`to_result`)와 종료 사건(`to_terminal_event`)을 둘 다 그 객체에서 만든다. 사건의 `stamp`는 노드 시계의 ROS 시각이다.
+- 이름 상수(`Mission::ACTION_NAME`, `MissionEvent::TOPIC_NAME`)는 상대 이름으로 쓰고 namespace 범위 static 초기화식에 쓰지 않는다.
+
+상태기(core)
+- 20 Hz tick마다 `step()` 한 번. goal 실행용 thread를 두지 않는다.
+- 한 tick 안의 판정 순서: (1) 그 단계의 실패(감시 표, 상태 끊김, 거부 ack, 타임아웃 만료) (2) 확인과 완료(N회 연속, 도달, 경과) (3) 취소 (4) 출력 마무리. 같은 tick에 실패와 확인이 함께 정해지면 실패가 이긴다(decisions.md 쟁점 3 "종료의 충돌 규칙"을 전이에도 같게 쓴다).
+- 시간 경계: 경과가 값 이상(`>=`)이면 만료다.
+- `termination`은 정확히 한 번 나오고, 그 뒤의 step은 빈 출력이다(명령, setpoint, feedback, 종료 없음).
+- "N회 연속"은 서로 다른 vehicle_status 표본 N개다. timestamp가 직전 표본보다 크지 않은 표본은 건너뛴다(`SampleCounter`).
+- 대기 중인 명령은 한 번에 하나다. 분기나 단계가 바뀌는 tick에 이전 명령의 재전송을 지운다(그 tick에 이미 쌓인 재전송도 지운다). ack는 대기 중인 명령의 command 묶음이고 첫 전송 tick 뒤에 받은 것만 본다.
+- 발행 규칙: P3-P6(Offboard로 들어가는 중)이 아니면 `nav_state`가 OFFBOARD일 때만 발행한다. OFFBOARD가 아닌 표본을 보면 멈추고 다시 켜지 않는다(`apply_publish_rule`). Hold와 AUTO_LAND의 처음 관측도 이 규칙으로 멈춘다.
+- `Px4ClockPort`는 출력(setpoint나 명령)이 있는 tick에만 부른다. setpoint 항목 실행 중에는 감시 표 순위 1을 보려고 tick 머리에서 부른다.
+
+## 전이 표와 구현의 대응
+
+| decisions.md | 구현 |
+| --- | --- |
+| 쟁점 4 미션의 정적 검증, 1a 임시 제한 | `validate_mission_contract`, `validate_mission` |
+| 쟁점 3 M1 즉시 판정 순서 | `screen_goal` |
+| 쟁점 4 PREPARING P0-P2(TAKEOFF와 LAND 분기) | `MissionRunner::prepare_wait_ready` |
+| P3 발행 시작과 목표점 | `start_signal` |
+| P4, P5, P6 | `prepare_signal`, `prepare_offboard`, `prepare_arm` |
+| 항목 표 TAKEOFF, LOITER와 비행 중 감시 표 | `step_setpoint_item`, `evaluate_monitor`(`core/rules.hpp`) |
+| 항목 표 LAND와 LAND 감시 세 구간, 대비책 disarm | `step_land` |
+| LAND 항목의 ITEM_TIMEOUT | `land_item_timeout` |
+| 쟁점 3 M3-M5 취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패의 정리 | `begin_cleanup`, `step_cleanup`, `select_cleanup` |
+| M4 Hold 분기와 Land 경로 | `enter_air`, `run_air`, `enter_air_land`, `run_air_land` |
+| M5 지상 disarm 분기, C4 | `enter_ground`, `run_ground`, `DisarmConfirm` |
+| disarm 분류의 고정 규칙 | `disarm_class_`(LAND, 정리), `DisarmClass` |
+| 명령 재전송 규칙 | `send`, `resend_due`, `take_ack` |
+| 쟁점 10 타임아웃 기본값 | `core/config.hpp`의 `Timeouts` |
+
+## 재실측으로 바뀔 수 있는 곳
+
+결과가 표와 다르면 아래 한 곳만 고친다. 고칠 때는 px4-engineer가 필수 승인자다.
+
+| 항목 | 재실측 | 고칠 곳 |
+| --- | --- | --- |
+| 지상 setpoint 발행 중의 Hold(지상 분기 -> 공중 분기) | (2) | `MissionRunner::enter_air` |
+| 이륙 직후 landed가 true인 구간의 지상 setpoint와 disarm | (3) | `MissionRunner::enter_ground`, `ground_setpoint` |
+| 감시 표의 행 순위 | (4) | `core/rules.hpp`의 `kMonitorRankOrder` |
+| "disarm 전송 뒤 받은 표본"의 기준 | (5) | `core/rules.cpp`의 `is_after_disarm_send` |
+| 타임아웃 기본값과 재전송 주기 | - | `core/config.hpp`의 `Timeouts` |
+
+## 표에 없어 구현에서 정한 것
+
+px4-engineer 승인 대상이다. 근거가 바뀌면 표에 올리고 이 절을 지운다.
+
+1. 시간 경계와 같은 tick의 순서: 만료는 `>=`이고, 같은 tick에 만료(실패)와 확인이 함께 정해지면 만료가 이긴다. 전이(P5 확인 대 `mode_confirm_timeout` 등)에도, 정리 분기의 확인(Hold, disarm) 대 타임아웃에도 같다. 그래서 정확히 타임아웃 tick에 3번째 확인 표본이 오면 실패다.
+2. setpoint 항목에서 감시 표 행과 ITEM_TIMEOUT이 같은 tick이면 감시 표 행이 이긴다(감시 표를 먼저 본다). ITEM_TIMEOUT은 정리가 필요한 ABORTED 사유이고 감시 표 행은 정리 없이 끝낸다.
+3. P0의 "vehicle_status가 신선"은 마지막 수신이 `link_timeout`(2 s) 안이다.
+4. P1(시작 조건)은 P0을 통과한 tick마다 P2를 기다리는 동안 다시 본다. 기다리는 중에 누가 arm하면 PRECONDITION_FAILED다.
+5. P3은 위치 값(x, y, z와 MODE_KEEP이면 heading)이 유한할 때까지 기다린다(`ready_timeout` 안). `xy_valid`는 gate로 쓰지 않는다는 결정은 그대로다.
+6. P4의 신호 확인은 발행 시작 tick 뒤에 받은 failsafe_flags만 쓴다(그 전의 flags는 앞 미션의 값일 수 있다).
+7. P6의 "ARMED 3회 연속이고 여전히 OFFBOARD"는 ARMED이고 OFFBOARD인 표본을 센다.
+8. PREPARING 중 발행을 시작한 뒤(P3-P6)의 식별 불일치는 NOT_READY로 끝내고 정리 분기를 고르지 않는다(감시 표 순위 2처럼 입력을 믿지 않는다). PREPARING 중에는 LINK_LOST 판정을 두지 않고 각 단계의 타임아웃이 잡는다.
+9. 정리 분기(취소, ITEM_TIMEOUT, PREPARING 실패)는 Executor가 발행이나 명령을 한 번이라도 한 뒤에만 의미가 있다. P0-P2에서 끝나는 NOT_READY와 PRECONDITION_FAILED는 정리 없이 끝난다. 아무것도 하지 않은 상태의 취소는 표본이 없거나 끊겼으면 바로 CANCELED이고, 표본이 있으면 표대로 고른다(예: `[LAND]` 미션의 P2 대기 중 취소는 공중이면 Hold).
+10. 거부 ack의 정의: ACCEPTED와 IN_PROGRESS가 아니면 거부다. DO_SET_MODE(Offboard)의 "ACCEPTED가 아니면 MODE_SWITCH_FAILED"도 IN_PROGRESS는 거부로 보지 않는다.
+11. Hold와 Offboard는 같은 DO_SET_MODE라 ack로 가를 수 없다. 대기 중인 명령이 하나라는 규칙에 기대어 그 명령의 ack로 본다. Offboard의 늦은 거부 ack가 Hold 대기 중에 오면 Hold 거부로 읽힌다.
+12. LAND 항목의 대비책 disarm은 AUTO_LAND 확인 뒤에만 보낸다(대기 중인 명령은 하나라 NAV_LAND 재전송과 겹치지 않게). 지연 시간은 landed이고 ARMED인 최신 값을 처음 본 tick부터 잰다.
+13. LAND 항목의 확인 전 구간에서도 `mode_confirm_timeout`은 지상 DISARMED 계수 중에도 흐른다. 같은 tick이면 MODE_SWITCH_FAILED가 ITEM_TIMEOUT보다 먼저다(`[LAND]` 단독 미션 단서의 "timeout이 `mode_confirm_timeout`보다 짧을 때뿐"과 맞춘다).
+14. disarm 분류(지상 대 공중)는 처음 관측한 DISARMED 표본에서 정하고, ARMED 표본을 보면 미정으로 되돌린다. LAND 항목에서 정한 분류는 취소의 정리로 이어진다.
+15. ITEM_TIMEOUT과 PREPARING 실패의 정리 중 feedback phase는 실패한 단계의 phase(EXECUTING, WAITING_MODE, PREPARING)를 유지한다. PHASE_CANCELING은 취소일 때만이다.
+16. 지상 setpoint의 위치가 유한하지 않으면 P3에서 읽은 위치를 쓰고, heading이 유한하지 않으면 그때의 setpoint yaw를 쓴다.
+17. `Px4Timestamp` 공급이 실패한 tick: 출력을 모두 버리고 ABORTED로 끝낸다. reason은 정리 중(ITEM_TIMEOUT, PREPARING 실패)이면 원래 것, 그 밖은 INTERNAL이다. 끝나는 tick에 보내려던 마지막 disarm은 버리고 결과는 유지한다.
+18. 지상 disarm 분기의 LINK_LOST에서 "disarm을 한 번 더 보낸다"는 그 tick의 분기 고르기가 지상일 때다.
+
+## 테스트
+
+`test/`의 core 단위 테스트는 gtest와 core만 링크한다(노드와 DDS 참가자를 만들지 않는다). 노드가 필요한 테스트(lifecycle, 배선, 메시지 상수 교차 검사)는 P3d에서 더한다.
+
+| 파일 | 내용 |
+| --- | --- |
+| `runner_harness.hpp` | tick 열 헬퍼(20 Hz 흉내, 합성 timestamp, 가짜 PX4 반응, `feed`로 표본 열 주입, 종료 불변식) |
+| `test_mission_validation.cpp` | 검증 규칙, 1a 제한, `TYPE_*` 분류 전수, `screen_goal` 순서 |
+| `test_termination.cpp` | status와 reason 전수 대응표, reason 값, 종료 결과 == 종료 사건 |
+| `test_monitor_table.cpp` | 감시 표 순위마다 한 건, 같은 tick 동률 24쌍, 순위 5의 가지, 행 수와 parametrize 수 |
+| `test_confirm_rules.cpp` | N회 연속 계수, 전송 뒤 표본 기준, 늦은 arm 경합, 정리 분기 교차표(원인 3 x snapshot 5), yaw 변환 |
+| `test_runner_preparing.cpp` | P0-P6, `[LAND]` 미션, PREPARING 실패의 정리 |
+| `test_runner_items.cpp` | TAKEOFF, LOITER, 상태기 안의 감시 표(순위마다), 엇갈림, 이력의 항목 경계, 분류 고정 |
+| `test_runner_land.cpp` | LAND 세 구간, 완료 우선, 대비책 disarm, LAND의 ITEM_TIMEOUT 변형 |
+| `test_runner_cleanup.cpp` | 취소 분기, Hold와 Land 경로, 지상 disarm 확인과 C4, ITEM_TIMEOUT 정리 |
+| `test_runner_conflicts.cpp` | 종료의 충돌 규칙(C5), `Px4Timestamp` 공급 실패 |
+
+PX4 v1.17.0에서 나오지 않는 방어 경로(OFFBOARD이고 ARMED인 채 failsafe, 순위 5의 이력, 순위 8, DISARM과 ARM의 그 밖의 거부 ack)는 합성 표본과 합성 ack로만 시험하고 테스트 주석에 그렇게 적었다. 단위 테스트는 합성 timestamp만 검사한다. 실제 시계 관계는 재실측 (5)만 확인한다.

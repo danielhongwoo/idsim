@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>idsim_mission</name>
+  <version>0.1.0</version>
+  <description>idsim Mission Executor: 미션 검증, 상태기 core, PX4 어댑터, lifecycle 노드</description>
+  <maintainer email="27140685+danielhongwoo@users.noreply.github.com">Daniel Hongwoo Lee</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_cmake_copyright</test_depend>
+  <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_lint_cmake</test_depend>
+  <test_depend>ament_cmake_xmllint</test_depend>
+  <test_depend>ament_lint_auto</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
