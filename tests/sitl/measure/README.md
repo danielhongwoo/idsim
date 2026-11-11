@@ -27,9 +27,15 @@ tests/sitl/measure/run_measure.sh [--stack 7] [--attempts N] [--keep] item2|item
 
 시도 수(유효 시도)는 기준에 대한 판정이 있는 verdict(`PASS`, `FAIL`, `M3_CONTRADICTED`)만 센다. `INCONCLUSIVE`, `COND_NOT_REACHED`, `HOLD_END`, `WINDOW_MISSED`, `PRECONDITION` 등은 세지 않는다. 항목별 최소 PASS 횟수는 2b/(3) 3회, (5)와 `armed` 10회다.
 
-관찰 판정(2b의 `COND_NOT_REACHED`, (3)의 `HOLD_END`)은 표본 조건을 같이 본다. 관찰 구간(실제 sim 길이) 60 s 이상, 구간 안 `vehicle_status` 표본이 초당 1개 이상, `vehicle_land_detected`가 초당 0.5개 이상, 마지막 표본이 관찰 끝에서 각각 1 s, 2 s 이내여야 하고 못 채우면 `INCONCLUSIVE`다. 표본이 없는 관찰을 "상태 유지"로 읽지 않기 위한 조건이다.
+관찰 판정(2b의 `COND_NOT_REACHED`, (3)의 `HOLD_END`)은 표본 조건을 같이 본다. 관찰 구간(실제 sim 길이) 60 s 이상, 구간 안 `vehicle_status` 표본이 초당 1개 이상, `vehicle_land_detected`가 초당 0.5개 이상, 마지막 표본이 관찰 끝에서 각각 1 s, 2 s 이내여야 하고, 이웃한 표본 사이의 최대 간격(관찰 시작 가장자리 포함. 시작 직전 마지막 표본이 있으면 구간 안으로 세어 잰다)이 `vehicle_status` 2.0 s, `vehicle_land_detected` 4.0 s 이하여야 한다. 간격은 PX4 timestamp 기준과 ROS 수신 시각 기준을 둘 다 행에 남기고 긴 쪽으로 판정한다. 못 채우면 `INCONCLUSIVE`다. 상수의 근거는 PX4 v1.17.0 SITL의 trial4/5 ULog 실측(중앙값 504 ms/1000 ms, 최대 508/1004 ms)이고 PX4 버전을 올리면 다시 확인한다. 표본이 없는 관찰을 "상태 유지"로 읽지 않기 위한 조건이다.
 
-최종 종료 코드는 `crosscheck.py`를 따른다. `run_measure.sh`의 종료 코드는 `measure.py`가 1을 낸 항목이 있으면 1, 아니면 `crosscheck.py`의 값이다. `crosscheck.py`가 ULog 증거로 확정한 최종 판정((5)의 INCONCLUSIVE -> PASS), 최종 판정 기준의 유효 시도 수와 PASS 횟수(전체와 (5)의 지연값별, `final_summary.json`), commit과 image key, `measure.py`의 완료 기록(`done_<item>.json`)을 다시 평가한다.
+최종 verdict가 PASS가 아닌 행이 하나라도 있으면(INCONCLUSIVE, HOLD_END, ERROR, CLOCK_STALLED 등) PASS 횟수를 채워도 종료 코드 0이 아니라 2다(FAIL이나 `M3_CONTRADICTED`가 있으면 1이 앞선다). (5)의 arm 수락 증거가 끝내 없는 회도 같다(집계에서는 10회에 넣지 않고 따로 적고, 종료 코드는 "기계가 판정하지 않은 행이 있음"이다).
+
+`item2`는 2b가 PASS일 수 없어(`COND_NOT_REACHED` 또는 `M3_CONTRADICTED`) 종료 코드 0이 나오지 않는다. (2)의 통과는 architect가 (가) 3/3을 보고 판정한다. 요약과 `final_summary.json`에 "(가) 미도달 n회, (나) M3_CONTRADICTED n회"가 따로 적힌다.
+
+ARMED 기준은 ARMED 3회 확인까지 간 실행이 10회 이상이어야 `enough`다. (3)과 (5)는 취소가 빨라 ARMED 3회에 거의 가지 못하므로 `armed` 항목 없이 item 하나만 돌리면 종료 코드 0이 될 수 없다(예: `item5`만이면 도달 0, `item3`만이면 최대 3). 0을 보려면 `armed`(또는 `all`)를 함께 돌린다.
+
+최종 종료 코드는 `crosscheck.py`를 따른다. `run_measure.sh`의 종료 코드는 `measure.py`가 1을 낸 항목이 있으면 1, 아니면 `crosscheck.py`의 값이다. `crosscheck.py`가 ULog 증거로 확정한 최종 판정((5)의 증거 미확인 INCONCLUSIVE -> PASS. 값이 없어서 INCONCLUSIVE인 행은 승격하지 않는다), 최종 판정 기준의 유효 시도 수와 PASS 횟수(전체와 (5)의 지연값별, `final_summary.json`), commit과 image key, 요청한 item마다의 행과 `measure.py` 완료 기록(`done_<item>.json`)을 다시 평가한다. `run_measure.sh`가 요청 item 목록을 `--items`로 넘기므로 `measure.py`가 기록을 만들기 전에 죽은 item은 2다. `crosscheck.py`의 산출 파일이 이미 있으면 `--force` 없이는 덮어쓰지 않고 거부한다(종료 코드 2).
 
 ## 구조
 

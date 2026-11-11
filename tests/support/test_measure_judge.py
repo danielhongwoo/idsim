@@ -465,6 +465,8 @@ def b2(**kw):
     """2b 사실. 기본은 landed가 true에 닿지 못한 60 s 관찰(조건과 표본 조건 만족)."""
     f = {"landed_true_seen": False, "observe_span_s": 60.0, "observe_status_n": 120,
          "observe_landed_n": 60, "observe_status_age_s": 0.3, "observe_landed_age_s": 0.5,
+         "observe_status_gap_ts_s": 0.51, "observe_status_gap_recv_s": 0.52,
+         "observe_landed_gap_ts_s": 1.01, "observe_landed_gap_recv_s": 1.02,
          "observe_all_armed_loiter": True, "observe_landed_transitions": 0, "dz_max_m": 0.05}
     f.update(kw)
     return f
@@ -535,7 +537,9 @@ def hold3(**kw):
     f = good3()
     f.update({"end_reason": "HOLD", "hold_observe_span_s": 60.0, "hold_observe_status_n": 120,
               "hold_observe_landed_n": 60, "hold_observe_status_age_s": 0.3,
-              "hold_observe_landed_age_s": 0.5, "hold_observe_all_armed_loiter": True,
+              "hold_observe_landed_age_s": 0.5, "hold_observe_status_gap_ts_s": 0.51,
+              "hold_observe_status_gap_recv_s": 0.52, "hold_observe_landed_gap_ts_s": 1.01,
+              "hold_observe_landed_gap_recv_s": 1.02, "hold_observe_all_armed_loiter": True,
               "hold_observe_landed_false": True, "hold_observe_dz_m": 0.05})
     f.update(kw)
     return f
@@ -585,6 +589,8 @@ def test_judge_5_no_arm_evidence_is_inconclusive_when_everything_else_ok():
     v = mj.judge_attempt("5", dict(good3(), arm_evidence=False))
     assert v.verdict == "INCONCLUSIVE" and not v.ok
     assert "ack는 증거가 아니다" in v.reasons[0] and "ACCEPTED" not in v.reasons[0]
+    assert v.kind == "ARM_EVIDENCE"
+    assert mj.judge_attempt("5", dict(good3(), climb_m=None)).kind == ""       # 값 없음 INCONCLUSIVE는 종류가 다르다
     # 다른 위반이 있으면 FAIL이 앞선다
     assert mj.judge_attempt("5", dict(good3(), arm_evidence=False, climb_m=0.5)).verdict == "FAIL"
     assert mj.judge_attempt("5", good3()).verdict == "PASS"
@@ -763,3 +769,45 @@ def test_armed_criterion_window_missed_rows_do_not_fill_n_reached():
     rows = [row(reached=True)] * 10 + [row("WINDOW_MISSED", reached=True, bad=1)]
     r = mj.judge_armed_criterion(rows)
     assert r["n_reached"] == 10 and r["violation_total"] == 1 and not r["passed"]
+
+
+# --- 이웃 표본 간격 -----------------------------------------------------------
+
+
+def test_neighbor_gap_middle_gap():
+    t = [100 * US, 100 * US + 500_000, 103 * US + 500_000]
+    assert mj.neighbor_gap_s(t, 99 * US + 900_000) == pytest.approx(3.0)       # 가운데 공백 3 s
+
+
+def test_neighbor_gap_start_edge_uses_last_sample_before_start():
+    # 시작 직전 표본이 있으면 그것을 구간 안으로 세어 첫 표본과의 간격을 잰다
+    t = [10 * US, 14 * US, 14 * US + 500_000]
+    assert mj.neighbor_gap_s(t, 13 * US) == pytest.approx(4.0)
+    # 시작 직전 표본이 없으면 start부터 첫 표본까지
+    assert mj.neighbor_gap_s([14 * US, 14 * US + 500_000], 11 * US) == pytest.approx(3.0)
+
+
+def test_neighbor_gap_duplicates_ignored_and_empty_is_none():
+    t = [1 * US, 1 * US, 1 * US + 500_000, 1 * US + 500_000]
+    assert mj.neighbor_gap_s(t, 0) == pytest.approx(1.0)                # start 0 -> 첫 표본 1 s
+    assert mj.neighbor_gap_s([], 0) is None
+    assert mj.neighbor_gap_s([1 * US], 2 * US) is None                  # 구간 안 표본이 없다
+    assert mj.neighbor_gap_s([1 * US, 5 * US], 0, end_us=3 * US) == pytest.approx(1.0)   # end 뒤는 무시
+
+
+def test_judge_gap_limits_status_2s_and_landed_4s_use_longer_axis():
+    assert mj.judge_attempt("2b", b2()).verdict == "COND_NOT_REACHED"
+    assert mj.judge_attempt("2b", b2(observe_status_gap_ts_s=2.0)).verdict == "COND_NOT_REACHED"
+    assert mj.judge_attempt("2b", b2(observe_status_gap_ts_s=2.01)).verdict == "INCONCLUSIVE"
+    # ROS 수신 쪽만 긴 간격도 걸린다
+    assert mj.judge_attempt("2b", b2(observe_status_gap_recv_s=2.5)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("2b", b2(observe_landed_gap_ts_s=4.0)).verdict == "COND_NOT_REACHED"
+    assert mj.judge_attempt("2b", b2(observe_landed_gap_ts_s=4.01)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("2b", b2(observe_landed_gap_recv_s=4.5)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("2b", b2(observe_status_gap_ts_s=None)).verdict == "INCONCLUSIVE"
+
+
+def test_judge_gap_limits_apply_to_hold_end_too():
+    assert mj.judge_attempt("3", hold3()).verdict == "HOLD_END"
+    assert mj.judge_attempt("3", hold3(hold_observe_status_gap_recv_s=3.0)).verdict == "INCONCLUSIVE"
+    assert mj.judge_attempt("3", hold3(hold_observe_landed_gap_ts_s=5.0)).verdict == "INCONCLUSIVE"

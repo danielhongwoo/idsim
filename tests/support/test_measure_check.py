@@ -228,9 +228,10 @@ def test_crosscheck_status_aggregation():
 # --- (5) arm 수락 증거: ULog에서 확정 ----------------------------------------
 
 
-def row5(verdict="INCONCLUSIVE", evidence=False):
+def row5(verdict="INCONCLUSIVE", evidence=False, kind="ARM_EVIDENCE"):
     r = row(item="5")
     r["verdict"] = verdict
+    r["inconclusive_kind"] = kind
     r["facts"]["arm_evidence"] = evidence
     return r
 
@@ -340,7 +341,8 @@ def test_final_summary_counts_valid_attempts_and_pass_by_delay():
               "injection": {"delay_s_nominal": [0.0, 0.1][i % 2]}} for i in range(12)])
     finals = {("5", i + 1): ("PASS" if i < 10 else "INCONCLUSIVE") for i in range(12)}
     s = mc.final_summary(rows, finals)["5"]
-    assert s["n"] == 12 and s["n_valid"] == 10 and s["n_pass"] == 10 and s["enough"]
+    assert s["n"] == 12 and s["n_valid"] == 10 and s["n_pass"] == 10
+    assert s["n_not_pass"] == 2 and not s["enough"]       # 판정 안 된 행이 남았다
     assert s["by_delay"]["0.0"]["n_pass"] == 5 and s["by_delay"]["0.1"]["n_pass"] == 5
     # 최종 판정이 없으면 live verdict를 쓴다(INCONCLUSIVE는 유효가 아니다)
     s = mc.final_summary(rows, {})["5"]
@@ -373,3 +375,84 @@ def test_meta_ok_requires_commit_and_image_keys():
     assert not mc.meta_ok([dict(good, commit="unknown")])
     assert not mc.meta_ok([dict(good, commit=None)])
     assert not mc.meta_ok([dict(good, image_keys=None)])
+
+
+# --- 4차 수정 ---------------------------------------------------------------
+
+
+def test_only_arm_evidence_inconclusive_is_promoted_by_ulog_evidence():
+    u = [ul(1100)]
+    promoted = mc.check_row(row5(), [ros(1100)], *index(u))
+    assert promoted["final_verdict"] == "PASS"
+    # 값이 없어서(climb_m None) INCONCLUSIVE인 행은 증거가 있어도 승격하지 않는다
+    other = mc.check_row(row5(kind=""), [ros(1100)], *index(u), logged=[logged(1050)])
+    assert other["final_verdict"] == "INCONCLUSIVE" and not other["evidence_pending"]
+
+
+def srow(item, attempt, verdict, delay=0.0):
+    return {"item": item, "attempt": attempt, "verdict": verdict,
+            "injection": {"delay_s_nominal": delay} if item == "5" else None}
+
+
+GOOD = {"violated": False, "violated_any_class": False, "ulog_total_samples": 3, "enough": True}
+OKROW = {"item": "5", "attempt": 1, "ros_missing_in_ulog": 0, "ulog_samples_in_range": 3,
+         "ros_field_mismatch": [], "ulog_armed_non_offboard": 0, "ulog_flight_armed_non_offboard": 0,
+         "ulog_only": 0, "evidence_pending": False}
+
+
+def test_pass_count_met_but_unjudged_rows_remain_is_exit_two():
+    cases = [
+        [srow("3", i, "PASS") for i in (1, 2, 3)] + [srow("3", i, "HOLD_END") for i in (4, 5, 6)],
+        [srow("5", i, "PASS") for i in range(1, 11)] + [srow("5", 11, "ERROR"), srow("5", 12, "ERROR")],
+        [srow("armed", i, "PASS") for i in range(1, 11)] + [srow("armed", 11, "CLOCK_STALLED")],
+        [srow("5", i, "PASS") for i in range(1, 11)] + [srow("5", 11, "INCONCLUSIVE")],
+    ]
+    for rows in cases:
+        s = mc.final_summary(rows, {})
+        sub = rows[0]["item"]
+        assert s[sub]["n_pass"] >= s[sub]["min"] and s[sub]["n_not_pass"] > 0 and not s[sub]["enough"]
+        assert mc.crosscheck_status([OKROW], GOOD, summary=s) == 2, sub
+
+
+def test_pass_count_met_and_all_pass_is_zero_and_fail_wins_over_unjudged():
+    rows = [srow("5", i, "PASS") for i in range(1, 11)]
+    assert mc.crosscheck_status([OKROW], GOOD, summary=mc.final_summary(rows, {})) == 0
+    rows += [srow("5", 11, "ERROR"), srow("5", 12, "FAIL")]
+    assert mc.crosscheck_status([OKROW], GOOD, summary=mc.final_summary(rows, {})) == 1
+    rows = [srow("2b", 1, "M3_CONTRADICTED"), srow("2b", 2, "COND_NOT_REACHED")]
+    assert mc.crosscheck_status([OKROW], GOOD, summary=mc.final_summary(rows, {})) == 1
+
+
+def test_item5_attempts_without_evidence_are_exit_two_even_with_ten_passes():
+    rows = [srow("5", i, "INCONCLUSIVE") for i in range(1, 12)]
+    finals = {("5", i): "PASS" for i in range(1, 11)}      # 10회는 ULog 증거로 승격, 1회는 끝내 증거 없음
+    s = mc.final_summary(rows, finals)["5"]
+    assert s["n_pass"] == 10 and s["n_not_pass"] == 1 and not s["enough"]
+    pending = dict(OKROW, evidence_pending=True)
+    assert mc.crosscheck_status([pending], GOOD) == 2
+
+
+def test_item2_never_exits_zero_because_2b_cannot_pass():
+    rows = ([srow("2a", i, "PASS") for i in (1, 2, 3)]
+            + [srow("2b", i, "COND_NOT_REACHED") for i in (1, 2, 3)])
+    s = mc.final_summary(rows, {})
+    assert s["2b"]["case_ga"] == 3 and s["2b"]["case_na"] == 0 and not s["2b"]["enough"]
+    assert mc.crosscheck_status([OKROW], GOOD, summary=s) == 2
+
+
+def test_2b_case_counts_split_ga_and_na():
+    rows = [srow("2b", 1, "COND_NOT_REACHED"), srow("2b", 2, "M3_CONTRADICTED"),
+            srow("2b", 3, "COND_NOT_REACHED"), srow("2b", 4, "INCONCLUSIVE")]
+    s = mc.final_summary(rows, {})["2b"]
+    assert s["case_ga"] == 2 and s["case_na"] == 1 and s["by_verdict"]["INCONCLUSIVE"] == 1
+
+
+def test_item_problems_flags_missing_rows_and_done():
+    assert mc.item_problems(["item3"], {"item3": 3}, {"item3"}) == []
+    p = mc.item_problems(["item3", "item5"], {"item3": 3}, {"item3"})
+    assert len(p) == 2 and all(x.startswith("item5") for x in p)
+    p = mc.item_problems(["item2"], {"item2": 2}, set())
+    assert p == ["item2: 완료 기록(done_item2.json)이 없음"]
+    p = mc.item_problems(["item2"], {"item2": 0}, {"item2"})
+    assert len(p) == 1 and "행이 0개" in p[0]
+    assert mc.crosscheck_status([OKROW], GOOD, done=not p) == 2

@@ -18,7 +18,12 @@
 호스트에서 표준 라이브러리만으로 돈다(rclpy, pyulog 불필요). run_measure.sh가 스택을 멈춘 뒤 부른다
 (ULog는 닫힌 뒤에 읽는다. 닫히지 않았으면 마지막 메시지가 잘린 채로 읽는다).
 
-  crosscheck.py --measure-dir <실행 디렉터리>/measure [--repo-root 저장소]
+  crosscheck.py --measure-dir <실행 디렉터리>/measure [--repo-root 저장소] [--items item3,item5,...] [--force]
+
+--items는 요청한 item 목록이다(run_measure.sh가 넘긴다). item마다 행(measure_<item>.jsonl)과 완료 기록
+(done_<item>.json)이 없으면 종료 코드 2다(measure.py가 기록을 만들기 전에 죽은 item도 드러난다). 생략하면
+있는 파일로 목록을 정한다. 이 스크립트가 만드는 파일(crosscheck_<item>.json, armed_criterion.json,
+final_summary.json)이 이미 있으면 --force 없이는 덮어쓰지 않고 거부한다(종료 코드 2).
 
 시도마다(armed_window_ros_us가 있는 행). 대조 로직은 tests/support/measure_check.py(단위 테스트)다.
   - ROS 표본이 ULog에 같은 timestamp로 있고 arming_state, nav_state, failsafe,
@@ -71,25 +76,38 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--measure-dir", required=True)
     ap.add_argument("--repo-root", default=str(Path(__file__).resolve().parents[3]))
+    ap.add_argument("--items", default=None, help="요청한 item 목록(쉼표 구분)")
+    ap.add_argument("--force", action="store_true", help="기존 crosscheck 산출 파일을 덮어쓴다")
     args = ap.parse_args(argv)
     mdir = Path(args.measure_dir)
     files = sorted(glob.glob(str(mdir / "measure_*.jsonl")))
+    requested = args.items.split(",") if args.items else [
+        os.path.basename(f)[len("measure_"):-len(".jsonl")] for f in files]
+    outputs = [mdir / ("crosscheck_%s.json" % it) for it in requested]
+    outputs += [mdir / "armed_criterion.json", mdir / "final_summary.json"]
+    existing = [str(o) for o in outputs if o.exists()]
+    if existing and not args.force:
+        print("이미 있는 산출 파일을 덮어쓰지 않는다(--force로 허용): %s" % existing, file=sys.stderr)
+        return 2
     if not files:
         print("measure_*.jsonl이 없다: %s" % mdir, file=sys.stderr)
+        for line in mc.item_problems(requested, {}, set()):
+            print(line, file=sys.stderr)
         return 2
     cache = {}
     entries = []
     all_results = []
     all_rows = []
     finals = {}
-    done = True
+    rows_by_item = {}
+    done_items = set()
     for mf in files:
         item = os.path.basename(mf)[len("measure_"):-len(".jsonl")]
         rows = load_jsonl(mf)
         all_rows.extend(rows)
-        if not (mdir / ("done_%s.json" % item)).exists():
-            print("done_%s.json이 없다(measure.py가 끝까지 돌지 않았다)" % item)
-            done = False
+        rows_by_item[item] = len(rows)
+        if (mdir / ("done_%s.json" % item)).exists():
+            done_items.add(item)
         raw = load_jsonl(str(mdir / ("raw_%s.jsonl" % item)))
         by_attempt = {}
         for r in raw:
@@ -150,14 +168,21 @@ def main(argv=None):
     for path, (_, _, logged) in sorted(cache.items()):
         n_armed_log = sum(1 for m in logged if mc.ARM_LOG_TEXT in m["msg"])
         print("ULog %s: '%s' 줄 %d개" % (os.path.relpath(path, args.repo_root), mc.ARM_LOG_TEXT, n_armed_log))
+    problems = mc.item_problems(requested, rows_by_item, done_items)
+    for line in problems:
+        print("요청한 항목의 기록이 없다: %s" % line)
+    done = not problems
     crit = mc.aggregate_armed(entries)
     summary = mc.final_summary(all_rows, finals)
     with open(mdir / "final_summary.json", "w") as fh:
         json.dump(summary, fh, indent=1, sort_keys=True)
         fh.write("\n")
     for sub_item, d in sorted(summary.items()):
-        print("최종 %s: 시도 %d, 유효 %d, PASS %d(최소 %d), 기준과 다른 관측 %d%s" % (
-            sub_item, d["n"], d["n_valid"], d["n_pass"], d["min"], d["n_exit1"],
+        print("최종 %s: 시도 %d, 유효 %d, PASS %d(최소 %d), PASS가 아닌 행 %d, 기준과 다른 관측 %d, verdict별 %s%s%s" % (
+            sub_item, d["n"], d["n_valid"], d["n_pass"], d["min"], d["n_not_pass"], d["n_exit1"],
+            json.dumps(d["by_verdict"], sort_keys=True),
+            ", (가) 미도달 %d회, (나) M3_CONTRADICTED %d회" % (d["case_ga"], d["case_na"])
+            if "case_ga" in d else "",
             ", 지연값별 %s" % json.dumps(d["by_delay"], sort_keys=True) if d["by_delay"] else ""))
     crit["note"] = ("이 통과는 PX4 직접 명령 부류(px4_direct)의 통과다. P4 머지 조건은 Executor 경유 부류"
                     "(scenario_a)의 통과가 따로 필요하다. armed_non_offboard 합산은 ROS 기록과 ULog 기록의 합이고 "

@@ -78,8 +78,10 @@ from tests.support.px4_raw import ClockStalled, Px4Raw  # noqa: E402
 US = mj.US
 
 ITEMS = ("item2", "item3", "item5", "armed")
-DEFAULT_ATTEMPTS = {"item2": 3, "item3": 3, "item5": 10, "armed": 10}
-MIN_ATTEMPTS = dict(DEFAULT_ATTEMPTS)
+# 최소 시도 수는 measure_check.MIN_ATTEMPTS_BY_ITEM 한 곳에 있다(crosscheck.py도 같은 값을 쓴다)
+MIN_ATTEMPTS = {"item2": mc.MIN_ATTEMPTS_BY_ITEM["2b"], "item3": mc.MIN_ATTEMPTS_BY_ITEM["3"],
+                "item5": mc.MIN_ATTEMPTS_BY_ITEM["5"], "armed": mc.MIN_ATTEMPTS_BY_ITEM["armed"]}
+DEFAULT_ATTEMPTS = dict(MIN_ATTEMPTS)
 DELAY_RANGE_S = (0.0, 0.2)
 
 STOP_ARM_RESEND_AFTER_FIRST_ARMED = True   # armed 항목: P6처럼 첫 ARMED 표본에서 arm 재전송을 멈춘다
@@ -367,6 +369,7 @@ def observe_facts(raw, start_us, z_ref, end_us):
     st = [x for x in raw.status if start_us < x.recv_ros_us <= end_us]
     ld = [x for x in raw.landed if start_us < x.recv_ros_us <= end_us]
     last_ld = [x for x in raw.landed if x.recv_ros_us <= end_us]
+    all_st = [x for x in raw.status if x.recv_ros_us <= end_us]
     zs = [abs(q[3] - z_ref) for q in raw.pos if start_us < q[0] <= end_us]
     return {
         "span_s": (end_us - start_us) / US,
@@ -374,6 +377,11 @@ def observe_facts(raw, start_us, z_ref, end_us):
         "landed_n": len(ld),
         "status_age_s": None if not st else (end_us - st[-1].recv_ros_us) / US,
         "landed_age_s": None if not last_ld else (end_us - last_ld[-1].recv_ros_us) / US,
+        # 이웃 표본 사이 최대 간격(시작 가장자리 포함). PX4 timestamp 기준과 수신 시각 기준을 둘 다 남긴다.
+        "status_gap_ts_s": mj.neighbor_gap_s([x.ts_us for x in all_st], start_us),
+        "status_gap_recv_s": mj.neighbor_gap_s([x.recv_ros_us for x in all_st], start_us),
+        "landed_gap_ts_s": mj.neighbor_gap_s([x.ts_us for x in last_ld], start_us),
+        "landed_gap_recv_s": mj.neighbor_gap_s([x.recv_ros_us for x in last_ld], start_us),
         "all_armed_loiter": all(mj.is_armed(x) and x.nav_state == mj.NAV_STATE_AUTO_LOITER for x in st),
         "landed_transitions": mj.landed_transitions(raw.landed, start_us, end_us),
         "landed_false": all(not x.landed for x in ld),
@@ -387,6 +395,10 @@ def hold_observe_facts(raw, end_us, z_end):
     return {"hold_observe_span_s": o["span_s"], "hold_observe_status_n": o["status_n"],
             "hold_observe_landed_n": o["landed_n"], "hold_observe_status_age_s": o["status_age_s"],
             "hold_observe_landed_age_s": o["landed_age_s"],
+            "hold_observe_status_gap_ts_s": o["status_gap_ts_s"],
+            "hold_observe_status_gap_recv_s": o["status_gap_recv_s"],
+            "hold_observe_landed_gap_ts_s": o["landed_gap_ts_s"],
+            "hold_observe_landed_gap_recv_s": o["landed_gap_recv_s"],
             "hold_observe_all_armed_loiter": o["all_armed_loiter"],
             "hold_observe_landed_false": o["landed_false"], "hold_observe_dz_m": o["dz_m"]}
 
@@ -549,6 +561,10 @@ def attempt_item2(rig, args, a):
               "observe_span_s": obs["span_s"], "observe_status_n": obs["status_n"],
               "observe_landed_n": obs["landed_n"], "observe_status_age_s": obs["status_age_s"],
               "observe_landed_age_s": obs["landed_age_s"],
+              "observe_status_gap_ts_s": obs["status_gap_ts_s"],
+              "observe_status_gap_recv_s": obs["status_gap_recv_s"],
+              "observe_landed_gap_ts_s": obs["landed_gap_ts_s"],
+              "observe_landed_gap_recv_s": obs["landed_gap_recv_s"],
               "observe_all_armed_loiter": obs["all_armed_loiter"]})
     if got:
         t_true = seen_true["l"].recv_ros_us
@@ -711,6 +727,9 @@ def write_extra_summary(fh, item, rows):
             else:
                 cases.append("  시도 %d: (가) landed true 미도달(%s)" % (r["attempt"], r["verdict"]))
         fh.write("2b 회별 결과:\n" + "\n".join(cases) + "\n")
+        fh.write("(가) 미도달 %d회(COND_NOT_REACHED), (나) M3_CONTRADICTED %d회\n" % (
+            sum(1 for r in rows if r["item"] == "2b" and r["verdict"] == "COND_NOT_REACHED"),
+            sum(1 for r in rows if r["item"] == "2b" and r["verdict"] == "M3_CONTRADICTED")))
         if any(c.startswith("  시도") and "(나)" in c for c in cases):
             fh.write("!! (나)가 있다: M3 문장(Hold로 끝난 기체는 스스로 내려앉지 않는다)과 다르다. architect에게 올린다.\n")
     if item in ("item3", "item5"):
@@ -884,6 +903,7 @@ def main(argv=None):
                     f = err[2]
                     row = dict(base, item=nominal_injection(item, a, args)["item"], **{"class": mj.CLASS_DIRECT},
                                injection=nominal_injection(item, a, args), verdict=err[0],
+                               inconclusive_kind="",
                                result=err[0], reasons=[err[1]], facts=f, exit_code=exit_code_of(err[0]),
                                armed3_reached=None if not f or "armed3_reached" not in f
                                else f["armed3_reached"],
@@ -898,7 +918,7 @@ def main(argv=None):
                     for sub, inj, facts, v in judged:
                         has = "armed_window_ros_us" in facts
                         row = dict(base, item=sub, injection=inj, verdict=v.verdict, result=v.verdict,
-                                   **{"class": mj.CLASS_DIRECT},
+                                   inconclusive_kind=v.kind, **{"class": mj.CLASS_DIRECT},
                                    reasons=v.reasons, facts=facts, exit_code=exit_code_of(v.verdict),
                                    armed3_reached=facts["armed3_reached"] if has else None,
                                    armed_non_offboard=facts["armed_non_offboard"] if has else None)

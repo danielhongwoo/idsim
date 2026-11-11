@@ -136,7 +136,8 @@ compose ps -a --format '{{.Service}} {{.State}} exit={{.ExitCode}}' >"${out_dir}
 compose logs --no-color >"${out_dir}/compose.log" 2>&1 || true
 echo "서비스 종료 상태: ${out_rel}/stop_exit.txt" >&2
 
-python3 tests/sitl/measure/crosscheck.py --measure-dir "$out_dir" --repo-root "$repo_root" | tee "${out_dir}/crosscheck.log"
+python3 tests/sitl/measure/crosscheck.py --measure-dir "$out_dir" --repo-root "$repo_root" \
+  --items "$(IFS=,; echo "${items[*]}")" | tee "${out_dir}/crosscheck.log"
 rc="${PIPESTATUS[0]}"
 case "$rc" in 0|1|2) ;; *) echo "crosscheck: 예상 밖의 종료 코드 ${rc}를 2로 접는다" >&2; rc=2 ;; esac
 # 최종 종료 코드는 crosscheck를 따른다. crosscheck는 ULog 증거로 확정한 최종 판정(예: (5)의 INCONCLUSIVE ->

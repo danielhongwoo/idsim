@@ -52,6 +52,12 @@ OBSERVE_MAX_STATUS_AGE_S = 1.0      # 마지막 vehicle_status 표본이 관찰 
 OBSERVE_MAX_LANDED_AGE_S = 2.0      # 마지막 vehicle_land_detected 표본도 같다
 OBSERVE_MIN_STATUS_PER_S = 1.0      # 관찰 구간의 vehicle_status 표본 수 하한(초당)
 OBSERVE_MIN_LANDED_PER_S = 0.5      # 관찰 구간의 vehicle_land_detected 표본 수 하한(초당)
+# 이웃한 표본 사이의 최대 간격(s). 구간 가운데의 공백과 시작 가장자리를 함께 본다.
+# 근거: PX4 v1.17.0 SITL, trial4/5 ULog 실측 중앙값 504 ms(vehicle_status)/1000 ms(vehicle_land_detected),
+# 최대 508/1004 ms. PX4 버전을 올리면 다시 확인한다. PX4 timestamp 기준과 ROS 수신 시각 기준을 둘 다
+# 계산하고 긴 쪽으로 판정한다(같은 timestamp 중복은 무시).
+OBSERVE_MAX_STATUS_GAP_S = 2.0
+OBSERVE_MAX_LANDED_GAP_S = 4.0
 
 # 종료 코드 1로 읽는 verdict(기준과 다른 관측). M3_CONTRADICTED는 2b에서 landed가 true에 닿은 경우다.
 EXIT1_VERDICTS = ("FAIL", "M3_CONTRADICTED")
@@ -459,6 +465,25 @@ class Verdict:
     ok: bool
     verdict: str                       # PASS, FAIL, 또는 plan의 분류(PRECONDITION 등)
     reasons: list = field(default_factory=list)
+    # INCONCLUSIVE의 종류. "ARM_EVIDENCE"는 (5)의 arm 수락 증거 미확인(ULog 교차 확인에서 승격할 수
+    # 있는 유일한 종류). 그 밖의 INCONCLUSIVE는 빈 문자열이고 승격하지 않는다.
+    kind: str = ""
+
+
+def neighbor_gap_s(times_us, start_us, end_us=None):
+    """관찰 구간 (start_us, end_us]에서 이웃한 표본 사이의 최대 간격(s)과 그 수.
+
+    times_us: 표본 시각 목록(PX4 timestamp 또는 ROS 수신 시각, 같은 시각 중복은 무시). 시작 직전의
+    마지막 표본이 있으면 구간 안으로 세어 첫 표본과의 간격을 시작 가장자리로 잰다. 없으면 start_us부터
+    첫 표본까지를 잰다. 구간 안 표본이 없으면 None(간격을 말할 수 없다).
+    """
+    ts = sorted(set(t for t in times_us if end_us is None or t <= end_us))
+    inside = [t for t in ts if t > start_us]
+    if not inside:
+        return None
+    before = [t for t in ts if t <= start_us]
+    seq = ([before[-1]] if before else [start_us]) + inside
+    return max(b - a for a, b in zip(seq, seq[1:])) / US
 
 
 def judge_cleanup_time(total_s, limit_s=CLEANUP_LIMIT_S):
@@ -481,6 +506,14 @@ def _sampling_problem(f, p):
     if f[p + "landed_n"] < span * OBSERVE_MIN_LANDED_PER_S:
         return "vehicle_land_detected 표본 %d개 < 초당 %.1f개 x %.0f s" % (
             f[p + "landed_n"], OBSERVE_MIN_LANDED_PER_S, span)
+    for name, limit, label in (("status", OBSERVE_MAX_STATUS_GAP_S, "vehicle_status"),
+                               ("landed", OBSERVE_MAX_LANDED_GAP_S, "vehicle_land_detected")):
+        gts, grecv = f[p + name + "_gap_ts_s"], f[p + name + "_gap_recv_s"]
+        if gts is None or grecv is None:
+            return "%s 이웃 표본 간격을 구할 수 없음" % label
+        if max(gts, grecv) > limit:
+            return "%s 이웃 표본 간격 %.2f s(PX4 timestamp %.2f, 수신 %.2f) > %.1f s" % (
+                label, max(gts, grecv), gts, grecv, limit)
     sa, la = f[p + "status_age_s"], f[p + "landed_age_s"]
     if sa is None or sa > OBSERVE_MAX_STATUS_AGE_S:
         return "마지막 vehicle_status 표본이 관찰 끝에서 %s s (기준 %.1f s 이내)" % (sa, OBSERVE_MAX_STATUS_AGE_S)
@@ -584,7 +617,8 @@ def judge_attempt(item, f):
         need(f["final_disarmed"], "관찰 끝에 DISARMED가 아님")
         if item == "5" and not reasons and not missing and not f["arm_evidence"]:
             return Verdict(False, "INCONCLUSIVE",
-                           ["arm 수락 증거(전송 뒤 ARMED 표본 또는 ULog logged message)가 없음. ack는 증거가 아니다"])
+                           ["arm 수락 증거(전송 뒤 ARMED 표본 또는 ULog logged message)가 없음. ack는 증거가 아니다"],
+                           kind="ARM_EVIDENCE")
         return fin()
     if item == "armed":
         need(f["armed3_reached"], "ARMED 3회 확인에 도달하지 못함")

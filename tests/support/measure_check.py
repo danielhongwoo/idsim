@@ -64,9 +64,9 @@ def final_verdict(row, evidence, consistent=True):
 
     돌려주는 (verdict, pending). pending은 증거가 끝내 없어 INCONCLUSIVE로 남은 경우다.
     행의 ULog 대조가 일치하지 않으면(consistent False) 증거가 있어도 PASS로 올리지 않는다."""
-    f = row["facts"]
-    if row["item"] == "5" and row["verdict"] == "INCONCLUSIVE" and f is not None \
-            and f["arm_evidence"] is False:
+    # 증거 미확인으로 INCONCLUSIVE가 된 행만 승격한다. 값이 없어서(예: climb_m None) INCONCLUSIVE인
+    # 행은 증거가 있어도 승격하지 않는다.
+    if row["item"] == "5" and row["verdict"] == "INCONCLUSIVE" and row["inconclusive_kind"] == "ARM_EVIDENCE":
         if consistent and (evidence["A_armed_sample"] or evidence["B_armed_log"]):
             return "PASS", False
         return "INCONCLUSIVE", True
@@ -214,14 +214,20 @@ def final_summary(rows, finals, min_by_item=MIN_ATTEMPTS_BY_ITEM):
 
     rows: measure 행(item, attempt, injection, verdict). finals: {(item, attempt): 최종 verdict}.
     항목마다 n, n_valid(PASS, FAIL, M3_CONTRADICTED만. INCONCLUSIVE 등은 유효 시도가 아니다), n_pass,
-    n_exit1, enough(n_pass >= 최소 시도 수), by_delay((5)의 명목 지연값별 n, n_valid, n_pass)를 낸다.
+    n_not_pass(최종 verdict가 PASS가 아닌 행 수), n_exit1, by_verdict(최종 verdict별 횟수),
+    enough(n_pass >= 최소 시도 수 그리고 n_not_pass == 0), by_delay((5)의 명목 지연값별 n, n_valid,
+    n_pass)를 낸다. 판정 안 된 행이 하나라도 있으면 PASS 횟수를 채워도 enough가 아니다(종료 코드 2).
+    2b는 (가) 미도달(COND_NOT_REACHED)과 (나) M3_CONTRADICTED를 case_ga, case_na로 따로 센다.
     """
     out = {}
     for r in rows:
         sub = r["item"]
         v = finals.get((sub, r["attempt"]), r["verdict"])
-        d = out.setdefault(sub, {"n": 0, "n_valid": 0, "n_pass": 0, "n_exit1": 0, "by_delay": {}})
+        d = out.setdefault(sub, {"n": 0, "n_valid": 0, "n_pass": 0, "n_not_pass": 0, "n_exit1": 0,
+                                 "by_verdict": {}, "by_delay": {}})
         d["n"] += 1
+        d["by_verdict"][v] = d["by_verdict"].get(v, 0) + 1
+        d["n_not_pass"] += 0 if v == "PASS" else 1
         valid = v in mj.VALID_VERDICTS
         d["n_valid"] += 1 if valid else 0
         d["n_pass"] += 1 if v == "PASS" else 0
@@ -234,7 +240,24 @@ def final_summary(rows, finals, min_by_item=MIN_ATTEMPTS_BY_ITEM):
             e["n_pass"] += 1 if v == "PASS" else 0
     for sub, d in out.items():
         d["min"] = min_by_item[sub]
-        d["enough"] = d["n_pass"] >= d["min"]
+        d["enough"] = d["n_pass"] >= d["min"] and d["n_not_pass"] == 0
+        if sub == "2b":
+            d["case_ga"] = d["by_verdict"].get("COND_NOT_REACHED", 0)
+            d["case_na"] = d["by_verdict"].get("M3_CONTRADICTED", 0)
+    return out
+
+
+def item_problems(requested, rows_by_item, done_items):
+    """요청한 item마다 행과 완료 기록(done_<item>.json)이 있는가. 없는 item의 사유 목록을 돌려준다.
+
+    requested: 요청 item 이름 목록(item2 등). rows_by_item: {item 이름: 행 수}. done_items: 완료 기록이
+    있는 item 이름 집합. measure.py가 기록을 만들기 전에 죽은 item도 여기서 드러난다."""
+    out = []
+    for it in requested:
+        if rows_by_item.get(it, 0) == 0:
+            out.append("%s: 기록(measure_%s.jsonl)이 없거나 행이 0개" % (it, it))
+        if it not in done_items:
+            out.append("%s: 완료 기록(done_%s.json)이 없음" % (it, it))
     return out
 
 
