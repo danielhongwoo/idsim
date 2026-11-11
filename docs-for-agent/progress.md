@@ -2,7 +2,7 @@
 
 이 폴더는 에이전트와 작업자가 세션을 시작할 때 현재 상태를 파악하기 위한 기록이다. 설계는 `docs/architecture.md`, 계획은 `docs/roadmap.md`에 두고, 여기에는 무엇이 끝났고 무엇이 진행 중이며 다음에 무엇을 할지만 적는다. 날짜는 항상 절대 날짜(YYYY-MM-DD)로 쓴다.
 
-## 현재 상태 (2026-11-10)
+## 현재 상태 (2026-11-11)
 
 - 저장소: 원격 github.com/danielhongwoo/idsim. main에 PR #1 CI 골격, #2 큰 그림 다이어그램, #3 시각 도구 로드맵, #4 인계용 진행 기록이 합쳐져 있다. 2b단계(PR #5)와 루트 README, `check_host.sh`(PR #6)도 합쳐졌다.
 - 첫 개발 호스트(2026-11-06까지): VMware VM, x86_64 Ubuntu 24.04, 16 vCPU, 31GB, NVIDIA 없음, GNOME Wayland. 이 호스트에는 다른 compose 프로젝트(`docker`: open_manipulator, zenoh_daemon, cyclo_manager 등)가 host 네트워크로 떠 있었다. 아래 실측값(빌드 시간, 이미지 크기, Gazebo GUI fps)은 이 호스트 기준이다.
@@ -25,7 +25,7 @@
   - `docker/compose.smoke.yaml` 삭제. `run_smoke.sh`는 생성기를 호출해 stack.json을 소비하고, S2-S5는 운영 스택과 같은 구성으로 `bridge`까지 올린다(결정 기록 (k)).
   - 검증 결과: k=0에서 S0, S1b, S2, S3, S4(`--check` 일치), S5 통과. k=0과 k=1 동시 S2 통과, 두 스택 px4 로그 모두 `bind failed` 0건. `artifacts/runs/`에 root 소유 파일 0건. 단위 테스트 141 passed. `tools/ci/lint.sh all` 전부 PASS. `stack.sh up --viz`에서 gz-gui 창 확인(플러그인 18개). `qgc.sh --stack 1`에서 QGC가 15550을 수신하고 연결 확인(ParamCache 갱신). 8889를 점유한 상태에서 에이전트 `bind error` 보고 확인.
   - 접점 승인: test-engineer 조건부 승인 -> 조건 반영, ros2-engineer 승인, sim-engineer 조건부 승인(C1) -> 반영, px4-engineer 접점 문제 없음, reviewer 조건부 -> 반영.
-  - 사용자 육안 확인 2건은 아직 안 됨: `stack.sh up --viz`의 Gazebo GUI에서 x500_1 확인, `qgc.sh --stack`으로 QGC 기체 연결 확인.
+  - 사용자 육안 확인 2건: 2026-11-11에 사용자가 확인했다(`stack.sh up --viz`의 Gazebo GUI에서 x500_1, `qgc.sh --stack 0`으로 QGC 기체 연결).
 - 2026-11-10: 3단계는 PR #10으로 main에 합쳐졌다(5fd11a6).
 - 2026-11-10: 1a 4번 작업 `idsim_common` 설계 확정(ros2, px4, devops 의견, architect 결정, reviewer 검증 조건부 -> 반영). 구현은 시작 전이며 다른 작업 환경에서 이어갈 수 있도록 계획과 근거 전체를 `docs-for-agent/plan-1a-4-idsim-common/`에 두었다.
 - 2026-11-10: 개발 호스트가 바뀌었다. 새 개발 PC는 x86_64 Ubuntu 24.04, 4 vCPU, 7GB RAM이다. 이미지 5종을 이 호스트에서 로컬 빌드했다(px4 3.07GB, sim-base 2.98GB, ros-ws 1.99GB, ros-base 838MB, xrce-agent 153MB). 이 항목 아래의 실측값은 이 호스트 기준이다.
@@ -41,6 +41,10 @@
   - `tools/ros_ws.sh ci`: 148 tests(idsim_common 109, idsim_interfaces 39), clang-tidy PASS. 결함 주입 4가지(필드 타입, 상수 값, `TYPE_*` 추가, 중첩 타입 변경의 전파와 직접 변경 구분) 확인.
   - 관련 owner 검토: ros2, test, sim 승인. ops, logging 조건부 -> 반영. reviewer 최종 검토 PR 가능(PX4 읽기 검토 포함: Hold의 위치 요구, NAV_LAND force, 지상 아닌 disarm 거부, 자동 disarm 조건이 v1.17.0 원문과 모순 없음). 비차단 지적은 반영.
   - `MissionEvent` 고정 시점은 사용자 결정 1의 기준(첫 소비자가 생기는 Phase 완료)의 예외로 Phase 2 완료다(architect 결정, logging-engineer 동의). 이유는 decisions.md. 1a 완료로 당길 수 있다.
+- 2026-11-10: 1a 4번 작업은 PR #15, 5번 작업은 PR #17로 main에 합쳐졌다.
+- 2026-11-11: 현재 개발 호스트(daniel-vm)는 16 vCPU, 31GB로 측정됐다(`nproc`, `free`). px4와 ros2 실측(k=5, 6)은 이 호스트 기준이다.
+- 2026-11-11: GHCR 이미지 5종의 현재 key manifest가 익명 조회로 HTTP 200이다(devops-engineer 조회). 패키지 Public 여부는 사용자가 설정 화면에서 확인하면 "다음 작업 1"을 닫는다. progress의 "Lichtblick 2.5.2"는 베이스 Caddy 이미지 버전이었고 Lichtblick은 1.30.0을 쓴다.
+- 2026-11-11: 3단계 사용자 육안 확인 2건 완료. 1a 6단계(이륙-호버-착륙 노드와 통합 테스트) 설계 결정 확정(브랜치 `docs/1a-6-plan`, 계획과 계약은 `docs-for-agent/plan-1a-6-idsim-mission/`의 README.md와 decisions.md). 다음은 P0(CI trigger), P1(ros-ws 이미지 foxglove_bridge), P2(`idsim_common` 추가), P3a(autostart 런타임 확인) 착수. P3b(상태기)는 px4-engineer 승인 항목 뒤.
 - 다음 작업:
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
   2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
@@ -56,7 +60,7 @@
      - interface.md 초안(ros2-engineer): 포트와 식별자 표(k 0-9, N 1-9, DDS 포트 범위 근거, MAVLink 1000k), QGC 한 스택 제약, SIH 변형의 `PX4_HOME_*` 주의.
   4b. 3단계 C 후속(2026-11-10):
      - PR 생성과 CI 통과 확인(devops-engineer). 사용자 머지.
-     - 사용자 육안 확인 2건: `tools/stack.sh up --viz`의 Gazebo GUI에서 x500_1, `tools/qgc.sh --stack` 뒤 QGC 기체 연결.
+     - (완료 2026-11-11) 사용자 육안 확인 2건: `tools/stack.sh up --viz`의 Gazebo GUI에서 x500_1, `tools/qgc.sh --stack 0` 뒤 QGC 기체 연결.
      - 로드맵 다음 단계: 1a 4단계 `idsim_common`(C++, QoS 프로필, 토픽 이름 매핑, 좌표 변환, 네임스페이스 해석, `VehicleCommand` 빌더, GoogleTest). 이어서 5단계 `idsim_interfaces`, 6단계 이륙-호버-착륙 노드와 통합 테스트, 7단계 `docs/interface.md`. 4단계 착수 때 `frame_transforms`와 px4_msgs v1.17.0 호환을 확인한다(2026-11-10 확인 끝, 결정 기록 (q)).
      - 3단계 C 미해결 항목 처리는 미해결 사항 절 참조(`--run-id` 제거 PR, gz_server.sh 주석 정정 등).
   4c. 1a 4번 작업 `idsim_common`(구현 완료 2026-11-10, 브랜치 `feat/1a-4-idsim-common`). 계획은 `docs-for-agent/plan-1a-4-idsim-common/README.md`, 계약은 같은 디렉터리 `decisions.md`. S2-S5 회귀와 생성기 골든 갱신, reviewer 검토는 끝났다. 남은 순서: PR과 CI의 unit job 통과 -> 사용자 머지. 머지 뒤 unit job의 단계별 시간을 3회 기록한다(devops-engineer).
@@ -74,7 +78,7 @@
 
 | Phase | 상태 | 마지막 갱신 | 비고 |
 | --- | --- | --- | --- |
-| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계 완료(PR #10, 사용자 육안 확인 2건 남음). 4단계 구현 완료, 검토와 PR 전(브랜치 `feat/1a-4-idsim-common`, 계획과 계약은 `docs-for-agent/plan-1a-4-idsim-common/`) | 2026-11-10 | 스모크 설계는 `docs/smoke-test.md` |
+| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계 완료(PR #10, 사용자 육안 확인 2026-11-11 완료). 4단계 완료(PR #15, `docs-for-agent/plan-1a-4-idsim-common/`). 5단계 완료(PR #17, `docs-for-agent/plan-1a-5-idsim-interfaces/`). 6단계 설계 결정 확정, 구현 전(`docs-for-agent/plan-1a-6-idsim-mission/`. P0-P3a 착수 가능, P3b는 px4-engineer 승인 항목 뒤) | 2026-11-11 | 스모크 설계는 `docs/smoke-test.md` |
 | 1b | 시작 전 | 2026-11-06 | |
 | 2 | 시작 전 | 2026-11-06 | |
 | 3 | 시작 전 | 2026-11-06 | |
@@ -192,6 +196,9 @@
 - 2026-11-10: 1a 5번 작업 `idsim_interfaces` 사용자 결정 2건(둘 다 권고안). 1) 계약 고정 시점을 나눈다. 1a 완료 시 공통 규칙, `ExecuteMission`, TAKEOFF/LOITER/LAND. 1b 완료 시 `TargetState`, GOTO/TRACK/RTL. Phase 2 완료 시 `VehicleState`. 2) 6단계 이륙-호버-착륙 노드는 `ExecuteMission` action server로 미션 [TAKEOFF, LOITER, LAND]를 받는다. 그래서 취소 시 Hold 동작 실험을 6단계로 당기고 1a 고정 전에 결과를 반영한다. 근거와 확정 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md`.
 - 2026-11-10: 1a 5번 작업 ros2-engineer 실측 2건(Jazzy, rclcpp_action, rosbag2 0.26.11). 1) `ACCEPT_AND_EXECUTE`로 받은 뒤 사유를 실어 abort하는 방식은 동작한다(BUSY와 VEHICLE_ID_MISMATCH 사유 전달, 실행 중인 첫 goal 무영향, cancel과 abort 혼합 5가지 정상). `ACCEPT_AND_DEFER` 뒤 abort는 예외를 던지므로 Executor는 `ACCEPT_AND_EXECUTE`만 쓴다. 2) rosbag2는 action goal과 result를 기록하지 않는다(`--include-hidden-topics`로 feedback과 status만). Jazzy action에는 introspection이 없다. 그래서 기록물 인덱스용으로 일반 토픽 `MissionEvent.msg`를 둔다.
 
+- 2026-11-11: 1a 6단계 설계 토론(의견 px4, ros2, test, devops. architect 결정과 재질문 다섯 건, reviewer 검증 조건부 -> 개정). 결정은 `docs-for-agent/plan-1a-6-idsim-mission/decisions.md`. 요지: 호스트 wrapper `tests/sitl/run_sitl.sh`가 스택을 올리고 fixture는 붙기만 한다, 기체당 `ops-N` 서비스(component_container_isolated, autostart lifecycle), Offboard 먼저 arm 나중, EKF 준비는 `failsafe_flags` 넷, Offboard 아닌 모드에서는 setpoint 발행 중단(px4 실측), `MissionEvent`는 VOLATILE 유지, 5단계 계약의 의미 변경 M1-M5(고정 전)와 `REASON_DISARM_FAILED = 13` 상수 추가(golden 두 파일 한 줄씩), PR 분할 P0-P5.
+- 2026-11-11: 1a 6단계 사용자 결정. U1 공중 취소 시나리오 D와 `[LAND]` 한 항목 미션을 1a 필수에 넣는다. U2 `sitl`은 PR 머리 커밋마다(draft, 문서만 바뀐 PR 제외)와 main push, lint와 unit trigger도 `pull_request` + `push: main`으로 맞춘다. U3 공중에서 끝나는 미션(마지막 항목이 LAND가 아님)의 종료 동작은 1b로 미루고 1a 노드는 INVALID_MISSION으로 거부한다(5단계 사용자 결정 1의 1a 고정 범위에서 이 조각을 뺐다). `idsim_mission` 소유는 ros2-engineer(`px4/` 디렉터리는 px4-engineer)로 `CLAUDE.md`와 `.claude/agents/`에 반영. 문서의 "러너, 트리거, 게이트"는 runner, trigger, gate로 쓴다. px4-engineer 운용 방법은 그대로 둔다.
+
 ## 미해결 사항
 
 사용자 결정이 필요한 항목.
@@ -221,7 +228,7 @@
 - PX4 timestamp와 `/clock`이 같은 축이라는 주장은 1회 실측과 구조 논증만 있고 회귀 판정은 6단계 failsafe 테스트까지 없다. S5에 `vehicle_status.timestamp`와 `/clock`의 차이 상한 판정을 넣을지 px4-engineer와 test-engineer가 검토한다.
 - px4-api 검사는 C++과 `.py`만 본다. 6단계에서 params, remap yaml이 생기면 범위를 다시 본다.
 - 이 PR이 손대지 않은 `.github/workflows/build.yml`, `build-images.yml`, `tools/ci/image_keys.py`, `tools/ci/build_images.py`에 음차("키", "잡")가 남아 있다. 다음에 고칠 때 바꾼다.
-- px4-engineer가 이 프로젝트 작업에서 안전장치 오류로 반복 중단된다(이번 3회, 설계 토론 때 architect와 reviewer 포함 3회). PX4 인터페이스 작업의 운용 방법이 필요하다. 사용자가 오탐으로 신고하기로 했다(Request ID req_011CgtyuPphfbHiy5z6LYHwa, req_011Cgu1vZ83zmpEFgTFRgHSX, req_011Cgu4CY2zeGbKJuHzw7Gf4). 6단계 전에 결과를 보고 운용 방법을 다시 정한다.
+- px4-engineer가 이 프로젝트 작업에서 안전장치 오류로 반복 중단된다(이번 3회, 설계 토론 때 architect와 reviewer 포함 3회). PX4 인터페이스 작업의 운용 방법이 필요하다. 사용자가 오탐으로 신고하기로 했다(Request ID req_011CgtyuPphfbHiy5z6LYHwa, req_011Cgu1vZ83zmpEFgTFRgHSX, req_011Cgu4CY2zeGbKJuHzw7Gf4). 6단계 전에 결과를 보고 운용 방법을 다시 정한다. 2026-11-11 사용자 결정: 운용 방법은 그대로 둔다(px4-engineer를 계속 호출하고, 중단되면 같은 방식으로 대응).
 - clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다. tidy 대상은 `src/`의 소스이고 헤더는 소스가 include할 때만 검사되는데 `src/`가 이 두 헤더를 include하지 않기 때문이다. 헤더 전용 검사를 둘지, `test/`를 tidy 대상에 넣을지 정해야 한다(ros2-engineer와 devops-engineer).
 - `tools/ros_ws.sh tidy`는 대상이 0개이면 PASS-NO-TARGETS로 통과한다. 디렉터리 구조가 바뀌면 검사가 조용히 빠질 수 있으니 `ci`에서는 경고나 실패로 바꿀지 검토한다(test-engineer 제안, devops-engineer).
 - unit job은 GHCR에 새 ros-ws key(a0f1847b30f3b76f)가 없으면 load 모드로 ros-base부터 다시 빌드한다. main 머지 뒤 build job이 이미지를 올리면 해소된다.
