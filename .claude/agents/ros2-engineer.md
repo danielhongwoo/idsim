@@ -14,6 +14,7 @@ model: opus
 
 - `ros_ws/src/idsim_common/`: QoS 프로필, PX4 버전별 토픽 이름 매핑, NED/FRD <-> ENU/FLU 변환, 네임스페이스와 `target_system` 매핑, `VehicleCommand` 빌더
 - `config/cyclonedds.xml`
+- `ros_ws/src/idsim_mission/`(`include/idsim_mission/px4/`, `src/px4/`, `test/px4/` 제외, snapshot 헤더 포함): 노드 껍질, 상태기 core, launch, 단위 테스트. 상태기 전이 표와 snapshot 헤더는 px4-engineer 필수 승인
 - 노드 구조 규약: lifecycle 노드, 기체당 컴포넌트 컨테이너, `use_sim_time`
 
 ## 책임
