@@ -10,7 +10,10 @@
 # - 지상 disarm: 이 goal에서 arm을 보낸 적이 없을 때만 바로 CANCELED. 한 번이라도 보냈으면 지상에서 DISARMED로 보여도
 #   지상 arm 분기와 같은 disarm 확인을 거친다.
 # CANCELED로 끝난 기체는 Hold(ARMED, landed false)이거나 지상 disarm이다. Hold로 끝난 기체는 지면 근처이거나 땅에 닿아
-# 있어도 스스로 내려앉거나 disarm되지 않는다.
+# 있어도 스스로 내려앉거나 disarm되지 않는다. (이 문장은 이륙 단계와 0.5 m 호버에서 관찰한 범위이고 1a 고정
+# 전까지 잠정이다.)
+# 이 goal이 아직 아무것도 보내지 않았어도 같은 분기를 쓴다. 다만 기체 상태를 받지 못한 채이면 바로 CANCELED이고
+# 그때는 위 상태를 보장하지 않는다.
 string vehicle_id      # 받는 쪽이 자기 vehicle_id와 다르면 VEHICLE_ID_MISMATCH로 중단한다
 Mission mission
 ---
@@ -20,7 +23,7 @@ uint8 REASON_NONE = 0
 uint8 REASON_INVALID_MISSION = 1
 uint8 REASON_VEHICLE_ID_MISMATCH = 2
 uint8 REASON_BUSY = 3
-uint8 REASON_NOT_READY = 4            # 항목을 시작하기 전에 기체가 준비되지 않음
+uint8 REASON_NOT_READY = 4            # 항목을 시작하기 전에 기체가 준비되지 않음. 이 goal은 setpoint와 명령을 보내지 않았다
 uint8 REASON_ARM_REJECTED = 5
 uint8 REASON_MODE_SWITCH_FAILED = 6   # 요청한 모드 전환이 확인되지 않음
 uint8 REASON_ITEM_TIMEOUT = 7
@@ -34,7 +37,7 @@ uint8 REASON_DISARM_FAILED = 13
 # setpoint 항목 실행 중에 Executor가 보내지 않은 disarm이 지상에서 failsafe 없이 관측됐다. 끝난 뒤 기체는 지상에
 # disarm 상태다. 원인은 판정하지 않는다(외부 명령뿐 아니라 PX4 자체의 disarm과 kill을 포함한다).
 uint8 REASON_EXTERNAL_DISARM = 14
-uint8 REASON_INTERNAL = 255
+uint8 REASON_INTERNAL = 255           # 끝난 뒤 기체 상태를 보장하지 않는다(지상에 arm 상태로 남았을 수 있다)
 
 uint8 reason               # REASON_*
 uint32 items_completed     # 완료한 항목 수

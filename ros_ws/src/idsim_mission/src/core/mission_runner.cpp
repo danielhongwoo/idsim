@@ -154,13 +154,15 @@ void MissionRunner::step_preparing(Tick & t)
     // 순위 2와 같다). arm을 보냈으면 강제가 아닌 disarm을 한 번 보낸다(px4-engineer N1).
     // vehicle_command는 target_system으로 주소가 정해져 status의 식별과 무관하고, 강제가 아닌
     // disarm은 공중에서 거부되므로 공중 기체를 끄지 않는다. 이륙 이력이 없으면 자동 disarm이 없다.
+    // reason은 INTERNAL이다. NOT_READY는 기체에 아무것도 보내지 않은 goal에만 쓴다
+    // (P0-P2, architect).
     std::string detail =
       "vehicle_status identity mismatch during preparing: " + t.status->identity_detail;
     if (arm_sent_) {
       send_once(t, CommandKind::kDisarm);
       detail += "; disarm sent once, not confirmed; vehicle may remain armed on ground";
     }
-    terminate(t, aborted(Reason::kNotReady, detail));
+    terminate(t, aborted(Reason::kInternal, detail));
     return;
   }
   switch (prep_) {

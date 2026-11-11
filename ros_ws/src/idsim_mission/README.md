@@ -36,7 +36,7 @@
 파라미터(모두 읽기 전용, 생성기는 만들지 않는다): `lifecycle.self_start`(bool, 기본 true), `command_source.system`(254), `command_source.component`(191), 타임아웃 여덟(`ready_timeout`, `offboard_signal_timeout`, `mode_confirm_timeout`, `arm_timeout`, `hold_confirm_timeout`, `link_timeout`, `land_disarm_fallback_delay`, `command_resend_period`. 초 단위 double, 기본값은 `core/config.hpp`).
 
 lifecycle
-- 생성자: `vehicle.*`를 한 번 선언하고 해석한다(실패는 configure에서 드러난다). `lifecycle.self_start`가 true이면 벽시계 0 ms 일회 timer를 만들고, 그 콜백의 첫 줄에서 timer를 취소한 뒤 `configure()`와 `activate()`를 한 번씩 부른다. 실패하면 그 상태에 남고 `IDSIM_EXECUTOR_START_FAILED: <전이> failed, state <상태>: <이유>` 한 줄을 ERROR로 남긴다(`kStartFailedLogPrefix`). 프로세스는 끝내지 않는다.
+- 생성자: `vehicle.*`를 한 번 선언하고 해석한다(실패는 configure에서 드러난다). `lifecycle.self_start`가 true이면 벽시계 0 ms 일회 timer를 만들고, 그 callback의 첫 줄에서 timer를 취소한 뒤 `configure()`와 `activate()`를 한 번씩 부른다. 실패하면 그 상태에 남고 `IDSIM_EXECUTOR_START_FAILED: <전이> failed, state <상태>: <이유>` 한 줄을 ERROR로 남긴다(`kStartFailedLogPrefix`). 프로세스는 끝내지 않는다.
 - on_configure: `link_timeout`이 `mode_confirm_timeout`보다 짧지 않으면 WARN(지상 disarm 분기의 C4 전제). `vehicle.*` 해석 실패, `use_sim_time` false, 노드 네임스페이스와 `vehicle.ns` 불일치, 타임아웃 0 이하, command source 무효나 source == sysid이면 FAILURE. 구독 다섯, PX4 발행자 셋, 사건 발행자, `RosPx4ClockPort`를 만든다.
 - on_activate: 첫 `/clock`을 벽시계 2 s 기다리고(`wait_until_started`. 파라미터가 아니다) `Px4Timestamp::now`가 되는지 본 뒤 발행자를 켜고, 20 Hz tick timer(노드 시계)와 action 서버를 만든다.
 - on_deactivate: goal 실행 중이면 FAILURE(active에 남는다). 아니면 action 서버와 timer를 없앤다.
@@ -111,7 +111,7 @@ px4-engineer 검토(2026-11-11, P3b 구현)에서 1-8, 10-12, 14-18은 승인, 9
 6. P3은 위치 값(x, y, z와 MODE_KEEP이면 heading)이 유한할 때까지 기다린다(`ready_timeout` 안). `xy_valid`는 gate로 쓰지 않는다는 결정은 그대로다.
 7. P4의 신호 확인은 발행 시작 tick 뒤에 받은 failsafe_flags만 쓴다(그 전의 flags는 앞 미션의 값일 수 있다).
 8. P6의 "ARMED 3회 연속이고 여전히 OFFBOARD"는 ARMED이고 OFFBOARD인 표본을 센다.
-9. PREPARING 중 발행을 시작한 뒤(P3-P6)의 식별 불일치는 NOT_READY로 끝내고 정리 분기를 고르지 않는다(감시 표 순위 2처럼 입력을 믿지 않는다). 이 goal에서 arm을 보냈으면 강제가 아닌 disarm을 한 번 보내고 `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground"를 적는다. vehicle_command는 target_system으로 주소가 정해져 status의 식별과 무관하고, 강제가 아닌 disarm은 공중에서 거부되며, 이륙 이력이 없으면 자동 disarm이 없다(`COM_DISARM_PRFLT=-1`). PREPARING 중에는 LINK_LOST 판정을 두지 않고 각 단계의 타임아웃이 잡는다.
+9. PREPARING 중 발행을 시작한 뒤(P3-P6)의 식별 불일치는 INTERNAL로 끝내고 정리 분기를 고르지 않는다(감시 표 순위 2처럼 입력을 믿지 않는다). 이 goal에서 arm을 보냈으면 강제가 아닌 disarm을 한 번 보내고 `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground"를 적는다. vehicle_command는 target_system으로 주소가 정해져 status의 식별과 무관하고, 강제가 아닌 disarm은 공중에서 거부되며, 이륙 이력이 없으면 자동 disarm이 없다(`COM_DISARM_PRFLT=-1`). PREPARING 중에는 LINK_LOST 판정을 두지 않고 각 단계의 타임아웃이 잡는다.
 10. 정리 분기(취소, ITEM_TIMEOUT, PREPARING 실패)는 Executor가 발행이나 명령을 한 번이라도 한 뒤에만 의미가 있다. P0-P2에서 끝나는 NOT_READY와 PRECONDITION_FAILED는 정리 없이 끝난다. 아무것도 하지 않은 상태의 취소는 표본이 없거나 끊겼으면 바로 CANCELED이고, 표본이 있으면 표대로 고른다. 예: `[LAND]` 미션의 P2 대기 중 취소는 공중이면 Hold를 보낸다. TAKEOFF 미션이 P0에서 다른 토픽을 기다리는 중이라 P1 재확인이 아직 걸리지 않았는데 외부에서 arm된 지상 기체를 취소가 만나면, 지상 분기가 그 기체를 disarm한다. 표(M3)대로이고 강제가 아닌 disarm이라 위험은 낮다.
 11. 거부 ack의 정의: ACCEPTED와 IN_PROGRESS가 아니면 거부다. DO_SET_MODE(Offboard)의 "ACCEPTED가 아니면 MODE_SWITCH_FAILED"도 IN_PROGRESS는 거부로 보지 않는다.
 12. Hold와 Offboard는 같은 DO_SET_MODE라 ack로 가를 수 없다. 대기 중인 명령이 하나라는 규칙에 기대어 그 명령의 ack로 본다. Offboard의 늦은 거부 ack가 Hold 대기 중에 오면 Hold 거부로 읽힌다.
@@ -122,6 +122,11 @@ px4-engineer 검토(2026-11-11, P3b 구현)에서 1-8, 10-12, 14-18은 승인, 9
 17. ITEM_TIMEOUT과 PREPARING 실패의 정리 중 feedback phase는 실패한 단계의 phase(EXECUTING, WAITING_MODE, PREPARING)를 유지한다. PHASE_CANCELING은 취소일 때만이다.
 18. 지상 setpoint의 위치가 유한하지 않으면 P3에서 읽은 위치를 쓰고, heading이 유한하지 않으면 그때의 setpoint yaw를 쓴다.
 19. `Px4Timestamp` 공급이 실패한 tick: 출력을 모두 버리고 ABORTED로 끝낸다. reason은 정리 중(ITEM_TIMEOUT, PREPARING 실패)이면 원래 것, 그 밖은 INTERNAL이다. 발행이나 명령을 한 번이라도 했으면 `detail`에 "vehicle state unknown, may remain armed on ground"를 더한다. 끝나는 tick에 보내려던 마지막 disarm은 버리고 결과는 유지한다.
+
+## 알려진 제한
+
+- 정리 분기 전체의 상한이 없다. 지상 분기와 공중 분기가 바뀔 때마다 분기의 타임아웃 기준(`branch_first_ns_`)이 다시 시작한다. `landed`가 흔들리면 정리가 길어질 수 있다(P4에서 상한을 설계한다).
+- REASON_NOT_READY로 끝난 goal은 기체에 setpoint와 명령을 하나도 보내지 않았다(발행 시작 전인 P0-P2에서만 쓴다). 발행을 시작한 뒤의 식별 불일치는 INTERNAL이다.
 
 ## 테스트
 

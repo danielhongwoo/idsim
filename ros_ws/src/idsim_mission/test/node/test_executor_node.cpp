@@ -520,44 +520,72 @@ TEST_F(ExecutorNodeTest, DeactivateRejectedDuringGoalAndShutdownAborts)
   expect_events_match_result(client.events(), client.result_, MissionEvent::STATUS_ABORTED);
 }
 
-TEST_F(ExecutorNodeTest, CanceledGoalCanBeAborted)
+class CanceledGoalEndTest : public ExecutorNodeTest
 {
-  // 종료의 충돌 규칙은 cancel을 받아들인 goal을 ABORTED나 SUCCEEDED로 끝낼 수 있어야 한다.
-  // rclcpp_action이 이를 허용하는지 본다(노드와 무관한 서버 하나).
-  auto server_node = std::make_shared<rclcpp::Node>("test_server");
-  std::shared_ptr<rclcpp_action::ServerGoalHandle<ExecuteMission>> held;
-  auto server = rclcpp_action::create_server<ExecuteMission>(
-    server_node, "/test/execute_mission",
-    [](const rclcpp_action::GoalUUID &, std::shared_ptr<const ExecuteMission::Goal>) {
-      return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
-    },
-    [](std::shared_ptr<rclcpp_action::ServerGoalHandle<ExecuteMission>>) {
-      return rclcpp_action::CancelResponse::ACCEPT;
-    },
-    [&held](std::shared_ptr<rclcpp_action::ServerGoalHandle<ExecuteMission>> h) { held = h; });
-  auto client_node = std::make_shared<rclcpp::Node>("test_cancel_client");
-  auto client = rclcpp_action::create_client<ExecuteMission>(client_node, "/test/execute_mission");
-  executor_->add_node(server_node);
-  executor_->add_node(client_node);
-  ASSERT_TRUE(spin_until(
-    [&] { return client->action_server_is_ready(); }, std::chrono::seconds(10), nullptr));
-  rclcpp_action::ClientGoalHandle<ExecuteMission>::SharedPtr handle;
-  bool done = false;
-  rclcpp_action::ResultCode code = rclcpp_action::ResultCode::UNKNOWN;
-  rclcpp_action::Client<ExecuteMission>::SendGoalOptions options;
-  options.goal_response_callback = [&handle](const auto & h) { handle = h; };
-  options.result_callback = [&](const auto & r) {
-    code = r.code;
-    done = true;
-  };
-  client->async_send_goal(standard_goal(), options);
-  ASSERT_TRUE(spin_until(
-    [&] { return handle != nullptr && held != nullptr; }, std::chrono::seconds(10), nullptr));
-  client->async_cancel_goal(handle);
-  ASSERT_TRUE(spin_until([&] { return held->is_canceling(); }, std::chrono::seconds(10), nullptr));
-  held->abort(std::make_shared<ExecuteMission::Result>());
-  ASSERT_TRUE(spin_until([&] { return done; }, std::chrono::seconds(10), nullptr));
-  EXPECT_EQ(code, rclcpp_action::ResultCode::ABORTED);
+protected:
+  // cancel을 받아들인 goal을 succeed(true) 또는 abort(false)로 끝내고 client가 받은 code를
+  // 돌려준다.
+  rclcpp_action::ResultCode end_canceled_goal(bool succeed)
+  {
+    // 종료의 충돌 규칙은 cancel을 받아들인 goal을 ABORTED나 SUCCEEDED로 끝낼 수 있어야 한다.
+    // rclcpp_action이 이를 허용하는지 본다(노드와 무관한 서버 하나).
+    auto server_node = std::make_shared<rclcpp::Node>("test_server");
+    std::shared_ptr<rclcpp_action::ServerGoalHandle<ExecuteMission>> held;
+    auto server = rclcpp_action::create_server<ExecuteMission>(
+      server_node, "/test/execute_mission",
+      [](const rclcpp_action::GoalUUID &, std::shared_ptr<const ExecuteMission::Goal>) {
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+      },
+      [](std::shared_ptr<rclcpp_action::ServerGoalHandle<ExecuteMission>>) {
+        return rclcpp_action::CancelResponse::ACCEPT;
+      },
+      [&held](std::shared_ptr<rclcpp_action::ServerGoalHandle<ExecuteMission>> h) { held = h; });
+    auto client_node = std::make_shared<rclcpp::Node>("test_cancel_client");
+    auto client =
+      rclcpp_action::create_client<ExecuteMission>(client_node, "/test/execute_mission");
+    executor_->add_node(server_node);
+    executor_->add_node(client_node);
+    if (!spin_until(
+          [&] { return client->action_server_is_ready(); }, std::chrono::seconds(10), nullptr)) {
+      return rclcpp_action::ResultCode::UNKNOWN;
+    }
+    rclcpp_action::ClientGoalHandle<ExecuteMission>::SharedPtr handle;
+    bool done = false;
+    rclcpp_action::ResultCode code = rclcpp_action::ResultCode::UNKNOWN;
+    rclcpp_action::Client<ExecuteMission>::SendGoalOptions options;
+    options.goal_response_callback = [&handle](const auto & h) { handle = h; };
+    options.result_callback = [&](const auto & r) {
+      code = r.code;
+      done = true;
+    };
+    client->async_send_goal(standard_goal(), options);
+    if (!spin_until(
+          [&] { return handle != nullptr && held != nullptr; }, std::chrono::seconds(10),
+          nullptr)) {
+      return rclcpp_action::ResultCode::UNKNOWN;
+    }
+    client->async_cancel_goal(handle);
+    if (!spin_until([&] { return held->is_canceling(); }, std::chrono::seconds(10), nullptr)) {
+      return rclcpp_action::ResultCode::UNKNOWN;
+    }
+    if (succeed) {
+      held->succeed(std::make_shared<ExecuteMission::Result>());
+    } else {
+      held->abort(std::make_shared<ExecuteMission::Result>());
+    }
+    spin_until([&] { return done; }, std::chrono::seconds(10), nullptr);
+    return code;
+  }
+};
+
+TEST_F(CanceledGoalEndTest, AbortIsAllowed)
+{
+  EXPECT_EQ(end_canceled_goal(false), rclcpp_action::ResultCode::ABORTED);
+}
+
+TEST_F(CanceledGoalEndTest, SucceedIsAllowed)
+{
+  EXPECT_EQ(end_canceled_goal(true), rclcpp_action::ResultCode::SUCCEEDED);
 }
 
 // ---- P3d 검토 보완 ----

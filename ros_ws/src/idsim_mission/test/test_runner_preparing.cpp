@@ -109,6 +109,26 @@ TEST(Preparing, ReadyTimeoutBoundaryAndFeedbackBeforeNotReady)
   EXPECT_TRUE(h.commands().empty());
 }
 
+TEST(Preparing, NotReadyGoalHasSentNothing)
+{
+  // 불변식: NOT_READY로 끝난 goal은 setpoint와 명령을 한 건도 내지 않았다(P0 불일치,
+  // ready_timeout).
+  for (const bool mismatch : {true, false}) {
+    Harness h(standard_mission());
+    if (mismatch) {
+      h.world.identity = IdentityCheck::kMismatch;
+    } else {
+      h.world.ekf_ready = false;
+    }
+    ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 700));
+    expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
+    for (const StepOutput & out : h.outputs()) {
+      EXPECT_FALSE(out.setpoint.has_value());
+      EXPECT_TRUE(out.commands.empty());
+    }
+  }
+}
+
 TEST(Preparing, MissingTopicWaitsThenNotReady)
 {
   Harness h(standard_mission());
@@ -279,7 +299,7 @@ TEST(Preparing, IdentityMismatchAfterPublishingStartsStops)
   const StepOutput out = h.tick();
   EXPECT_FALSE(out.setpoint.has_value());
   EXPECT_TRUE(out.commands.empty());
-  expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
+  expect_terminated_once(h, Status::kAborted, Reason::kInternal);
 }
 
 // ---- 검토 보완(px4-engineer N1, N5, test-engineer B2) ----
@@ -360,7 +380,7 @@ TEST(Preparing, IdentityMismatchAfterArmSentSendsOneDisarm)
   EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kDisarm});
   EXPECT_TRUE(out.px4_timestamp_us.has_value());
   EXPECT_FALSE(out.setpoint.has_value());
-  expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
+  expect_terminated_once(h, Status::kAborted, Reason::kInternal);
   EXPECT_NE(h.termination()->detail.find("may remain armed"), std::string::npos);
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 1);
 }
