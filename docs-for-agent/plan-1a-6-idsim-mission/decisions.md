@@ -161,8 +161,8 @@ reviewer 권고의 처리
 - README의 사용자 결정 표기에 U4, U5: 수용.
 - 13과 14를 다른 브랜치가 쓰는지 P3e 전에 확인: 수용(architect 구현 지시).
 - 재실측 (2)-(5)를 P3 머지 조건으로 올릴지: 올리지 않는다. (2), (3), (5)는 P4 머지 조건으로 둔다. (4)와 나머지는 7단계 고정 전이다.
-  - P3 머지 조건으로 두지 않는 이유: P3이 합쳐져도 Executor는 어떤 스택에서도 기본으로 뜨지 않는다(`ops-N` 서비스와 `stack.sh`의 노드 단계는 P4다). P3의 단위 테스트는 표와 구현의 일치를 볼 뿐 표와 PX4의 일치는 보지 못하므로, 재실측이 표를 바꾸면 고치는 비용은 P3 머지 전이나 뒤나 같다. 반대로 P3을 묶으면 P4까지의 사슬 전체가 px4-engineer의 실측 일정에 걸린다.
-  - (2), (3), (5)를 P4 머지 조건으로 두는 이유: P4부터 `tools/stack.sh up`이 Executor를 띄우고 사람이 goal과 취소를 보낼 수 있다. 세 항목은 이륙 직후 취소가 지나는 경로이고, 틀리면 기체가 지상에 armed로 남거나 떠오른다. 시나리오 D는 5 m에서 취소하므로 통합 테스트는 이 경로를 지나지 않는다. 그래서 테스트 통과가 아니라 실측이 근거여야 한다.
+  - P3 머지 조건으로 두지 않는 이유: P3이 합쳐져도 Executor는 어떤 스택에서도 기본으로 뜨지 않는다(`ops-N` 서비스와 `sim_stack.sh`의 노드 단계는 P4다). P3의 단위 테스트는 표와 구현의 일치를 볼 뿐 표와 PX4의 일치는 보지 못하므로, 재실측이 표를 바꾸면 고치는 비용은 P3 머지 전이나 뒤나 같다. 반대로 P3을 묶으면 P4까지의 사슬 전체가 px4-engineer의 실측 일정에 걸린다.
+  - (2), (3), (5)를 P4 머지 조건으로 두는 이유: P4부터 `tools/sim_stack.sh up`이 Executor를 띄우고 사람이 goal과 취소를 보낼 수 있다. 세 항목은 이륙 직후 취소가 지나는 경로이고, 틀리면 기체가 지상에 armed로 남거나 떠오른다. 시나리오 D는 5 m에서 취소하므로 통합 테스트는 이 경로를 지나지 않는다. 그래서 테스트 통과가 아니라 실측이 근거여야 한다.
   - (4)를 P4 조건에서 뺀 이유: 결과가 바꾸는 것은 reason의 분류이고 기체 동작(발행 중단, ABORTED)은 순위와 무관하게 같다.
 
 ## P3a 결과 반영 (2026-11-11)
@@ -194,7 +194,7 @@ devops-engineer 의견(`opinion-devops-selfstart.md`. 읽기 전용 검토, 반�
 | --- | --- | --- |
 | healthcheck 값 | `interval` 10s, `timeout` 10s, `retries` 2, `start_period` 20s, `start_interval` 2s. 명령 안쪽에 `timeout 8`. 출력을 버리지 않는다(`.State.Health.Log`에 상태가 남는다) | 채택. 쟁점 2 |
 | 실패가 드러나기까지의 상한 | 컨테이너 시작부터 약 54 s, 모든 probe가 timeout까지 가는 최악 70 s([추정]. probe의 직렬 동작은 기억에 기댄다) | 채택. P4에서 결함 주입으로 잰다 |
-| `stop_grace_period` | 10s. `stack.sh`와 `run_smoke.sh`의 `down --timeout 10`이 서비스 값보다 우선하므로 하나로 맞춘다 | 채택(앞 판의 15s를 고친다) |
+| `stop_grace_period` | 10s. `sim_stack.sh`와 `run_smoke.sh`의 `down --timeout 10`이 서비스 값보다 우선하므로 하나로 맞춘다 | 채택(앞 판의 15s를 고친다) |
 | exit code | 컨테이너 exit code를 판정에 쓰지 않는다. stop 전에 `compose ps -a`를 기록해 실행 중 사망과 정상 정리를 순서로 가른다 | 채택. reviewer 필수 2와 합쳤다 |
 | 다른 서비스의 신호 | bridge(`ros2 run`의 python)와 xrce-agent는 PID 1이라 SIGTERM을 버린다([소스] 떠 있는 스택의 신호 마스크. down 시간은 미측정). 상주 ros-ws 서비스와 xrce-agent에 `init: true` | 채택. P4 같은 PR, 생성기 golden 4종 |
 | runner | wrapper의 `timeout`이 보내는 SIGTERM이 PID 1인 pytest에서 버려질 수 있다([추정]) | P4에서 1회 확인하고 `init: true` 또는 `timeout -s INT -k 30` |
@@ -304,7 +304,7 @@ px4-engineer 최종 확인(`approval-px4-p3b-final.md`. PX4 v1.17.0 원문 대�
 - ros2 R6(bridge): 1a는 CLI 인자 유지, `bridge.yaml` 생성은 1b.
 - ros2 R7(빌더 `make`): 호출처는 `idsim_common` 안의 테스트 두 곳뿐이다. 기존 테스트의 source (254, 1), (1, 191)은 대상 sysid 2와 달라 새 규칙을 통과한다. 거부 테스트 1건을 더한다.
 - ros2 R8(autostart의 원문): [소스] ros-base 이미지의 `/opt/ros/jazzy/lib/python3.12/site-packages/launch_ros/descriptions/composable_lifecycle_node.py` 30-35행(`ComposableLifecycleNode`, `autostart: bool = False`)과 `launch_ros/actions/load_composable_nodes.py` 243-256행(CONFIGURE, ACTIVATE를 한 번씩, 재시도 없음). 실행 중 동작은 확인하지 않았다.
-- test T1(wrapper): 수용. 조건: wrapper는 스택을 `tools/stack.sh`로만 올리고 내린다(수집에만 `compose ps/logs/stop`), `--attach`는 down을 부르지 않는다, 바깥 `timeout`은 CI `timeout-minutes`보다 짧다.
+- test T1(wrapper): 수용. 조건: wrapper는 스택을 `tools/sim_stack.sh`로만 올리고 내린다(수집에만 `compose ps/logs/stop`), `--attach`는 down을 부르지 않는다, 바깥 `timeout`은 CI `timeout-minutes`보다 짧다.
 - test T2(시나리오): 순서를 B, C, A, D, T로 바꾸자고 했다(T의 발행자나 신호 손실 상태가 D를 오염하지 않게). 한 스택의 판정 구간은 [추정] sim 90-110 s. 사전조건에 `nav_state` 값을 넣지 않는다. 자기 의견서의 "첫 항목이 TAKEOFF가 아니면 INVALID_MISSION"은 `[LAND]`와 충돌하므로 architect와 ros2가 검증 규칙을 확정해야 한다.
 - test T3(T의 판정): 발행자가 없을 때도 `offboard_control_signal_lost`는 true라 "묵은 timestamp 뒤 true"만으로는 vacuous하다. 대조군 false -> 묵은 timestamp true -> 대조군 복귀 false의 양방향 전이를 단정한다. 발행 전에 발행자의 `get_subscription_count() >= 1`을 확인한다. `failsafe_flags`가 변화 때만 나오면 "N회 연속"을 셀 수 없으므로 px4 확인이 필요하다.
 - test T4(/fmu/in): 수용. `px4-api` 예외는 한 파일, `vehicle_command` 발행은 source가 (254, 25)가 아니면 생성 거부, `offboard_control_mode` 발행자는 T 안의 context manager로만.
@@ -333,9 +333,9 @@ px4-engineer 최종 확인(`approval-px4-p3b-final.md`. PX4 v1.17.0 원문 대�
 - 스택을 올리고 내리는 것은 호스트 wrapper `tests/sitl/run_sitl.sh`다. pytest는 `runner` 서비스(ros-ws, `compose run --rm`) 안에서 돌고, fixture는 `IDSIM_STACK_FILE`의 `stack.json`을 읽어 이미 떠 있는 스택에 붙어 준비 상태를 검증만 한다. 준비 검증이 실패하면 skip이 아니라 session 오류다.
 - `runner`에 docker 소켓을 주지 않는다.
 - wrapper의 인자: `--stack k`(없으면 `IDSIM_STACK_INDEX`, 없으면 0), `--repeat N`(회마다 down 뒤 콜드 up, 실행 id가 다르다), `--attach <실행 디렉터리>`(올리지도 내리지도 않고 pytest와 수집만. QGC와 Gazebo GUI 육안 확인, 디버깅용), pytest로 넘기는 선택 인자.
-- wrapper 규칙: 스택은 `tools/stack.sh`로만 올리고 내린다. 수집에만 `docker compose ps/logs/stop`을 직접 쓴다. 순서는 up -> pytest(바깥 `timeout`) -> (Phase 2에 recorder 정지가 들어올 자리) -> `compose stop -t 15 px4-N` -> 수집 -> down이고, 중단돼도 trap으로 down이 돈다(`--attach` 제외). 마지막 stdout 줄은 실행 디렉터리 경로다. `ros_ws/install/idsim_mission/`이 없으면 빌드하지 않고 안내와 함께 실패한다.
+- wrapper 규칙: 스택은 `tools/sim_stack.sh`로만 올리고 내린다. 수집에만 `docker compose ps/logs/stop`을 직접 쓴다. 순서는 up -> pytest(바깥 `timeout`) -> (Phase 2에 recorder 정지가 들어올 자리) -> `compose stop -t 15 px4-N` -> 수집 -> down이고, 중단돼도 trap으로 down이 돈다(`--attach` 제외). 마지막 stdout 줄은 실행 디렉터리 경로다. `ros_ws/install/idsim_mission/`이 없으면 빌드하지 않고 안내와 함께 실패한다.
 - CI와 로컬은 이 한 명령을 쓴다. `sitl.yml`은 시나리오를 모른다.
-- 소유: wrapper를 포함한 `tests/sitl/` 전체는 test-engineer. devops-engineer는 compose와 `stack.sh` 호출부를 검토하고 `sitl.yml`을 소유한다.
+- 소유: wrapper를 포함한 `tests/sitl/` 전체는 test-engineer. devops-engineer는 compose와 `sim_stack.sh` 호출부를 검토하고 `sitl.yml`을 소유한다.
 
 근거: architecture.md의 두 문장("fixture가 `docker compose up --wait`로 올린다", "pytest는 ros-ws 컨테이너 안")은 `runner`에 docker CLI와 소켓이 없어 함께 성립하지 않는다(test, devops 둘 다 지적). 소켓을 마운트하면 호스트 root 권한이 테스트 컨테이너로 넘어가 3단계의 uid:gid 매핑 취지와 어긋난다.
 
@@ -351,7 +351,7 @@ px4-engineer 최종 확인(`approval-px4-p3b-final.md`. PX4 v1.17.0 원문 대�
 - 전이(2026-11-11 재결정. `p3a-results.md`): 전이를 거는 주체는 노드 자신이다. Executor는 생성자에서 만든 벽시계 일회 timer(`create_wall_timer`, 0 ms)로 `configure()`를 부르고, 성공하면 `activate()`를 부른다. 각각 한 번이고 재시도하지 않는다(launch autostart가 하려던 것과 같다). fixture, compose command, launch는 전이를 걸지 않는다.
   - timer의 시계: 벽시계여야 한다. 노드 시계(`use_sim_time`) timer는 `/clock`이 오기 전에는 fire하지 않으므로, `/clock`이 없으면 전이를 시도하지도 않아 ERROR 로그 없이 `unconfigured`에 남는다. 이 timer는 판정에 쓰지 않는 trigger이고 벽시계 예외 목록(문서 반영 목록의 시간 기준 문장)에 넣는다. P3a 시험 코드의 자기 전이도 `create_wall_timer(0 ms)`였다(ros2-engineer 확인 2026-11-11. `/clock`이 없는 실행에서도 fire해 configure가 성공했고 activate는 2.000 s 뒤 FAILURE였다). 주의 둘: (1) 콜백의 첫 줄에서 timer를 `cancel()`한다. 0 ms 벽시계 timer는 취소하지 않으면 계속 다시 fire한다. (2) on_activate는 이 timer 콜백 안에서 최대 2 s 동안 executor를 막는다. 그동안에도 `/clock`은 TimeSource의 clock thread(`use_clock_thread` 기본 true)가 받으므로 대기가 풀린다([실측] 대기 중에 `/clock`이 도착한 경우 1.350 s 뒤 성공). NodeOptions에서 `use_clock_thread`를 끄지 않는다.
   - 끄는 param: 선언 param `lifecycle.self_start`(bool, 기본 true, 읽기 전용. 생성자에서만 읽는다). 생성기는 이 key를 params 파일에 만들지 않는다(식별값만 생성한다는 규칙 그대로). 단위 테스트와 노드 배선 테스트는 NodeOptions의 parameter override로 false를 주고 전이를 직접 건다. false여도 lifecycle 서비스는 그대로라 손으로 전이할 수 있다.
-  - 실패 시: 프로세스를 끝내지 않는다. 노드는 실패한 자리(`unconfigured` 또는 `inactive`)에 남고, 어느 전이가 왜 실패했는지 ERROR 로그 한 줄을 고정 접두어로 남긴다(grep할 수 있게. 접두어 문자열은 ros2-engineer가 정하고 devops-engineer에게 알린다). 드러나는 길은 compose healthcheck(`active`로 시작하지 않음)와 `stack.sh`의 노드 단계 실패 때 출력하는 `ops-N` 로그 끝과 `.State.Health.Log`다. `run_sitl.sh`는 둘 다 아티팩트에 넣는다.
+  - 실패 시: 프로세스를 끝내지 않는다. 노드는 실패한 자리(`unconfigured` 또는 `inactive`)에 남고, 어느 전이가 왜 실패했는지 ERROR 로그 한 줄을 고정 접두어로 남긴다(grep할 수 있게. 접두어 문자열은 ros2-engineer가 정하고 devops-engineer에게 알린다). 드러나는 길은 compose healthcheck(`active`로 시작하지 않음)와 `sim_stack.sh`의 노드 단계 실패 때 출력하는 `ops-N` 로그 끝과 `.State.Health.Log`다. `run_sitl.sh`는 둘 다 아티팩트에 넣는다.
   - 실패 시 프로세스를 끝내는 안을 기각한 이유: 컴포넌트가 `rclcpp::shutdown()`을 부르면 컨테이너 프로세스 전체가 내려간다. Phase 2에 같은 컨테이너에 들어올 Collector까지 내리게 되고, 프로세스의 수명을 컴포넌트 하나가 정하는 구조가 된다. 남겨 두면 상태를 조회하고 손으로 전이를 다시 걸 수 있다. 실패가 드러나는 방식이 원래 설계(healthcheck)와 같다. 대가는 실패가 즉시가 아니라 healthcheck 주기 뒤에 드러난다는 것이다. 상한은 컨테이너 시작부터 약 54 s, 최악 70 s다(devops-engineer. [추정]. 아래 healthcheck 값). 실패한 실행에서만 드는 비용이고 `STACK_UP_TIMEOUT` 240 s와 CI 15분 안이다.
   - 표시 파일(노드가 전이 결과를 파일에 쓰고 healthcheck가 먼저 읽는 안)은 두지 않는다. 컴포넌트와 compose 사이에 경로 계약이 하나 생기고, `ros2 lifecycle get`이라는 직접 신호가 이미 있다. 다시 볼 조건: CI에서 probe 평균이 7 s를 넘거나 probe 부하로 RTF가 0.7 기준에 걸릴 때(devops-engineer).
   - launch 쪽: [실측]은 `ComposableLifecycleNode(autostart=True)`를 둔 채 자기 전이를 켠 형태였다(10/10 active). 구현은 `autostart`를 빼고 load만 하는 형태로 두고(`ComposableNode`를 쓸지 `ComposableLifecycleNode(autostart=False)`를 쓸지는 ros2-engineer가 정한다) P3의 수동 확인에서 그 형태로 active를 다시 확인한다.
@@ -364,14 +364,14 @@ px4-engineer 최종 확인(`approval-px4-p3b-final.md`. PX4 v1.17.0 원문 대�
 - params 파일은 `artifacts/runs/<id>/params/ops-N.yaml`. key는 `/**`이고 내용은 `use_sim_time: true`, `vehicle.id`, `vehicle.ns`, `vehicle.sysid`뿐이다. 튜닝 값(타임아웃, 주기), `command_source.*`, `lifecycle.self_start`는 생성하지 않고 노드 선언 기본값에 둔다. [실측] P3a: `/**`의 값은 컨테이너 노드에 적용되고 선언하지 않은 key는 LoadNode 오류 없이 무시된다. 패키지 config yaml을 둘째 params 파일로 두지 않는다. 노드는 `vehicle.*`에 기본값을 두지 않아 누락이면 configure가 실패한다.
 - `stack.json`(schema 1 유지, key 추가만): `vehicles[].vehicle_id`, `vehicles[].params_file`(실행 디렉터리 기준 상대 경로), `vehicles[].executor_node`(노드 FQN. healthcheck와 진단용), `run.params_dir`, `startup.node_stages`, `services.ops`. `GENERATOR_VERSION`은 P4에서 3, P5에서 4.
 - `vehicle_id`와 `px4_ns`는 별도 key로 둔다. 지금은 값이 같고 생성기의 불변식 검사가 `vehicle_id == ns[1:]`과 토큰 하나임을 단정한다. `px4_ns`는 PX4 환경변수에 넣는 값이고 `vehicle_id`는 계약 식별자라서 의미가 다르다.
-- `ops-N` 서비스: ros-ws 이미지, 호스트 uid:gid, `ROS_LOG_DIR=<run>/ros_log/ops-N`, `depends_on`은 `bridge`와 `px4-N`(healthy), `restart: no`, `stop_grace_period: 10s`(`stack.sh`와 `run_smoke.sh`의 `down --timeout 10`이 서비스 값보다 우선하므로 하나로 맞춘다. 앞 판의 15s를 고쳤다), `init: true`, `stop_signal: SIGINT`.
+- `ops-N` 서비스: ros-ws 이미지, 호스트 uid:gid, `ROS_LOG_DIR=<run>/ros_log/ops-N`, `depends_on`은 `bridge`와 `px4-N`(healthy), `restart: no`, `stop_grace_period: 10s`(`sim_stack.sh`와 `run_smoke.sh`의 `down --timeout 10`이 서비스 값보다 우선하므로 하나로 맞춘다. 앞 판의 15s를 고쳤다), `init: true`, `stop_signal: SIGINT`.
   - `stop_signal`을 SIGINT로 두는 이유([실측] P3a, 각 1-2회): `init: true` 구성에서 SIGTERM이면 0.4-0.5 s에 끝나지만 launch가 바로 죽어 정리 로그가 없다. SIGINT면 `init` 유무와 무관하게 1.7 s에 launch가 자식에게 신호를 넘기고 정리 로그를 남기며 끝난다. Executor의 on_shutdown(실행 중인 goal을 ABORTED로 끝내고 종료 사건을 낸다)이 돌 기회가 SIGINT 쪽에만 있다고 본다([추정]. 실측 없음. P4 stop 검증). `init` 없이 PID 1인 launch가 SIGTERM을 무시해 15.5 s 뒤 SIGKILL되는 것은 `init: true`를 두는 이유다.
   - exit code: SIGINT로 끝난 launch의 exit code는 정상 정리에서도 1이다([실측]). 컨테이너 exit code는 판정에 쓰지 않는다(판정은 junit과 verdict). exit 1을 보아 넘기는 것은 stop을 요청한 뒤(down 단계)에 한정한다. up 단계와 실행 중의 종료는 코드와 무관하게 실패다(launch 인자 누락도 rc 1이고, 컨테이너 프로세스가 죽으면 `on_exit=Shutdown()`으로 exited가 된다). 둘을 가르는 것은 순서다: (1) stop 전에 `compose ps -a --format json`을 기록하고, (2) 그 시점에 running이 아닌 `ops-N`이 있으면 실패, (3) `compose stop`, (4) `compose logs`(SIGINT 정리 로그 포함), (5) down. stop 뒤의 exit code(1, 130 등)는 기록만 한다. `--abort-on-container-exit`와 `--exit-code-from`은 쓰지 않고, entrypoint에서 exit 1을 0으로 바꾸지 않는다.
   - healthcheck: `ros2 lifecycle get --no-daemon <executor_node>`의 출력이 `active`로 시작하는지([실측] P3a: 출력은 `active [3]`, `inactive [2]`, `unconfigured [1]` 형식이고 `docker exec`로 3.0-4.5 s 걸린다). 값은 devops-engineer의 것을 채택한다: `interval` 10s, `timeout` 10s, `retries` 2, `start_period` 20s, `start_interval` 2s. 명령은 `/opt/ros/<distro>/setup.sh`만 source하고(`bash -l`과 workspace overlay 없음) `ROS_LOG_DIR=/tmp/hc timeout 8 ros2 lifecycle get --no-daemon <FQN>`의 출력을 echo한 뒤 판정한다. 출력을 버리지 않아 `.State.Health.Log`에 `unconfigured [1]` 같은 상태가 남는다. FQN은 생성기 상수 하나에서 나오고 `stack.json`의 `executor_node`와 같다.
   - 실패가 드러나기까지의 상한([추정] devops-engineer. probe가 겹치지 않고 앞 probe가 끝난 뒤 `interval`만큼 기다린다는 동작은 기억에 기댄다): 정상은 약 5-6.5 s에 healthy. 자기 전이 실패는 20 + 4.5 + 2 x 14.5 = 약 54 s, 모든 probe가 timeout까지 가면 20 + 10 + 2 x 20 = 70 s. P4에서 결함 주입으로 잰다. `retries` 2는 runner가 `ops-N`의 healthy에 의존하게 되므로 probe 한 번의 흔들림으로 테스트 시작이 실패하지 않게 하려는 값이다. CI 첫 3회에 RTF와 함께 probe 시간을 기록하고, RTF가 0.7 기준에 걸리면 `interval` 30s를 먼저 시험한다.
   - 다른 서비스: bridge와 xrce-agent도 PID 1이라 SIGTERM을 버린다([소스] 떠 있는 스택의 신호 마스크. down 시간은 미측정이고 지금 약 20 s 이상으로 추정). 상주 ros-ws 서비스(bridge, `ops-N`, P5의 foxglove)와 xrce-agent에 `init: true`를 둔다. `stop_signal: SIGINT`는 launch로 띄우는 `ops-N`에만 둔다(bridge의 `ros2 run`이 SIGINT를 자식에 넘기는지 모른다). P4의 같은 PR에서 고치고 생성기 golden 4종이 함께 바뀐다.
 - `runner`의 `depends_on`을 `bridge`에서 `ops-1..N`으로 바꾼다.
-- 기동 단계: `tools/stack.sh up`은 인프라 3단계 -> 모델 사전 검사 -> 노드 단계. `--infra-only`면 노드 단계를 건너뛴다. `run_smoke.sh`는 `--infra-only`를 쓴다. 노드 단계 전에 `ros_ws/install/idsim_mission/`이 없으면 안내와 함께 실패한다(1a 4단계 넘김).
+- 기동 단계: `tools/sim_stack.sh up`은 인프라 3단계 -> 모델 사전 검사 -> 노드 단계. `--infra-only`면 노드 단계를 건너뛴다. `run_smoke.sh`는 `--infra-only`를 쓴다. 노드 단계 전에 `ros_ws/install/idsim_mission/`이 없으면 안내와 함께 실패한다(1a 4단계 넘김).
 - embedded 변형에는 `ops-N`, `foxglove`, `lichtblick`을 만들지 않는다(`/clock` bridge가 없다).
 - golden 비교를 실행 디렉터리 전체 트리(파일 집합과 바이트)로 넓힌다. 성질 검사에 "생성 파일 어디에도 `fmu/`가 없다"를 넣는다.
 - `check_host.sh`에 Docker Engine 25 이상 점검을 넣는다(`start_interval`. 미해결 항목 닫기).
@@ -382,7 +382,7 @@ px4-engineer 최종 확인(`approval-px4-p3b-final.md`. PX4 v1.17.0 원문 대�
 - 서비스 이름을 `mission-N`이 아니라 `ops-N`으로 두는 이유: Phase 2에 Collector가 들어오면 이름이 역할과 어긋난다(devops도 중립 이름을 대안으로 냈다).
 - `/**`: 컨테이너 노드와 Phase 2 Collector가 같은 식별값을 받고, 선언하지 않은 key는 무시된다. FQN key의 걱정(이름이 틀리면 조용히 미적용)은 `/**`에서는 생기지 않고, 누락은 configure 실패로 드러난다.
 - 튜닝 값을 생성하지 않는 이유: 생성기 golden이 튜닝 변경에 흔들리지 않고, 값의 출처가 하나다(ros2, devops 같은 의견).
-- 스모크에서 노드를 빼는 이유: 스모크는 PX4, Gazebo, DDS 회귀 판정이고, S3의 arm과 disarm이 Executor와 같은 기체에 명령을 보내는 일을 피한다(devops, px4).
+- 스모크에서 노드를 빼는 이유: 스모크는 PX4, Gazebo, DDS 회귀 판정이고, px4-in의 arm과 disarm이 Executor와 같은 기체에 명령을 보내는 일을 피한다(devops, px4).
 
 기각한 안
 - `ros2 run` 단독 실행 파일과 `autostart` param(devops 초안), 단독 실행 파일 + `launch_ros.actions.LifecycleNode(autostart=True)`(P3a의 대안 B. [실측] 10/10 active), 단독 실행 파일이 `main`에서 전이(앞 판의 물러설 자리): 셋 다 Phase 2의 같은 컨테이너 요구를 잃는다. B는 전이 주체가 launch로 남고 실패 때 launch가 ERROR 로그를 내는 장점이 있지만 그 이유로 컨테이너를 버리지 않는다.
@@ -642,7 +642,7 @@ px4-engineer의 수용 조건(모두 받는다): core는 px4_msgs를 include하�
 - `px4-api` lint는 지금 `tests/`를 보지 않는다. P4에서 `tests/sitl/`과 `tests/support/`를 대상에 넣고 예외를 `tests/support/px4_raw.py`와 `px4_topic`이 든 파일로만 둔다(devops, test 승인. `px4_raw.py`의 변경은 px4-engineer가 필수 승인자다).
 - Executor에 테스트 전용 파라미터나 우회 경로를 두지 않는다.
 
-근거: 묵은 timestamp 판정은 `Px4Timestamp`를 우회해야만 만들 수 있어 C++ 노드로 가도 `idsim_common` 밖의 우회가 필요하다. 그러면 별도 실행 파일과 빌드 대상만 늘고 얻는 것이 없다. 스모크 S3이 이미 Python으로 `vehicle_command`를 발행하는 선례가 있다. 발행 허용 목록은 "실수 방지 수준이며 보안 경계가 아니다"(roadmap 4번).
+근거: 묵은 timestamp 판정은 `Px4Timestamp`를 우회해야만 만들 수 있어 C++ 노드로 가도 `idsim_common` 밖의 우회가 필요하다. 그러면 별도 실행 파일과 빌드 대상만 늘고 얻는 것이 없다. 스모크 px4-in이 이미 Python으로 `vehicle_command`를 발행하는 선례가 있다. 발행 허용 목록은 "실수 방지 수준이며 보안 경계가 아니다"(roadmap 4번).
 
 기각한 안: `tests/` 아래 별도 C++ 테스트 노드(ros2 A9의 한 갈래). 위 근거.
 
@@ -662,7 +662,7 @@ px4-engineer의 수용 조건(모두 받는다): core는 px4_msgs를 include하�
 - "disarm 확인"은 ARMED를 본 뒤의 DISARMED여야 한다(시작 때 이미 DISARMED라 순서를 보지 않으면 vacuous하다).
 - "도달"의 입력은 goal의 목표값과 `vehicle_local_position`(goal 직전의 z0 기준, `z_valid`)이다. 노드가 낸 setpoint는 판정 입력으로 쓰지 않는다(노드와 테스트의 오류가 상관된다). architecture.md의 "setpoint 거리" 문구를 고친다.
 - N은 3이다(스모크와 같다). N의 단위는 메시지 수이고, 유지 구간이 필요한 곳은 ROS 시각 경과로 따로 단정한다.
-- fixture 사전조건에 `/clock` 정렬을 넣는다: `use_sim_time` 노드 시각 - `vehicle_status.timestamp`의 중앙값 절대값 < 0.1 s, 최대 < 0.5 s. progress의 "S5에 넣을지" 항목은 이것으로 닫는다(S5에는 `use_sim_time` PX4 수신 노드가 없다).
+- fixture 사전조건에 `/clock` 정렬을 넣는다: `use_sim_time` 노드 시각 - `vehicle_status.timestamp`의 중앙값 절대값 < 0.1 s, 최대 < 0.5 s. progress의 "clock에 넣을지" 항목은 이것으로 닫는다(clock에는 `use_sim_time` PX4 수신 노드가 없다).
 - T의 각 단계 대기 상한은 ROS 시각 5 s다(`failsafe_flags`는 5 Hz 상한이고 변화가 없으면 500 ms 주기일 수 있어 3회 연속에 1.5 s 이상이 든다).
 - T가 맨 뒤인 이유: T의 발행자나 신호 상태가 뒤 시나리오의 Offboard 진입을 오염할 수 없다. T의 대조군(현재 timestamp에서 false)이 없으면 발행자가 없을 때의 true와 구분되지 않는다. T는 1a 4단계가 넘긴 "sim 시간 timestamp 경로의 회귀 판정"이고 `UXRCE_DDS_SYNCT`가 실수로 1로 돌아가면 실패한다. arm 명령을 보내지 않는 flag 판정으로 한 것은 테스트가 기체에 보내는 명령을 줄이기 위해서다(px4 5.1 가안의 변형. [소스] 같은 `data_is_recent` 경로를 지난다). `failsafe_flags`는 5 Hz 상한으로 주기 발행되므로 "3회 연속"으로 센다. 발행 전에 발행자의 `get_subscription_count() >= 1`을 확인한다. 대조군 단계가 `local_position_invalid`가 참인 경우(timestamp와 무관하게 true)를 걸러 준다.
 - 통합에서 하지 않고 core 단위 테스트로 덮는 것: BUSY, 지상 취소, NOT_READY, failsafe, EXTERNAL_MODE_CHANGE, EXTERNAL_DISARM, LINK_LOST, ARM_REJECTED, MODE_SWITCH_FAILED, DISARM_FAILED, ITEM_TIMEOUT, Hold 실패 뒤 Land, status와 reason 대응표, 종료 사건 == result, `[LAND]` 미션이 setpoint를 발행하지 않음, LAND로 시작하면 길이 1.
@@ -724,7 +724,7 @@ GHCR 패키지 다섯이 Public인지의 화면 확인을 사용자에게 요청
 - 버전: `versions.env`에 `FOXGLOVE_BRIDGE_VERSION=3.6.0`. apt로 설치한 뒤 `dpkg-query` 결과가 upstream 버전 접두와 같은지 빌드에서 단정한다. 정확한 pin은 쓰지 않는다(ROS apt 저장소는 최신 빌드 하나만 남긴다).
 - `foxglove` 서비스(`viz` 프로필, ros-ws, 저장소 마운트): `address` 127.0.0.1, `port` 8765 + k, `capabilities` [connectionGraph], `topic_whitelist`는 기체마다 `^/px4_N/`(생성기에 /fmu 문자열을 쓰지 않는다), `client_topic_whitelist`, `service_whitelist`, `param_whitelist`는 아무것과도 맞지 않는 정규식([실측] M8은 `^$`), `use_sim_time` true, `remote_access` false, `sysinfo` false. `/clock`은 화이트리스트에 넣지 않는다(250 Hz).
 - `lichtblick` 서비스: `versions.env`의 `LICHTBLICK_IMAGE=ghcr.io/lichtblick-suite/lichtblick:1.30.0@sha256:285adff96f24c80b511cf159e97e5395a6b154126c70c62d1199456009de07cc`(linux/amd64 manifest digest, 조회 2026-11-11). command를 `caddy file-server --listen 127.0.0.1:<18080 + k>`로 덮는다(이미지 기본은 `:8080`으로 모든 인터페이스에 연다). root로 둔다(entrypoint가 이미지 안의 `index.html`을 고쳐 쓰고 호스트에 쓰는 마운트가 없다). healthcheck 없음.
-- 기본 layout 파일은 1a에 넣지 않는다(layout에 버전 접미사가 붙은 토픽 경로가 들어간다). `stack.sh up --viz`가 접속 URL을 출력한다.
+- 기본 layout 파일은 1a에 넣지 않는다(layout에 버전 접미사가 붙은 토픽 경로가 들어간다). `sim_stack.sh up --viz`가 접속 URL을 출력한다.
 - progress의 "Lichtblick 2.5.2"는 Caddy의 버전 label을 Lichtblick 버전으로 읽은 것이다([실측] ros2 M9, devops). 1.30.0으로 고친다.
 - viz 서비스는 P5(별도 PR)다. 완료 조건은 브라우저 실접속(P5의 수동 확인): Lichtblick 1.30.0이 foxglove_bridge 3.6.0에 붙는지, clientPublish를 뺀 상태에서 연결이 유지되는지, PX4 토픽에 대한 bridge의 구독이 BEST_EFFORT인지(`ros2 topic info -v`. RELIABLE로 붙으면 수신이 없으므로 `best_effort_qos_topic_whitelist`에 넣고 lint 예외로 기록), setpoint와 `vehicle_local_position`이 같은 플롯에 놓이는지. 붙지 않으면 서브프로토콜을 기준으로 앞 버전을 고르고 architect에게 알린다.
 - 1a에는 recorder 서비스를 두지 않는다. 실패 산출물은 ULog, compose logs, ros_log, 판정 trace, graph snapshot, junit이다. 이것은 architecture.md의 "실패 시 MCAP 기록물과 ULog를 업로드"의 1a 예외다. MCAP 업로드는 Phase 2부터다.
@@ -740,7 +740,7 @@ Phase 2를 위해 6단계가 지켜 둘 것(logging): 실행 디렉터리의 `ba
 
 ## 쟁점 13. 작업 단위와 PR 분할
 
-README.md에 있다. 요약: P0(CI trigger 정리) / P1(ros-ws에 foxglove_bridge) / P2(`idsim_common` 추가) / P3(`idsim_mission` 패키지와 단위 테스트, `ExecuteMission.action`의 상수 `REASON_DISARM_FAILED` 추가와 주석, golden 두 파일) / P4(생성기, `stack.sh`, `tests/support`, `tests/sitl`, `sitl.yml`, 문서 반영) / P5(viz). P1과 P2는 병렬, P3은 P2 뒤, P4는 P1과 P3 뒤, P5는 P4 뒤다.
+README.md에 있다. 요약: P0(CI trigger 정리) / P1(ros-ws에 foxglove_bridge) / P2(`idsim_common` 추가) / P3(`idsim_mission` 패키지와 단위 테스트, `ExecuteMission.action`의 상수 `REASON_DISARM_FAILED` 추가와 주석, golden 두 파일) / P4(생성기, `sim_stack.sh`, `tests/support`, `tests/sitl`, `sitl.yml`, 문서 반영) / P5(viz). P1과 P2는 병렬, P3은 P2 뒤, P4는 P1과 P3 뒤, P5는 P4 뒤다.
 
 ---
 
@@ -798,13 +798,13 @@ devops-engineer
   - 상주 ros-ws 서비스(bridge, P5의 foxglove)와 xrce-agent에 `init: true`. 같은 PR에서 하고 생성기 golden 4종이 함께 바뀐다. 바꾸기 전후의 down 시간을 1회씩 잰다.
   - runner: wrapper의 `timeout`이 보낸 SIGTERM이 PID 1인 pytest에서 버려지는지 1회 확인하고 `init: true` 또는 `timeout -s INT -k 30`으로 고친다(test-engineer와).
   - exit code: 판정에 쓰지 않는다. stop 전 `compose ps -a --format json` 기록 -> running이 아닌 `ops-N`이 있으면 실패 -> `compose stop` -> `compose logs` -> down. exit 1을 보아 넘기는 것은 stop을 요청한 뒤에 한정한다(쟁점 2).
-  - `stack.sh`는 노드 단계가 실패하면 `ops-N` 로그 끝과 `.State.Health.Log`를 함께 찍는다.
+  - `sim_stack.sh`는 노드 단계가 실패하면 `ops-N` 로그 끝과 `.State.Health.Log`를 함께 찍는다.
   - 생성기 성질 테스트 넷: ros-ws 이미지의 상주 서비스는 모두 `init: true`. `ops-N`은 `stop_signal: SIGINT`와 `stop_grace_period: 10s`. 생성된 params 파일에 `lifecycle.`로 시작하는 key가 없다. healthcheck 문자열의 FQN이 `stack.json`의 `executor_node`와 같다.
   - P4 검증(결과를 progress에 남기고, 값이 아래와 다르면 architect에게 알린다)
     - stop 검증 10회: 그중 4회 이상은 goal 실행 중에 stop한다(PREPARING, TAKEOFF, LOITER, LAND 각 1회 이상. test-engineer). 기록 형식은 test-engineer 지시의 "P4의 실측 기록"을 따른다. 볼 것은 유예(10 s) 안에 끝나는지, 정리 로그가 있는지, exit code의 분포, goal 실행 중 stop에서 종료 사건(ABORTED, REASON_INTERNAL)이 구독자에게 오는지다(on_shutdown이 SIGINT 뒤에 도는지는 실측이 없다).
-    - 결함 주입 1회 이상: `vehicle.id`가 빠진 params로 `stack.sh up`이 unhealthy를 보고하기까지의 시간(예상 약 54 s, 최악 70 s)과 정상일 때 healthy까지의 시간(예상 약 5-6.5 s).
+    - 결함 주입 1회 이상: `vehicle.id`가 빠진 params로 `sim_stack.sh up`이 unhealthy를 보고하기까지의 시간(예상 약 54 s, 최악 70 s)과 정상일 때 healthy까지의 시간(예상 약 5-6.5 s).
     - CI 첫 3회의 probe 시간(`.State.Health.Log`의 Start와 End)을 RTF와 함께 기록한다. runner의 `docker version`을 job 로그에 남긴다(`start_interval`은 Engine 25 이상).
-- P4: 생성기(쟁점 2), `stack.sh`(`--infra-only`, install 검사, 노드 단계 실패 때 `ops-N` 로그 출력), `run_smoke.sh`, `check_host.sh`, `--run-id` 제거, `build_images.py --mode pull`, `sitl.yml`, `px4-api` 범위 확장, 생성기 golden 4종과 전체 트리 비교. 손대는 파일의 음차("키", "잡")를 고친다.
+- P4: 생성기(쟁점 2), `sim_stack.sh`(`--infra-only`, install 검사, 노드 단계 실패 때 `ops-N` 로그 출력), `run_smoke.sh`, `check_host.sh`, `--run-id` 제거, `build_images.py --mode pull`, `sitl.yml`, `px4-api` 범위 확장, 생성기 golden 4종과 전체 트리 비교. 손대는 파일의 음차("키", "잡")를 고친다.
 - P5: `foxglove`, `lichtblick` 서비스와 `LICHTBLICK_IMAGE`, `docker/README.md`의 갱신 절차와 접속 안내.
 
 architect
@@ -838,7 +838,7 @@ reviewer: 이 문서의 검증("reviewer가 검증할 가정")과 PR마다의 �
 이번에는 고치지 않았다. P4 PR 안에서 reviewer 확인 뒤 architect가 반영한다(viz 관련 줄은 P5).
 
 - `docs/architecture.md`
-  - 테스트 절의 통합 테스트 구조: "pytest fixture가 `docker compose up --wait`로 스택을 올리고"를 "호스트 wrapper `tests/sitl/run_sitl.sh`가 `tools/stack.sh`로 스택을 올리고 내리며, pytest는 `runner` 안에서 돌고 fixture는 이미 뜬 스택에 붙어 준비 상태를 검증한다"로. "fixture가 active 전이를 기다릴 수 있게"는 "compose healthcheck가 active를 확인한다"로.
+  - 테스트 절의 통합 테스트 구조: "pytest fixture가 `docker compose up --wait`로 스택을 올리고"를 "호스트 wrapper `tests/sitl/run_sitl.sh`가 `tools/sim_stack.sh`로 스택을 올리고 내리며, pytest는 `runner` 안에서 돌고 fixture는 이미 뜬 스택에 붙어 준비 상태를 검증한다"로. "fixture가 active 전이를 기다릴 수 있게"는 "compose healthcheck가 active를 확인한다"로.
   - 테스트 절의 판정 기준: "도달은 `vehicle_local_position`과 setpoint 거리"를 "goal의 목표값과 `vehicle_local_position`"으로.
   - CI 절 (4) `sitl`: 실패 산출물을 ULog, compose logs, ros_log, 판정 trace로, "MCAP 업로드는 Phase 2부터". "PR당 1회"를 "PR 머리 커밋당 1회, 자동 재시도 없음"으로(U2).
   - 276행(테스트 층 표의 단위 행의 실행 시점 "모든 push"): P0(PR #19) 뒤 틀린 문장이다. "PR 머리 커밋마다와 main push"로(U2. PR이 없는 브랜치 push에는 돌지 않는다). 277행(리플레이 통합 행)은 아직 없는 replay job의 계획이라 여기서 고치지 않는다(U4. Phase 2).
@@ -866,7 +866,7 @@ reviewer: 이 문서의 검증("reviewer가 검증할 가정")과 PR마다의 �
   - 59행(Phase 2 완료 기준의 "replay CI job이 모든 push에서 돈다")은 P4에서 고치지 않는다. replay job의 trigger는 Phase 2에서 정하고 그때 고친다(U4).
 - `docs/smoke-test.md`: `run_smoke.sh`가 `--infra-only`로 올린다는 것.
 - `ros_ws/src/idsim_interfaces/action/ExecuteMission.action`: `REASON_DISARM_FAILED = 13`, `REASON_EXTERNAL_DISARM = 14`와 주석(M1, M3-M5, 두 상수의 의미), golden 두 파일(P3).
-- 루트 `README.md`와 `docker/README.md`: `tests/sitl/run_sitl.sh` 실행 안내(`--repeat`, `--attach`), `stack.sh up --infra-only`.
+- 루트 `README.md`와 `docker/README.md`: `tests/sitl/run_sitl.sh` 실행 안내(`--repeat`, `--attach`), `sim_stack.sh up --infra-only`.
 - `docs-for-agent/file-ownership.md`: P4가 아니라 계획 PR(브랜치 `docs/1a-6-plan`)에서 호출한 쪽이 반영한다. 구현이 시작되기 전에 소유가 문서에 있어야 한다. 문안은 아래 그대로다.
   - 표의 ros2-engineer 행 파일 목록 끝에 더한다: `ros_ws/src/idsim_mission/`(launch, `include/idsim_mission/core/snapshot.hpp` 포함. 아래 px4-engineer 몫 제외)
   - 표의 px4-engineer 행 파일 목록 끝에 더한다: `ros_ws/src/idsim_mission/include/idsim_mission/px4/`, `ros_ws/src/idsim_mission/src/px4/`, `ros_ws/src/idsim_mission/test/px4/`
@@ -886,7 +886,7 @@ reviewer: 이 문서의 검증("reviewer가 검증할 가정")과 PR마다의 �
 ```
 
 - `docs-for-agent/file-ownership.md`(호출한 쪽): "idsim_mission의 승인 규칙" 절에 한 줄을 더한다. "`tests/sitl/measure/`(실측 스크립트)는 test-engineer 소유이고 측정 절차의 변경은 px4-engineer가 필수 승인자다."
-- `docs-for-agent/progress.md`(호출한 쪽): 결정 기록, "Lichtblick 2.5.2" 정정, 닫히는 미해결 항목(6단계로 넘김 4건, S5의 `/clock` 판정, `px4-api` 범위, `start_interval` 하한, `--run-id`, `--mode pull`), "다음 작업 5"의 bridge 설정 파일은 1b로.
+- `docs-for-agent/progress.md`(호출한 쪽): 결정 기록, "Lichtblick 2.5.2" 정정, 닫히는 미해결 항목(6단계로 넘김 4건, clock의 `/clock` 판정, `px4-api` 범위, `start_interval` 하한, `--run-id`, `--mode pull`), "다음 작업 5"의 bridge 설정 파일은 1b로.
 - `CLAUDE.md` 담당자 표와 `.claude/agents/`(사용자 승인 2026-11-11, 호출한 쪽이 반영 완료)
   - `CLAUDE.md` 표의 ros2-engineer 소유 영역: "`idsim_common`, `config/cyclonedds.xml`"에 "`idsim_mission`(`px4/` 디렉터리 제외)"를 더한다.
   - `CLAUDE.md` 표의 px4-engineer 소유 영역: "`idsim_mission`의 PX4 인터페이스"를 "`idsim_mission`의 `px4/` 디렉터리(어댑터), 상태기 전이 표의 필수 승인"으로.

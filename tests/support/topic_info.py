@@ -84,8 +84,16 @@ def run(args, runner=_run, clock=time.monotonic, sleep=time.sleep, out=sys.stdou
     rc = 0
     for topic, _ in found:
         # 발견 직후 엔드포인트 수가 덜 잡힐 수 있어 판정이 맞을 때까지 시간 안에서 재시도한다.
+        # --no-daemon은 프로세스마다 탐색을 새로 하므로 list에서 본 토픽을 info가 아직 모를 수 있다
+        # ("Unknown topic", 종료 코드 1). 이 실패도 같은 시간 안에서 재시도한다.
         while True:
-            raw = runner(["ros2", "topic", "info", "-v", "--no-daemon", topic])
+            try:
+                raw = runner(["ros2", "topic", "info", "-v", "--no-daemon", topic])
+            except subprocess.CalledProcessError:
+                if clock() - start >= args.timeout:
+                    raise
+                sleep(1.0)
+                continue
             info = parse_topic_info(raw)
             errs = judge(info, args.expect_publishers, args.expect_subscriptions,
                          args.expect_type)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 스모크 S4 원문 수집 스크립트. ros-ws 컨테이너 안에서 실행한다.
+# 스모크 golden 원문 수집 스크립트. ros-ws 컨테이너 안에서 실행한다.
 #
 # 사용법:
 #   capture.sh [--ns NS] [--hz-seconds N] [--spin-time S] OUT_DIR
@@ -8,7 +8,7 @@
 #                    없으면 접두사 없음(인스턴스 0. 3단계부터 스모크는 쓰지 않는다).
 #   --hz-seconds N   ros2 topic hz 측정 시간(초, 벽시계). 기본 30.
 #   --spin-time S    --no-daemon 디스커버리 대기 시간(초). 기본 5.
-#   OUT_DIR          원문을 쓸 디렉터리. run_smoke.sh S4는 artifacts/runs/<run_id>/smoke/ros
+#   OUT_DIR          원문을 쓸 디렉터리. run_smoke.sh golden은 artifacts/runs/<run_id>/smoke/ros
 #                    (저장소 상대, 컨테이너 cwd /opt/idsim 기준).
 #
 # 하는 일은 원문 수집뿐이다. 골든 형식(topics.txt, qos/, env.txt) 생성은
@@ -197,7 +197,7 @@ for pid in "${pids[@]}"; do
 done
 log "hz 측정 끝"
 
-# 5. 정규화(골든 형식 생성)는 여기서 하지 않는다. run_smoke.sh S4가 이 스크립트 다음에
+# 5. 정규화(골든 형식 생성)는 여기서 하지 않는다. run_smoke.sh golden이 이 스크립트 다음에
 #      python3 -m tests.support.normalize --raw <OUT_DIR> --ns <ns> --check|--update
 #    를 부른다(입력: topic_list.txt, topic_info/<rel>.txt, env_raw.txt.
 #    출력: tests/fixtures/px4/<PX4_TAG>/ 의 topics.txt, qos/<rel>.txt, env.txt).

@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # 스모크 단계 실행기. 호스트에서 실행한다.
 #
-# 사용법: tests/smoke/run_smoke.sh [--update-golden] [--stack k] <S0|S1b|S2|S3|S4|S5>
+# 사용법: tests/smoke/run_smoke.sh [--update-golden] [--stack k] <images|embedded|px4-out|px4-in|golden|clock>
 #
-# 골든이 없으면(처음 S4) --update-golden이 필요하다. --check는 골든이 없으면 실패한다.
-# S1(인스턴스 0)은 3단계부터 지원하지 않는다(2026-11-06 1회 통과 기록으로 남긴다).
+# golden 파일이 없으면(처음 golden 단계) --update-golden이 필요하다. --check는 골든이 없으면 실패한다.
+# 빠른 시작은 images, px4-out, px4-in, clock 순서다. golden은 회귀 비교, embedded는 진단용이다.
 #
 # 하는 일
-#   1. 스택 번호 k(--stack, 없으면 IDSIM_STACK_INDEX, 없으면 0)와 변형(S1b는 embedded, 나머지 standalone)으로
-#      tools/stack.sh up을 부른다. stack.sh가 tools/gen_compose.sh로 artifacts/runs/<실행 id>/에 compose.yaml과
+#   1. 스택 번호 k(--stack, 없으면 IDSIM_STACK_INDEX, 없으면 0)와 변형(embedded 단계는 embedded 구성, 나머지는 standalone)으로
+#      tools/sim_stack.sh up을 부른다. sim_stack.sh가 tools/gen_compose.sh로 artifacts/runs/<실행 id>/에 compose.yaml과
 #      stack.json을 만들고, 떠 있는 idsim-<k>를 내린 뒤 세 단계(에이전트와 gazebo, px4-N, bridge)로 up --wait 하며(standalone은 1단계 뒤에
-#      모델 잔존 사전 검사와 gz 서버 유일성 검사), 실패하면 에이전트 bind error와 px4 bind failed를 보고한다. S0은 스택을 올리지 않는다.
+#      모델 잔존 사전 검사와 gz 서버 유일성 검사), 실패하면 에이전트 bind error와 px4 bind failed를 보고한다. images는 스택을 올리지 않는다.
 #   2. 판정에 쓰는 식별자(네임스페이스, system id, 모델 이름, 원점, 기대 파라미터, 서비스 이름)는 모두
 #      stack.json에서 읽는다(python3 표준 라이브러리). 이 스크립트는 식별자를 계산하지 않는다.
-#   3. 단계별 판정. S1b, S2, S3은 ros-ws 안의 check_px4.py(S3만 --arm), S2는 모델 유일성, gz 서버 유일성, pxh 판정,
-#      PX4 로그(gz_bridge 오류, MAVLink bind failed), S4는 capture.sh와 tests.support.normalize
-#      (--update-golden이면 --update, 아니면 --check), S5는 /clock 발행자 1과 증가. 모든 타임아웃은 벽시계다.
+#   3. 단계별 판정. embedded, px4-out, px4-in은 ros-ws 안의 check_px4.py(px4-in만 --arm), px4-out은 모델 유일성, gz 서버 유일성, pxh 판정,
+#      PX4 로그(gz_bridge 오류, MAVLink bind failed), golden은 capture.sh와 tests.support.normalize
+#      (--update-golden이면 --update, 아니면 --check), clock은 /clock 발행자 1과 증가. 모든 타임아웃은 벽시계다.
 #      run_checks는 || 문맥에서 불리므로 set -e가 꺼져 있다. 판정 명령은 반드시 &&로 잇는다(빠뜨리면 실패가 삼켜진다).
 #      아직 판정할 수 없는 항목은 pending()으로 남기고, 마지막 줄에 "통과 (미판정 N건 PENDING)"으로 나타난다.
 #   4. 산출물(판정 JSON, compose 로그, ULog)은 실행 디렉터리 artifacts/runs/<실행 id>/ 아래에 남는다.
@@ -57,10 +57,9 @@ set +a
 
 variant="standalone"
 case "$stage" in
-  S0) ;;
-  S1) echo "S1(인스턴스 0)은 3단계부터 지원하지 않는다. 진단은 S1b(embedded)를 쓴다" >&2; exit 2 ;;
-  S1b) variant="embedded" ;;
-  S2|S3|S4|S5) ;;
+  images) ;;
+  embedded) variant="embedded" ;;
+  px4-out|px4-in|golden|clock) ;;
   *) usage ;;
 esac
 
@@ -107,7 +106,7 @@ image_env() {
   docker run --rm --entrypoint printenv "$1" "$2" 2>/dev/null || true
 }
 
-# S0: 이미지가 versions.env와 일치하고 필수 산출물이 있는지 본다. 스택을 올리지 않는다.
+# images: 이미지가 versions.env와 일치하고 필수 산출물이 있는지 본다. 스택을 올리지 않는다.
 s0_fail=0
 s0_expect() { # 이미지 변수이름 기대값
   local got
@@ -272,19 +271,19 @@ check_clock() {
 
 run_checks() {
   case "$stage" in
-    S1b)
+    embedded)
       check_px4 \
-        && topic_info "--regex '^/${px4_ns}/fmu/out/vehicle_status(_v[0-9]+)?\$' --expect-publishers 1 --expect-type px4_msgs/msg/VehicleStatus --save ${out_rel}/s1b_topic_info" ;;
-    S2)
+        && topic_info "--regex '^/${px4_ns}/fmu/out/vehicle_status(_v[0-9]+)?\$' --expect-publishers 1 --expect-type px4_msgs/msg/VehicleStatus --save ${out_rel}/embedded_topic_info" ;;
+    px4-out)
       local origin
       origin="$(origin_args)"
       # shellcheck disable=SC2086  # origin은 공백으로 나뉜 인자 넷이다
       check_model_unique && check_single_gz_server && check_px4 $origin && check_pxh && check_px4_log ;;
-    S3)
+    px4-in)
       check_timeout=90
       check_px4 --arm \
-        && topic_info "--regex '^/${px4_ns}/fmu/in/trajectory_setpoint(_v[0-9]+)?\$' --expect-subscriptions 1 --save ${out_rel}/s3_topic_info" ;;
-    S4)
+        && topic_info "--regex '^/${px4_ns}/fmu/in/trajectory_setpoint(_v[0-9]+)?\$' --expect-subscriptions 1 --save ${out_rel}/px4-in_topic_info" ;;
+    golden)
       local mode="--check"
       [ "$update_golden" -eq 1 ] && mode="--update"
       run_env=(-e "IDSIM_BUILD_PX4_TAG=$(image_env "$(sj images.px4)" IDSIM_BUILD_PX4_TAG)" \
@@ -292,18 +291,18 @@ run_checks() {
       check_pxh \
         && in_ros "cd /opt/idsim && tests/smoke/capture.sh --ns ${px4_ns} ${out_rel}/ros" \
         && in_ros "cd /opt/idsim && python3 -m tests.support.normalize --raw ${out_rel}/ros --ns ${px4_ns} ${mode}" ;;
-    S5)
+    clock)
       # 정보 수집(gz-transport 버전)은 실패해도 판정에 넣지 않으므로 먼저 하고, 마지막 명령이 판정이 되게 한다
       in_ros 'dpkg -l | grep gz-transport' >"${out_dir}/gz_transport_ros_ws.txt" || true
       compose exec -T "$gazebo_svc" bash -c 'dpkg -l | grep gz-transport' >"${out_dir}/gz_transport_gazebo.txt" || true
-      topic_info "--regex '^/clock\$' --expect-publishers 1 --expect-type rosgraph_msgs/msg/Clock --save ${out_rel}/s5_topic_info" \
+      topic_info "--regex '^/clock\$' --expect-publishers 1 --expect-type rosgraph_msgs/msg/Clock --save ${out_rel}/clock_topic_info" \
         && check_clock ;;
   esac
 }
 
 collect() {
   [ -f "${run_dir}/compose.yaml" ] || return 0
-  if [ "$stage" != "S0" ] && [ -f "${run_dir}/stack.json" ]; then
+  if [ "$stage" != "images" ] && [ -f "${run_dir}/stack.json" ]; then
     dds_config_changed >&2 || true
   fi
   compose logs --no-color >"${out_dir}/compose.log" 2>&1 || true
@@ -317,17 +316,17 @@ collect() {
 }
 
 cleanup() {
-  [ "$stage" = "S0" ] || docker compose -p "$project" down --timeout 10 >/dev/null 2>&1 || true
+  [ "$stage" = "images" ] || docker compose -p "$project" down --timeout 10 >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 status=0
-if [ "$stage" = "S0" ]; then
+if [ "$stage" = "images" ]; then
   mkdir -p "$out_dir"
   check_s0 || status=1
 else
   SMOKE_UP_TIMEOUT="${SMOKE_UP_TIMEOUT:-240}"
-  if STACK_UP_TIMEOUT="$SMOKE_UP_TIMEOUT" tools/stack.sh up --stack "$k" --variant "$variant" --run-dir "$run_dir" >/dev/null; then
+  if STACK_UP_TIMEOUT="$SMOKE_UP_TIMEOUT" tools/sim_stack.sh up --stack "$k" --variant "$variant" --run-dir "$run_dir" >/dev/null; then
     mkdir -p "$out_dir"
     runner="$(sj services.runner)"
     gazebo_svc="$(sj services.gazebo)"

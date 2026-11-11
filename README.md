@@ -16,49 +16,66 @@ idsim은 Interceptor Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, RO
 | 메모리 | 16GB 이상. 개발 VM 31GB와 CI 러너 16GB에서 확인했고 그 아래는 미실측 |
 | 선택 | gh (PR을 올리거나 합칠 때), 화면 확인용 X11 또는 XWayland 데스크톱 |
 
-compose 생성기 골든(`tests/tools`)을 의도해서 바꿨다면 ros-ws 컨테이너에서 `python3 -m pytest tests/tools --update-golden`으로 갱신한다(CI에서는 거부된다).
-
 조건은 `tools/check_host.sh`가 점검한다. 시스템을 바꾸지 않고 조회만 하며, 외부 네트워크 검사는 `--offline`으로 건너뛴다.
 
 ## 빠른 시작
 
+새 호스트에서 한 번 하는 환경 구성이다. 순서대로 돌리고, 모두 통과하면 개발을 시작할 수 있다.
+
 ```
 tools/check_host.sh
 python3 tools/ci/build_images.py --mode load
-tests/smoke/run_smoke.sh S0
-tests/smoke/run_smoke.sh S2
-tools/ci/lint.sh all
-tools/ros_ws.sh ci
-tools/stack.sh up
+tests/smoke/run_smoke.sh images
+tests/smoke/run_smoke.sh px4-out
+tests/smoke/run_smoke.sh px4-in
+tests/smoke/run_smoke.sh clock
 ```
 
-| 명령 | 확인하는 것 |
+| 명령 | 하는 일 |
 | --- | --- |
-| `tools/check_host.sh` | 호스트가 위 조건을 갖췄는지, 포트와 미러 접근에 문제가 없는지 |
+| `tools/check_host.sh` | 호스트가 위 조건을 갖췄는지, 포트와 미러 접근에 문제가 없는지 본다 |
 | `python3 tools/ci/build_images.py --mode load` | 이미지 5종을 로컬에 빌드한다. 콜드 빌드는 CI 실측 약 22분. 로컬 16 vCPU에서 PX4 컴파일 단계는 163초였다 |
-| `tests/smoke/run_smoke.sh S0` | 이미지 버전과 `docker/versions.env`의 일치 |
-| `tests/smoke/run_smoke.sh S2` | PX4와 Gazebo 연동, 파라미터 저장값 |
-| `tools/ci/lint.sh all` | CI와 같은 린트 전체 (호스트에 린터 설치가 필요 없다) |
+| `tests/smoke/run_smoke.sh images` | 이미지 버전과 `docker/versions.env`의 일치를 본다. 스택을 올리지 않는다 |
+| `tests/smoke/run_smoke.sh px4-out` | 운용과 같은 구성(Gazebo 분리)에서 기체 스폰, PX4 -> ROS 방향 토픽, `commander check`를 본다 |
+| `tests/smoke/run_smoke.sh px4-in` | ROS -> PX4 방향. arm/disarm 왕복과 `trajectory_setpoint` 구독을 본다. 미션 노드가 이 방향으로 명령과 setpoint를 보낸다 |
+| `tests/smoke/run_smoke.sh clock` | `/clock` 브리지의 발행자 수와 시각 증가를 본다. 노드와 통합 테스트의 시간 기준이다 |
+
+px4-out, px4-in, clock은 각각 스택을 내렸다가 다시 올리고, 끝나면 내린다.
+
+## 개발 중에 쓰는 도구
+
+환경 구성이 끝난 뒤 작업하면서 반복해서 쓰는 명령이다.
+
+| 명령 | 하는 일 |
+| --- | --- |
+| `tools/sim_stack.sh up` | `config/fleet.yaml`로 스택(아래 "스택과 스택 번호")을 생성하고 올린다. 실행 디렉터리 `artifacts/runs/<실행 id>/`를 출력한다. 내리기는 `tools/sim_stack.sh down`. 화면 도구는 아래 "화면으로 보기" |
 | `tools/ros_ws.sh ci` | `ros_ws/src`의 ROS 2 패키지를 ros-ws 컨테이너에서 빌드하고 테스트(ament_lint 포함)와 clang-tidy를 돌린다. CI의 unit job과 같은 명령 |
-| `tools/stack.sh up` | `config/fleet.yaml`로 스택(에이전트, Gazebo, 기체, `/clock` 브리지)을 생성하고 올린다. 실행 디렉터리 `artifacts/runs/<실행 id>/`를 출력한다. 내리기는 `tools/stack.sh down` |
+| `tools/ci/lint.sh all` | CI와 같은 lint 전체 (호스트에 linter 설치가 필요 없다) |
+| `python3 tools/ci/build_images.py --mode load [이미지]` | `docker/`나 `versions.env`를 바꾼 뒤 이미지를 다시 빌드한다. 이미지 이름을 주면 그 이미지와 베이스만 빌드한다 |
+| `tests/smoke/run_smoke.sh <images, px4-out, px4-in, clock>` | 이미지나 스택을 바꾼 뒤 빠른 시작의 스모크를 다시 돌린다 |
+| `tests/smoke/run_smoke.sh golden` | 토픽, QoS, 파라미터를 golden 파일과 비교한다. 이미지나 PX4 설정을 바꾼 뒤의 회귀 확인. golden을 의도해서 바꿀 때는 `--update-golden` |
+| `tests/smoke/run_smoke.sh embedded` | PX4가 Gazebo를 직접 띄우는 구성. 운용 구성이 아니라 px4-out이 실패할 때 원인을 가르는 진단용이다. 단계 설명은 `docs/smoke-test.md` |
+| `python3 -m pytest tests/tools --update-golden` | compose 생성기 golden(`tests/tools`)을 의도해서 바꿨을 때 ros-ws 컨테이너 안에서 갱신한다. CI에서는 거부된다 |
 
 ## 화면으로 보기
 
-스택을 `tools/stack.sh up --viz`로 올리면 Gazebo GUI(compose `viz` 프로필의 `gz-gui`)가 함께 뜬다. QGroundControl은 `tools/qgc.sh --stack k`로 호스트에서 띄운다. 기체 출발 위치는 `config/fleet.yaml`의 `world.origin`(기본 서울시청)이다. 자세한 것은 `docker/README.md`의 "시각 도구" 절을 따른다.
+스택을 `tools/sim_stack.sh up --viz`로 올리면 Gazebo GUI(compose `viz` 프로필의 `gz-gui`)가 함께 뜬다. QGroundControl은 `tools/qgc.sh --stack k`로 호스트에서 띄운다. 기체 출발 위치는 `config/fleet.yaml`의 `world.origin`(기본 서울시청)이다. 자세한 것은 `docker/README.md`의 "시각 도구" 절을 따른다.
 
-## 같은 호스트에 다른 ROS 2나 Gazebo가 있을 때
+## 스택과 스택 번호
 
-idsim은 스택 번호 k(0-9, 기본 0. `--stack k` 또는 환경 변수 `IDSIM_STACK_INDEX`)에서 격리 값을 파생한다.
+스택은 서로 격리된 시뮬레이션 한 벌이다. 에이전트, Gazebo 서버, 기체 px4-N, `/clock` 브리지가 compose 프로젝트 하나로 함께 뜬다. Gazebo GUI와 QGroundControl은 스택이 아니라 떠 있는 스택에 붙는 화면 도구다.
 
-| 항목 | 값 |
+같은 호스트에 스택이 둘 있거나 다른 ROS 2, Gazebo가 함께 떠 있으면 여러 계층에서 통신이 섞이거나 이름이 충돌한다. 스택 번호 k(0-9, 기본 0. `--stack k` 또는 환경 변수 `IDSIM_STACK_INDEX`)에서 계층마다 하나씩 격리 값을 파생해 이를 막는다.
+
+| 값 | 막는 충돌 |
 | --- | --- |
-| compose 프로젝트 | idsim-k |
-| ROS 2 도메인 | 20 + k |
-| 에이전트 포트 | 8888 + k |
-| Gazebo 파티션 | idsim-k |
-| QGC GCS 포트 | 14550 + 1000k |
+| compose 프로젝트 `idsim-k` | 컨테이너와 네트워크 이름 |
+| ROS 2 도메인 20 + k | ROS 토픽(DDS)이 다른 스택이나 다른 ROS 2와 섞이는 것 |
+| 에이전트 포트 8888 + k | PX4의 uXRCE-DDS 클라이언트가 다른 스택의 에이전트에 붙는 것(UDP) |
+| Gazebo 파티션 `idsim-k` | gz-transport 토픽과 모델이 다른 Gazebo와 섞이는 것 |
+| QGC GCS 포트 14550 + 1000k | MAVLink UDP 포트 |
 
-겹치면 k를 바꾼다(`tools/stack.sh up --stack 1`, `tools/qgc.sh --stack 1`). k가 다르면 idsim 스택 둘을 동시에 띄울 수 있다. 자세한 것은 `docker/README.md`의 "격리 규칙" 절을 본다.
+다른 프로그램과 겹치면 k를 바꾼다(`tools/sim_stack.sh up --stack 1`, `tools/qgc.sh --stack 1`). k가 다르면 idsim 스택 둘을 동시에 띄울 수 있다. 자세한 것은 `docker/README.md`의 "격리 규칙" 절을 본다.
 
 ## 알려진 제약
 

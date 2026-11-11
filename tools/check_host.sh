@@ -166,7 +166,7 @@ if [ -n "${XAUTHORITY:-}" ] && [ -s "${XAUTHORITY}" ] && [ -r "${XAUTHORITY}" ];
 elif [ -n "${XAUTHORITY:-}" ]; then
   warn "XAUTHORITY 파일($XAUTHORITY)이 없거나 비어 있거나 읽을 수 없다. Gazebo GUI가 X 서버 인증에 실패한다"
 else
-  warn "XAUTHORITY가 비어 있다. Gazebo GUI(tools/stack.sh up --viz)를 쓰려면 내보내라. GNOME Wayland: export XAUTHORITY=\$(ls /run/user/\$(id -u)/.mutter-Xwaylandauth.* | head -n 1)"
+  warn "XAUTHORITY가 비어 있다. Gazebo GUI(tools/sim_stack.sh up --viz)를 쓰려면 내보내라. GNOME Wayland: export XAUTHORITY=\$(ls /run/user/\$(id -u)/.mutter-Xwaylandauth.* | head -n 1)"
 fi
 
 # (j) 포트 충돌 힌트
@@ -191,7 +191,7 @@ if command -v ss > /dev/null 2>&1; then
   for port in $agent_port $gcs_port; do
     # ss -ulnp 출력에서 Local Address:Port는 4번째 열이다(5번째는 Peer)
     if printf '%s\n' "$ss_out" | awk -v p=":$port" '$4 ~ p"$" {f=1} END {exit !f}'; then
-      warn "UDP 포트 $port 가 이미 쓰이고 있다. 스택 번호를 바꿔 실행하라(예: tools/stack.sh up --stack 1). GCS 포트는 QGC가 듣는 중이면 정상이다"
+      warn "UDP 포트 $port 가 이미 쓰이고 있다. 스택 번호를 바꿔 실행하라(예: tools/sim_stack.sh up --stack 1). GCS 포트는 QGC가 듣는 중이면 정상이다"
       conflict=1
     fi
   done

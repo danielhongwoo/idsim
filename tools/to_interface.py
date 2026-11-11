@@ -16,7 +16,7 @@
 
 사용법
   tools/to_interface.py --artifacts artifacts/runs/<run_id>/smoke/ros [--golden DIR]
-  (<run_id>는 run_smoke.sh S4 실행의 id, 예: 20261110-003348-k0-s4)
+  (<run_id>는 run_smoke.sh golden 실행의 id, 예: 20261110-003348-k0-golden)
   --golden 을 주지 않으면 docker/versions.env 의 PX4_TAG 로 경로를 계산한다.
 """
 
