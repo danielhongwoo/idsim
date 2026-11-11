@@ -10,11 +10,11 @@
 | 사용자 결정 | U1(D와 `[LAND]`를 1a 필수에), U2(`sitl`은 PR 머리 커밋마다와 main push, lint와 unit trigger 정리), U3(공중에서 끝나는 미션은 1b로) 확정. GHCR Public 확인만 남음 |
 | 소유 반영(`CLAUDE.md`, `.claude/agents/`) | 완료(사용자 승인 2026-11-11, 호출한 쪽이 반영). `file-ownership.md`는 계획 PR에서 호출한 쪽이 반영한다(문안은 `decisions.md` 문서 반영 목록) |
 | px4-engineer 승인 항목(P3b 착수 전) | 닫힘(2026-11-11). 승인 2건, 수정 조건부 3건, 반대 없음. 실측 run 20261111-030155-k5. `decisions.md`의 "px4-engineer 승인 반영"에 반영했다(PR #21 머지). P3b 착수 가능. 실측이 없는 두 경로와 감시 표의 행 순위는 표대로 구현하되 재실측으로 바뀔 수 있다 |
-| PR #21 reviewer 검증 | 조건부(필수 5건, 권고 6건). 후속 PR에서 반영: 상수 `REASON_EXTERNAL_DISARM = 14` 추가(golden은 두 파일에 두 줄씩), 감시 표의 행 순위(잠정), M3의 미확인 목록, 필수 재실측 다시 정함. 사용자 결정 U4(replay job trigger는 Phase 2에서), U5(px4 확인은 개정 뒤, sonnet으로). px4-engineer 확인 완료(`approval-px4-p3b-review.md`. 승인 3건, 수정 조건부 2건, 반대 없음)와 PR #23 reviewer 검증(조건부, 필수 3건)을 같은 PR에 반영했다. 필수 재실측 (2), (3), (5)는 P4 머지 조건. 이어서 쟁점 2 재결정에 대한 devops-engineer 의견과 reviewer 필수 3건, ros2-engineer의 timer 확인, test-engineer의 조건부 승인(C1-C6)을 반영했다. 남은 확인 예정은 px4-engineer 몫 하나(감시 표 순위 5의 이력 문장과 함께 묶은 문장들)다 |
+| PR #21 reviewer 검증 | 조건부(필수 5건, 권고 6건). 후속 PR에서 반영: 상수 `REASON_EXTERNAL_DISARM = 14` 추가(golden은 두 파일에 두 줄씩), 감시 표의 행 순위(잠정), M3의 미확인 목록, 필수 재실측 다시 정함. 사용자 결정 U4(replay job trigger는 Phase 2에서), U5(px4 확인은 개정 뒤, sonnet으로). px4-engineer 확인 완료(`approval-px4-p3b-review.md`. 승인 3건, 수정 조건부 2건, 반대 없음)와 PR #23 reviewer 검증(조건부, 필수 3건)을 같은 PR에 반영했다. 필수 재실측 (2), (3), (5)는 P4 머지 조건. 이어서 쟁점 2 재결정에 대한 devops-engineer 의견과 reviewer 필수 3건, ros2-engineer의 timer 확인, test-engineer의 조건부 승인(C1-C6)을 반영했다. px4-engineer의 최종 확인(`approval-px4-p3b-final.md`. 반대 없음)까지 반영해 확인 예정은 모두 닫혔다. 남은 잠정은 감시 표의 순위(재실측 (4) 전까지) 하나다 |
 | P0 CI trigger 정리 | 완료(PR #19 머지 2026-11-11). lint와 unit이 `pull_request` + `push: main`에서 돈다 |
 | P1 ros-ws에 foxglove_bridge | 진행 중 |
 | P2 `idsim_common` 추가 | 진행 중 |
-| P3 `idsim_mission` 패키지 | P3a 완료(2026-11-11. `p3a-results.md`). 컨테이너 autostart는 Jazzy(launch_ros 0.26.13)에서 동작하지 않아 쟁점 2를 노드의 자기 전이(`lifecycle.self_start`)로 다시 결정했다. `/**` params 성립, 첫 `/clock` 최대 0.66 s, ACCEPTED 누락은 순서 규칙을 지키면 0/400. P3b 착수 가능(승인 반영 PR #21 머지) |
+| P3 `idsim_mission` 패키지 | P3a 완료(2026-11-11. `p3a-results.md`). 컨테이너 autostart는 Jazzy(launch_ros 0.26.13)에서 동작하지 않아 쟁점 2를 노드의 자기 전이(`lifecycle.self_start`)로 다시 결정했다. `/**` params 성립, 첫 `/clock` 최대 0.66 s, ACCEPTED 누락은 순서 규칙을 지키면 0/400. P3b 착수 가능으로 확정(승인 반영 PR #21 머지. 그 뒤의 확인 예정도 모두 닫혔다. 후속 반영은 PR #23) |
 | P4 생성기, 통합 테스트, `sitl` job, 문서 | 시작 전 |
 | P5 viz | 시작 전 |
 | 로컬 3회 연속 통과 | 시작 전 |
@@ -27,6 +27,7 @@
 | `decisions.md` | architect 결정 13건(확정본), 확정 개정 요약, 계약 변경 여부와 golden 영향, 재질문 결과 요약, 전이 표, 담당자별 구현 지시, 넘김 목록, 문서 반영 목록, 사용자 결정 3건, reviewer 검증 결과 | 계약. 구현은 이 문서를 따른다 |
 | `p3a-results.md` | ros2-engineer의 P3a 실행 확인 결과(스택 6. autostart, `/**` params, 첫 `/clock`, ACCEPTED 누락 계수, PID 1 신호) | 근거 |
 | `opinion-px4.md` | px4-engineer 의견과 실측(스택 5. Offboard 진입, Hold 실험, 발행 중단 규칙, 타임아웃) | 근거 |
+| `approval-px4-p3b-final.md` | px4-engineer의 마지막 확인(2026-11-11. 순위 5의 이력 문장, OFFBOARD인 채 failsafe가 true인 표본, 지상 disarm 분기의 LINK_LOST, DISARM의 거부 ack, C5, C2) | 근거 |
 | `approval-px4-p3b-review.md` | px4-engineer의 PR #23 반영 확인(2026-11-11. 원문 대조, 새 실측 없음. 표본 기준, 순위 5의 failsafe 가지, `[LAND]` 단독 미션의 ITEM_TIMEOUT 단서, 재실측에 더할 셋) | 근거 |
 | `approval-px4-p3b.md` | px4-engineer의 P3b 착수 전 승인 항목 다섯 검토(2026-11-11. 스택 5 실측 run 20261111-030155-k5, 타임아웃과 재전송 주기의 최종 값, 추가로 발견한 문제 다섯) | 근거 |
 | `opinion-ros2.md` | ros2-engineer 의견과 실측(스택 6. 패키지 구조, lifecycle, matched 판정, foxglove_bridge 파라미터) | 근거 |
@@ -117,6 +118,6 @@
 
 ## 사용자 결정과 알림
 
-- 결정(2026-11-11, 셋 다 architect 권고안. 호출한 쪽이 전달): U1 시나리오 D와 `[LAND]` 한 항목 미션을 1a 필수에 넣는다. U2 `sitl`은 PR 머리 커밋마다와 main push, lint와 unit trigger도 맞춘다. U3 공중에서 끝나는 미션의 종료 동작은 1b로 미룬다. U4 replay job의 trigger는 Phase 2에서 정한다. U5 px4-engineer의 PR #21 반영 확인은 architect 개정 뒤에 sonnet으로 받는다(기본 모델 opus의 예외, 사용자가 직접 골랐다). U4와 U5는 architect 권고안이 아니라 사용자가 정한 것이다.
+- 결정(2026-11-11, 셋 다 architect 권고안. 호출한 쪽이 전달): U1 시나리오 D와 `[LAND]` 한 항목 미션을 1a 필수에 넣는다. U2 `sitl`은 PR 머리 커밋마다와 main push, lint와 unit trigger도 맞춘다. U3 공중에서 끝나는 미션의 종료 동작은 1b로 미룬다. U4 replay job의 trigger는 Phase 2에서 정한다. U5 px4-engineer의 읽기 전용 확인은 앞으로 sonnet으로 받는다(기본 모델 opus의 예외. 사용자가 정한 일반 규칙이고 PR #21 반영 확인부터 적용했다). U4와 U5는 architect 권고안이 아니라 사용자가 정한 것이다.
 - 남은 것: GHCR 패키지 다섯과 buildcache의 Public 설정 확인. `CLAUDE.md` 담당자 표와 `.claude/agents/` 세 파일의 소유 반영은 끝났다(사용자 승인, 호출한 쪽이 반영).
 - 알림: `ExecuteMission`에 상수 `REASON_DISARM_FAILED = 13`과 `REASON_EXTERNAL_DISARM = 14`를 더한다(고정 전의 계약 변경), 1a `sitl`은 MCAP을 올리지 않는다, Lichtblick은 1.30.0이다("2.5.2"는 Caddy label), LAND 중 취소도 Hold다, ros-ws 이미지 key가 바뀐다, 스모크는 노드 없이 돈다, PR이 여섯 개다.
