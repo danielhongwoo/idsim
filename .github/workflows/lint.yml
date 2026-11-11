@@ -5,9 +5,11 @@
 #   PASS             대상이 있었고 통과
 #   PASS-NO-TARGETS  대상 파일 0개라 검사 없이 통과 (notice 주석이 함께 남는다. 건너뜀이 아니다)
 #   FAIL-NOT-WIRED   대상 파일이 생겼는데 검사가 아직 연결되지 않음 (cargo). 연결할 때까지 실패한다
-# clang-tidy와 ament_lint는 이 워크플로에 없다. compile_commands.json과 ROS 헤더가 필요해서 unit 워크플로
-# (tools/ros_ws.sh ci)의 ros-ws 컨테이너 안에서 돈다. 이 워크플로에서 "통과"로 보이는 가짜 항목을 두지 않는다.
-# 매트릭스 job은 if 조건으로 건너뛰지 않는다. GitHub UI에서 "skipped"로 보이는 lint job은 없어야 한다.
+# clang-tidy와 ament_lint는 이 workflow에 없다. compile_commands.json과 ROS 헤더가 필요해서 unit workflow
+# (tools/ros_ws.sh ci)의 ros-ws 컨테이너 안에서 돈다. 이 workflow에서 "통과"로 보이는 가짜 항목을 두지 않는다.
+# matrix job은 if 조건으로 건너뛰지 않는다. GitHub UI에서 "skipped"로 보이는 lint job은 없어야 한다.
+# 대가: base와 충돌이 있는 PR에서는 pull_request 실행이 돌지 않는다. unit의 key는 PR merge commit 기준이고
+# re-run은 처음 merge SHA를 쓰므로 main의 새 key 반영에는 새 push가 필요하다.
 name: lint
 
 on:
@@ -19,8 +21,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: lint-${{ github.ref }}
-  # PR의 옛 실행은 취소한다. main에서는 취소하지 않는다(push마다 결과가 남아야 한다).
+  # PR: 같은 ref면 옛 실행 취소. main: 실행마다 group이 달라 대기 중 실행도 취소되지 않는다(push마다 결과가 남는다).
+  group: lint-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
