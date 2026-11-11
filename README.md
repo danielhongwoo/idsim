@@ -16,31 +16,40 @@ idsim은 Interceptor Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, RO
 | 메모리 | 16GB 이상. 개발 VM 31GB와 CI 러너 16GB에서 확인했고 그 아래는 미실측 |
 | 선택 | gh (PR을 올리거나 합칠 때), 화면 확인용 X11 또는 XWayland 데스크톱 |
 
-compose 생성기 골든(`tests/tools`)을 의도해서 바꿨다면 ros-ws 컨테이너에서 `python3 -m pytest tests/tools --update-golden`으로 갱신한다(CI에서는 거부된다).
-
 조건은 `tools/check_host.sh`가 점검한다. 시스템을 바꾸지 않고 조회만 하며, 외부 네트워크 검사는 `--offline`으로 건너뛴다.
 
 ## 빠른 시작
+
+새 호스트에서 한 번 하는 환경 구성이다. 순서대로 돌리고, 모두 통과하면 개발을 시작할 수 있다.
 
 ```
 tools/check_host.sh
 python3 tools/ci/build_images.py --mode load
 tests/smoke/run_smoke.sh S0
 tests/smoke/run_smoke.sh S2
-tools/ci/lint.sh all
-tools/ros_ws.sh ci
-tools/stack.sh up
 ```
 
-| 명령 | 확인하는 것 |
+| 명령 | 하는 일 |
 | --- | --- |
-| `tools/check_host.sh` | 호스트가 위 조건을 갖췄는지, 포트와 미러 접근에 문제가 없는지 |
+| `tools/check_host.sh` | 호스트가 위 조건을 갖췄는지, 포트와 미러 접근에 문제가 없는지 본다 |
 | `python3 tools/ci/build_images.py --mode load` | 이미지 5종을 로컬에 빌드한다. 콜드 빌드는 CI 실측 약 22분. 로컬 16 vCPU에서 PX4 컴파일 단계는 163초였다 |
-| `tests/smoke/run_smoke.sh S0` | 이미지 버전과 `docker/versions.env`의 일치 |
-| `tests/smoke/run_smoke.sh S2` | PX4와 Gazebo 연동, 파라미터 저장값 |
-| `tools/ci/lint.sh all` | CI와 같은 린트 전체 (호스트에 린터 설치가 필요 없다) |
+| `tests/smoke/run_smoke.sh S0` | 이미지 버전과 `docker/versions.env`의 일치를 본다 |
+| `tests/smoke/run_smoke.sh S2` | PX4와 Gazebo 연동, 파라미터 저장값을 본다 |
+
+## 개발 중에 쓰는 도구
+
+환경 구성이 끝난 뒤 작업하면서 반복해서 쓰는 명령이다.
+
+이 문서에서 스택은 서로 격리된 시뮬레이션 한 벌이다. 에이전트, Gazebo 서버, 기체 px4-N, `/clock` 브리지가 compose 프로젝트 `idsim-k` 하나로 함께 뜬다. Gazebo GUI와 QGroundControl은 스택이 아니라 떠 있는 스택에 붙는 화면 도구다.
+
+| 명령 | 하는 일 |
+| --- | --- |
+| `tools/stack.sh up` | `config/fleet.yaml`로 스택(에이전트, Gazebo, 기체, `/clock` 브리지)을 생성하고 올린다. 실행 디렉터리 `artifacts/runs/<실행 id>/`를 출력한다. 내리기는 `tools/stack.sh down`. 화면 도구는 아래 "화면으로 보기" |
 | `tools/ros_ws.sh ci` | `ros_ws/src`의 ROS 2 패키지를 ros-ws 컨테이너에서 빌드하고 테스트(ament_lint 포함)와 clang-tidy를 돌린다. CI의 unit job과 같은 명령 |
-| `tools/stack.sh up` | `config/fleet.yaml`로 스택(에이전트, Gazebo, 기체, `/clock` 브리지)을 생성하고 올린다. 실행 디렉터리 `artifacts/runs/<실행 id>/`를 출력한다. 내리기는 `tools/stack.sh down` |
+| `tools/ci/lint.sh all` | CI와 같은 lint 전체 (호스트에 linter 설치가 필요 없다) |
+| `python3 tools/ci/build_images.py --mode load [이미지]` | `docker/`나 `versions.env`를 바꾼 뒤 이미지를 다시 빌드한다. 이미지 이름을 주면 그 이미지와 베이스만 빌드한다 |
+| `tests/smoke/run_smoke.sh <S0, S1b, S2-S5>` | 이미지나 스택을 바꾼 뒤 환경 스모크를 다시 돌린다. 단계 설명은 `docs/smoke-test.md` |
+| `python3 -m pytest tests/tools --update-golden` | compose 생성기 golden(`tests/tools`)을 의도해서 바꿨을 때 ros-ws 컨테이너 안에서 갱신한다. CI에서는 거부된다 |
 
 ## 화면으로 보기
 
