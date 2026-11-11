@@ -330,7 +330,7 @@ def run_status(rows, min_attempts, meta_ok=True, crit=None):
     """measure.py 한 실행의 종료 코드.
 
     rows: 모든 행(item, verdict 키). min_attempts: 항목의 최소 시도 수(유효 시도 기준).
-    행이 0개, PASS와 FAIL이 아닌 verdict(COND_NOT_REACHED, HOLD_END, INCONCLUSIVE, WINDOW_MISSED,
+    행이 0개, PASS와 FAIL이 아닌 verdict(COND_NOT_REACHED, HOLD_END, INCONCLUSIVE,
     PRECONDITION, ERROR 등), 유효 시도 수 부족, 메타 부족(commit unknown, image key null)은 2.
     EXCLUDED_VERDICTS 중 WINDOW_MISSED(measure.py 안에서 정해지는 자극 불성립)는 유효 시도에도 not-pass에도
     넣지 않는다. (5)의 증거 미확인 INCONCLUSIVE는 ULog 교차 확인 전이라 여기서는 2다(제외는 crosscheck의
