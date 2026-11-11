@@ -1,9 +1,16 @@
 # goal. action 이름 /<vehicle_id>/execute_mission
 # 받는 쪽은 판단할 수 있는 goal을 모두 수락하고, 받을 수 없으면 즉시 ABORTED로 끝내며 reason을 싣는다(거절은 쓰지 않는다).
 # 실행 중인 goal은 선점하지 않는다. 두 번째 goal은 REASON_BUSY로 끝난다.
-# 취소: 공중이면 Hold 모드로 바꾸고 확인한 뒤 CANCELED. 정해진 시간 안에 확인되지 않으면 Land 명령을 보내고
-# ABORTED(REASON_MODE_SWITCH_FAILED). 지상에서 arm 상태이면 disarm을 확인한 뒤 CANCELED.
-# (취소의 분기는 1a 고정 전까지 잠정이다.)
+# 취소: 상황을 가리지 않고(failsafe 동작 중, LAND 항목 중 포함) 아래 분기로 처리하고 결과로 가른다.
+# - 공중: setpoint 발행을 유지한 채 Hold 명령을 보낸다. Hold를 처음 관측하면 setpoint 발행을 멈추고, 확인되면 CANCELED.
+#   Hold 명령의 ack가 거부이면 타임아웃을 기다리지 않고 바로, 아니면 정해진 시간 안에 확인되지 않을 때 Land 명령을
+#   보내고 ABORTED(REASON_MODE_SWITCH_FAILED).
+# - 지상 arm: disarm을 확인한 뒤 CANCELED. 정해진 시간 안에 확인되지 않으면 ABORTED(REASON_DISARM_FAILED).
+#   대기 중 지상 판정이 풀리면 공중 분기로 넘어간다.
+# - 지상 disarm: 이 goal에서 arm을 보낸 적이 없을 때만 바로 CANCELED. 한 번이라도 보냈으면 지상에서 DISARMED로 보여도
+#   지상 arm 분기와 같은 disarm 확인을 거친다.
+# CANCELED로 끝난 기체는 Hold(ARMED, landed false)이거나 지상 disarm이다. Hold로 끝난 기체는 지면 근처이거나 땅에 닿아
+# 있어도 스스로 내려앉거나 disarm되지 않는다.
 string vehicle_id      # 받는 쪽이 자기 vehicle_id와 다르면 VEHICLE_ID_MISMATCH로 중단한다
 Mission mission
 ---
@@ -15,13 +22,18 @@ uint8 REASON_VEHICLE_ID_MISMATCH = 2
 uint8 REASON_BUSY = 3
 uint8 REASON_NOT_READY = 4            # 항목을 시작하기 전에 기체가 준비되지 않음
 uint8 REASON_ARM_REJECTED = 5
-uint8 REASON_MODE_SWITCH_FAILED = 6
+uint8 REASON_MODE_SWITCH_FAILED = 6   # 요청한 모드 전환이 확인되지 않음
 uint8 REASON_ITEM_TIMEOUT = 7
 uint8 REASON_FAILSAFE = 8
 uint8 REASON_EXTERNAL_MODE_CHANGE = 9
 uint8 REASON_TARGET_LOST = 10
 uint8 REASON_LINK_LOST = 11
 uint8 REASON_PRECONDITION_FAILED = 12 # 항목을 시작할 때 그 항목의 시작 조건이 맞지 않음
+# 취소 처리 중 지상에서 보낸 disarm이 제한 시간 안에 확인되지 않았고 기체가 arm 상태로 남았을 수 있다.
+uint8 REASON_DISARM_FAILED = 13
+# setpoint 항목 실행 중에 Executor가 보내지 않은 disarm이 지상에서 failsafe 없이 관측됐다. 끝난 뒤 기체는 지상에
+# disarm 상태다. 원인은 판정하지 않는다(외부 명령뿐 아니라 PX4 자체의 disarm과 kill을 포함한다).
+uint8 REASON_EXTERNAL_DISARM = 14
 uint8 REASON_INTERNAL = 255
 
 uint8 reason               # REASON_*
@@ -30,6 +42,9 @@ uint32 last_item_index     # 끝날 때 실행 중이던 항목(0부터). 항목
 string detail              # 사람이 읽는 설명. 판정에 쓰지 않는다
 ---
 # feedback
+# 즉시 ABORTED로 끝나는 goal 가운데 feedback 0건이 보장되는 것은 REASON_VEHICLE_ID_MISMATCH, REASON_INVALID_MISSION,
+# REASON_BUSY뿐이다. REASON_NOT_READY 앞에는 PHASE_PREPARING feedback이 나갈 수 있다.
+# 보내는 쪽은 feedback 수신을 수락 확인으로 쓰지 않는다.
 uint8 PHASE_PREPARING = 1      # 식별 대조, arm, Offboard 진입
 uint8 PHASE_EXECUTING = 2
 uint8 PHASE_WAITING_MODE = 3   # 모드 명령 항목에서 모드 전이 확인 대기
