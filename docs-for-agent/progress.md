@@ -53,7 +53,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. P4의 선행 작업: 측정 스크립트를 `tests/sitl/measure/`에 만든다(test-engineer, 절차 승인 px4-engineer). px4-engineer의 필수 재실측 (2), (3), (5)는 P4 머지 조건이다. 항목별 기록 항목과 통과 기준(OFFBOARD가 아닌 ARMED 표본 0개, 정리의 총 소요 9 s 미만 등)은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록에 있다.
+1. P4의 선행 작업: 측정 스크립트 `tests/sitl/measure/`(`run_measure.sh`, 사용법은 같은 디렉터리 `README.md`)가 있다. 남은 일은 px4-engineer의 절차 승인과 본 측정(재실측 (2), (3), (5)는 P4 머지 조건)이다. 항목별 기록 항목과 통과 기준(OFFBOARD가 아닌 ARMED 표본 0개, 정리의 총 소요 9 s 미만 등)은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록에 있다. 시나리오 A(Executor 경유)의 `vehicle_status` 원시 표본 기록은 `tests/support/px4_raw.py`와 `measure_judge.py`를 P4 시나리오가 쓴다.
 2. P4의 core 변경(ros2-engineer 구현, px4-engineer 필수 승인. `decisions.md` 쟁점 3 M6과 쟁점 4, 담당자별 구현 지시). P6에서 ARMED를 처음 관측한 뒤의 감시 표 적용과 arm 재전송 중단, 감시 표로 끝낼 때의 disarm 1회, ARMED 관측 뒤의 확인 기한, 정리의 상한(`hold_confirm_timeout + 3 x mode_confirm_timeout`, 기본 12 s)과 상한 tick의 동작, Hold 실패 뒤 공중 재진입은 Land 경로, 단위 테스트, 패키지 `README.md` 갱신. `ExecuteMission.action`의 의미 주석은 이미 이 결정에 맞춰져 있다(golden 무변경).
 3. P4 생성기와 통합(devops-engineer, test-engineer, architect의 문서 반영). `ops-N` 서비스, params와 `stack.json` key, `tests/sitl/`, CI `sitl` job, `build_images.py --mode pull`. 함께 할 것: `idsim_mission/config/ops.example.yaml`의 손으로 쓴 식별자를 지우거나 install에서 빼기, 노드 이름 기본값 `mission_executor`와 생성기의 대조, CI 첫 몇 회의 노드 테스트(`test_executor_node`) 소요 기록(벽시계 1 ms당 sim 2 ms라 runner가 느리면 LINK_LOST로 흔들릴 수 있다. 흔들리면 재시도나 상한 늘리기로 덮지 않는다).
 4. P5 viz(devops-engineer). `foxglove`와 `lichtblick` 서비스, 브라우저 실접속 확인.
