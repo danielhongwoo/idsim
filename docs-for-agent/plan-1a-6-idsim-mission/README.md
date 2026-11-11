@@ -1,6 +1,6 @@
 # Phase 1a 6번 작업 idsim_mission 작업 계획
 
-작성 2026-11-11, 같은 날 확정 개정. 설계 결정은 `decisions.md`에 있고 확정본이다(reviewer 검증의 필수 7건과 권고 10건, 사용자 결정 3건 반영). 구현은 시작하지 않았다. P0, P1, P2, P3a는 바로 시작할 수 있고 P3b는 px4-engineer의 승인 항목이 닫힌 뒤다. 계획 브랜치는 `docs/1a-6-plan`이다.
+작성 2026-11-11, 같은 날 확정 개정. 설계 결정은 `decisions.md`에 있고 확정본이다(reviewer 검증의 필수 7건과 권고 10건, 사용자 결정 3건 반영). 계획은 PR #18로 main에 들어갔다. P0은 끝났고(PR #19) P1, P2, P3a가 진행 중이다. px4-engineer의 P3b 착수 전 승인 항목 다섯은 2026-11-11에 닫혔고(`approval-px4-p3b.md`, 브랜치 `docs/1a-6-p3b-approval`) 그 반영이 main에 들어가면 P3b를 시작할 수 있다.
 
 ## 진행 상태 (2026-11-11)
 
@@ -9,10 +9,11 @@
 | 설계 결정 | 확정(`decisions.md`). 의견 넷, 재질문 다섯 건, reviewer 검증(조건부) 반영. reviewer 재확인(조건부) 반영: M5 (나) 성립, LAND 감시 시작 시점과 ITEM_TIMEOUT 정리 보강. P0-P3a 착수 가능, P3b는 px4-engineer 승인 항목 뒤 |
 | 사용자 결정 | U1(D와 `[LAND]`를 1a 필수에), U2(`sitl`은 PR 머리 커밋마다와 main push, lint와 unit trigger 정리), U3(공중에서 끝나는 미션은 1b로) 확정. GHCR Public 확인만 남음 |
 | 소유 반영(`CLAUDE.md`, `.claude/agents/`) | 완료(사용자 승인 2026-11-11, 호출한 쪽이 반영). `file-ownership.md`는 계획 PR에서 호출한 쪽이 반영한다(문안은 `decisions.md` 문서 반영 목록) |
-| P0 CI trigger 정리 | 시작 전(착수 가능) |
-| P1 ros-ws에 foxglove_bridge | 시작 전(착수 가능) |
-| P2 `idsim_common` 추가 | 시작 전(착수 가능) |
-| P3 `idsim_mission` 패키지 | 시작 전. P3a는 착수 가능, P3b는 px4-engineer 승인 항목 다섯이 닫힌 뒤 |
+| px4-engineer 승인 항목(P3b 착수 전) | 닫힘(2026-11-11). 승인 2건, 수정 조건부 3건, 반대 없음. 실측 run 20261111-030155-k5. `decisions.md`의 "px4-engineer 승인 반영"에 반영했다. 새 상수와 golden 변화는 없다. 이 반영 PR이 머지된 뒤 P3b 착수 가능 |
+| P0 CI trigger 정리 | 완료(PR #19 머지 2026-11-11). lint와 unit이 `pull_request` + `push: main`에서 돈다 |
+| P1 ros-ws에 foxglove_bridge | 진행 중 |
+| P2 `idsim_common` 추가 | 진행 중 |
+| P3 `idsim_mission` 패키지 | P3a 진행 중. P3b는 px4-engineer 승인 반영 PR이 머지된 뒤 |
 | P4 생성기, 통합 테스트, `sitl` job, 문서 | 시작 전 |
 | P5 viz | 시작 전 |
 | 로컬 3회 연속 통과 | 시작 전 |
@@ -24,6 +25,7 @@
 | `README.md` | 이 문서. 작업 단위, 순서, 검토, 완료 기준 | 실행 계획 |
 | `decisions.md` | architect 결정 13건(확정본), 확정 개정 요약, 계약 변경 여부와 golden 영향, 재질문 결과 요약, 전이 표, 담당자별 구현 지시, 넘김 목록, 문서 반영 목록, 사용자 결정 3건, reviewer 검증 결과 | 계약. 구현은 이 문서를 따른다 |
 | `opinion-px4.md` | px4-engineer 의견과 실측(스택 5. Offboard 진입, Hold 실험, 발행 중단 규칙, 타임아웃) | 근거 |
+| `approval-px4-p3b.md` | px4-engineer의 P3b 착수 전 승인 항목 다섯 검토(2026-11-11. 스택 5 실측 run 20261111-030155-k5, 타임아웃과 재전송 주기의 최종 값, 추가로 발견한 문제 다섯) | 근거 |
 | `opinion-ros2.md` | ros2-engineer 의견과 실측(스택 6. 패키지 구조, lifecycle, matched 판정, foxglove_bridge 파라미터) | 근거 |
 | `opinion-test.md` | test-engineer 의견(실측 없음. 통합 테스트 구조, 판정 코드, 시나리오) | 근거 |
 | `opinion-devops.md` | devops-engineer 의견과 조회(생성기, 이미지, Lichtblick digest, `sitl` job) | 근거 |
@@ -60,11 +62,11 @@
 1. (완료) reviewer가 `decisions.md`를 검증했다(조건부). 필수 7건과 권고 10건을 확정본에 반영했다.
 2. (완료) 사용자 결정 U1, U2, U3. GHCR Public 확인은 남았다.
 3. reviewer가 확정본의 "재확인이 필요한 지점"을 본다. 동시에 P0, P1, P2, P3a를 시작한다. P1이 합쳐지면 main build가 새 ros-ws key를 올린 것을 확인하고 뒤의 브랜치를 rebase한다.
-4. P3. 첫 작업은 P3a다. autostart가 실패하면 단독 실행 파일로 물러서고 architect에게 알린다. px4-engineer가 승인 항목 다섯(ITEM_TIMEOUT 뒤 정리의 snapshot 분기, TAKEOFF 시작 조건은 지상이고 DISARMED, 지상 arm 취소 분기의 setpoint, LAND 감시의 세 구간, 방어용 분류)을 닫은 뒤 P3b를 시작한다.
+4. P3. 첫 작업은 P3a다. autostart가 실패하면 단독 실행 파일로 물러서고 architect에게 알린다. px4-engineer가 승인 항목 다섯(ITEM_TIMEOUT 뒤 정리의 snapshot 분기, TAKEOFF 시작 조건은 지상이고 DISARMED, 지상 arm 취소 분기의 setpoint, LAND 감시의 세 구간, 방어용 분류)을 닫은 뒤 P3b를 시작한다(2026-11-11에 닫혔다. `decisions.md`에 반영한 PR이 머지되면 시작한다).
 5. P4. 로컬에서 `tests/sitl/run_sitl.sh --repeat 3`이 통과한 뒤 PR을 올리고 `sitl` job의 첫 실행을 본다. 첫 3회의 단계별 시간과 RTF를 기록한다.
 6. P5. 브라우저 실접속을 확인한다.
 7. 사용자 육안 확인(QGC, Gazebo GUI에서 같은 비행). `tools/stack.sh up --viz` 뒤 `tests/sitl/run_sitl.sh --attach <실행 디렉터리>`로 시나리오 A를 돌린다.
-8. 7단계(`docs/interface.md`)로 넘어간다. 계약 고정 전에 px4-engineer의 필수 재실측(Hold 실험 B와 C 각 3회 이상, LAND 중 0.3 m 아래 취소 3회, X3 1회)이 끝나야 한다.
+8. 7단계(`docs/interface.md`)로 넘어간다. 계약 고정 전에 px4-engineer의 필수 재실측(AUTO_LAND 하강 중 0.3 m 아래 취소 3회, 표본 늘리기: Hold 실험 B와 C, 2026-11-11 run의 G, H, X2a, X2b를 각 3회 이상, X3 1회)이 끝나야 한다.
 
 ## 검토
 
