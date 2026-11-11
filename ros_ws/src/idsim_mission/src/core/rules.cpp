@@ -136,6 +136,39 @@ std::optional<MonitorVerdict> evaluate_monitor(const MonitorInput & input)
   return std::nullopt;
 }
 
+MonitorDisarm monitor_row_disarm(MonitorRow row)
+{
+  switch (row) {
+    case MonitorRow::kTimestampFailure:
+    case MonitorRow::kDisarmedInAir:
+    case MonitorRow::kDisarmedOnGround:
+      return MonitorDisarm::kNever;
+    case MonitorRow::kIdentityMismatch:
+      return MonitorDisarm::kIfArmSent;
+    case MonitorRow::kLinkLost:
+    case MonitorRow::kModeFailsafe:
+    case MonitorRow::kModeExternal:
+    case MonitorRow::kModeDefensive:
+      return MonitorDisarm::kIfNeverAirborne;
+  }
+  return MonitorDisarm::kNever;
+}
+
+bool monitor_sends_disarm(MonitorRow row, const MonitorDisarmInput & input)
+{
+  switch (monitor_row_disarm(row)) {
+    case MonitorDisarm::kNever:
+      return false;
+    case MonitorDisarm::kIfArmSent:
+      // vehicle_land_detected에는 식별 필드가 없어 남의 landed false 하나로 조건 2가 깨질 수 있다.
+      return input.arm_sent;
+    case MonitorDisarm::kIfNeverAirborne:
+      // 한 번도 뜨지 않은 지상 arm만 PX4가 스스로 disarm하지 않는다(COM_DISARM_PRFLT=-1).
+      return input.arm_sent && !input.landed_false_seen && input.landed_known && input.landed;
+  }
+  return false;
+}
+
 const char * cleanup_choice_name(CleanupChoice choice)
 {
   switch (choice) {

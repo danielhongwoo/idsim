@@ -165,7 +165,7 @@ TEST(Px4Inputs, AckResultAllValues)
 
 TEST(Px4Inputs, AckResultRejectionFollowsCoreRule)
 {
-  // ACCEPTED와 IN_PROGRESS만 거부가 아니다(README 10번). 해석은 core의 is_rejection이 한다.
+  // ACCEPTED와 IN_PROGRESS만 거부가 아니다(decisions.md 쟁점 4 "명령 재전송 규칙"). 해석은 core의 is_rejection이 한다.
   for (int v = 0; v <= 255; ++v) {
     const bool not_rejection = v == VehicleCommandAck::VEHICLE_CMD_RESULT_ACCEPTED ||
                                v == VehicleCommandAck::VEHICLE_CMD_RESULT_IN_PROGRESS;

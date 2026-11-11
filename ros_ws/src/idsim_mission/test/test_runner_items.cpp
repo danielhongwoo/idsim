@@ -13,13 +13,18 @@
 // limitations under the License.
 
 // setpoint 항목(TAKEOFF, LOITER)과 상태기 안의 비행 중 감시(decisions.md 쟁점 4 "항목", "비행 중
-// 감시"). 순위마다 한 건, 엇갈려 시작하는 경우, 순위 5 이력의 항목 경계, disarm 분류의 고정.
+// 감시"). 순위마다 한 건, 엇갈려 시작하는 경우, 순위 5 이력의 항목 경계, disarm 분류의 고정, 감시
+// 표로 끝낼 때의 disarm 1회(P6, TAKEOFF, LOITER).
 // 감시 표의 행 순위는 재실측 (4) 전까지 잠정이다.
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "idsim_mission/core/rules.hpp"
@@ -127,17 +132,13 @@ std::vector<RunnerRowCase> runner_rows()
     {"Rank1_TimestampFailure", [](Harness & h) { h.clock.fail = true; }, Reason::kInternal, 1},
     {"Rank2_IdentityMismatch", [](Harness & h) { h.world.identity = IdentityCheck::kMismatch; },
      Reason::kInternal, 2},
-    {"Rank3_LinkLost",
+    // vehicle_status만 끊는다. 마지막 수신에서 link_timeout(2 s) 뒤에 끝난다.
+    {"Rank3_LinkLost", [](Harness & h) { h.auto_samples = false; }, Reason::kLinkLost, 3},
+    {"Rank4_DisarmedInAir",
      [](Harness & h) {
-       // vehicle_status만 끊는다. 마지막 수신에서 2 s.
-       h.auto_samples = false;
-       for (int i = 0; i < 39; ++i) {
-         h.step_only();
-       }
-       ASSERT_FALSE(h.runner().done());
+       h.world.arming = Arming::kDisarmed;
+       h.world.landed = false;
      },
-     Reason::kLinkLost, 3},
-    {"Rank4_DisarmedInAir", [](Harness & h) { h.world.arming = Arming::kDisarmed; },
      Reason::kFailsafe, 4},
     {"Rank5_DisarmedOnGround",
      [](Harness & h) {
@@ -175,14 +176,22 @@ class RunnerMonitorRow : public ::testing::TestWithParam<RunnerRowCase>
 
 TEST_P(RunnerMonitorRow, EndsGoalAndStopsPublishing)
 {
+  // LOITER(landed false를 본 뒤): disarm 1회는 순위 2만 보낸다(조건 없이 arm을 보냈으면).
   Harness h(standard_mission());
   h.drive_to_loiter();
   h.auto_px4 = false;
   GetParam().inject(h);
-  const StepOutput out = h.tick();
+  const std::size_t from = h.outputs().size();
+  ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 60));
+  const StepOutput out = h.outputs().back();
   ASSERT_TRUE(out.termination.has_value()) << GetParam().name;
+  EXPECT_EQ(h.outputs().size(), GetParam().rank == 3 ? from + 40 : from + 1);
   EXPECT_FALSE(out.setpoint.has_value());
-  EXPECT_TRUE(out.commands.empty());
+  if (GetParam().rank == 2) {
+    EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kDisarm});
+  } else {
+    EXPECT_TRUE(out.commands.empty());
+  }
   EXPECT_NE(
     out.termination->detail.find("rank " + std::to_string(GetParam().rank)), std::string::npos)
     << out.termination->detail;
@@ -290,7 +299,7 @@ TEST(RunnerMonitor, Rank5HistoryWithinItemIsFailsafe)
   }()});
   h.feed({disarmed(true)});
   expect_terminated_once(h, Status::kAborted, Reason::kFailsafe);
-  EXPECT_NE(h.termination()->detail.find("rank 5"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("rank 5"), std::string::npos);
 }
 
 TEST(RunnerMonitor, DisarmClassIsFixedAtFirstDisarmed)
@@ -324,9 +333,144 @@ TEST(RunnerMonitor, NavStateOfGroundDisarmedSampleIsNotRead)
   expect_terminated_once(h, Status::kAborted, Reason::kExternalDisarm);
 }
 
+// ---- 감시 표로 끝낼 때의 disarm 1회(decisions.md 쟁점 4 표 아래 "지상 disarm 1회") ----
+// P6(첫 ARMED 뒤), TAKEOFF, LOITER에서 같은 행과 같은 landed 이력이면 같은 결과다.
+
+enum class MonitorStage : std::uint8_t
+{
+  kP6,
+  kTakeoff,
+  kLoiter,
+};
+
+enum class LandedHistory : std::uint8_t
+{
+  kGroundNeverFlown,   // 첫 ARMED 뒤 landed가 계속 true
+  kAirborne,           // 끝나는 tick의 landed가 false
+  kGroundAfterFlying,  // landed false를 본 뒤 다시 true
+};
+
+const char * stage_name(MonitorStage stage)
+{
+  switch (stage) {
+    case MonitorStage::kP6:
+      return "P6";
+    case MonitorStage::kTakeoff:
+      return "TAKEOFF";
+    case MonitorStage::kLoiter:
+      return "LOITER";
+  }
+  return "?";
+}
+
+const char * history_name(LandedHistory history)
+{
+  switch (history) {
+    case LandedHistory::kGroundNeverFlown:
+      return "GroundNeverFlown";
+    case LandedHistory::kAirborne:
+      return "Airborne";
+    case LandedHistory::kGroundAfterFlying:
+      return "GroundAfterFlying";
+  }
+  return "?";
+}
+
+// 그 단계까지 가서 landed 이력을 만든다. P6에서는 vehicle_status를 새로 주지 않고(확인이 차지 않게)
+// vehicle_land_detected만 바꾼다.
+void to_monitor_stage(Harness & h, MonitorStage stage, LandedHistory history)
+{
+  const bool end_landed = history != LandedHistory::kAirborne;
+  if (stage == MonitorStage::kP6) {
+    ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+    h.auto_px4 = false;
+    h.feed({armed(NavMode::kOffboard, true)});
+    ASSERT_TRUE(h.view().armed_seen);
+    if (history != LandedHistory::kGroundNeverFlown) {
+      h.push_land(false);
+      h.step_only();
+    }
+    h.push_land(end_landed);
+    h.step_only();
+    ASSERT_EQ(h.view().stage, Stage::kPreparing);
+  } else if (stage == MonitorStage::kTakeoff) {
+    h.drive_to_takeoff();
+    h.auto_px4 = false;
+    if (history != LandedHistory::kGroundNeverFlown) {
+      h.world.landed = false;
+      h.tick();
+    }
+    h.world.landed = end_landed;
+    h.tick();
+    ASSERT_EQ(h.view().item_index, 0U);
+  } else {
+    // drive_to_loiter는 TAKEOFF 도달 때 landed false를 거친다.
+    ASSERT_NE(history, LandedHistory::kGroundNeverFlown);
+    h.drive_to_loiter();
+    h.auto_px4 = false;
+    h.world.landed = end_landed;
+    h.tick();
+    ASSERT_EQ(h.view().item_index, 1U);
+  }
+  ASSERT_FALSE(h.runner().done());
+  ASSERT_EQ(h.view().landed_false_seen, history != LandedHistory::kGroundNeverFlown);
+}
+
+int expected_disarms(int rank, LandedHistory history)
+{
+  if (rank == 2) {
+    return 1;  // arm을 보냈으면 landed와 이력을 보지 않는다
+  }
+  if (rank == 3 || rank >= 6) {
+    return history == LandedHistory::kGroundNeverFlown ? 1 : 0;
+  }
+  return 0;  // 순위 1, 4, 5
+}
+
+TEST(MonitorEndDisarm, SameRuleInP6TakeoffAndLoiter)
+{
+  // 8행 x {P6, TAKEOFF, LOITER} x landed 이력. 끝나는 tick의 disarm 수와 setpoint 없음.
+  const std::vector<std::pair<MonitorStage, LandedHistory>> combos = {
+    {MonitorStage::kP6, LandedHistory::kGroundNeverFlown},
+    {MonitorStage::kP6, LandedHistory::kAirborne},
+    {MonitorStage::kP6, LandedHistory::kGroundAfterFlying},
+    {MonitorStage::kTakeoff, LandedHistory::kGroundNeverFlown},
+    {MonitorStage::kTakeoff, LandedHistory::kAirborne},
+    {MonitorStage::kTakeoff, LandedHistory::kGroundAfterFlying},
+    {MonitorStage::kLoiter, LandedHistory::kAirborne},
+    {MonitorStage::kLoiter, LandedHistory::kGroundAfterFlying},
+  };
+  for (const RunnerRowCase & row : runner_rows()) {
+    for (const auto & [stage, history] : combos) {
+      SCOPED_TRACE(std::string(row.name) + " " + stage_name(stage) + " " + history_name(history));
+      Harness h(standard_mission());
+      to_monitor_stage(h, stage, history);
+      if (::testing::Test::HasFatalFailure()) {
+        return;
+      }
+      row.inject(h);
+      ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 60));
+      const StepOutput & end = h.outputs().back();
+      ASSERT_TRUE(end.termination.has_value());
+      EXPECT_FALSE(end.setpoint.has_value());
+      const int disarms = static_cast<int>(
+        std::count(end.commands.begin(), end.commands.end(), CommandKind::kDisarm));
+      EXPECT_EQ(disarms, expected_disarms(row.rank, history));
+      EXPECT_EQ(end.commands.size(), static_cast<std::size_t>(disarms));
+      if (disarms > 0) {
+        EXPECT_TRUE(end.px4_timestamp_us.has_value());
+        EXPECT_NE(end.termination->detail.find("disarm sent once"), std::string::npos);
+      }
+      EXPECT_EQ(end.termination->reason, row.reason) << end.termination->detail;
+      EXPECT_EQ(end.termination->last_item_index, stage == MonitorStage::kLoiter ? 1U : 0U);
+      EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 0);
+    }
+  }
+}
+
 TEST(ItemTimeout, LoiterTimerStartsAtTakeoffCompletion)
 {
-  // B3. LOITER의 timeout은 앞 항목(TAKEOFF)이 끝난 tick부터 흐른다. duration < timeout(검증)이라
+  // LOITER의 timeout은 앞 항목(TAKEOFF)이 끝난 tick부터 흐른다. duration < timeout(검증)이라
   // LOITER의 ITEM_TIMEOUT은 duration이 정확하면 닿지 않는다. 그래서 duration을 timeout보다 한
   // tick 짧게 두고 경계로 잰다. timer가 한 tick이라도 일찍 시작했다면 완료 tick에 ITEM_TIMEOUT이
   // 먼저 맞는다(같은 tick이면 ITEM_TIMEOUT이 완료보다 앞). 이 시험은 일찍 시작한 경우만 잡는다.

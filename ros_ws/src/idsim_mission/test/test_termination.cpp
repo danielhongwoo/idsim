@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // status와 reason의 전수 대응표, reason 값, 종료 결과 == 종료 사건.
-// 결정: decisions.md 담당자별 구현 지시(test-engineer, ros2-engineer).
+// 결정: decisions.md 쟁점 3 "종료의 충돌 규칙"(종료 사건은 정확히 1건)과 "계약과 golden"의
+// reason 상수.
 // core의 reason 값과 생성된 메시지 상수 값의 교차 검사는 노드 쪽 gtest(P3d)에 둔다.
 
 #include <gtest/gtest.h>
@@ -150,8 +151,8 @@ TEST(TerminalEvent, EqualsResultInRunnerScenarios)
     h.world.arming = Arming::kDisarmed;
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 50));
     expect_terminated_once(h, Status::kSucceeded, Reason::kNone);
-    EXPECT_EQ(h.termination()->items_completed, 3U);
-    EXPECT_EQ(h.termination()->last_item_index, 2U);
+    EXPECT_EQ(termination_or_empty(h).items_completed, 3U);
+    EXPECT_EQ(termination_or_empty(h).last_item_index, 2U);
     expect_result_equals_event(*h.termination(), 3);
   }
   {
@@ -160,8 +161,8 @@ TEST(TerminalEvent, EqualsResultInRunnerScenarios)
     h.tick(true);
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
     expect_terminated_once(h, Status::kCanceled, Reason::kNone);
-    EXPECT_EQ(h.termination()->items_completed, 1U);
-    EXPECT_EQ(h.termination()->last_item_index, 1U);
+    EXPECT_EQ(termination_or_empty(h).items_completed, 1U);
+    EXPECT_EQ(termination_or_empty(h).last_item_index, 1U);
     expect_result_equals_event(*h.termination(), 3);
   }
   {
@@ -169,8 +170,8 @@ TEST(TerminalEvent, EqualsResultInRunnerScenarios)
     h.world.ekf_ready = false;
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 700));
     expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
-    EXPECT_EQ(h.termination()->items_completed, 0U);
-    EXPECT_EQ(h.termination()->last_item_index, 0U);
+    EXPECT_EQ(termination_or_empty(h).items_completed, 0U);
+    EXPECT_EQ(termination_or_empty(h).last_item_index, 0U);
     expect_result_equals_event(*h.termination(), 3);
   }
 }

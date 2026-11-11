@@ -197,11 +197,16 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_configure(
     return fail("configure", "command_source.system must differ from vehicle.sysid");
   }
   if (t.link_timeout_ns >= t.mode_confirm_timeout_ns) {
-    // 지상 disarm 분기는 link_timeout이 mode_confirm_timeout보다 짧다는 전제로 정했다(C4).
+    // 지상 disarm 분기는 link_timeout이 mode_confirm_timeout보다 짧다는 전제로 정했다
+    // (decisions.md 쟁점 3 M5 "지상 disarm 분기의 상태 끊김과 거부 ack").
     RCLCPP_WARN(
       get_logger(), "link_timeout (%.3f s) is not shorter than mode_confirm_timeout (%.3f s)",
       ns_to_seconds(t.link_timeout_ns), ns_to_seconds(t.mode_confirm_timeout_ns));
   }
+  // 정리의 상한(decisions.md 쟁점 3 M6)은 노드 파라미터가 아니라 파생값이라 계산값을 남긴다.
+  RCLCPP_INFO(
+    get_logger(), "cleanup cap %.3f s (hold_confirm_timeout + 3 x mode_confirm_timeout)",
+    ns_to_seconds(core::cleanup_cap_ns(t)));
   create_entities(*vehicle_, *builder_);
   return CallbackReturn::SUCCESS;
 }
@@ -469,7 +474,7 @@ void MissionExecutorNode::abort_running_goal(const std::string & why)
   if (view.arm_sent) {
     // 지상 arm 뒤 이륙 전이면 자동 disarm이 없다(COM_DISARM_PRFLT=-1). 강제가 아닌 disarm을 한 번
     // 보낸다. 공중이면 PX4가 거부하고, vehicle_command는 target_system 주소라 다른 기체에 닿지
-    // 않는다(px4-engineer P3d-1).
+    // 않는다.
     const std::optional<idsim_common::Px4Timestamp> stamp =
       idsim_common::Px4Timestamp::now(*get_clock());
     if (

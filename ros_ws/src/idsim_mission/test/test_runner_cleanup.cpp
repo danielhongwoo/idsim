@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // 정리 분기: 취소(쟁점 3 M3-M5), setpoint 항목의 ITEM_TIMEOUT(쟁점 4), 분기 내부(Hold 확인,
-// Land 경로, 지상 disarm 확인), 지상 disarm 분기의 LINK_LOST와 거부 ack(C4).
+// Land 경로, 지상 disarm 확인), 지상 disarm 분기의 LINK_LOST와 거부 ack(M5), 정리의 상한(M6),
+// Hold 실패 뒤 공중 재진입(M4).
 // 고르기의 교차표는 test_confirm_rules.cpp, PREPARING 실패의 정리는
 // test_runner_preparing.cpp에 있다.
 // 지상 setpoint 발행 중의 Hold와 이륙 직후의 지상 setpoint + disarm은 실측이 없는 경로다(필수
@@ -70,8 +71,8 @@ TEST(CancelAir, HoldConfirmedIsCanceled)
   EXPECT_FALSE(seen.setpoint.has_value());
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 5));
   expect_terminated_once(h, Status::kCanceled, Reason::kNone);
-  EXPECT_EQ(h.termination()->items_completed, 1U);
-  EXPECT_EQ(h.termination()->last_item_index, 1U);
+  EXPECT_EQ(termination_or_empty(h).items_completed, 1U);
+  EXPECT_EQ(termination_or_empty(h).last_item_index, 1U);
 }
 
 TEST(CancelAir, HoldRejectedGoesToLandPath)
@@ -89,7 +90,7 @@ TEST(CancelAir, HoldRejectedGoesToLandPath)
   const StepOutput end = h.tick();  // AUTO_LAND를 처음 관측한 tick에 끝난다
   EXPECT_FALSE(end.setpoint.has_value());
   expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
-  EXPECT_NE(h.termination()->detail.find("Hold rejected"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("Hold rejected"), std::string::npos);
 }
 
 TEST(CancelAir, HoldTimeoutThenLandNotConfirmed)
@@ -228,7 +229,7 @@ TEST(CancelGround, DisarmFailedBoundaryAndFinalResend)
   EXPECT_TRUE(end.px4_timestamp_us.has_value());
   EXPECT_FALSE(end.setpoint.has_value());
   expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
-  EXPECT_NE(h.termination()->detail.find("may remain armed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("may remain armed"), std::string::npos);
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 7);  // 첫 1 + 재전송 5 + 마지막 1
 }
 
@@ -253,7 +254,7 @@ TEST(CancelGround, StaleDisarmedSamplesDoNotConfirm)
 
 TEST(CancelGround, LinkLostDuringGroundDisarm)
 {
-  // C4: 지상 disarm 분기에서 vehicle_status가 link_timeout(2 s) 동안 없으면 발행을 멈추고 disarm을
+  // M5: 지상 disarm 분기에서 vehicle_status가 link_timeout(2 s) 동안 없으면 발행을 멈추고 disarm을
   // 한 번 더 보낸 뒤 ABORTED, LINK_LOST. mode_confirm_timeout(3 s)보다 먼저다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
@@ -271,9 +272,31 @@ TEST(CancelGround, LinkLostDuringGroundDisarm)
   expect_terminated_once(h, Status::kAborted, Reason::kLinkLost);
 }
 
+TEST(CancelGround, LinkLostDuringGroundDisarmWithTimestampFailureDropsDisarm)
+{
+  // 상태 끊김 tick에 Px4Timestamp를 만들 수 없으면 끝내기 전의 disarm을 버리고 결과는 유지한다.
+  Harness h(standard_mission());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.auto_px4 = false;
+  h.world.arming = Arming::kArmed;
+  h.tick(true);
+  h.auto_samples = false;
+  for (int i = 0; i < 39; ++i) {
+    h.tick();
+  }
+  ASSERT_FALSE(h.runner().done());
+  h.clock.fail = true;
+  const StepOutput end = h.tick();
+  EXPECT_TRUE(end.commands.empty());
+  expect_terminated_once(h, Status::kAborted, Reason::kLinkLost);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("disarm not sent (Px4Timestamp unavailable)"), std::string::npos) << detail;
+  EXPECT_EQ(detail.find("sent once"), std::string::npos) << detail;
+}
+
 TEST(CancelGround, DeniedDisarmAckKeepsRetrying)
 {
-  // C4. 방어 경로(합성 ack): v1.17.0의 ARM_DISARM은 DENIED를 돌려주지 않는다. 거부 ack는 종류와
+  // M5. 방어 경로(합성 ack): v1.17.0의 ARM_DISARM은 DENIED를 돌려주지 않는다. 거부 ack는 종류와
   // 무관하게 그 자리에서 끝내지 않고 landed인 동안 재전송하며, 타임아웃에 끝나며 detail에 적는다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
@@ -285,7 +308,7 @@ TEST(CancelGround, DeniedDisarmAckKeepsRetrying)
   EXPECT_FALSE(h.runner().done());
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
   expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
-  EXPECT_NE(h.termination()->detail.find("DENIED"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("DENIED"), std::string::npos);
 }
 
 // ---- 취소: LAND 항목과 [LAND] 미션 ----
@@ -416,7 +439,7 @@ TEST(TakeoffTimeout, AirHoldConfirmed)
   EXPECT_EQ(first.feedback->phase, FeedbackPhase::kExecuting);
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("Hold confirmed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("Hold confirmed"), std::string::npos);
 }
 
 TEST(TakeoffTimeout, HoldNotConfirmedSendsLand)
@@ -430,7 +453,7 @@ TEST(TakeoffTimeout, HoldNotConfirmedSendsLand)
   h.world.nav = NavMode::kLand;
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 5));
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("Land sent"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("Land sent"), std::string::npos);
 }
 
 TEST(TakeoffTimeout, GroundArmedDisarms)
@@ -443,7 +466,7 @@ TEST(TakeoffTimeout, GroundArmedDisarms)
   EXPECT_EQ(first.setpoint->kind, SetpointKind::kGround);
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("disarm confirmed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("disarm confirmed"), std::string::npos);
 }
 
 TEST(TakeoffTimeout, CancelDuringCleanupIsIgnored)
@@ -461,7 +484,7 @@ TEST(TakeoffTimeout, CancelDuringCleanupIsIgnored)
 
 TEST(TakeoffTimeout, GroundDisarmLinkLostKeepsReason)
 {
-  // C4: 정리 중의 LINK_LOST는 원래 reason(ITEM_TIMEOUT)을 유지하고 detail에 적는다.
+  // M5: 정리 중의 LINK_LOST는 원래 reason(ITEM_TIMEOUT)을 유지하고 detail에 적는다.
   Harness h(standard_mission());
   to_takeoff_timeout(h, true);
   h.auto_px4 = false;
@@ -470,7 +493,7 @@ TEST(TakeoffTimeout, GroundDisarmLinkLostKeepsReason)
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
   EXPECT_EQ(h.outputs().back().commands, std::vector<CommandKind>{CommandKind::kDisarm});
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("vehicle_status lost"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("vehicle_status lost"), std::string::npos);
 }
 
 TEST(TakeoffTimeout, ReasonStaysItemTimeoutInEveryBranch)
@@ -482,15 +505,15 @@ TEST(TakeoffTimeout, ReasonStaysItemTimeoutInEveryBranch)
     Harness h(standard_mission());
     to_takeoff_timeout(h, false);
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
-    details.push_back(h.termination()->detail);
-    EXPECT_EQ(h.termination()->reason, Reason::kItemTimeout);
+    details.push_back(termination_or_empty(h).detail);
+    EXPECT_EQ(termination_or_empty(h).reason, Reason::kItemTimeout);
   }
   {
     Harness h(standard_mission());
     to_takeoff_timeout(h, true);
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
-    details.push_back(h.termination()->detail);
-    EXPECT_EQ(h.termination()->reason, Reason::kItemTimeout);
+    details.push_back(termination_or_empty(h).detail);
+    EXPECT_EQ(termination_or_empty(h).reason, Reason::kItemTimeout);
   }
   {
     Harness h(standard_mission());
@@ -498,8 +521,8 @@ TEST(TakeoffTimeout, ReasonStaysItemTimeoutInEveryBranch)
     h.auto_px4 = false;
     h.world.arming = Arming::kArmed;
     ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
-    details.push_back(h.termination()->detail);
-    EXPECT_EQ(h.termination()->reason, Reason::kItemTimeout);
+    details.push_back(termination_or_empty(h).detail);
+    EXPECT_EQ(termination_or_empty(h).reason, Reason::kItemTimeout);
   }
   ASSERT_EQ(details.size(), 3U);
   EXPECT_NE(details[0], details[1]);
@@ -507,7 +530,7 @@ TEST(TakeoffTimeout, ReasonStaysItemTimeoutInEveryBranch)
   EXPECT_NE(details[2].find("disarm not confirmed"), std::string::npos);
 }
 
-// ---- 검토 보완(px4-engineer N2, N5, test-engineer B1, B4) ----
+// ---- 검토 보완 ----
 
 TEST(CancelGround, GroundSetpointFallsBackWhenPositionNotFinite)
 {
@@ -560,7 +583,7 @@ TEST(CancelAir, HoldInProgressAckIsNotRejection)
 
 TEST(UntrustedSample, NotCountedForGroundDisarm)
 {
-  // N2: 정리 중 식별이 어긋난 표본은 분기 고르기와 확인 계수에 쓰지 않는다. 남의 기체의
+  // M2: 정리 중 식별이 어긋난 표본은 분기 고르기와 확인 계수에 쓰지 않는다. 남의 기체의
   // DISARMED로 CANCELED가 되지 않고, 분기의 타임아웃이 끝낸다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
@@ -602,12 +625,12 @@ TEST(UntrustedSample, NotCountedForHold)
   EXPECT_FALSE(h.runner().done());
   h.tick();
   expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
-  EXPECT_NE(h.termination()->detail.find("AUTO_LAND not confirmed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("AUTO_LAND not confirmed"), std::string::npos);
 }
 
 TEST(TakeoffTimeout, DisarmedSnapshotAfterArmReselectsGroundDisarm)
 {
-  // B1. arm을 보낸 뒤 DISARMED snapshot을 ITEM_TIMEOUT의 정리가 만나면 disarm 분기를 거친다.
+  // arm을 보낸 뒤 DISARMED snapshot을 ITEM_TIMEOUT의 정리가 만나면 disarm 분기를 거친다.
   // 만료 tick에 이미 DISARMED이면 감시 표 순위 4-5가 먼저 끝내므로(아래 교차표 칸 6), 정리가
   // 시작된 뒤(공중 Hold 대기 중) 지상 DISARMED를 만나는 경로로 시험한다.
   Harness h(standard_mission());
@@ -624,34 +647,49 @@ TEST(TakeoffTimeout, DisarmedSnapshotAfterArmReselectsGroundDisarm)
   EXPECT_EQ(g[0].setpoint->kind, SetpointKind::kGround);
   h.feed({disarmed(true), disarmed(true), disarmed(true)});
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("disarm confirmed"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("disarm confirmed"), std::string::npos);
 }
 
 TEST(UntrustedSample, FirstCleanupTickEndsAndDisarmsIfArmSent)
 {
-  // R5. 방어 경로(합성): 정리의 첫 tick에 식별 불일치면 분기를 고를 수 없어 끝낸다. 취소는
-  // ABORTED, INTERNAL이고 arm을 보냈으면 강제가 아닌 disarm을 한 번 보낸다.
-  Harness h(standard_mission());
-  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
-  h.world.identity = IdentityCheck::kMismatch;
-  h.push_world_samples();
-  TickInput input;
-  input.tick = h.tick_no;
-  input.now_ns = h.now_ns;
-  input.cancel_requested = true;
-  h.clock.now_ns = h.now_ns;
-  const StepOutput out =
-    MissionRunnerTestAccess::begin_cancel(h.mutable_runner(), input, h.snapshot, h.clock);
-  ASSERT_TRUE(out.termination.has_value());
-  EXPECT_EQ(out.termination->status, Status::kAborted);
-  EXPECT_EQ(out.termination->reason, Reason::kInternal);
-  EXPECT_NE(out.termination->detail.find("may remain armed"), std::string::npos);
-  EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kDisarm});
-  EXPECT_FALSE(out.setpoint.has_value());
-  EXPECT_TRUE(h.runner().done());
+  // 방어 경로(합성): 정리의 첫 tick에 식별 불일치면 분기를 고를 수 없어 끝낸다. 취소는
+  // ABORTED, INTERNAL이고 arm을 보냈으면 강제가 아닌 disarm을 한 번 보낸다. 그 tick에
+  // Px4Timestamp를 만들 수 없으면 disarm을 버리고 보내지 못했다고 적는다.
+  for (const bool stamp_fails : {false, true}) {
+    SCOPED_TRACE(stamp_fails ? "Px4Timestamp failure" : "normal");
+    Harness h(standard_mission());
+    ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+    h.world.identity = IdentityCheck::kMismatch;
+    h.push_world_samples();
+    TickInput input;
+    input.tick = h.tick_no;
+    input.now_ns = h.now_ns;
+    input.cancel_requested = true;
+    h.clock.now_ns = h.now_ns;
+    h.clock.fail = stamp_fails;
+    const StepOutput out =
+      MissionRunnerTestAccess::begin_cancel(h.mutable_runner(), input, h.snapshot, h.clock);
+    ASSERT_TRUE(out.termination.has_value());
+    EXPECT_EQ(out.termination->status, Status::kAborted);
+    EXPECT_EQ(out.termination->reason, Reason::kInternal);
+    EXPECT_NE(out.termination->detail.find("may remain armed"), std::string::npos);
+    EXPECT_FALSE(out.setpoint.has_value());
+    EXPECT_TRUE(h.runner().done());
+    if (stamp_fails) {
+      EXPECT_TRUE(out.commands.empty());
+      EXPECT_NE(
+        out.termination->detail.find("disarm not sent (Px4Timestamp unavailable)"),
+        std::string::npos)
+        << out.termination->detail;
+      EXPECT_EQ(out.termination->detail.find("sent once"), std::string::npos);
+    } else {
+      EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kDisarm});
+      EXPECT_NE(out.termination->detail.find("disarm sent once"), std::string::npos);
+    }
+  }
 }
 
-// ---- 교차표의 원인 축(상태기 수준. B4): (취소, ITEM_TIMEOUT, PREPARING 실패) x
+// ---- 교차표의 원인 축(상태기 수준): (취소, ITEM_TIMEOUT, PREPARING 실패) x
 // (공중 ARMED, 지상 ARMED, 지상 DISARMED이고 arm 보냄) ----
 
 void to_prepare_arm(Harness & h, Arming arming, bool landed)
@@ -691,6 +729,14 @@ std::vector<CauseCell> cause_cells()
     h.push_ack(AckCommand::kArmDisarm, AckResult::kDenied);  // 방어 경로(합성 ack)
     h.tick();
   };
+  // ARMED snapshot의 PREPARING 실패: 첫 ARMED 표본 뒤 timestamp가 늘지 않는 표본만 와서(합성 표본)
+  // 확인 기한(mode_confirm_timeout)에 ARM_REJECTED. 첫 ARMED 뒤의 거부 ack는 보지 않으므로 이
+  // 경로다.
+  const auto stall_after_armed = [](Harness & h) {
+    Sample stuck = armed(NavMode::kOffboard, h.world.landed);
+    stuck.timestamp_us = h.default_timestamp_us();
+    h.feed(std::vector<Sample>(61, stuck));
+  };
   return {
     {"Cancel_AirArmed",
      [](Harness & h) {
@@ -724,7 +770,8 @@ std::vector<CauseCell> cause_cells()
      },
      true, Branch::kGround, CleanupCause::kItemTimeout, Status::kAborted, Reason::kItemTimeout},
     // 닿지 않는 칸: 만료 tick의 snapshot이 지상 DISARMED이면 감시 표 순위 5가 먼저 goal을 끝내
-    // 정리가 시작되지 않는다. 정리 뒤에 DISARMED를 만나는 경로는 위 B1 시험이 덮는다.
+    // 정리가 시작되지 않는다. 정리 뒤에 DISARMED를 만나는 경로는 위
+    // DisarmedSnapshotAfterArmReselectsGroundDisarm이 덮는다.
     {"ItemTimeout_GroundDisarmedArmSent",
      [](Harness & h) {
        to_takeoff(h, true);
@@ -737,15 +784,15 @@ std::vector<CauseCell> cause_cells()
      // 정리가 시작되지 않으므로 branch와 cause 칸은 쓰지 않는 자리표시다(kNone, kCancel).
      false, Branch::kNone, CleanupCause::kCancel, Status::kAborted, Reason::kExternalDisarm},
     {"PreparingFailure_AirArmed",
-     [deny_arm](Harness & h) {
+     [stall_after_armed](Harness & h) {
        to_prepare_arm(h, Arming::kArmed, false);
-       deny_arm(h);
+       stall_after_armed(h);
      },
      true, Branch::kAir, CleanupCause::kPreparingFailure, Status::kAborted, Reason::kArmRejected},
     {"PreparingFailure_GroundArmed",
-     [deny_arm](Harness & h) {
+     [stall_after_armed](Harness & h) {
        to_prepare_arm(h, Arming::kArmed, true);
-       deny_arm(h);
+       stall_after_armed(h);
      },
      true, Branch::kGround, CleanupCause::kPreparingFailure, Status::kAborted,
      Reason::kArmRejected},
@@ -784,6 +831,587 @@ INSTANTIATE_TEST_SUITE_P(
   [](const ::testing::TestParamInfo<CauseCell> & info) { return std::string(info.param.name); });
 
 TEST(CauseCrossTableSize, ThreeByThree) { EXPECT_EQ(cause_cells().size(), 9U); }
+
+// ---- Hold 실패 뒤의 공중 재진입(decisions.md 쟁점 3 M4) ----
+
+TEST(HoldFailedReentry, AirAgainAfterRejectedHoldSendsNavLand)
+{
+  // Hold가 거부된 뒤 Land 경로 -> 지상 -> 다시 공중: Hold를 다시 보내지 않고 NAV_LAND를 보낸다.
+  // 다시 들어간 Land 경로의 mode_confirm_timeout 기준 시각은 다시 들어간 시각이다.
+  Harness h(standard_mission());
+  h.drive_to_loiter();
+  h.auto_px4 = false;
+  h.tick(true);
+  h.push_ack(AckCommand::kSetMode, AckResult::kDenied);
+  h.tick();
+  ASSERT_EQ(h.view().branch, Branch::kAirLand);
+  EXPECT_TRUE(h.view().hold_failed);
+  h.feed({armed(NavMode::kOffboard, true)});
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  const std::vector<StepOutput> again = h.feed({armed(NavMode::kOffboard, false)});
+  EXPECT_EQ(again[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  EXPECT_EQ(h.view().branch, Branch::kAirLand);
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 1);
+  const std::vector<StepOutput> wait =
+    h.feed(std::vector<Sample>(59, armed(NavMode::kOffboard, false)));
+  for (const StepOutput & out : wait) {
+    ASSERT_FALSE(out.termination.has_value());
+    EXPECT_FALSE(has_command(out, CommandKind::kSetModeHold));
+  }
+  // 한 번 더 지상을 거쳐 공중에 다시 들어가도 재진입 문구는 쌓이지 않는다.
+  h.feed({armed(NavMode::kOffboard, true)});
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  const std::vector<StepOutput> twice = h.feed({armed(NavMode::kOffboard, false)});
+  EXPECT_EQ(twice[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  h.feed(std::vector<Sample>(59, armed(NavMode::kOffboard, false)));
+  h.feed({armed(NavMode::kOffboard, false)});  // 다시 들어간 시각에서 3.0 s
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  {
+    const std::string & detail = termination_or_empty(h).detail;
+    const std::string suffix = "air re-entered after Hold failure";
+    const std::size_t first = detail.find(suffix);
+    ASSERT_NE(first, std::string::npos) << detail;
+    EXPECT_EQ(detail.find(suffix, first + 1), std::string::npos) << detail;
+  }
+  EXPECT_NE(
+    termination_or_empty(h).detail.find("air re-entered after Hold failure"), std::string::npos)
+    << termination_or_empty(h).detail;
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 1);
+}
+
+TEST(HoldFailedReentry, AirAgainAfterHoldTimeoutSendsNavLand)
+{
+  // hold_confirm_timeout으로 실패한 경우도 같다.
+  Harness h(standard_mission());
+  h.drive_to_loiter();
+  h.auto_px4 = false;
+  h.tick(true);
+  h.feed(std::vector<Sample>(60, armed(NavMode::kOffboard, false)));
+  ASSERT_EQ(h.view().branch, Branch::kAirLand);
+  const int holds = h.count_command(CommandKind::kSetModeHold);
+  h.feed({armed(NavMode::kOffboard, true)});
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  const std::vector<StepOutput> again = h.feed({armed(NavMode::kOffboard, false)});
+  EXPECT_EQ(again[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  EXPECT_EQ(h.view().branch, Branch::kAirLand);
+  h.feed({armed(NavMode::kLand, false)});  // AUTO_LAND를 처음 관측한 tick에 끝난다
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), holds);
+}
+
+// ---- 정리의 상한(decisions.md 쟁점 3 M6) ----
+// 상한 경로는 실제 PX4로 재현하기 어려워 합성 표본으로만 시험한다. 기본값에서 상한은
+// hold_confirm_timeout + 3 x mode_confirm_timeout = 12 s = 240 tick이다.
+
+constexpr int kCapTicks = 240;
+constexpr int kToggleTicks = 50;  // landed가 2.5 s마다 바뀐다(분기 타임아웃 3 s보다 짧다)
+
+TEST(CleanupCap, DerivedValue)
+{
+  const Timeouts t;
+  EXPECT_EQ(cleanup_cap_ns(t), 12 * kNsPerSecond);
+  EXPECT_EQ(cleanup_cap_ns(t), static_cast<std::int64_t>(kCapTicks) * kTickNs);
+  Timeouts other;
+  other.hold_confirm_timeout_ns = 2 * kNsPerSecond;
+  other.mode_confirm_timeout_ns = 4 * kNsPerSecond;
+  EXPECT_EQ(cleanup_cap_ns(other), 14 * kNsPerSecond);
+}
+
+// 정리 시작 tick을 0으로 둔 k번째 tick의 landed. k = 240(상한 tick)에는 start_landed와 같다.
+bool toggled_landed(bool start_landed, int k)
+{
+  return start_landed != ((k / kToggleTicks) % 2 == 1);
+}
+
+// 정리 시작 다음 tick부터 k = from..to의 표본(ARMED, OFFBOARD. 확인되는 것이 없다).
+std::vector<Sample> toggling(bool start_landed, int from, int to)
+{
+  std::vector<Sample> seq;
+  for (int k = from; k <= to; ++k) {
+    seq.push_back(armed(NavMode::kOffboard, toggled_landed(start_landed, k)));
+  }
+  return seq;
+}
+
+struct CapCell
+{
+  const char * name;
+  std::function<void(Harness &, bool)> start;  // 정리를 시작하는 tick까지(start_landed)
+  bool on_ground;                              // 상한 tick의 고르기
+  CleanupCause cause;
+  Reason reason;
+};
+
+void start_cancel(Harness & h, bool landed)
+{
+  h.drive_to_loiter();
+  h.auto_px4 = false;
+  h.feed({armed(NavMode::kOffboard, landed)}, true);
+}
+
+void start_item_timeout(Harness & h, bool landed)
+{
+  h.drive_to_takeoff();
+  h.auto_px4 = false;
+  h.world.landed = landed;
+  h.world.z = -2.0;
+  ASSERT_TRUE(h.run_until([&h] { return h.view().stage == Stage::kCleanup; }, 500));
+}
+
+void start_preparing_failure(Harness & h, bool /*landed*/)
+{
+  // 방어 경로(합성 ack): 첫 ARMED 표본 전의 ARM 거부. 그 tick의 snapshot은 지상 DISARMED이고 arm을
+  // 보냈으므로 지상 분기로 시작한다. 다음 tick부터 표본 열이 start_landed를 정한다.
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.auto_px4 = false;
+  h.world.arming = Arming::kDisarmed;
+  h.push_ack(AckCommand::kArmDisarm, AckResult::kDenied);
+  h.tick();
+}
+
+std::vector<CapCell> cap_cells()
+{
+  return {
+    {"Cancel_Ground", start_cancel, true, CleanupCause::kCancel, Reason::kDisarmFailed},
+    {"Cancel_Air", start_cancel, false, CleanupCause::kCancel, Reason::kModeSwitchFailed},
+    {"ItemTimeout_Ground", start_item_timeout, true, CleanupCause::kItemTimeout,
+     Reason::kItemTimeout},
+    {"ItemTimeout_Air", start_item_timeout, false, CleanupCause::kItemTimeout,
+     Reason::kItemTimeout},
+    {"PreparingFailure_Ground", start_preparing_failure, true, CleanupCause::kPreparingFailure,
+     Reason::kArmRejected},
+    {"PreparingFailure_Air", start_preparing_failure, false, CleanupCause::kPreparingFailure,
+     Reason::kArmRejected},
+  };
+}
+
+class CleanupCapCell : public ::testing::TestWithParam<CapCell>
+{
+};
+
+TEST_P(CleanupCapCell, EndsExactlyOnCapTickWithOneCommand)
+{
+  const CapCell & cell = GetParam();
+  Harness h(standard_mission());
+  cell.start(h, cell.on_ground);
+  ASSERT_EQ(h.view().stage, Stage::kCleanup);
+  ASSERT_EQ(h.view().cleanup_cause, cell.cause);
+  const std::vector<StepOutput> before = h.feed(toggling(cell.on_ground, 1, kCapTicks - 1));
+  int switches = 0;
+  for (std::size_t i = 0; i < before.size(); ++i) {
+    ASSERT_FALSE(before[i].termination.has_value()) << "k = " << i + 1;
+    if (
+      i > 0 && toggled_landed(cell.on_ground, static_cast<int>(i) + 1) !=
+                 toggled_landed(cell.on_ground, static_cast<int>(i))) {
+      ++switches;
+    }
+  }
+  EXPECT_EQ(switches, 4);
+  const std::vector<StepOutput> end =
+    h.feed({armed(NavMode::kOffboard, toggled_landed(cell.on_ground, kCapTicks))});
+  ASSERT_TRUE(end[0].termination.has_value());
+  EXPECT_FALSE(end[0].setpoint.has_value());
+  EXPECT_TRUE(end[0].px4_timestamp_us.has_value());
+  EXPECT_EQ(
+    end[0].commands,
+    std::vector<CommandKind>{cell.on_ground ? CommandKind::kDisarm : CommandKind::kNavLand});
+  const Status status = Status::kAborted;
+  expect_terminated_once(h, status, cell.reason);
+  EXPECT_NE(termination_or_empty(h).detail.find("cleanup cap reached"), std::string::npos)
+    << termination_or_empty(h).detail;
+  EXPECT_NE(
+    termination_or_empty(h).detail.find(
+      cell.on_ground ? "last branch ground (disarm)" : "last branch air (Hold)"),
+    std::string::npos)
+    << termination_or_empty(h).detail;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  CauseByGround, CleanupCapCell, ::testing::ValuesIn(cap_cells()),
+  [](const ::testing::TestParamInfo<CapCell> & info) { return std::string(info.param.name); });
+
+TEST(CleanupCap, SixCells) { EXPECT_EQ(cap_cells().size(), 6U); }
+
+TEST(CleanupCap, LongestLegitimatePathEndsByItsBranch)
+{
+  // 지상 -> Hold 실패(hold_confirm_timeout) -> Land 경로 -> 다시 지상이 상한 전에 끝나면 분기의
+  // 결과다.
+  // 지상 2.9 s, Hold 3 s, Land 경로 2.9 s, 지상 3 s(disarm 실패) = 11.8 s < 12 s.
+  Harness h(standard_mission());
+  start_cancel(h, true);
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  std::vector<Sample> seq;
+  for (int k = 1; k <= 57; ++k) {
+    seq.push_back(armed(NavMode::kOffboard, true));
+  }
+  for (int k = 58; k <= 175; ++k) {
+    seq.push_back(armed(NavMode::kOffboard, false));
+  }
+  for (int k = 176; k <= 235; ++k) {
+    seq.push_back(armed(NavMode::kOffboard, true));
+  }
+  const std::vector<StepOutput> outs = h.feed(seq);
+  for (const StepOutput & out : outs) {
+    ASSERT_FALSE(out.termination.has_value());
+  }
+  EXPECT_EQ(h.view().branch, Branch::kGround);
+  EXPECT_TRUE(h.view().hold_failed);
+  const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, true)});  // k = 236
+  ASSERT_TRUE(end[0].termination.has_value());
+  EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kDisarm});
+  expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
+  EXPECT_EQ(termination_or_empty(h).detail.find("cleanup cap"), std::string::npos)
+    << termination_or_empty(h).detail;
+  EXPECT_NE(termination_or_empty(h).detail.find("mode_confirm_timeout"), std::string::npos);
+}
+
+TEST(CleanupCapSameTick, CapBeatsThirdConfirmSample)
+{
+  // 상한 tick에 온 3번째 DISARMED 확인 표본은 세지 않는다(만료가 확인을 이긴다).
+  Harness h(standard_mission());
+  start_cancel(h, true);
+  h.feed(toggling(true, 1, kCapTicks - 3));
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  const std::vector<StepOutput> outs =
+    h.feed({disarmed(true), disarmed(true), disarmed(true)});  // k = 238, 239, 240
+  EXPECT_FALSE(outs[1].termination.has_value());
+  ASSERT_TRUE(outs[2].termination.has_value());
+  EXPECT_EQ(outs[2].commands, std::vector<CommandKind>{CommandKind::kDisarm});
+  expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
+  EXPECT_NE(termination_or_empty(h).detail.find("cleanup cap reached"), std::string::npos);
+}
+
+TEST(CleanupCapSameTick, LinkLostBeatsCap)
+{
+  // 마지막 표본이 k = 200이면 k = 240에 link_timeout(2 s)과 상한이 함께 닿는다. 상태 끊김이 먼저다.
+  Harness h(standard_mission());
+  start_cancel(h, true);
+  h.feed(toggling(true, 1, 200));
+  const std::vector<StepOutput> quiet = h.feed(std::vector<Sample>(39, no_new_sample()));
+  for (const StepOutput & out : quiet) {
+    ASSERT_FALSE(out.termination.has_value());
+  }
+  const std::vector<StepOutput> end = h.feed({no_new_sample()});
+  EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kDisarm});
+  expect_terminated_once(h, Status::kAborted, Reason::kLinkLost);
+  EXPECT_EQ(termination_or_empty(h).detail.find("cleanup cap"), std::string::npos);
+}
+
+TEST(CleanupCapSameTick, AirDisarmedBeatsCap)
+{
+  Harness h(standard_mission());
+  start_cancel(h, false);
+  h.feed(toggling(false, 1, kCapTicks - 1));
+  const std::vector<StepOutput> end = h.feed({disarmed(false)});
+  EXPECT_TRUE(end[0].commands.empty());
+  expect_terminated_once(h, Status::kAborted, Reason::kFailsafe);
+  EXPECT_EQ(termination_or_empty(h).detail.find("cleanup cap"), std::string::npos);
+}
+
+TEST(CleanupCapSameTick, NothingToCleanUpBeatsCap)
+{
+  // [LAND] 미션(arm을 보내지 않음)의 공중 취소. 상한 tick에 공중 분기에서 지상 DISARMED 표본이
+  // 오면 정리할 것 없음이 상한보다 앞이라 CANCELED다.
+  Harness h(land_only_mission());
+  h.world.arming = Arming::kArmed;
+  h.world.landed = false;
+  h.world.nav = NavMode::kHold;
+  h.tick();
+  h.auto_px4 = false;
+  h.feed({armed(NavMode::kOther, false)}, true);
+  ASSERT_EQ(h.view().stage, Stage::kCleanup);
+  std::vector<Sample> seq;
+  for (int k = 1; k < kCapTicks; ++k) {
+    seq.push_back(armed(NavMode::kOther, toggled_landed(false, k)));
+  }
+  const std::vector<StepOutput> outs = h.feed(seq);
+  for (const StepOutput & out : outs) {
+    ASSERT_FALSE(out.termination.has_value());
+  }
+  ASSERT_EQ(h.view().branch, Branch::kAir);
+  const std::vector<StepOutput> end = h.feed({disarmed(true, NavMode::kOther)});
+  EXPECT_TRUE(end[0].commands.empty());
+  expect_terminated_once(h, Status::kCanceled, Reason::kNone);
+}
+
+TEST(CleanupCap, UntrustedSampleOnCapTickUsesPreviousBranch)
+{
+  // 정리 중 식별 불일치 표본 경로에도 상한이 걸린다(합성 표본). 상한 tick의 표본이 어긋나면 다시
+  // 고르지 않고 직전까지의 분기로 정한다(어긋난 표본의 landed는 반대 값이다).
+  for (const bool ground : {true, false}) {
+    SCOPED_TRACE(ground ? "ground" : "air");
+    Harness h(standard_mission());
+    start_cancel(h, ground);
+    h.feed(toggling(ground, 1, 230));
+    h.world.identity = IdentityCheck::kMismatch;
+    const std::vector<StepOutput> outs =
+      h.feed(std::vector<Sample>(9, armed(NavMode::kOffboard, !ground)));
+    for (const StepOutput & out : outs) {
+      ASSERT_FALSE(out.termination.has_value());
+    }
+    EXPECT_EQ(h.view().branch, ground ? Branch::kGround : Branch::kAir);
+    const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, !ground)});  // k = 240
+    EXPECT_EQ(
+      end[0].commands,
+      std::vector<CommandKind>{ground ? CommandKind::kDisarm : CommandKind::kNavLand});
+    expect_terminated_once(
+      h, Status::kAborted, ground ? Reason::kDisarmFailed : Reason::kModeSwitchFailed);
+    EXPECT_NE(termination_or_empty(h).detail.find("cleanup cap reached"), std::string::npos);
+  }
+}
+
+TEST(CleanupCap, AirCapAfterHoldObservedSaysVehicleMayStayInHold)
+{
+  // 합성 표본: Hold 표본을 본 뒤(발행 중단) 확인이 차지 않은 채 상한에 닿으면 NAV_LAND 1회이고,
+  // 그것이 유실되면 Hold로 남는다는 것을 detail에 적는다.
+  Harness h(standard_mission());
+  start_cancel(h, false);
+  std::vector<Sample> seq;
+  for (int k = 1; k < kCapTicks; ++k) {
+    const bool landed = toggled_landed(false, k);
+    seq.push_back(armed(!landed && k % 2 == 0 ? NavMode::kHold : NavMode::kOther, landed));
+  }
+  h.feed(seq);
+  ASSERT_FALSE(h.runner().done());
+  const std::vector<StepOutput> end = h.feed({armed(NavMode::kOther, false)});
+  EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  EXPECT_NE(termination_or_empty(h).detail.find("stays in Hold"), std::string::npos)
+    << termination_or_empty(h).detail;
+}
+
+// ---- 분기 재진입(지상 G -> A -> G, 공중 A -> G -> A) ----
+
+TEST(BranchReentry, GroundReentryRestartsDisarmConfirmFromNewFirstSend)
+{
+  // 지상 분기에 다시 들어가면 그 tick에 disarm을 새로 보내고, "전송 뒤 표본"의 기준은 재진입의 첫
+  // 전송이다. 첫 지상 분기의 첫 전송보다 뒤이고 재진입의 첫 전송보다 앞선 timestamp의 DISARMED
+  // 표본은 재진입 뒤에 와도 세지 않는다(합성 표본).
+  Harness h(standard_mission());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.auto_px4 = false;
+  const std::uint64_t first_send = static_cast<std::uint64_t>(h.now_ns / 1000);
+  h.feed({armed(NavMode::kOffboard, true)}, true);
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  h.feed({armed(NavMode::kOffboard, false)});
+  ASSERT_EQ(h.view().branch, Branch::kAir);
+  const std::uint64_t reentry_send = static_cast<std::uint64_t>(h.now_ns / 1000);
+  const std::vector<StepOutput> again = h.feed({armed(NavMode::kOffboard, true)});
+  EXPECT_EQ(again[0].commands, std::vector<CommandKind>{CommandKind::kDisarm});
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  ASSERT_GT(reentry_send, first_send + 3);
+  std::vector<Sample> between;
+  for (std::uint64_t i = 1; i <= 3; ++i) {
+    Sample s = disarmed(true);
+    s.timestamp_us = first_send + i;  // 첫 전송보다 뒤, 재진입 전송보다 앞
+    between.push_back(s);
+  }
+  const std::vector<StepOutput> ignored = h.feed(between);
+  for (const StepOutput & out : ignored) {
+    ASSERT_FALSE(out.termination.has_value());
+  }
+  const std::vector<StepOutput> counted = h.feed({disarmed(true), disarmed(true)});
+  EXPECT_FALSE(counted[1].termination.has_value());
+  h.feed({disarmed(true)});
+  expect_terminated_once(h, Status::kCanceled, Reason::kNone);
+}
+
+// 공중 분기에서 Hold 표본 2개를 센 뒤 지상을 거쳐 공중 분기에 다시 들어간다(Hold 실패 없음).
+void to_air_reentry(Harness & h)
+{
+  h.drive_to_loiter();
+  h.auto_px4 = false;
+  h.tick(true);
+  ASSERT_EQ(h.view().branch, Branch::kAir);
+  h.feed({armed(NavMode::kHold, false), armed(NavMode::kHold, false)});
+  ASSERT_FALSE(h.runner().done());
+  h.feed({armed(NavMode::kHold, true)});
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+}
+
+TEST(BranchReentry, AirReentryWithoutHoldFailureSendsHoldAgainAndRestartsTimers)
+{
+  // 재진입 tick에 Hold를 한 번 더 보내고, 재전송은 그때부터 0.5 s 간격, hold_confirm_timeout은
+  // 재진입 시각부터 정확히 3.0 s에 Land 경로다.
+  Harness h(standard_mission());
+  to_air_reentry(h);
+  const int holds_before = h.count_command(CommandKind::kSetModeHold);
+  const std::vector<StepOutput> again = h.feed({armed(NavMode::kOther, false)});
+  EXPECT_EQ(again[0].commands, std::vector<CommandKind>{CommandKind::kSetModeHold});
+  EXPECT_EQ(h.view().branch, Branch::kAir);
+  EXPECT_FALSE(h.view().hold_failed);
+  const std::vector<StepOutput> wait =
+    h.feed(std::vector<Sample>(59, armed(NavMode::kOther, false)));
+  for (std::size_t i = 0; i < wait.size(); ++i) {
+    ASSERT_FALSE(wait[i].termination.has_value());
+    EXPECT_EQ(has_command(wait[i], CommandKind::kSetModeHold), (i + 1) % 10 == 0) << i + 1;
+  }
+  EXPECT_EQ(h.view().branch, Branch::kAir);
+  const std::vector<StepOutput> land = h.feed({armed(NavMode::kOther, false)});  // 3.0 s
+  EXPECT_EQ(land[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  EXPECT_EQ(h.view().branch, Branch::kAirLand);
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), holds_before + 6);
+}
+
+TEST(BranchReentry, AirReentryNeedsThreeNewHoldSamples)
+{
+  // 재진입 직전에 센 Hold 표본 2개는 남지 않는다. 재진입 뒤 3개가 새로 차야 CANCELED.
+  Harness h(standard_mission());
+  to_air_reentry(h);
+  h.feed({armed(NavMode::kOther, false)});
+  ASSERT_EQ(h.view().branch, Branch::kAir);
+  const std::vector<StepOutput> two =
+    h.feed({armed(NavMode::kHold, false), armed(NavMode::kHold, false)});
+  EXPECT_FALSE(two[1].termination.has_value());
+  h.feed({armed(NavMode::kHold, false)});
+  expect_terminated_once(h, Status::kCanceled, Reason::kNone);
+}
+
+// ---- 정리의 상한: 추가 경계 ----
+
+TEST(CleanupCapSameTick, CapTickChoiceFollowsThatTickNotPreviousBranch)
+{
+  // 상한 tick의 명령은 그 tick의 고르기로 정한다. k = 239까지 지상 분기였어도 k = 240 표본이
+  // landed false이면 NAV_LAND이고, 반대도 같다.
+  {
+    Harness h(standard_mission());
+    start_cancel(h, true);
+    h.feed(toggling(true, 1, kCapTicks - 1));
+    ASSERT_EQ(h.view().branch, Branch::kGround);
+    const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, false)});
+    EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+    expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+    EXPECT_NE(
+      termination_or_empty(h).detail.find("last branch ground (disarm)"), std::string::npos);
+  }
+  {
+    Harness h(standard_mission());
+    start_cancel(h, false);
+    h.feed(toggling(false, 1, kCapTicks - 1));
+    ASSERT_EQ(h.view().branch, Branch::kAir);
+    const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, true)});
+    EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kDisarm});
+    expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
+    EXPECT_NE(termination_or_empty(h).detail.find("last branch air (Hold)"), std::string::npos);
+  }
+}
+
+TEST(CleanupCapSameTick, AirCapBeatsThirdHoldSample)
+{
+  // 공중 분기의 상한 tick에 온 3번째 AUTO_LOITER 표본은 세지 않는다.
+  Harness h(standard_mission());
+  start_cancel(h, false);
+  h.feed(toggling(false, 1, kCapTicks - 3));
+  ASSERT_EQ(h.view().branch, Branch::kAir);
+  const std::vector<StepOutput> outs = h.feed(
+    {armed(NavMode::kHold, false), armed(NavMode::kHold, false), armed(NavMode::kHold, false)});
+  EXPECT_FALSE(outs[1].termination.has_value());
+  ASSERT_TRUE(outs[2].termination.has_value());
+  EXPECT_EQ(outs[2].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  EXPECT_NE(termination_or_empty(h).detail.find("cleanup cap reached"), std::string::npos);
+}
+
+TEST(CleanupCap, LastBranchLandPathIsNamed)
+{
+  // 합성 표본: Hold 실패 뒤 지상과 Land 경로를 오가다 Land 경로에서 상한에 닿는다.
+  // k: 0-99 공중(60에 Hold 실패 -> Land 경로), 100-149 지상, 150-199 공중(Land 경로 재진입),
+  // 200-229 지상, 230-240 공중(Land 경로 재진입). 분기마다 타임아웃(3 s)보다 짧다.
+  Harness h(standard_mission());
+  start_cancel(h, false);
+  std::vector<Sample> seq;
+  for (int k = 1; k < kCapTicks; ++k) {
+    const bool landed = (k >= 100 && k < 150) || (k >= 200 && k < 230);
+    seq.push_back(armed(NavMode::kOffboard, landed));
+  }
+  const std::vector<StepOutput> outs = h.feed(seq);
+  for (const StepOutput & out : outs) {
+    ASSERT_FALSE(out.termination.has_value());
+  }
+  ASSERT_EQ(h.view().branch, Branch::kAirLand);
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 6);  // 처음 공중 분기에서만
+  const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, false)});
+  EXPECT_EQ(end[0].commands, std::vector<CommandKind>{CommandKind::kNavLand});
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("last branch air (Land path)"), std::string::npos) << detail;
+}
+
+TEST(CleanupCap, TimestampFailureOnCapTickDropsTheCommandKeepsResult)
+{
+  // 상한 tick에 Px4Timestamp를 만들 수 없으면 명령을 버리고 결과는 유지한다. detail은 보내지
+  // 못했다고 적는다.
+  for (const bool ground : {true, false}) {
+    SCOPED_TRACE(ground ? "ground" : "air");
+    Harness h(standard_mission());
+    start_cancel(h, ground);
+    h.feed(toggling(ground, 1, kCapTicks - 1));
+    h.clock.fail = true;
+    const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, ground)});
+    ASSERT_TRUE(end[0].termination.has_value());
+    EXPECT_TRUE(end[0].commands.empty());
+    EXPECT_FALSE(end[0].px4_timestamp_us.has_value());
+    expect_terminated_once(
+      h, Status::kAborted, ground ? Reason::kDisarmFailed : Reason::kModeSwitchFailed);
+    const std::string & detail = termination_or_empty(h).detail;
+    EXPECT_NE(
+      detail.find(
+        ground ? "disarm not sent (Px4Timestamp unavailable)"
+               : "NAV_LAND not sent (Px4Timestamp unavailable)"),
+      std::string::npos)
+      << detail;
+    EXPECT_EQ(detail.find("sent once"), std::string::npos) << detail;
+  }
+}
+
+TEST(CleanupCap, HoldObservedAndNavLandNotSentSaysVehicleStaysInHold)
+{
+  // 합성 표본: Hold를 본 뒤 상한 tick에 Px4Timestamp를 만들 수 없으면 NAV_LAND를 보내지 못하고
+  // 기체는 Hold로 남는다("if NAV_LAND is lost"가 아니다).
+  Harness h(standard_mission());
+  start_cancel(h, false);
+  std::vector<Sample> seq;
+  for (int k = 1; k < kCapTicks; ++k) {
+    const bool landed = toggled_landed(false, k);
+    seq.push_back(armed(!landed && k % 2 == 0 ? NavMode::kHold : NavMode::kOther, landed));
+  }
+  h.feed(seq);
+  ASSERT_FALSE(h.runner().done());
+  h.clock.fail = true;
+  const std::vector<StepOutput> end = h.feed({armed(NavMode::kOther, false)});
+  EXPECT_TRUE(end[0].commands.empty());
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("NAV_LAND not sent"), std::string::npos) << detail;
+  EXPECT_NE(detail.find("publishing stopped, vehicle stays in Hold"), std::string::npos) << detail;
+  EXPECT_EQ(detail.find("if NAV_LAND is lost"), std::string::npos) << detail;
+}
+
+TEST(CleanupCap, HoldObservedWithoutPublishingDoesNotSayPublishingStopped)
+{
+  // [LAND] 미션(발행한 적이 없음)의 공중 취소에서 Hold를 본 뒤 상한에 닿으면 "publishing
+  // stopped"를 적지 않는다(합성 표본).
+  Harness h(land_only_mission());
+  h.world.arming = Arming::kArmed;
+  h.world.landed = false;
+  h.world.nav = NavMode::kHold;
+  h.tick();
+  h.auto_px4 = false;
+  h.feed({armed(NavMode::kOther, false)}, true);
+  ASSERT_EQ(h.view().stage, Stage::kCleanup);
+  std::vector<Sample> seq;
+  for (int k = 1; k < kCapTicks; ++k) {
+    const bool landed = toggled_landed(false, k);
+    seq.push_back(armed(!landed && k % 2 == 0 ? NavMode::kHold : NavMode::kOther, landed));
+  }
+  h.feed(seq);
+  ASSERT_FALSE(h.runner().done());
+  h.feed({armed(NavMode::kOther, false)});
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("Hold was observed, vehicle stays in Hold"), std::string::npos) << detail;
+  EXPECT_EQ(detail.find("publishing stopped"), std::string::npos) << detail;
+}
 
 }  // namespace
 }  // namespace idsim_mission::core::test

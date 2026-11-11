@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 종료의 충돌 규칙(C5. decisions.md 쟁점 3): 먼저 정해진 것이 이기고, 같은 tick이면 ABORTED 사유,
-// 완료, 취소 순이다. 종료 뒤의 cancel과 표본은 결과를 바꾸지 않는다. 그리고 Px4Timestamp 공급
-// 실패(감시 표 순위 1 밖의 단계).
+// 종료의 충돌 규칙(decisions.md 쟁점 3 "종료의 충돌 규칙"): 먼저 정해진 것이 이기고, 같은
+// tick이면 ABORTED 사유, 완료, 취소 순이다. 종료 뒤의 cancel과 표본은 결과를 바꾸지 않는다.
+// 그리고 Px4Timestamp 공급 실패(감시 표 순위 1 밖의 단계).
 
 #include <gtest/gtest.h>
 
@@ -80,8 +80,8 @@ TEST(Conflict, CompletionThenCancelSameTickCancelsNextItem)
   EXPECT_EQ(h.view().stage, Stage::kCleanup);
   ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
   expect_terminated_once(h, Status::kCanceled, Reason::kNone);
-  EXPECT_EQ(h.termination()->items_completed, 1U);
-  EXPECT_EQ(h.termination()->last_item_index, 1U);
+  EXPECT_EQ(termination_or_empty(h).items_completed, 1U);
+  EXPECT_EQ(termination_or_empty(h).last_item_index, 1U);
 }
 
 TEST(Conflict, CancelDuringPreparingFailureCleanupIsIgnored)
@@ -134,7 +134,7 @@ TEST(TimestampPort, FailureDuringItemTimeoutCleanupKeepsReason)
   h.clock.fail = true;
   h.tick();
   expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
-  EXPECT_NE(h.termination()->detail.find("Px4Timestamp unavailable"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("Px4Timestamp unavailable"), std::string::npos);
 }
 
 TEST(TimestampPort, NoQueryWhenNothingToEmit)
@@ -170,17 +170,20 @@ TEST(TimestampPort, FailureOnFinalDisarmDropsCommandKeepsResult)
   const StepOutput end = h.tick();
   EXPECT_TRUE(end.commands.empty());
   expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("disarm not sent (Px4Timestamp unavailable)"), std::string::npos) << detail;
+  EXPECT_EQ(detail.find("sent once"), std::string::npos) << detail;
 }
 
 TEST(TimestampPort, DetailSaysStateUnknownAfterActing)
 {
-  // N3: 발행이나 명령을 한 뒤의 실패는 기체 상태를 모른다고 detail에 적는다.
+  // 발행이나 명령을 한 뒤의 실패는 기체 상태를 모른다고 detail에 적는다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
   h.clock.fail = true;
   h.tick();
   expect_terminated_once(h, Status::kAborted, Reason::kInternal);
-  EXPECT_NE(h.termination()->detail.find("vehicle state unknown"), std::string::npos);
+  EXPECT_NE(termination_or_empty(h).detail.find("vehicle state unknown"), std::string::npos);
 }
 
 }  // namespace

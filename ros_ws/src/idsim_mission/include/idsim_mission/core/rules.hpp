@@ -34,7 +34,7 @@
 namespace idsim_mission::core
 {
 
-// ---- 비행 중 감시 표(setpoint 항목 실행 중) ----
+// ---- 비행 중 감시 표(P6에서 첫 ARMED 표본을 본 tick부터 setpoint 항목이 끝날 때까지) ----
 
 enum class MonitorRow : std::uint8_t
 {
@@ -83,8 +83,30 @@ struct MonitorVerdict
 };
 
 // 순위대로 처음 맞는 행. 어느 행도 맞지 않으면 nullopt(goal을 계속한다). OFFBOARD이고 ARMED인
-// 채 failsafe가 true인 표본은 어느 행에도 맞지 않는다(decisions.md "확인 예정의 처리").
+// 채 failsafe가 true인 표본은 어느 행에도 맞지 않는다(decisions.md 쟁점 4 "비행 중 감시" 표 아래
+// 문단).
 std::optional<MonitorVerdict> evaluate_monitor(const MonitorInput & input);
+
+// 감시 표의 행으로 goal을 끝낼 때 강제가 아닌 disarm을 한 번 보내는가(decisions.md 쟁점 4 표 아래
+// "지상 disarm 1회"와 "순위 2의 disarm 1회"). 보낸 disarm은 재전송하지 않고 확인하지 않는다.
+enum class MonitorDisarm : std::uint8_t
+{
+  kNever,      // 순위 1(명령에 실을 시각이 없다), 4, 5(이미 DISARMED)
+  kIfArmSent,  // 순위 2. 이 goal이 arm을 보냈으면 landed와 이력을 보지 않고 보낸다
+  kIfNeverAirborne,  // 순위 3, 6, 7, 8. 아래 조건 셋이 모두 참일 때만 보낸다
+};
+
+MonitorDisarm monitor_row_disarm(MonitorRow row);
+
+struct MonitorDisarmInput
+{
+  bool arm_sent{false};  // 조건 1: 이 goal이 arm을 보냈다
+  bool landed_false_seen{false};  // 첫 ARMED 표본 뒤에 받은 landed가 false인 적이 있다(goal 이력)
+  bool landed_known{false};  // vehicle_land_detected 표본이 있다
+  bool landed{false};  // 조건 3: 그 tick의 최신 landed(순위 3에서는 끊기기 전의 값)
+};
+
+bool monitor_sends_disarm(MonitorRow row, const MonitorDisarmInput & input);
 
 // ---- 정리 분기 고르기(취소, ITEM_TIMEOUT, PREPARING 실패가 같이 쓴다) ----
 
@@ -138,7 +160,7 @@ private:
   bool has_last_{false};
 };
 
-// "disarm 전송 뒤 받은 표본"의 기준(decisions.md "px4-engineer 승인 반영", 쟁점 3 M5). 재실측
+// "disarm 전송 뒤 받은 표본"의 기준(decisions.md 쟁점 3 M5 "arm을 보낸 뒤의 지상 분기"). 재실측
 // (5)로 바뀌면 이 함수만 고친다. 수신 tick이 이 분기의 첫 disarm 전송 tick보다 크고, timestamp가
 // 첫 전송에 실은 Px4Timestamp보다 엄격히 뒤인 표본만 센다(두 조건 모두. 재전송의 값이 아니라
 // 첫 전송의 값과 비교한다).
