@@ -1,6 +1,6 @@
 # Phase 1a 6번 작업 idsim_mission 작업 계획
 
-작성 2026-11-11, 같은 날 확정 개정. 설계 결정은 `decisions.md`에 있고 확정본이다(reviewer 검증의 필수 7건과 권고 10건, 사용자 결정 3건 반영). 계획은 PR #18로 main에 들어갔다. P0은 끝났고(PR #19) P1, P2, P3a가 진행 중이다. px4-engineer의 P3b 착수 전 승인 항목 다섯은 2026-11-11에 닫혔고(`approval-px4-p3b.md`) 그 반영이 PR #21로 main에 들어가 P3b를 시작할 수 있다. PR #21에 대한 reviewer 조건(필수 5건)은 후속 PR(브랜치 `docs/1a-6-p3b-review`)로 반영한다.
+작성 2026-11-11, 같은 날 확정 개정. 설계 결정은 `decisions.md`에 있고 확정본이다(reviewer 검증의 필수 7건과 권고 10건, 사용자 결정 3건 반영). 계획은 PR #18로 main에 들어갔다. P0과 P3a는 끝났고(PR #19, `p3a-results.md`) P1, P2가 진행 중이다. px4-engineer의 P3b 착수 전 승인 항목 다섯은 2026-11-11에 닫혔고(`approval-px4-p3b.md`) 그 반영이 PR #21로 main에 들어가 P3b를 시작할 수 있다. PR #21에 대한 reviewer 조건(필수 5건)은 후속 PR(브랜치 `docs/1a-6-p3b-review`)로 반영한다.
 
 ## 진행 상태 (2026-11-11)
 
@@ -14,7 +14,7 @@
 | P0 CI trigger 정리 | 완료(PR #19 머지 2026-11-11). lint와 unit이 `pull_request` + `push: main`에서 돈다 |
 | P1 ros-ws에 foxglove_bridge | 진행 중 |
 | P2 `idsim_common` 추가 | 진행 중 |
-| P3 `idsim_mission` 패키지 | P3a 진행 중. P3b 착수 가능(승인 반영 PR #21 머지) |
+| P3 `idsim_mission` 패키지 | P3a 완료(2026-11-11. `p3a-results.md`). 컨테이너 autostart는 Jazzy(launch_ros 0.26.13)에서 동작하지 않아 쟁점 2를 노드의 자기 전이(`lifecycle.self_start`)로 다시 결정했다. `/**` params 성립, 첫 `/clock` 최대 0.66 s, ACCEPTED 누락은 순서 규칙을 지키면 0/400. P3b 착수 가능(승인 반영 PR #21 머지) |
 | P4 생성기, 통합 테스트, `sitl` job, 문서 | 시작 전 |
 | P5 viz | 시작 전 |
 | 로컬 3회 연속 통과 | 시작 전 |
@@ -25,6 +25,7 @@
 | --- | --- | --- |
 | `README.md` | 이 문서. 작업 단위, 순서, 검토, 완료 기준 | 실행 계획 |
 | `decisions.md` | architect 결정 13건(확정본), 확정 개정 요약, 계약 변경 여부와 golden 영향, 재질문 결과 요약, 전이 표, 담당자별 구현 지시, 넘김 목록, 문서 반영 목록, 사용자 결정 3건, reviewer 검증 결과 | 계약. 구현은 이 문서를 따른다 |
+| `p3a-results.md` | ros2-engineer의 P3a 런타임 확인 결과(스택 6. autostart, `/**` params, 첫 `/clock`, ACCEPTED 누락 계수, PID 1 신호) | 근거 |
 | `opinion-px4.md` | px4-engineer 의견과 실측(스택 5. Offboard 진입, Hold 실험, 발행 중단 규칙, 타임아웃) | 근거 |
 | `approval-px4-p3b-review.md` | px4-engineer의 PR #23 반영 확인(2026-11-11. 원문 대조, 새 실측 없음. 표본 기준, 순위 5의 failsafe 가지, `[LAND]` 단독 미션의 ITEM_TIMEOUT 단서, 재실측에 더할 셋) | 근거 |
 | `approval-px4-p3b.md` | px4-engineer의 P3b 착수 전 승인 항목 다섯 검토(2026-11-11. 스택 5 실측 run 20261111-030155-k5, 타임아웃과 재전송 주기의 최종 값, 추가로 발견한 문제 다섯) | 근거 |
@@ -64,7 +65,7 @@
 1. (완료) reviewer가 `decisions.md`를 검증했다(조건부). 필수 7건과 권고 10건을 확정본에 반영했다.
 2. (완료) 사용자 결정 U1, U2, U3. GHCR Public 확인은 남았다.
 3. reviewer가 확정본의 "재확인이 필요한 지점"을 본다. 동시에 P0, P1, P2, P3a를 시작한다. P1이 합쳐지면 main build가 새 ros-ws key를 올린 것을 확인하고 뒤의 브랜치를 rebase한다.
-4. P3. 첫 작업은 P3a다. autostart가 실패하면 단독 실행 파일로 물러서고 architect에게 알린다. px4-engineer가 승인 항목 다섯(ITEM_TIMEOUT 뒤 정리의 snapshot 분기, TAKEOFF 시작 조건은 지상이고 DISARMED, 지상 arm 취소 분기의 setpoint, LAND 감시의 세 구간, 방어용 분류)을 닫은 뒤 P3b를 시작한다(2026-11-11에 닫혔고 PR #21로 반영됐다. 시작할 수 있다).
+4. P3. 첫 작업 P3a는 끝났다. 컨테이너 autostart가 동작하지 않아 Executor는 스스로 configure와 activate를 건다(`decisions.md` 쟁점 2). px4-engineer가 승인 항목 다섯(ITEM_TIMEOUT 뒤 정리의 snapshot 분기, TAKEOFF 시작 조건은 지상이고 DISARMED, 지상 arm 취소 분기의 setpoint, LAND 감시의 세 구간, 방어용 분류)을 닫은 뒤 P3b를 시작한다(2026-11-11에 닫혔고 PR #21로 반영됐다. 시작할 수 있다).
 5. P4. 로컬에서 `tests/sitl/run_sitl.sh --repeat 3`이 통과한 뒤 PR을 올리고 `sitl` job의 첫 실행을 본다. 첫 3회의 단계별 시간과 RTF를 기록한다.
 6. P5. 브라우저 실접속을 확인한다.
 7. 사용자 육안 확인(QGC, Gazebo GUI에서 같은 비행). `tools/stack.sh up --viz` 뒤 `tests/sitl/run_sitl.sh --attach <실행 디렉터리>`로 시나리오 A를 돌린다.
@@ -87,7 +88,7 @@
 
 - P1: build job이 새 ros-ws key를 GHCR에 올리고 다른 넷의 key는 그대로다. 이미지 안에서 `ros2 pkg prefix foxglove_bridge`가 성공한다.
 - P2: `tools/ros_ws.sh ci` 통과. `idsim_common` 테스트 수가 늘고 기존 109건이 통과한다.
-- P3: `tools/ros_ws.sh ci` 통과. `idsim_mission` 테스트 결과 1건 이상. `idsim_interfaces` 계약 테스트가 통과하고 `git diff test/golden`이 `ExecuteMission`의 직접 정의와 펼친 정의 두 파일에 `REASON_DISARM_FAILED = 13`과 `REASON_EXTERNAL_DISARM = 14` 두 줄씩뿐이다(`type_hashes.txt` 무변경). core 단위 테스트가 `decisions.md`의 전이 표, 취소 분기, status와 reason 대응표, 종료 사건 == result, `TYPE_*` 분류를 덮는다. 스택 위에서 `ops` 컨테이너가 autostart로 active가 되는 것을 손으로 확인한다. P3a의 계수 실험 결과(200회 중 ACCEPTED 누락 횟수)와 첫 `/clock` 수신 시간이 기록되어 있다.
+- P3: `tools/ros_ws.sh ci` 통과. `idsim_mission` 테스트 결과 1건 이상. `idsim_interfaces` 계약 테스트가 통과하고 `git diff test/golden`이 `ExecuteMission`의 직접 정의와 펼친 정의 두 파일에 `REASON_DISARM_FAILED = 13`과 `REASON_EXTERNAL_DISARM = 14` 두 줄씩뿐이다(`type_hashes.txt` 무변경). core 단위 테스트가 `decisions.md`의 전이 표, 취소 분기, status와 reason 대응표, 종료 사건 == result, `TYPE_*` 분류를 덮는다. 스택 위에서 `ops` 컨테이너가 자기 전이로 active가 되는 것을 손으로 확인한다(launch에서 `autostart`를 뺀 형태). P3a의 계수 실험 결과(200회 중 ACCEPTED 누락 횟수)와 첫 `/clock` 수신 시간이 기록되어 있다.
 - P4
   - `tools/ci/lint.sh all` 통과(생성기 단위 테스트와 golden 4종, `compose config`, `px4-api` 넓힌 범위, 문자 집합).
   - 스모크 S0, S2-S5가 `--infra-only` 스택에서 통과한다(S4 `--check` 일치).

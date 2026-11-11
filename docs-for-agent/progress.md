@@ -48,6 +48,7 @@
 - 2026-11-11: 1a 6단계 P0 완료(PR #19 머지). lint와 unit의 trigger를 `pull_request` + `push: main`으로 정리했고, main에서는 실행마다 concurrency group을 달리해 push마다 결과가 남는다. PR이 없는 브랜치 push에는 CI가 돌지 않는다.
 - 2026-11-11: px4-engineer가 P3b 착수 전 승인 항목 다섯을 검토했다(승인 2건, 수정 조건부 3건, 반대 없음. 스택 5 실측 run 20261111-030155-k5). 근거는 `docs-for-agent/plan-1a-6-idsim-mission/approval-px4-p3b.md`, 반영은 같은 디렉터리 `decisions.md`의 "px4-engineer 승인 반영"(브랜치 `docs/1a-6-p3b-approval`). 이 PR이 머지되면 P3b를 시작할 수 있다. P1, P2, P3a는 진행 중이다.
 - 2026-11-11: 위 반영은 PR #21로 main에 들어갔다(P3b 착수 가능). PR #21에 대한 reviewer 판정은 조건부(필수 5건, 권고 6건)였고 머지 전에 반영되지 않아 후속 PR(브랜치 `docs/1a-6-p3b-review`)로 반영한다. px4-engineer의 반영 확인은 이 개정 뒤에 받았고(사용자 결정, sonnet) 같은 PR #23에 반영했다.
+- 2026-11-11: 1a 6단계 P3a 완료(ros2-engineer, 스택 6 run 20261111-030924-k6. `docs-for-agent/plan-1a-6-idsim-mission/p3a-results.md`). 컨테이너 autostart가 동작하지 않아 쟁점 2를 다시 결정했다(결정 기록). ACCEPTED 누락은 순서 규칙을 지키면 0/400, 어기면 87/400. 첫 `/clock`은 프로세스 시작부터 최대 0.66 s.
 - 다음 작업:
   1. 첫 main 빌드가 GHCR에 이미지를 올리면 사용자가 패키지 5개와 buildcache를 Public으로 바꾼다. 비공개면 포크 PR과 익명 조회가 403을 받아 매번 전체를 다시 빌드한다. 두 번째 main 실행에서 다섯 이미지 모두 SKIP인지 확인.
   2. (완료 2026-11-09) 2b PR #5. 사용자가 QGC로 서울 상공 비행과 Gazebo GUI의 x500을 확인했다.
@@ -81,7 +82,7 @@
 
 | Phase | 상태 | 마지막 갱신 | 비고 |
 | --- | --- | --- | --- |
-| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계 완료(PR #10, 사용자 육안 확인 2026-11-11 완료). 4단계 완료(PR #15, `docs-for-agent/plan-1a-4-idsim-common/`). 5단계 완료(PR #17, `docs-for-agent/plan-1a-5-idsim-interfaces/`). 6단계 설계 결정 확정, 구현 전(`docs-for-agent/plan-1a-6-idsim-mission/`. P0 완료(PR #19), P1, P2, P3a 진행 중, px4-engineer 승인 항목은 닫혔고(PR #21) P3b 착수 가능. reviewer 조건은 후속 PR) | 2026-11-11 | 스모크 설계는 `docs/smoke-test.md` |
+| 1a | 1, 2, 2b단계 완료(2b는 PR #5, 완료 기준을 사용자가 화면으로 확인: QGC 연결과 비행, Gazebo GUI에 x500). 3단계 완료(PR #10, 사용자 육안 확인 2026-11-11 완료). 4단계 완료(PR #15, `docs-for-agent/plan-1a-4-idsim-common/`). 5단계 완료(PR #17, `docs-for-agent/plan-1a-5-idsim-interfaces/`). 6단계 설계 결정 확정, 구현 전(`docs-for-agent/plan-1a-6-idsim-mission/`. P0 완료(PR #19), P3a 완료(쟁점 2 재결정), P1, P2 진행 중, px4-engineer 승인 항목은 닫혔고(PR #21) P3b 착수 가능. reviewer 조건은 후속 PR) | 2026-11-11 | 스모크 설계는 `docs/smoke-test.md` |
 | 1b | 시작 전 | 2026-11-06 | |
 | 2 | 시작 전 | 2026-11-06 | |
 | 3 | 시작 전 | 2026-11-06 | |
@@ -205,6 +206,7 @@
 - 2026-11-11: PR #21 reviewer 검증(조건부) 반영(architect). 위 항목에서 바뀐 것. 1) setpoint 항목 중 지상에서 Executor가 보내지 않은 disarm의 reason을 새 상수 `REASON_EXTERNAL_DISARM = 14`로 바꿨다(`failsafe`이면 REASON_FAILSAFE). 앞 결정(EXTERNAL_MODE_CHANGE에 묶기)의 근거가 M5의 상수 추가도 기각하는 논리였고 다음 동작도 같지 않았기 때문이다. M5 (나)와 같은 기준(끝난 뒤 상태와 다음 동작이 다르고, 고정 뒤에는 가를 수 없다)을 적용했다. 6단계가 더하는 상수는 13과 14 둘이고 golden은 `ExecuteMission`의 두 파일에 두 줄씩이다(P3e). 2) 비행 중 감시 표에 행 순위를 두었다(잠정): `Px4Timestamp` 실패, 식별 불일치, LINK_LOST, DISARMED 두 행, 모드 세 행 순. 3) 실측이 없는 두 경로(지상 setpoint 발행 중의 Hold, 이륙 직후 landed가 true인 구간의 지상 setpoint와 disarm)는 닫힌 것이 아니다. P3b는 표대로 구현하되 재실측으로 바뀔 수 있다. 4) M3 계약 문장의 실측 범위를 좁혀 적고(Hold 종료 표본 2회, 12 s 관찰, 스크립트 명령) 미확인 목록을 두었다. 필수 재실측은 여덟 항목으로 다시 정했다. architect가 채운 문장과 새 상수는 개정 뒤 px4-engineer 확인을 받는다.
 - 2026-11-11: 사용자 결정 2건. U4 replay job의 trigger는 지금 정하지 않고 replay job을 만드는 Phase 2에서 정한다. `docs/architecture.md` 277행과 `docs/roadmap.md` 59행은 그때 고친다. U5 px4-engineer의 반영 확인은 architect 개정이 끝난 뒤 다시 받는다. px4 반영 확인은 사용자 결정으로 sonnet으로 받는다(px4-engineer 기본 opus의 예외, 사용자가 2026-11-11 직접 선택).
 - 2026-11-11: PR #23 검토 반영(architect). px4-engineer 확인(`docs-for-agent/plan-1a-6-idsim-mission/approval-px4-p3b-review.md`. 승인 3건, 수정 조건부 2건, 반대 없음)으로 `REASON_EXTERNAL_DISARM = 14`와 감시 표 순위, architect가 채운 문장들이 승인됐다(순위는 재실측 (4) 전까지 잠정). 바뀐 것: 감시 표 순위 5는 이 항목 실행 중 failsafe나 OFFBOARD 이탈을 한 번이라도 봤으면 FAILSAFE(자동 disarm의 첫 DISARMED 표본은 `failsafe`가 false다). "disarm 전송 뒤 받은 표본"은 첫 disarm 전송 tick 뒤에 받았고 `vehicle_status.timestamp`가 명령의 `Px4Timestamp`보다 엄격히 뒤인 표본이며 같은 timestamp는 한 번만 센다. `[LAND]` 단독 미션의 ITEM_TIMEOUT 단서 교체. architect 결정: 필수 재실측 (2) 지상 setpoint 발행 중의 Hold, (3) 이륙 직후의 지상 setpoint와 disarm, (5) arm 전송 직후 취소의 경쟁은 P3이 아니라 P4 머지 조건으로 둔다(P4부터 Executor가 스택에서 기본으로 뜨고, 통합 테스트는 이 경로를 지나지 않는다). 나머지 재실측은 7단계 고정 전.
+- 2026-11-11: 1a 6단계 쟁점 2 재결정(architect, P3a 결과). Jazzy의 launch_ros 0.26.13에서 `component_container_isolated` + `ComposableLifecycleNode(autostart=True)`는 노드를 load만 하고 전이를 걸지 못한다(5/5 `unconfigured`, 오류 로그 없음). 결정: 컨테이너 구성은 그대로 두고 Executor가 생성자의 일회 timer로 스스로 configure와 activate를 건다(각 한 번, 재시도 없음. 스택에서 10/10 active). 끄는 param은 `lifecycle.self_start`(기본 true, 생성기는 만들지 않음, 단위 테스트는 false). 자기 전이가 실패하면 프로세스를 끝내지 않고 노드를 그 상태에 남겨 compose healthcheck가 잡게 한다(컴포넌트가 컨테이너 프로세스를 내리면 Phase 2의 Collector까지 내린다). 기각: 단독 실행 파일 + `LifecycleNode(autostart=True)`(10/10 active였지만 Phase 2의 같은 컨테이너 요구를 잃는다), 앞 판의 물러설 자리였던 `main`에서의 전이. 쟁점 7은 유지하되 구독을 action client보다 먼저(같은 노드에서) 만드는 순서 규칙을 필수 조건으로 올렸고, 구독 쪽 `get_publisher_count()` gate가 수신을 보장하지 않음을 적었다. devops-engineer 지시: `ops-N`에 `stop_signal: SIGINT`(PID 1 launch가 SIGTERM을 무시해 15 s 뒤 SIGKILL), healthcheck timeout 10 s 이상(조회 한 번이 3.0-4.5 s).
 
 ## 미해결 사항
 
