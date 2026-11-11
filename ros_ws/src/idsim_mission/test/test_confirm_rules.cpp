@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 순수 규칙: N회 연속 계수, "disarm 전송 뒤 받은 표본"의 기준, 정리 분기 고르기의 교차표, yaw 변환.
+// 순수 규칙: N회 연속 계수, "disarm 전송 뒤 받은 표본"의 기준, 정리 분기 고르기, yaw 변환.
 // 결정: decisions.md "px4-engineer 승인 반영"(표본 기준), 쟁점 3 M3-M5, test-engineer 지시(교차표).
 // 단위 테스트는 합성 timestamp만 검사한다. vehicle_status.timestamp와 Px4Timestamp의 실제 시계
 // 관계는 재실측 (5)의 분포만 확인한다.
@@ -138,17 +138,9 @@ TEST(DisarmConfirm, BeginResets)
   EXPECT_EQ(d.first_send_tick(), 20U);
 }
 
-// ---- 정리 분기 고르기의 교차표: (원인 3종) x (snapshot 유형 5종) ----
-// 취소, ITEM_TIMEOUT, PREPARING 실패는 같은 select_cleanup을 쓴다. 원인은 고르기에 들어가지
-// 않고 끝난 결과(CANCELED 또는 원래 reason의 ABORTED)만 가른다. 그 결과는
-// test_runner_cleanup.cpp가 본다.
-
-enum class Cause : std::uint8_t
-{
-  kCancel,
-  kItemTimeout,
-  kPreparingFailure
-};
+// ---- 정리 분기 고르기: snapshot 유형 5종 ----
+// 취소, ITEM_TIMEOUT, PREPARING 실패는 같은 select_cleanup을 쓰고 원인은 입력에 없다.
+// 원인 축(3 x 3)은 상태기 수준의 test_runner_cleanup.cpp CauseCrossTable이 본다.
 
 struct SnapshotKind
 {
@@ -202,47 +194,21 @@ std::vector<SnapshotKind> snapshot_kinds()
   return kinds;
 }
 
-struct CrossCase
-{
-  Cause cause;
-  SnapshotKind kind;
-};
-
-std::vector<CrossCase> cross_table()
-{
-  std::vector<CrossCase> table;
-  for (const Cause cause : {Cause::kCancel, Cause::kItemTimeout, Cause::kPreparingFailure}) {
-    for (const SnapshotKind & kind : snapshot_kinds()) {
-      table.push_back({cause, kind});
-    }
-  }
-  return table;
-}
-
-class CleanupCrossTable : public ::testing::TestWithParam<CrossCase>
+class SnapshotKindTable : public ::testing::TestWithParam<SnapshotKind>
 {
 };
 
-TEST_P(CleanupCrossTable, SameChoiceForEveryCause)
+TEST_P(SnapshotKindTable, Choice)
 {
-  EXPECT_EQ(select_cleanup(GetParam().kind.input), GetParam().kind.expected)
-    << cleanup_choice_name(select_cleanup(GetParam().kind.input));
+  EXPECT_EQ(select_cleanup(GetParam().input), GetParam().expected)
+    << cleanup_choice_name(select_cleanup(GetParam().input));
 }
 
 INSTANTIATE_TEST_SUITE_P(
-  CauseBySnapshot, CleanupCrossTable, ::testing::ValuesIn(cross_table()),
-  [](const ::testing::TestParamInfo<CrossCase> & info) {
-    const char * cause = info.param.cause == Cause::kCancel        ? "Cancel"
-                         : info.param.cause == Cause::kItemTimeout ? "ItemTimeout"
-                                                                   : "PreparingFailure";
-    return std::string(cause) + "_" + info.param.kind.name;
-  });
+  Kinds, SnapshotKindTable, ::testing::ValuesIn(snapshot_kinds()),
+  [](const ::testing::TestParamInfo<SnapshotKind> & info) { return std::string(info.param.name); });
 
-TEST(CleanupCrossTableSize, ThreeByFive)
-{
-  EXPECT_EQ(snapshot_kinds().size(), 5U);
-  EXPECT_EQ(cross_table().size(), 15U);
-}
+TEST(SnapshotKindTableSize, Five) { EXPECT_EQ(snapshot_kinds().size(), 5U); }
 
 TEST(SelectCleanup, GroundBranchStaysWhileDisarmedEvenWithoutArmSent)
 {

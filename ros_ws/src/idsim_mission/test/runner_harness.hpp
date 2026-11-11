@@ -419,7 +419,24 @@ private:
   std::optional<Termination> termination_;
 };
 
-// 종료 결과의 불변식: 정확히 1건, status와 reason의 대응, 끝난 뒤의 step은 빈 출력.
+// 종료 결과 == 종료 사건: 한 Termination에서 만든 result와 사건의 필드가 같다.
+inline void expect_result_equals_event(const Termination & term, std::uint32_t item_count)
+{
+  const ResultFields result = to_result(term);
+  const EventFields event = to_terminal_event(term, item_count);
+  EXPECT_EQ(event.status, event_status_code(term.status));
+  EXPECT_EQ(event.reason, result.reason);
+  EXPECT_EQ(event.items_completed, result.items_completed);
+  EXPECT_EQ(event.last_item_index, result.last_item_index);
+  EXPECT_EQ(event.detail, result.detail);
+  EXPECT_EQ(event.item_count, item_count);
+  EXPECT_EQ(result.reason, static_cast<std::uint8_t>(term.reason));
+  EXPECT_EQ(result.items_completed, term.items_completed);
+  EXPECT_EQ(result.last_item_index, term.last_item_index);
+  EXPECT_EQ(result.detail, term.detail);
+}
+
+// 종료 결과의 불변식: 정확히 1건, status와 reason의 대응, result == 사건, 끝난 뒤의 step은 빈 출력.
 inline void expect_terminated_once(Harness & h, Status status, Reason reason)
 {
   ASSERT_EQ(h.termination_count(), 1);
@@ -429,6 +446,8 @@ inline void expect_terminated_once(Harness & h, Status status, Reason reason)
   EXPECT_EQ(term.reason, reason) << reason_name(term.reason) << " " << term.detail;
   EXPECT_TRUE(is_consistent(term.status, term.reason));
   EXPECT_TRUE(h.runner().done());
+  // 하네스 불변식: 모든 시나리오에서 종료 결과 == 종료 사건.
+  expect_result_equals_event(term, static_cast<std::uint32_t>(h.runner().mission().items.size()));
   // 종료 뒤의 step은 명령, setpoint, feedback, 종료를 내지 않는다(취소가 와도).
   for (int i = 0; i < 3; ++i) {
     const StepOutput after = h.tick(i == 1);

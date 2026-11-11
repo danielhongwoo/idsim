@@ -324,5 +324,26 @@ TEST(RunnerMonitor, NavStateOfGroundDisarmedSampleIsNotRead)
   expect_terminated_once(h, Status::kAborted, Reason::kExternalDisarm);
 }
 
+TEST(ItemTimeout, LoiterTimerStartsAtTakeoffCompletion)
+{
+  // B3. LOITER의 timeout은 앞 항목(TAKEOFF)이 끝난 tick부터 흐른다. duration < timeout(검증)이라
+  // LOITER의 ITEM_TIMEOUT은 duration이 정확하면 닿지 않는다. 그래서 duration을 timeout보다 한
+  // tick 짧게 두고 경계로 잰다. timer가 한 tick이라도 일찍 시작했다면 완료 tick에 ITEM_TIMEOUT이
+  // 먼저 맞는다(같은 tick이면 ITEM_TIMEOUT이 완료보다 앞).
+  MissionSpec m = standard_mission();
+  m.items[1].timeout = seconds(10);
+  m.items[1].loiter.duration = Duration{9, 950000000U};
+  Harness h(m);
+  h.drive_to_loiter();
+  for (int i = 0; i < 198; ++i) {
+    h.tick();
+  }
+  EXPECT_EQ(h.view().item_index, 1U);
+  EXPECT_EQ(h.view().stage, Stage::kItem);
+  h.tick();  // LOITER 시작에서 9.95 s: 완료
+  EXPECT_EQ(h.view().item_index, 2U);
+  EXPECT_EQ(h.view().stage, Stage::kItem);
+}
+
 }  // namespace
 }  // namespace idsim_mission::core::test

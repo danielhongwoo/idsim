@@ -10,7 +10,7 @@
 | `idsim_mission_px4` | px4_msgs -> snapshot 변환, 명령 목록 -> `VehicleCommand`와 setpoint | core, `idsim_common`, px4_msgs | px4-engineer(`include/idsim_mission/px4/`, `src/px4/`, `test/px4/`) | P3c |
 | `mission_executor_component` | lifecycle 노드 껍질, action 서버, 사건 발행, launch | core, px4 어댑터, rclcpp | ros2-engineer | P3d |
 
-- `idsim_mission_core`는 어떤 ROS 패키지도 링크하지 않는다(CMake 대상에 링크가 없다). 단위 테스트는 gtest와 core만 링크한다. ctest의 `core_purity`가 core 소스에 `clock::now`, `rclcpp`, `px4_msgs`, `idsim_common`, `idsim_interfaces`, `builtin_interfaces` 문자열이 없는지 본다(주석 줄 제외).
+- `idsim_mission_core`는 어떤 ROS 패키지도 링크하지 않는다(CMake 대상에 링크가 없다). 단위 테스트는 gtest와 core만 링크한다. ctest의 `core_purity`가 core 소스에 `clock::now`, `clock_gettime`, `gettimeofday`, `std::time`, `this_thread`, `getenv`, `rclcpp`, `px4_msgs`, `idsim_common`, `idsim_interfaces`, `builtin_interfaces` 문자열이 없는지 본다(주석 줄 제외). `core_purity_negative`는 금지 문자열을 심은 임시 파일로 검사기 자체가 그 수만큼 잡는지 본다.
 - core는 `idsim_interfaces`의 메시지를 쓰지 않고 같은 값을 다시 적는다(`core/types.hpp`의 `Reason`, `item_type`, `FeedbackPhase`, `core/termination.hpp`의 `event_status`). 값이 메시지 상수와 같은지는 P3d의 노드 쪽 gtest가 교차 검사한다(13, 14는 P3e가 메시지에 더한다).
 
 ## core와 어댑터의 경계
@@ -81,26 +81,27 @@ action 서버(P3d)
 
 ## 표에 없어 구현에서 정한 것
 
-px4-engineer 승인 대상이다. 근거가 바뀌면 표에 올리고 이 절을 지운다.
+px4-engineer 검토(2026-11-11, P3b 구현)에서 1-8, 10-12, 14-18은 승인, 9, 13, 19는 수정 조건부였고 그 수정을 반영했다(아래 문장). 근거가 바뀌면 표에 올리고 이 절을 지운다.
 
 1. 시간 경계와 같은 tick의 순서: 만료는 `>=`이고, 같은 tick에 만료(실패)와 확인이 함께 정해지면 만료가 이긴다. 전이(P5 확인 대 `mode_confirm_timeout` 등)에도, 정리 분기의 확인(Hold, disarm) 대 타임아웃에도 같다. 그래서 정확히 타임아웃 tick에 3번째 확인 표본이 오면 실패다.
 2. setpoint 항목에서 감시 표 행과 ITEM_TIMEOUT이 같은 tick이면 감시 표 행이 이긴다(감시 표를 먼저 본다). ITEM_TIMEOUT은 정리가 필요한 ABORTED 사유이고 감시 표 행은 정리 없이 끝낸다.
-3. P0의 "vehicle_status가 신선"은 마지막 수신이 `link_timeout`(2 s) 안이다.
-4. P1(시작 조건)은 P0을 통과한 tick마다 P2를 기다리는 동안 다시 본다. 기다리는 중에 누가 arm하면 PRECONDITION_FAILED다.
-5. P3은 위치 값(x, y, z와 MODE_KEEP이면 heading)이 유한할 때까지 기다린다(`ready_timeout` 안). `xy_valid`는 gate로 쓰지 않는다는 결정은 그대로다.
-6. P4의 신호 확인은 발행 시작 tick 뒤에 받은 failsafe_flags만 쓴다(그 전의 flags는 앞 미션의 값일 수 있다).
-7. P6의 "ARMED 3회 연속이고 여전히 OFFBOARD"는 ARMED이고 OFFBOARD인 표본을 센다.
-8. PREPARING 중 발행을 시작한 뒤(P3-P6)의 식별 불일치는 NOT_READY로 끝내고 정리 분기를 고르지 않는다(감시 표 순위 2처럼 입력을 믿지 않는다). PREPARING 중에는 LINK_LOST 판정을 두지 않고 각 단계의 타임아웃이 잡는다.
-9. 정리 분기(취소, ITEM_TIMEOUT, PREPARING 실패)는 Executor가 발행이나 명령을 한 번이라도 한 뒤에만 의미가 있다. P0-P2에서 끝나는 NOT_READY와 PRECONDITION_FAILED는 정리 없이 끝난다. 아무것도 하지 않은 상태의 취소는 표본이 없거나 끊겼으면 바로 CANCELED이고, 표본이 있으면 표대로 고른다(예: `[LAND]` 미션의 P2 대기 중 취소는 공중이면 Hold).
-10. 거부 ack의 정의: ACCEPTED와 IN_PROGRESS가 아니면 거부다. DO_SET_MODE(Offboard)의 "ACCEPTED가 아니면 MODE_SWITCH_FAILED"도 IN_PROGRESS는 거부로 보지 않는다.
-11. Hold와 Offboard는 같은 DO_SET_MODE라 ack로 가를 수 없다. 대기 중인 명령이 하나라는 규칙에 기대어 그 명령의 ack로 본다. Offboard의 늦은 거부 ack가 Hold 대기 중에 오면 Hold 거부로 읽힌다.
-12. LAND 항목의 대비책 disarm은 AUTO_LAND 확인 뒤에만 보낸다(대기 중인 명령은 하나라 NAV_LAND 재전송과 겹치지 않게). 지연 시간은 landed이고 ARMED인 최신 값을 처음 본 tick부터 잰다.
-13. LAND 항목의 확인 전 구간에서도 `mode_confirm_timeout`은 지상 DISARMED 계수 중에도 흐른다. 같은 tick이면 MODE_SWITCH_FAILED가 ITEM_TIMEOUT보다 먼저다(`[LAND]` 단독 미션 단서의 "timeout이 `mode_confirm_timeout`보다 짧을 때뿐"과 맞춘다).
-14. disarm 분류(지상 대 공중)는 처음 관측한 DISARMED 표본에서 정하고, ARMED 표본을 보면 미정으로 되돌린다. LAND 항목에서 정한 분류는 취소의 정리로 이어진다.
-15. ITEM_TIMEOUT과 PREPARING 실패의 정리 중 feedback phase는 실패한 단계의 phase(EXECUTING, WAITING_MODE, PREPARING)를 유지한다. PHASE_CANCELING은 취소일 때만이다.
-16. 지상 setpoint의 위치가 유한하지 않으면 P3에서 읽은 위치를 쓰고, heading이 유한하지 않으면 그때의 setpoint yaw를 쓴다.
-17. `Px4Timestamp` 공급이 실패한 tick: 출력을 모두 버리고 ABORTED로 끝낸다. reason은 정리 중(ITEM_TIMEOUT, PREPARING 실패)이면 원래 것, 그 밖은 INTERNAL이다. 끝나는 tick에 보내려던 마지막 disarm은 버리고 결과는 유지한다.
-18. 지상 disarm 분기의 LINK_LOST에서 "disarm을 한 번 더 보낸다"는 그 tick의 분기 고르기가 지상일 때다.
+3. LAND 항목의 확인 전 구간에서는 `mode_confirm_timeout`이 지상 DISARMED 계수 중에도 흐른다. 같은 tick이면 MODE_SWITCH_FAILED가 ITEM_TIMEOUT보다 먼저다(`[LAND]` 단독 미션 단서의 "timeout이 `mode_confirm_timeout`보다 짧을 때뿐"과 맞춘다).
+4. P0의 "vehicle_status가 신선"은 마지막 수신이 `link_timeout`(2 s) 안이다.
+5. P1(시작 조건)은 P0을 통과한 tick마다 P2를 기다리는 동안 다시 본다. 기다리는 중에 누가 arm하면 PRECONDITION_FAILED다.
+6. P3은 위치 값(x, y, z와 MODE_KEEP이면 heading)이 유한할 때까지 기다린다(`ready_timeout` 안). `xy_valid`는 gate로 쓰지 않는다는 결정은 그대로다.
+7. P4의 신호 확인은 발행 시작 tick 뒤에 받은 failsafe_flags만 쓴다(그 전의 flags는 앞 미션의 값일 수 있다).
+8. P6의 "ARMED 3회 연속이고 여전히 OFFBOARD"는 ARMED이고 OFFBOARD인 표본을 센다.
+9. PREPARING 중 발행을 시작한 뒤(P3-P6)의 식별 불일치는 NOT_READY로 끝내고 정리 분기를 고르지 않는다(감시 표 순위 2처럼 입력을 믿지 않는다). 이 goal에서 arm을 보냈으면 강제가 아닌 disarm을 한 번 보내고 `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground"를 적는다. vehicle_command는 target_system으로 주소가 정해져 status의 식별과 무관하고, 강제가 아닌 disarm은 공중에서 거부되며, 이륙 이력이 없으면 자동 disarm이 없다(`COM_DISARM_PRFLT=-1`). PREPARING 중에는 LINK_LOST 판정을 두지 않고 각 단계의 타임아웃이 잡는다.
+10. 정리 분기(취소, ITEM_TIMEOUT, PREPARING 실패)는 Executor가 발행이나 명령을 한 번이라도 한 뒤에만 의미가 있다. P0-P2에서 끝나는 NOT_READY와 PRECONDITION_FAILED는 정리 없이 끝난다. 아무것도 하지 않은 상태의 취소는 표본이 없거나 끊겼으면 바로 CANCELED이고, 표본이 있으면 표대로 고른다. 예: `[LAND]` 미션의 P2 대기 중 취소는 공중이면 Hold를 보낸다. TAKEOFF 미션이 P0에서 다른 토픽을 기다리는 중이라 P1 재확인이 아직 걸리지 않았는데 외부에서 arm된 지상 기체를 취소가 만나면, 지상 분기가 그 기체를 disarm한다. 표(M3)대로이고 강제가 아닌 disarm이라 위험은 낮다.
+11. 거부 ack의 정의: ACCEPTED와 IN_PROGRESS가 아니면 거부다. DO_SET_MODE(Offboard)의 "ACCEPTED가 아니면 MODE_SWITCH_FAILED"도 IN_PROGRESS는 거부로 보지 않는다.
+12. Hold와 Offboard는 같은 DO_SET_MODE라 ack로 가를 수 없다. 대기 중인 명령이 하나라는 규칙에 기대어 그 명령의 ack로 본다. Offboard의 늦은 거부 ack가 Hold 대기 중에 오면 Hold 거부로 읽힌다.
+13. 정리 중(취소, ITEM_TIMEOUT, PREPARING 실패)에 식별이 어긋난 vehicle_status 표본은 발행 규칙, 분기 고르기, 확인 계수(disarm, Hold, AUTO_LAND)에 쓰지 않는다. 같은 네임스페이스의 다른 발행자의 DISARMED나 Hold로 정리를 끝내면 우리 기체가 arm으로 남을 수 있기 때문이다. 이미 정해진 분기는 유지하고 그 분기의 타임아웃(`hold_confirm_timeout`, `mode_confirm_timeout`)이 끝낸다. 분기가 정해지기 전(정리의 첫 tick)이면 끝낸다: 취소는 ABORTED, INTERNAL, 그 밖은 원래 reason이고 arm을 보냈으면 9와 같이 disarm을 한 번 보낸다. 정리를 시작하는 tick의 표본은 그 단계가 이미 식별을 보므로 이 첫 tick 경로는 방어용이다(`cleanup_with_untrusted_sample`).
+14. LAND 항목의 대비책 disarm은 AUTO_LAND 확인 뒤에만 보낸다(대기 중인 명령은 하나라 NAV_LAND 재전송과 겹치지 않게). 지연 시간은 landed이고 ARMED인 최신 값을 처음 본 tick부터 재고, 둘 중 하나가 깨지면 처음부터 다시 잰다.
+15. disarm 분류(지상 대 공중)는 처음 관측한 DISARMED 표본에서 정하고, ARMED 표본을 보면 미정으로 되돌린다. LAND 항목에서 정한 분류는 취소의 정리로 이어진다.
+16. 지상 disarm 분기의 LINK_LOST에서 "disarm을 한 번 더 보낸다"는 그 tick의 분기 고르기가 지상일 때다.
+17. ITEM_TIMEOUT과 PREPARING 실패의 정리 중 feedback phase는 실패한 단계의 phase(EXECUTING, WAITING_MODE, PREPARING)를 유지한다. PHASE_CANCELING은 취소일 때만이다.
+18. 지상 setpoint의 위치가 유한하지 않으면 P3에서 읽은 위치를 쓰고, heading이 유한하지 않으면 그때의 setpoint yaw를 쓴다.
+19. `Px4Timestamp` 공급이 실패한 tick: 출력을 모두 버리고 ABORTED로 끝낸다. reason은 정리 중(ITEM_TIMEOUT, PREPARING 실패)이면 원래 것, 그 밖은 INTERNAL이다. 발행이나 명령을 한 번이라도 했으면 `detail`에 "vehicle state unknown, may remain armed on ground"를 더한다. 끝나는 tick에 보내려던 마지막 disarm은 버리고 결과는 유지한다.
 
 ## 테스트
 
@@ -108,15 +109,15 @@ px4-engineer 승인 대상이다. 근거가 바뀌면 표에 올리고 이 절�
 
 | 파일 | 내용 |
 | --- | --- |
-| `runner_harness.hpp` | tick 열 헬퍼(20 Hz 흉내, 합성 timestamp, 가짜 PX4 반응, `feed`로 표본 열 주입, 종료 불변식) |
+| `runner_harness.hpp` | tick 열 헬퍼(20 Hz 흉내, 합성 timestamp, 가짜 PX4 반응, `feed`로 표본 열 주입, 종료 불변식: 정확히 1건, result == 종료 사건, 종료 뒤 빈 출력) |
 | `test_mission_validation.cpp` | 검증 규칙, 1a 제한, `TYPE_*` 분류 전수, `screen_goal` 순서 |
 | `test_termination.cpp` | status와 reason 전수 대응표, reason 값, 종료 결과 == 종료 사건 |
 | `test_monitor_table.cpp` | 감시 표 순위마다 한 건, 같은 tick 동률 24쌍, 순위 5의 가지, 행 수와 parametrize 수 |
-| `test_confirm_rules.cpp` | N회 연속 계수, 전송 뒤 표본 기준, 늦은 arm 경합, 정리 분기 교차표(원인 3 x snapshot 5), yaw 변환 |
+| `test_confirm_rules.cpp` | N회 연속 계수, 전송 뒤 표본 기준, 늦은 arm 경합, 정리 분기 고르기(snapshot 5종), yaw 변환 |
 | `test_runner_preparing.cpp` | P0-P6, `[LAND]` 미션, PREPARING 실패의 정리 |
 | `test_runner_items.cpp` | TAKEOFF, LOITER, 상태기 안의 감시 표(순위마다), 엇갈림, 이력의 항목 경계, 분류 고정 |
 | `test_runner_land.cpp` | LAND 세 구간, 완료 우선, 대비책 disarm, LAND의 ITEM_TIMEOUT 변형 |
-| `test_runner_cleanup.cpp` | 취소 분기, Hold와 Land 경로, 지상 disarm 확인과 C4, ITEM_TIMEOUT 정리 |
+| `test_runner_cleanup.cpp` | 취소 분기, Hold와 Land 경로, 지상 disarm 확인과 C4, ITEM_TIMEOUT 정리, 원인 3 x snapshot 3 교차표, 정리 중 식별 불일치 |
 | `test_runner_conflicts.cpp` | 종료의 충돌 규칙(C5), `Px4Timestamp` 공급 실패 |
 
 PX4 v1.17.0에서 나오지 않는 방어 경로(OFFBOARD이고 ARMED인 채 failsafe, 순위 5의 이력, 순위 8, DISARM과 ARM의 그 밖의 거부 ack)는 합성 표본과 합성 ack로만 시험하고 테스트 주석에 그렇게 적었다. 단위 테스트는 합성 timestamp만 검사한다. 실제 시계 관계는 재실측 (5)만 확인한다.

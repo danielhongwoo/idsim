@@ -14,6 +14,7 @@
 
 # core 소스가 벽시계, rclcpp, px4_msgs 같은 ROS 의존을 쓰지 않는지 본다(decisions.md 쟁점 6 C1).
 # 사용법: cmake -DCORE_INCLUDE_DIR=<dir> -DCORE_SRC_DIR=<dir> -P check_core_purity.cmake
+# 음성 시험: -DEXPECT_VIOLATIONS=<N>이면 위반이 정확히 N건일 때만 통과한다(검사기 자체를 시험한다).
 # 링크는 CMake 대상이 막고(idsim_mission_core는 ROS 패키지를 링크하지 않는다), 이 검사는
 # include와 시계 호출을 문자열로 막는다. 주석 줄은 보지 않는다(설명에 이름이 나올 수 있다).
 
@@ -23,6 +24,11 @@ endif()
 
 set(_patterns
   "clock::now"
+  "clock_gettime"
+  "gettimeofday"
+  "std::time"
+  "this_thread"
+  "getenv"
   "rclcpp"
   "px4_msgs"
   "idsim_common"
@@ -40,7 +46,7 @@ if(_count EQUAL 0)
   message(FATAL_ERROR "no core source found under: ${CORE_INCLUDE_DIR} ${CORE_SRC_DIR}")
 endif()
 
-set(_bad 0)
+set(_violations 0)
 foreach(_file ${_files})
   # 줄 단위로 나눈다. CMake 목록 문자(세미콜론, 대괄호, 역빗금)는 먼저 바꿔 둔다.
   file(READ "${_file}" _content)
@@ -59,14 +65,21 @@ foreach(_file ${_files})
     foreach(_pattern ${_patterns})
       string(FIND "${_line}" "${_pattern}" _pos)
       if(NOT _pos EQUAL -1)
-        message(SEND_ERROR "${_file}:${_lineno}: forbidden in core: '${_pattern}'")
-        set(_bad 1)
+        message(STATUS "${_file}:${_lineno}: forbidden in core: '${_pattern}'")
+        math(EXPR _violations "${_violations} + 1")
       endif()
     endforeach()
   endforeach()
 endforeach()
 
-if(_bad)
-  message(FATAL_ERROR "core purity check failed")
+if(DEFINED EXPECT_VIOLATIONS)
+  if(NOT _violations EQUAL EXPECT_VIOLATIONS)
+    message(FATAL_ERROR "negative check: expected ${EXPECT_VIOLATIONS} violations, found ${_violations}")
+  endif()
+  message(STATUS "negative check: ${_violations} violations found as expected")
+  return()
+endif()
+if(NOT _violations EQUAL 0)
+  message(FATAL_ERROR "core purity check failed: ${_violations} violations")
 endif()
 message(STATUS "core purity: ${_count} files checked")

@@ -21,8 +21,10 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -485,6 +487,259 @@ TEST(TakeoffTimeout, ReasonStaysItemTimeoutInEveryBranch)
   EXPECT_NE(details[1], details[2]);
   EXPECT_NE(details[2].find("disarm not confirmed"), std::string::npos);
 }
+
+// ---- 검토 보완(px4-engineer N2, N5, test-engineer B1, B4) ----
+
+TEST(CancelGround, GroundSetpointFallsBackWhenPositionNotFinite)
+{
+  // 지상 setpoint의 위치가 유한하지 않으면 P3에서 읽은 위치, heading이 유한하지 않으면 그때의
+  // setpoint yaw를 쓴다.
+  Harness h(standard_mission());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.world.x = std::nan("");
+  h.world.y = 7.0;
+  h.world.heading = std::nan("");
+  const StepOutput c = h.tick(true);
+  ASSERT_TRUE(c.setpoint.has_value());
+  EXPECT_EQ(c.setpoint->kind, SetpointKind::kGround);
+  EXPECT_DOUBLE_EQ(c.setpoint->x, 1.0);
+  EXPECT_DOUBLE_EQ(c.setpoint->y, 2.0);
+  EXPECT_DOUBLE_EQ(c.setpoint->z, 0.0);
+  EXPECT_DOUBLE_EQ(c.setpoint->yaw_ned, 0.25);
+}
+
+TEST(CancelAir, LinkLostDuringHold)
+{
+  // 공중 분기의 LINK_LOST: 발행을 멈추고 ABORTED, LINK_LOST. disarm은 보내지 않는다.
+  Harness h(standard_mission());
+  h.drive_to_loiter();
+  h.auto_px4 = false;
+  h.tick(true);
+  h.auto_samples = false;
+  for (int i = 0; i < 39; ++i) {
+    h.tick();
+  }
+  EXPECT_FALSE(h.runner().done());
+  const StepOutput end = h.tick();
+  EXPECT_TRUE(end.commands.empty());
+  EXPECT_FALSE(end.setpoint.has_value());
+  expect_terminated_once(h, Status::kAborted, Reason::kLinkLost);
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);
+}
+
+TEST(CancelAir, HoldInProgressAckIsNotRejection)
+{
+  Harness h(standard_mission());
+  h.drive_to_loiter();
+  h.tick(true);
+  h.push_ack(AckCommand::kSetMode, AckResult::kInProgress);
+  h.tick();
+  EXPECT_EQ(h.view().branch, Branch::kAir);
+  ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
+  expect_terminated_once(h, Status::kCanceled, Reason::kNone);
+}
+
+TEST(UntrustedSample, NotCountedForGroundDisarm)
+{
+  // N2: 정리 중 식별이 어긋난 표본은 분기 고르기와 확인 계수에 쓰지 않는다. 남의 기체의
+  // DISARMED로 CANCELED가 되지 않고, 분기의 타임아웃이 끝낸다.
+  Harness h(standard_mission());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.auto_px4 = false;
+  h.world.arming = Arming::kArmed;
+  h.tick(true);
+  ASSERT_EQ(h.view().branch, Branch::kGround);
+  h.world.identity = IdentityCheck::kMismatch;
+  h.world.arming = Arming::kDisarmed;
+  h.world.landed = false;  // 고르기에 쓰였다면 공중 분기로 갔다
+  for (int i = 0; i < 59; ++i) {
+    h.tick();
+    ASSERT_EQ(h.view().branch, Branch::kGround);
+  }
+  EXPECT_FALSE(h.runner().done());
+  h.tick();
+  expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
+}
+
+TEST(UntrustedSample, NotCountedForHold)
+{
+  Harness h(standard_mission());
+  h.drive_to_loiter();
+  h.auto_px4 = false;
+  h.tick(true);
+  h.world.identity = IdentityCheck::kMismatch;
+  h.world.nav = NavMode::kHold;
+  for (int i = 0; i < 59; ++i) {
+    h.tick();
+  }
+  EXPECT_EQ(h.view().branch, Branch::kAir);
+  EXPECT_TRUE(h.view().publishing);  // 어긋난 표본으로 발행을 멈추지도 않는다
+  h.tick();                          // hold_confirm_timeout -> Land 경로
+  EXPECT_EQ(h.view().branch, Branch::kAirLand);
+  h.world.nav = NavMode::kLand;
+  for (int i = 0; i < 59; ++i) {
+    h.tick();
+  }
+  EXPECT_FALSE(h.runner().done());
+  h.tick();
+  expect_terminated_once(h, Status::kAborted, Reason::kModeSwitchFailed);
+  EXPECT_NE(h.termination()->detail.find("AUTO_LAND not confirmed"), std::string::npos);
+}
+
+TEST(TakeoffTimeout, DisarmedSnapshotAfterArmReselectsGroundDisarm)
+{
+  // B1. arm을 보낸 뒤 DISARMED snapshot을 ITEM_TIMEOUT의 정리가 만나면 disarm 분기를 거친다.
+  // 만료 tick에 이미 DISARMED이면 감시 표 순위 4-5가 먼저 끝내므로(아래 교차표 칸 6), 정리가
+  // 시작된 뒤(공중 Hold 대기 중) 지상 DISARMED를 만나는 경로로 시험한다.
+  Harness h(standard_mission());
+  h.drive_to_takeoff();
+  h.auto_px4 = false;
+  h.world.landed = false;
+  h.world.z = -2.0;
+  ASSERT_TRUE(h.run_until([&h] { return h.view().stage == Stage::kCleanup; }, 500));
+  EXPECT_EQ(h.view().branch, Branch::kAir);
+  const std::vector<StepOutput> g = h.feed({disarmed(true)});
+  EXPECT_EQ(h.view().branch, Branch::kGround);
+  EXPECT_EQ(g[0].commands, std::vector<CommandKind>{CommandKind::kDisarm});
+  ASSERT_TRUE(g[0].setpoint.has_value());
+  EXPECT_EQ(g[0].setpoint->kind, SetpointKind::kGround);
+  h.feed({disarmed(true), disarmed(true), disarmed(true)});
+  expect_terminated_once(h, Status::kAborted, Reason::kItemTimeout);
+  EXPECT_NE(h.termination()->detail.find("disarm confirmed"), std::string::npos);
+}
+
+// ---- 교차표의 원인 축(상태기 수준. B4): (취소, ITEM_TIMEOUT, PREPARING 실패) x
+// (공중 ARMED, 지상 ARMED, 지상 DISARMED이고 arm 보냄) ----
+
+void to_prepare_arm(Harness & h, Arming arming, bool landed)
+{
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.auto_px4 = false;
+  h.world.arming = arming;
+  h.world.landed = landed;
+}
+
+void to_takeoff(Harness & h, bool landed)
+{
+  h.drive_to_takeoff();
+  h.auto_px4 = false;
+  h.world.landed = landed;
+  h.world.z = landed ? 0.0 : -2.0;
+}
+
+struct CauseCell
+{
+  const char * name;
+  std::function<void(Harness &)> start;  // 정리가 시작되는 tick까지
+  bool reached_cleanup;
+  Branch branch;
+  CleanupCause cause;
+  Status status;
+  Reason reason;
+};
+
+std::vector<CauseCell> cause_cells()
+{
+  const auto run_to_cleanup = [](Harness & h) {
+    ASSERT_TRUE(
+      h.run_until([&h] { return h.runner().done() || h.view().stage == Stage::kCleanup; }, 500));
+  };
+  const auto deny_arm = [](Harness & h) {
+    h.push_ack(AckCommand::kArmDisarm, AckResult::kDenied);  // 방어 경로(합성 ack)
+    h.tick();
+  };
+  return {
+    {"Cancel_AirArmed",
+     [](Harness & h) {
+       h.drive_to_loiter();
+       h.auto_px4 = false;
+       h.tick(true);
+     },
+     true, Branch::kAir, CleanupCause::kCancel, Status::kCanceled, Reason::kNone},
+    {"Cancel_GroundArmed",
+     [](Harness & h) {
+       to_prepare_arm(h, Arming::kArmed, true);
+       h.tick(true);
+     },
+     true, Branch::kGround, CleanupCause::kCancel, Status::kCanceled, Reason::kNone},
+    {"Cancel_GroundDisarmedArmSent",
+     [](Harness & h) {
+       to_prepare_arm(h, Arming::kDisarmed, true);
+       h.tick(true);
+     },
+     true, Branch::kGround, CleanupCause::kCancel, Status::kCanceled, Reason::kNone},
+    {"ItemTimeout_AirArmed",
+     [run_to_cleanup](Harness & h) {
+       to_takeoff(h, false);
+       run_to_cleanup(h);
+     },
+     true, Branch::kAir, CleanupCause::kItemTimeout, Status::kAborted, Reason::kItemTimeout},
+    {"ItemTimeout_GroundArmed",
+     [run_to_cleanup](Harness & h) {
+       to_takeoff(h, true);
+       run_to_cleanup(h);
+     },
+     true, Branch::kGround, CleanupCause::kItemTimeout, Status::kAborted, Reason::kItemTimeout},
+    // 닿지 않는 칸: 만료 tick의 snapshot이 지상 DISARMED이면 감시 표 순위 5가 먼저 goal을 끝내
+    // 정리가 시작되지 않는다. 정리 뒤에 DISARMED를 만나는 경로는 위 B1 시험이 덮는다.
+    {"ItemTimeout_GroundDisarmedArmSent",
+     [](Harness & h) {
+       to_takeoff(h, true);
+       for (int i = 0; i < 399; ++i) {
+         h.tick();
+       }
+       h.world.arming = Arming::kDisarmed;
+       h.tick();
+     },
+     false, Branch::kNone, CleanupCause::kCancel, Status::kAborted, Reason::kExternalDisarm},
+    {"PreparingFailure_AirArmed",
+     [deny_arm](Harness & h) {
+       to_prepare_arm(h, Arming::kArmed, false);
+       deny_arm(h);
+     },
+     true, Branch::kAir, CleanupCause::kPreparingFailure, Status::kAborted, Reason::kArmRejected},
+    {"PreparingFailure_GroundArmed",
+     [deny_arm](Harness & h) {
+       to_prepare_arm(h, Arming::kArmed, true);
+       deny_arm(h);
+     },
+     true, Branch::kGround, CleanupCause::kPreparingFailure, Status::kAborted,
+     Reason::kArmRejected},
+    {"PreparingFailure_GroundDisarmedArmSent",
+     [deny_arm](Harness & h) {
+       to_prepare_arm(h, Arming::kDisarmed, true);
+       deny_arm(h);
+     },
+     true, Branch::kGround, CleanupCause::kPreparingFailure, Status::kAborted,
+     Reason::kArmRejected},
+  };
+}
+
+class CauseCrossTable : public ::testing::TestWithParam<CauseCell>
+{
+};
+
+TEST_P(CauseCrossTable, BranchAndResult)
+{
+  const CauseCell & cell = GetParam();
+  Harness h(standard_mission());
+  cell.start(h);
+  if (cell.reached_cleanup) {
+    ASSERT_EQ(h.view().stage, Stage::kCleanup) << cell.name;
+    EXPECT_EQ(h.view().branch, cell.branch);
+    EXPECT_EQ(h.view().cleanup_cause, cell.cause);
+    // 가짜 PX4가 반응하게 두면 분기가 확인되어 끝난다.
+    h.auto_px4 = true;
+    ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 100));
+  }
+  expect_terminated_once(h, cell.status, cell.reason);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  CauseBySnapshot, CauseCrossTable, ::testing::ValuesIn(cause_cells()),
+  [](const ::testing::TestParamInfo<CauseCell> & info) { return std::string(info.param.name); });
+
+TEST(CauseCrossTableSize, ThreeByThree) { EXPECT_EQ(cause_cells().size(), 9U); }
 
 }  // namespace
 }  // namespace idsim_mission::core::test

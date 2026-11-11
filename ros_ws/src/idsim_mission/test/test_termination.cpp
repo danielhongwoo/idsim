@@ -111,22 +111,6 @@ TEST(EventStatus, Codes)
   EXPECT_EQ(event_status_code(Status::kAborted), 6);
 }
 
-void expect_result_equals_event(const Termination & term, std::uint32_t item_count)
-{
-  const ResultFields result = to_result(term);
-  const EventFields event = to_terminal_event(term, item_count);
-  EXPECT_EQ(event.status, event_status_code(term.status));
-  EXPECT_EQ(event.reason, result.reason);
-  EXPECT_EQ(event.items_completed, result.items_completed);
-  EXPECT_EQ(event.last_item_index, result.last_item_index);
-  EXPECT_EQ(event.detail, result.detail);
-  EXPECT_EQ(event.item_count, item_count);
-  EXPECT_EQ(result.reason, static_cast<std::uint8_t>(term.reason));
-  EXPECT_EQ(result.items_completed, term.items_completed);
-  EXPECT_EQ(result.last_item_index, term.last_item_index);
-  EXPECT_EQ(result.detail, term.detail);
-}
-
 TEST(TerminalEvent, EqualsResultForEveryReason)
 {
   for (const ReasonRow & row : reason_table()) {

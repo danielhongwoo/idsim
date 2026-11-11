@@ -172,5 +172,16 @@ TEST(TimestampPort, FailureOnFinalDisarmDropsCommandKeepsResult)
   expect_terminated_once(h, Status::kAborted, Reason::kDisarmFailed);
 }
 
+TEST(TimestampPort, DetailSaysStateUnknownAfterActing)
+{
+  // N3: 발행이나 명령을 한 뒤의 실패는 기체 상태를 모른다고 detail에 적는다.
+  Harness h(standard_mission());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.clock.fail = true;
+  h.tick();
+  expect_terminated_once(h, Status::kAborted, Reason::kInternal);
+  EXPECT_NE(h.termination()->detail.find("vehicle state unknown"), std::string::npos);
+}
+
 }  // namespace
 }  // namespace idsim_mission::core::test

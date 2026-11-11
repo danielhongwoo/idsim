@@ -138,11 +138,16 @@ void MissionRunner::step_preparing(Tick & t)
     prep_ != PrepStep::kWaitReady && t.status != nullptr &&
     t.status->identity == IdentityCheck::kMismatch) {
     // 발행을 시작한 뒤의 식별 불일치. 입력을 믿을 수 없으므로 정리 분기를 고르지 않는다(감시 표
-    // 순위 2와 같다).
-    terminate(
-      t, aborted(
-           Reason::kNotReady,
-           "vehicle_status identity mismatch during preparing: " + t.status->identity_detail));
+    // 순위 2와 같다). arm을 보냈으면 강제가 아닌 disarm을 한 번 보낸다(px4-engineer N1).
+    // vehicle_command는 target_system으로 주소가 정해져 status의 식별과 무관하고, 강제가 아닌
+    // disarm은 공중에서 거부되므로 공중 기체를 끄지 않는다. 이륙 이력이 없으면 자동 disarm이 없다.
+    std::string detail =
+      "vehicle_status identity mismatch during preparing: " + t.status->identity_detail;
+    if (arm_sent_) {
+      send_once(t, CommandKind::kDisarm);
+      detail += "; disarm sent once, not confirmed; vehicle may remain armed on ground";
+    }
+    terminate(t, aborted(Reason::kNotReady, detail));
     return;
   }
   switch (prep_) {
@@ -540,7 +545,6 @@ void MissionRunner::begin_cleanup(Tick & t, CleanupCause cause, Reason reason, s
 
 void MissionRunner::step_cleanup(Tick & t)
 {
-  apply_publish_rule(t);
   const StatusSample * const s = t.status;
   if (s == nullptr || t.land == nullptr || (!acted_ && link_lost(t))) {
     // 아무것도 하지 않았고 판단할 표본도 없다.
@@ -549,6 +553,11 @@ void MissionRunner::step_cleanup(Tick & t)
     finish(t, Outcome::kSuccess, "nothing to clean up");
     return;
   }
+  if (s->identity == IdentityCheck::kMismatch) {
+    cleanup_with_untrusted_sample(t);
+    return;
+  }
+  apply_publish_rule(t);
   if (s->arming == Arming::kDisarmed) {
     if (disarm_class_ == DisarmClass::kUnknown) {
       disarm_class_ = t.land->landed ? DisarmClass::kGround : DisarmClass::kAir;
@@ -606,6 +615,43 @@ void MissionRunner::step_cleanup(Tick & t)
       } else {
         run_air_land(t);
       }
+      return;
+  }
+}
+
+void MissionRunner::cleanup_with_untrusted_sample(Tick & t)
+{
+  // 정리 중의 식별 불일치(px4-engineer N2). 이 표본은 발행 규칙, 분기 고르기, 확인 계수에 쓰지
+  // 않는다. 남의 기체의 DISARMED나 Hold로 정리를 끝내지 않기 위해서다. 이미 정해진 분기는 유지하고
+  // 그 분기의 타임아웃이 끝낸다. 분기가 정해지기 전(정리의 첫 tick)이면 고를 수 없으므로 끝낸다.
+  const std::string what = "vehicle_status identity mismatch during cleanup: " +
+                           (t.status != nullptr ? t.status->identity_detail : std::string());
+  if (branch_ == Branch::kNone) {
+    publishing_ = false;
+    clear_pending();
+    std::string detail = what;
+    if (arm_sent_) {
+      send_once(t, CommandKind::kDisarm);
+      detail += "; disarm sent once, not confirmed; vehicle may remain armed on ground";
+    }
+    terminate(
+      t, cause_ == CleanupCause::kCancel
+           ? aborted(Reason::kInternal, "cancel: " + detail)
+           : aborted(cleanup_reason_, cleanup_detail_ + "; cleanup: " + detail));
+    return;
+  }
+  t.status = nullptr;
+  switch (branch_) {
+    case Branch::kGround:
+      run_ground(t);
+      return;
+    case Branch::kAir:
+      run_air(t);
+      return;
+    case Branch::kAirLand:
+      run_air_land(t);
+      return;
+    case Branch::kNone:
       return;
   }
 }
@@ -758,9 +804,13 @@ void MissionRunner::finalize(Tick & t)
     if (!query_stamp(t)) {
       t.out.commands.clear();
       const bool keep_reason = stage_ == Stage::kCleanup && cause_ != CleanupCause::kCancel;
+      // 명령을 만들 수 없으므로 기체 상태를 모른다(px4-engineer N3).
+      const std::string what =
+        std::string("Px4Timestamp unavailable") +
+        (acted_ ? "; vehicle state unknown, may remain armed on ground" : "");
       terminate(
-        t, keep_reason ? aborted(cleanup_reason_, cleanup_detail_ + "; Px4Timestamp unavailable")
-                       : aborted(Reason::kInternal, "Px4Timestamp unavailable"));
+        t, keep_reason ? aborted(cleanup_reason_, cleanup_detail_ + "; " + what)
+                       : aborted(Reason::kInternal, what));
       return;
     }
     t.out.px4_timestamp_us = t.stamp_us;

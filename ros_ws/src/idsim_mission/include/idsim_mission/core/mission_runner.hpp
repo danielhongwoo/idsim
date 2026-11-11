@@ -193,6 +193,7 @@ private:
   void land_item_timeout(Tick & t, bool landed);
   void begin_cleanup(Tick & t, CleanupCause cause, Reason reason, std::string detail);
   void step_cleanup(Tick & t);
+  void cleanup_with_untrusted_sample(Tick & t);
   void enter_ground(Tick & t);
   void run_ground(Tick & t);
   void enter_air(Tick & t);

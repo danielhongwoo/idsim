@@ -62,6 +62,33 @@ if(BUILD_TESTING)
       -DCORE_SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src/core
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_core_purity.cmake)
 
+  # 검사기의 음성 시험: 금지 문자열마다 한 줄씩 심은 임시 파일(빌드 디렉터리)에서 그 수만큼 걸리고,
+  # 주석 줄의 금지 문자열은 걸리지 않아야 한다.
+  set(_purity_neg "${CMAKE_CURRENT_BINARY_DIR}/core_purity_negative")
+  file(WRITE "${_purity_neg}/src/bad.cpp" "// rclcpp in a comment is allowed\n")
+  foreach(_bad_line
+      "auto a = std::chrono::steady_clock::now()"
+      "clock_gettime(CLOCK_MONOTONIC, &ts)"
+      "gettimeofday(&tv, nullptr)"
+      "auto b = std::time(nullptr)"
+      "std::this_thread::yield()"
+      "auto c = std::getenv(name)"
+      "#include <rclcpp/rclcpp.hpp>"
+      "#include <px4_msgs/msg/vehicle_status.hpp>"
+      "#include <idsim_common/vehicle.hpp>"
+      "#include <idsim_interfaces/msg/mission.hpp>"
+      "#include <builtin_interfaces/msg/time.hpp>")
+    file(APPEND "${_purity_neg}/src/bad.cpp" "${_bad_line}\n")
+  endforeach()
+  file(WRITE "${_purity_neg}/include/ok.hpp" "// clean\n")
+  ament_add_test(core_purity_negative
+    GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+    COMMAND ${CMAKE_COMMAND}
+      -DCORE_INCLUDE_DIR=${_purity_neg}/include
+      -DCORE_SRC_DIR=${_purity_neg}/src
+      -DEXPECT_VIOLATIONS=11
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_core_purity.cmake)
+
   # ---- core 단위 테스트. gtest와 core만 링크한다(노드와 DDS 참가자를 만들지 않는다) ----
   find_package(ament_cmake_gtest REQUIRED)
   set(_core_tests

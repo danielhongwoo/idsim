@@ -282,5 +282,102 @@ TEST(Preparing, IdentityMismatchAfterPublishingStartsStops)
   expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
 }
 
+// ---- 검토 보완(px4-engineer N1, N5, test-engineer B2) ----
+
+TEST(Preparing, P1IsRecheckedWhileWaitingForEkf)
+{
+  // P2(EKF gate)를 기다리는 동안 누가 arm하면 PRECONDITION_FAILED. 지상 arm을 받지 않는다.
+  Harness h(standard_mission());
+  h.world.ekf_ready = false;
+  for (int i = 0; i < 5; ++i) {
+    h.tick();
+  }
+  EXPECT_FALSE(h.runner().done());
+  h.world.arming = Arming::kArmed;
+  h.tick();
+  expect_terminated_once(h, Status::kAborted, Reason::kPreconditionFailed);
+  EXPECT_TRUE(h.commands().empty());
+}
+
+TEST(Preparing, NonFinitePositionWaitsThenNotReady)
+{
+  // P3은 위치가 유한할 때까지 기다리고, ready_timeout에 NOT_READY. 발행을 시작하지 않는다.
+  Harness h(standard_mission());
+  h.world.z = std::nan("");
+  ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 700));
+  for (const StepOutput & out : h.outputs()) {
+    EXPECT_FALSE(out.setpoint.has_value());
+  }
+  expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
+  EXPECT_NE(h.termination()->detail.find("finite vehicle_local_position"), std::string::npos);
+}
+
+TEST(Preparing, NonFiniteHeadingWaitsOnlyForKeepYaw)
+{
+  {
+    Harness h(standard_mission());  // MODE_KEEP
+    h.world.heading = std::nan("");
+    h.tick();
+    EXPECT_EQ(h.view().prep, PrepStep::kWaitReady);
+    h.world.heading = 0.5;
+    h.tick();
+    EXPECT_EQ(h.view().prep, PrepStep::kSignal);
+    EXPECT_DOUBLE_EQ(h.view().setpoint.yaw_ned, 0.5);
+  }
+  {
+    MissionSpec m = standard_mission();
+    m.items[0].takeoff.yaw.mode = yaw_mode::kFixed;
+    Harness h(m);
+    h.world.heading = std::nan("");
+    h.tick();
+    EXPECT_EQ(h.view().prep, PrepStep::kSignal);
+    EXPECT_TRUE(std::isfinite(h.view().setpoint.yaw_ned));
+  }
+}
+
+TEST(Preparing, InProgressAckIsNotRejection)
+{
+  // ACCEPTED와 IN_PROGRESS가 아니면 거부다. IN_PROGRESS는 계속 기다린다.
+  Harness h(standard_mission());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kOffboard; }));
+  h.push_ack(AckCommand::kSetMode, AckResult::kInProgress);
+  h.tick();
+  EXPECT_FALSE(h.runner().done());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }, 10));
+  h.push_ack(AckCommand::kArmDisarm, AckResult::kInProgress);
+  h.tick();
+  EXPECT_FALSE(h.runner().done());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().stage == Stage::kItem; }, 10));
+}
+
+TEST(Preparing, IdentityMismatchAfterArmSentSendsOneDisarm)
+{
+  // N1: arm을 보낸 뒤의 식별 불일치. 정리 분기는 고르지 않지만 강제가 아닌 disarm을 한 번 보낸다.
+  Harness h(standard_mission());
+  ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
+  h.world.identity = IdentityCheck::kMismatch;
+  const StepOutput out = h.tick();
+  EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kDisarm});
+  EXPECT_TRUE(out.px4_timestamp_us.has_value());
+  EXPECT_FALSE(out.setpoint.has_value());
+  expect_terminated_once(h, Status::kAborted, Reason::kNotReady);
+  EXPECT_NE(h.termination()->detail.find("may remain armed"), std::string::npos);
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 1);
+}
+
+TEST(Preparing, SetpointItemsStartAfterArmSent)
+{
+  // B2 불변식: setpoint 항목이 시작될 때 이 goal에서 arm을 보낸 적이 있다(TAKEOFF와 LOITER).
+  // 그래서 1a에서 ITEM_TIMEOUT의 "지상 disarm이면 바로 끝" 분기에는 닿지 않는다.
+  Harness h(standard_mission());
+  h.drive_to_takeoff();
+  EXPECT_EQ(h.view().item_index, 0U);
+  EXPECT_TRUE(h.view().arm_sent);
+  h.world.landed = false;
+  h.world.z = h.view().setpoint.z;
+  ASSERT_TRUE(h.run_until([&h] { return h.view().item_index == 1U; }, 5));
+  EXPECT_TRUE(h.view().arm_sent);
+}
+
 }  // namespace
 }  // namespace idsim_mission::core::test

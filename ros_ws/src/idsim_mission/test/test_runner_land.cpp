@@ -340,5 +340,48 @@ TEST(Land, LinkLostAndIdentityMismatch)
   }
 }
 
+// ---- 대비책 disarm의 부정 시험(px4-engineer N5-4) ----
+
+TEST(Land, FallbackNotSentBeforeAutoLandConfirm)
+{
+  // AUTO_LAND 확인 전에는 landed이고 ARMED가 오래 이어져도 보내지 않는다. 확인 전 구간이 5 s를
+  // 넘도록 mode_confirm_timeout을 늘린 설정으로 본다.
+  Config config;
+  config.timeouts.mode_confirm_timeout_ns = 10 * kNsPerSecond;
+  Harness h(standard_mission(), config);
+  h.drive_to_land();
+  h.auto_px4 = false;
+  h.world.nav = NavMode::kOffboard;
+  h.world.landed = true;
+  for (int i = 0; i < 160; ++i) {  // 8 s
+    h.tick();
+  }
+  EXPECT_FALSE(h.runner().done());
+  EXPECT_FALSE(h.view().land_confirmed);
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);
+}
+
+TEST(Land, FallbackDelayRestartsWhenLandedDrops)
+{
+  Harness h(standard_mission());
+  h.drive_to_land();
+  ASSERT_TRUE(h.run_until([&h] { return h.view().land_confirmed; }, 5));
+  h.auto_px4 = false;
+  h.world.landed = true;
+  for (int i = 0; i < 60; ++i) {  // 3 s
+    h.tick();
+  }
+  h.world.landed = false;
+  h.tick();
+  h.world.landed = true;
+  h.tick();  // 지연이 여기서 다시 시작한다
+  for (int i = 0; i < 99; ++i) {
+    h.tick();
+  }
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);
+  const StepOutput out = h.tick();  // 다시 시작한 뒤 5.0 s
+  EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kDisarm});
+}
+
 }  // namespace
 }  // namespace idsim_mission::core::test
