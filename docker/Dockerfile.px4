@@ -10,6 +10,8 @@
 #   PX4_TAG            PX4-Autopilot 릴리스 태그. 예: v1.17.0
 #   PX4_GZ_MODELS_REF  PX4-gazebo-models 커밋 SHA(40자리). Tools/simulation/gz
 #                      서브모듈 커밋과 sim-base의 /opt/px4-gz가 이 값과 같아야 한다.
+#   PX4_OPTICAL_FLOW_REF  PX4-OpticalFlow 커밋 SHA(40자리). builder 단계의
+#                      gz_plugins/optical_flow가 받는 커밋을 이 값으로 고정한다(5단계 앞 절).
 #
 # 결과물 (runtime 단계, 빌드 때와 같은 절대 경로)
 #   /opt/PX4-Autopilot/build/px4_sitl_default/{bin,etc,rootfs}
@@ -98,20 +100,31 @@ RUN test -n "${PX4_TAG}" || { echo "PX4_TAG is empty" >&2; exit 1; } \
 #    empy는 4.x에서 API가 바뀌어 PX4 생성기가 깨지므로 3.3.4로 고정한다
 #    (requirements.txt도 empy>=3.3,<4). ROS가 apt로 넣은 패키지가 조건을 만족하면
 #    pip는 건드리지 않는다.
+#    모든 패키지를 정확한 버전으로 고정한다. 의존성으로 딸려 오는 것(attrs 이하 여섯)도
+#    고정해 resolver가 새 버전을 고를 여지를 없앤다. 값의 출처: sim-base 이미지
+#    46b8599200ec 위에서 이 단계를 고정 전 목록으로 실행한 결과의 pip list.
+#    empy, lark, lxml, numpy, packaging, pyyaml, six는 sim-base에 apt로 이미 있는
+#    버전과 같아 pip가 설치하지 않는다.
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
       "empy==3.3.4" \
-      future \
-      jinja2 \
-      jsonschema \
-      kconfiglib \
-      lark \
-      lxml \
-      numpy \
-      packaging \
-      pyros-genmsg \
-      pyyaml \
-      six \
-      toml \
+      "future==1.0.0" \
+      "jinja2==3.1.6" \
+      "jsonschema==4.26.0" \
+      "kconfiglib==14.1.0" \
+      "lark==1.1.9" \
+      "lxml==5.2.1" \
+      "numpy==1.26.4" \
+      "packaging==24.0" \
+      "pyros-genmsg==0.5.8" \
+      "pyyaml==6.0.1" \
+      "six==1.16.0" \
+      "toml==0.10.2" \
+      "attrs==26.1.0" \
+      "jsonschema-specifications==2025.9.1" \
+      "markupsafe==3.0.4" \
+      "referencing==0.37.0" \
+      "rpds-py==2026.9.1" \
+      "typing-extensions==4.16.0" \
  && python3 -c "import em, genmsg, jinja2, yaml, menuconfig, jsonschema; assert em.__version__.startswith('3.'), em.__version__"
 
 # 3. PX4-Autopilot 클론. 태그로 얕게 받고 서브모듈도 얕게 받는다.
@@ -129,7 +142,7 @@ WORKDIR /opt/PX4-Autopilot
 # 4. 모델 저장소 정합성 검사. 다르면 실패한다.
 #    (a) 상위 저장소가 기록한 서브모듈 커밋 (b) 실제 체크아웃된 커밋
 #    (c) sim-base /opt/px4-gz의 내용 (d) PX4 gz_bridge/server.config와 모델 저장소
-#    server.config의 동일성(smoke-test-phase1a.md 가정 절).
+#    server.config의 동일성(docs/smoke-test.md 가정 절).
 #    sim-base가 만든 파생 파일 server.idsim.config는 (c)의 비교에서 뺀다.
 RUN recorded="$(git ls-tree HEAD Tools/simulation/gz | awk '{print $3}')" \
  && actual="$(git -C Tools/simulation/gz rev-parse HEAD)" \
@@ -139,18 +152,40 @@ RUN recorded="$(git ls-tree HEAD Tools/simulation/gz | awk '{print $3}')" \
  && diff -r --exclude=.git --exclude=server.idsim.config Tools/simulation/gz /opt/px4-gz \
  && diff src/modules/simulation/gz_bridge/server.config Tools/simulation/gz/server.config
 
+# PX4-OpticalFlow 고정. v1.17.0 src/modules/simulation/gz_plugins/optical_flow/
+# optical_flow.cmake(38-48행)는 CMake ExternalProject_Add로
+#   GIT_REPOSITORY https://github.com/PX4/PX4-OpticalFlow.git, GIT_TAG master,
+#   PREFIX ${CMAKE_BINARY_DIR}/OpticalFlow, UPDATE_DISCONNECTED ON
+# 을 받는다. FetchContent가 아니므로 FETCHCONTENT_SOURCE_DIR_* 로는 바꿀 수 없다.
+# PX4 소스는 고치지 않고 git의 url.<base>.insteadOf로 그 URL을 로컬 bare 저장소로
+# 돌린다. 그 저장소에는 PX4_OPTICAL_FLOW_REF 커밋 하나만 받고 master를 그 커밋에
+# 둔다. ExternalProject의 git clone과 "git checkout master"가 이 커밋을 꺼낸다.
+# 서브모듈(external/klt_feature_tracker)은 고정된 커밋이 기록한 SHA로 받는다.
+# 같은 스니펫을 cmake 3.28.3(이 단계의 cmake)에서 실행해 HEAD가 이 값이 되는 것을
+# 확인했다(2026-11-13). 빌드 뒤 6단계에서 체크아웃된 커밋을 다시 대조한다.
+# 결과물은 runtime에 들어가지 않는다.
+ARG PX4_OPTICAL_FLOW_REF
+RUN { test "${#PX4_OPTICAL_FLOW_REF}" -eq 40 && case "${PX4_OPTICAL_FLOW_REF}" in *[!0-9a-f]*) false ;; esac; } \
+      || { echo "PX4_OPTICAL_FLOW_REF must be a 40-digit commit SHA: '${PX4_OPTICAL_FLOW_REF}'" >&2; exit 1; } \
+ && m=/opt/mirror/PX4-OpticalFlow.git \
+ && git init --quiet --bare "${m}" \
+ && git -C "${m}" fetch --quiet --depth 1 https://github.com/PX4/PX4-OpticalFlow.git "${PX4_OPTICAL_FLOW_REF}" \
+ && git -C "${m}" update-ref refs/heads/master "${PX4_OPTICAL_FLOW_REF}" \
+ && git -C "${m}" symbolic-ref HEAD refs/heads/master \
+ && git config --global url."file://${m}".insteadOf https://github.com/PX4/PX4-OpticalFlow.git
+
 # 5. SITL 빌드. ccache는 캐시 마운트에 둔다.
 #    GIT_SUBMODULES_ARE_EVIL=1: Tools/check_submodules.sh가 빌드 중에 서브모듈을
 #    다시 sync/update하거나 대화형 입력(read)을 기다리지 않게 한다. 서브모듈은
 #    3단계에서 태그가 기록한 커밋으로 받았다.
-#    참고: gz_plugins/optical_flow는 빌드 중 PX4-OpticalFlow의 master를 받는다
-#    (optical_flow.cmake). 결과물은 runtime에 들어가지 않는다.
 RUN --mount=type=cache,target=/root/.ccache \
     GIT_SUBMODULES_ARE_EVIL=1 make px4_sitl_default \
  && { ccache --show-stats || true; }
 
-# 6. 산출물 검사. gz_bridge와 uxrce_dds_client 모듈 링크, rcS, gz_env.sh.
+# 6. 산출물 검사. gz_bridge와 uxrce_dds_client 모듈 링크, rcS, gz_env.sh,
+#    PX4-OpticalFlow 체크아웃 커밋.
 #    px4_posix_generate_symlinks가 모듈마다 bin/px4-<모듈> 링크를 만든다.
+#    glob이 하나도 맞지 않으면 패턴 문자열이 그대로 남으므로 test -e가 실패한다.
 RUN b=build/px4_sitl_default \
  && test -x "${b}/bin/px4" \
  && test -L "${b}/bin/px4-gz_bridge" \
@@ -160,7 +195,10 @@ RUN b=build/px4_sitl_default \
  && test -f "${b}/rootfs/gz_env.sh" \
  && grep -q "PX4_GZ_MODELS=/opt/PX4-Autopilot/Tools/simulation/gz/models" "${b}/rootfs/gz_env.sh" \
  && grep -q "PX4_GZ_SERVER_CONFIG=/opt/PX4-Autopilot/src/modules/simulation/gz_bridge/server.config" "${b}/rootfs/gz_env.sh" \
- && ls "${b}/bin" | grep -E '^px4-gz_'
+ && test "$(git -C "${b}/OpticalFlow/src/OpticalFlow" rev-parse HEAD)" = "${PX4_OPTICAL_FLOW_REF}" \
+ && set -- "${b}"/bin/px4-gz_* \
+ && test -e "$1" \
+ && printf '%s\n' "$@"
 
 # ---------------------------------------------------------------------------
 # runtime
