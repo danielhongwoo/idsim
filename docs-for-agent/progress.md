@@ -21,12 +21,12 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 | 3 `config/fleet.yaml`과 `tools/gen_compose.py` | 완료 |
 | 4 `idsim_common` | 완료 |
 | 5 `idsim_interfaces` | 완료. 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md` |
-| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0(CI trigger), P1(ros-ws 이미지의 foxglove_bridge), P2(`idsim_common` 추가), P3a(런타임 확인)는 완료. P3(`idsim_mission` 패키지)도 완료(승인 내역과 넘기는 항목은 PR #27 본문). `decisions.md`는 지금 유효한 계약만 담은 한 판이고 P4 착수 전 설계 토론의 결정(P6의 ARMED 관측 뒤 감시, 정리의 상한)이 들어 있다. P4 선행 측정 스크립트(`tests/sitl/measure/`, PR #31)와 P4 core 변경(그 결정의 상태기 구현과 단위 테스트, 승인 내역은 PR 본문)은 완료. P4의 본 측정, 생성기, 통합 테스트, `sitl` job, 문서와 P5(viz)는 시작 전 |
+| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0(CI trigger), P1(ros-ws 이미지의 foxglove_bridge), P2(`idsim_common` 추가), P3a(런타임 확인)는 완료. P3(`idsim_mission` 패키지)도 완료(승인 내역과 넘기는 항목은 PR #27 본문). `decisions.md`는 지금 유효한 계약만 담은 한 판이고 P4 착수 전 설계 토론의 결정(P6의 ARMED 관측 뒤 감시, 정리의 상한)이 들어 있다. P4 선행 측정 스크립트(`tests/sitl/measure/`)와 P4 core 변경(그 결정의 상태기 구현과 단위 테스트, 승인 내역은 PR 본문)은 완료. PX4 직접 명령 부류의 본 측정((2), (3), (5), `armed`)도 통과. P4의 생성기와 통합은 진행 중이고, 통합 테스트, `sitl` job, 문서와 P5(viz)는 시작 전 |
 | 7 `docs/interface.md` | 시작 전 |
 
 환경.
 
-- 저장소 원격은 github.com/danielhongwoo/idsim, 이미지 레지스트리는 ghcr.io/danielhongwoo/idsim이다. 이미지 5종의 현재 key는 익명으로 조회된다.
+- 저장소 원격은 github.com/danielhongwoo/idsim, 이미지 레지스트리는 ghcr.io/danielhongwoo/idsim이다. GHCR 패키지 5개는 Public이고, 이미지 5종의 현재 key와 `buildcache` 태그가 익명으로 조회된다.
 - CI의 `lint`와 `unit`은 `pull_request`와 `push: main`에서 돈다. PR이 없는 브랜치 push에는 CI가 돌지 않는다. `build`는 PR에서 빌드만 하고 main에서만 GHCR에 올린다.
 - 개발 호스트는 x86_64 Ubuntu 24.04 VM(16 vCPU, 31GB, NVIDIA 없음, GNOME Wayland)이다. 이 호스트에서 archive.ubuntu.com이 응답하지 않는 날이 있어 이미지 빌드의 apt 미러 기본값이 kr 미러다.
 - 스모크와 스택의 실행 기록 `artifacts/`는 git에 추적되지 않으므로 다른 PC로 옮겨지지 않는다. 판정에 필요한 golden은 `tests/fixtures/`에 추적된다.
@@ -54,7 +54,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. P4의 선행 측정: 측정 스크립트 `tests/sitl/measure/`(`run_measure.sh`, 사용법은 같은 디렉터리 `README.md`)가 있고 절차는 px4-engineer가 승인했다. 남은 일은 px4-engineer의 본 측정이다. 재실측 (2), (3), (5)와 `armed` 항목(PX4 직접 명령) 10회이며 P4 생성기와 통합 PR의 머지 조건이다(U5). 통과 판정 범위와 종료 코드의 뜻은 `plan-1a-6-idsim-mission/decisions.md`의 "P4의 실측 기록" 절과 넘김 목록 px4-engineer 행에 있다. item2는 종료 코드 0이 나오지 않고 (2)의 통과는 architect가 판정한다. ARMED 표본 기준은 Executor 경유(시나리오 A) 부류도 따로 10회 이상 통과해야 P4 머지 조건이 채워지며, 그 기록은 P4 시나리오가 `tests/support/px4_raw.py`, `measure_judge.py`, `measure_check.py`를 써서 남긴다.
+1. P4의 선행 측정(PX4 직접 명령 부류): 측정 스크립트는 `tests/sitl/measure/`(사용법은 같은 디렉터리 `README.md`, 절차 승인 px4-engineer)다. 재실측 (2), (5)와 `armed` 항목은 통과했고((2)는 architect 판정), (3)은 spoolup, rampup 내부, 경계 세 대역 27회로 다시 정해 통과했다(경계 대역의 Hold로 끝난 1회는 architect 판정). 기준과 실측 근거는 `plan-1a-6-idsim-mission/decisions.md`의 "P4의 실측 기록" 절과 넘김 목록 px4-engineer 행에 있다. 다른 개발 PC에서 (3)을 돌리려면 그 호스트의 `armed` 기록으로 T_lf와 지연값을 정한 뒤 커밋하고 돌린다(image key나 TAKEOFF 높이가 근거 실행과 다르면 측정 스크립트가 거부한다). P4 머지 조건으로 남은 것은 Executor 경유(시나리오 A) 부류의 ARMED 표본 기준 10회 이상이며, 그 기록은 P4 시나리오가 `tests/support/px4_raw.py`, `measure_judge.py`, `measure_check.py`를 써서 남긴다.
 2. P4 생성기와 통합(devops-engineer, test-engineer, architect의 문서 반영). `ops-N` 서비스, params와 `stack.json` key, `tests/sitl/`, CI `sitl` job, `build_images.py --mode pull`. 함께 할 것: `idsim_mission/config/ops.example.yaml`의 손으로 쓴 식별자를 지우거나 install에서 빼기, 노드 이름 기본값 `mission_executor`와 생성기의 대조, CI 첫 몇 회의 노드 테스트(`test_executor_node`) 소요 기록(벽시계 1 ms당 sim 2 ms라 runner가 느리면 LINK_LOST로 흔들릴 수 있다. 흔들리면 재시도나 상한 늘리기로 덮지 않는다).
 3. P5 viz(devops-engineer). `foxglove`와 `lichtblick` 서비스, 브라우저 실접속 확인.
 4. 6단계 마무리: 통합 테스트 로컬 3회 연속 통과, CI `sitl` 통과, 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인.
@@ -62,10 +62,6 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 6. CI 후속 PR. `Dockerfile.px4`의 pip 고정과 `PX4_OPTICAL_FLOW_REF` 반영, `ls | grep` 정리(px4-engineer). `Dockerfile.sim-base`의 `GZ_APT_KEY_FPR` 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 이미지 key 재료 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 key에서 뺀 것이 "같은 key는 같은 바이트"의 예외라는 점 포함). `image_keys.py`가 bake 블록의 tags와 공백까지 해시하는 것 정리(devops-engineer).
 
 ## 미해결 사항
-
-사용자 결정이나 확인이 필요한 항목.
-
-- GHCR 패키지 5개와 buildcache가 Public인지 설정 화면에서 확인한다. 비공개면 포크 PR과 익명 조회가 거부되어 매번 전체를 다시 빌드한다.
 
 1a 6단계.
 
@@ -76,6 +72,9 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - `px4-api` 검사는 C++과 `.py`만 본다. params와 remap yaml이 생기는 P4에서 범위를 넓힌다.
 - PX4 timestamp와 `/clock`이 같은 축이라는 것의 회귀 판정은 P4의 SITL fixture 사전조건(`/clock` 정렬)과 시나리오 T가 생길 때까지 없다. 스모크 clock 단계에는 넣지 않는다(`decisions.md` 쟁점 9).
 - `artifacts/`를 CI job 아티팩트로 올리는 것은 `sitl` job을 만드는 P4에서 확인한다.
+- 측정 스크립트가 T_lf를 조건이 같은 앞선 기록 전부(재실측 (3)의 관측 포함)의 최솟값으로 구하고 ULog의 PX4 파라미터(`MPC_THR_HOVER`, `COM_SPOOLUP_TIME`)를 근거 실행과 비교하도록 고친다(test-engineer, `decisions.md` 넘김 목록 (3) 정의). 다음 (3) 실행 전에 한다. 파라미터 목록은 px4-engineer가 승인한다.
+- 거부된 disarm의 ack와 logged message의 시각 차이는 실측이 1회뿐이다. 판정 검사로 올릴지는 표본이 쌓인 뒤 정한다(architect, px4-engineer).
+- PX4 버전을 올리면 "ULog의 `vehicle_command` `timestamp`가 측정기의 stamp와 같다"와 "ack 기록 순서가 처리 순서와 같다"를 다시 확인한다(px4-engineer).
 
 1a 7단계(`docs/interface.md`)에 적을 것.
 
@@ -89,7 +88,6 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 7).
 - apt 미러: 지정 미러가 막히면 콜드 빌드가 실패한다. apt `Acquire::Retries` 미적용. CI에서는 Canonical 노드의 동기화 시차로 apt 단계가 간헐적으로 실패할 수 있다(대안: apt 단계 재시도, CI 미러 변경). GHCR 이미지를 받아 태그하는 `build_images.py --mode pull`은 P4에서 만든다.
 - `docker/Dockerfile.px4` 132행 주석이 없는 문서 이름 `smoke-test-phase1a.md`를 가리킨다. 주석만 고쳐도 px4 이미지 key가 바뀌므로 다음에 그 파일을 바꿀 때 `smoke-test.md`로 함께 고친다(px4-engineer).
-- `plan-1a-6-idsim-mission/decisions.md`에 옛 판에서 온 음차("헬퍼", "램프", "가드", "히스테리시스")가 남아 있다. 다음에 그 문서를 고칠 때 바꾼다(architect).
 - `.github/workflows/build.yml`, `build-images.yml`, `tools/ci/image_keys.py`, `tools/ci/build_images.py`에 음차("키", "잡")가 남아 있다. 다음에 고칠 때 바꾼다.
 - clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다(`src/`의 소스가 include하는 헤더만 검사된다). 헤더 전용 검사를 둘지, `test/`를 tidy 대상에 넣을지 정한다(ros2-engineer, devops-engineer).
 - `tools/ros_ws.sh tidy`는 대상이 0개이면 PASS-NO-TARGETS로 통과한다. `ci`에서는 경고나 실패로 바꿀지 검토한다(devops-engineer).

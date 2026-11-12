@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ULog에서 한 토픽의 표본만 읽는 최소 parser. 표준 라이브러리만 쓴다.
+"""ULog에서 고른 토픽의 표본만 읽는 최소 parser. 표준 라이브러리만 쓴다.
 
 호스트와 ros-ws, px4 이미지에 pyulog가 없어서 둔다. 읽는 것: header, F(형식), A(구독), D(데이터).
 나머지 메시지는 건너뛴다. 파일이 닫히지 않아 마지막 메시지가 잘려 있으면 거기서 멈추고 그때까지
@@ -79,16 +79,20 @@ def _decode(formats, name, data, off=0):
     return out, off
 
 
-def read_topic(path, topic, multi_id=0):
-    """path의 ULog에서 topic(multi_id) 표본을 dict 목록으로 읽는다."""
+def read_topics(path, wanted):
+    """path의 ULog를 한 번 훑어 wanted({토픽: multi_id})의 표본을 {토픽: dict 목록}으로 읽는다.
+
+    파일이 커서(수백 MB) 토픽마다 다시 읽지 않으려고 둔다. 구독이 없는 토픽은 빈 목록이다.
+    """
     with open(path, "rb") as fh:
         buf = fh.read()
     if buf[:7] != _MAGIC:
         raise UlogError("ULog header가 아니다: %s" % path)
     pos = 16
     formats = {}
-    msg_ids = set()
-    rows = []
+    msg_ids = {}          # msg_id -> 토픽 이름
+    rows = {t: [] for t in wanted}
+    sizes = {}            # 토픽 -> (전체 크기, padding을 뺀 최소 크기)
     while pos + 3 <= len(buf):
         size, mtype = struct.unpack_from("<HB", buf, pos)
         start = pos + 3
@@ -101,22 +105,32 @@ def read_topic(path, topic, multi_id=0):
             formats[name] = fields
         elif mtype == 0x41:    # 'A'
             mid, msg_id = struct.unpack_from("<BH", payload, 0)
-            if payload[3:].decode("ascii", "replace") == topic and mid == multi_id:
-                msg_ids.add(msg_id)
+            name = payload[3:].decode("ascii", "replace")
+            if wanted.get(name) == mid:
+                msg_ids[msg_id] = name
         elif mtype == 0x44:    # 'D'
             (msg_id,) = struct.unpack_from("<H", payload, 0)
-            if msg_id in msg_ids:
-                if topic not in formats:
-                    raise UlogError("형식 정의가 없다: %s" % topic)
-                # 끝의 _padding 필드는 파일에 기록되지 않는다. 0으로 채워 풀고 그보다 모자라면 건너뛴다.
-                data = payload[2:]
+            topic = msg_ids.get(msg_id)
+            if topic is None:
+                continue
+            if topic not in formats:
+                raise UlogError("형식 정의가 없다: %s" % topic)
+            if topic not in sizes:
                 full = _size(formats, topic)
                 pad = formats[topic][-1] if formats[topic][-1][2].startswith("_padding") else None
-                min_len = full - (pad[1] if pad else 0)
-                if len(data) < min_len:
-                    continue
-                rows.append(_decode(formats, topic, data.ljust(full, b"\0"))[0])
+                sizes[topic] = (full, full - (pad[1] if pad else 0))
+            full, min_len = sizes[topic]
+            # 끝의 _padding 필드는 파일에 기록되지 않는다. 0으로 채워 풀고 그보다 모자라면 건너뛴다.
+            data = payload[2:]
+            if len(data) < min_len:
+                continue
+            rows[topic].append(_decode(formats, topic, data.ljust(full, b"\0"))[0])
     return rows
+
+
+def read_topic(path, topic, multi_id=0):
+    """path의 ULog에서 topic(multi_id) 표본을 dict 목록으로 읽는다."""
+    return read_topics(path, {topic: multi_id})[topic]
 
 
 def read_logged(path):
