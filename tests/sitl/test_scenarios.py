@@ -31,7 +31,6 @@ TAKEOFF_M = 5.0
 ACCEPTANCE_M = 0.3
 RESULT_WAIT_S = 90.0         # goal 결과 대기(ROS 시각)
 US = 1_000_000
-CLOCK_QUANTUM_S = 0.004    # SITL /clock 한 양자(feedback stamp가 모두 4 ms의 배수)
 
 
 def takeoff_item():
@@ -196,9 +195,8 @@ def test_a_normal_flight(session):
     if fb_loiter.stamp_us < fb_take.stamp_us:
         findings.append((sw.WRONG_RESULT, "LOITER가 TAKEOFF보다 먼저 시작했다"))
     held = (fb_land.stamp_us - fb_loiter.stamp_us) / US
-    # feedback stamp는 on_tick 안에서 tick 입력 시각 뒤에 다시 읽는 /clock이다. Executor는 tick 입력 시각으로 5 s를 재므로
-    # 두 stamp는 /clock 한 양자(SITL 4 ms)만큼 어긋날 수 있다. 허용은 그 한 양자(+부동소수 여유)다
-    if held < 5.0 - CLOCK_QUANTUM_S - 1e-3:
+    # feedback stamp와 Executor의 5 s 계시는 모두 tick 입력 시각(TickInput.now_ns) 기준이라 유지 시간은 정확히 5 s다
+    if held < 5.0 - 1e-3:
         findings.append((sw.WRONG_RESULT, "LOITER 유지 시간 %.3f s < 5 s" % held))
     loiter_recv = fb_loiter.recv_us
     land_recv = fb_land.recv_us
