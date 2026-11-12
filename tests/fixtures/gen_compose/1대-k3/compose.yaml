@@ -173,7 +173,8 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - . /opt/ros/$${ROS_DISTRO}/setup.sh; ROS_LOG_DIR=/tmp/hc timeout 8 ros2 lifecycle get --no-daemon /px4_1/mission_executor > /tmp/hc.out 2>&1; cat /tmp/hc.out; grep -q '^active' /tmp/hc.out
+        - . /opt/ros/$${ROS_DISTRO}/setup.sh; ROS_LOG_DIR=/tmp/hc timeout 8 ros2 lifecycle get --no-daemon /px4_1/mission_executor > /tmp/hc.out 2>&1; cat
+          /tmp/hc.out; grep -q '^active' /tmp/hc.out
       interval: 10s
       timeout: 10s
       retries: 2

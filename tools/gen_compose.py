@@ -1018,7 +1018,7 @@ def dump_compose(compose):
             return super().increase_indent(flow, False)
 
     body = yaml.dump(compose, Dumper=Dumper, sort_keys=False, default_flow_style=False,
-                     allow_unicode=False, width=4096)
+                     allow_unicode=False, width=150)
     return COMPOSE_HEADER + body
 
 

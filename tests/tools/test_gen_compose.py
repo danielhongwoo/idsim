@@ -438,6 +438,13 @@ def test_stack_json_matches_compose_and_formats():
     assert gc.dump_compose(gen(k=4)[0]) == gc.dump_compose(compose)
 
 
+@pytest.mark.parametrize("kw", ALL_GENERATED)
+def test_dump_compose_round_trips(kw):
+    """긴 문자열은 yamllint 줄 길이를 위해 접어 쓰므로, 다시 읽으면 원래 dict와 같아야 한다."""
+    compose, _, _ = gen(**kw)
+    assert gc.load_yaml(gc.dump_compose(compose)) == compose
+
+
 def test_dump_compose_has_no_anchor_and_quotes_strings():
     text = gc.dump_compose(gen(three_vehicles())[0])
     assert "&id" not in text and "*id" not in text
