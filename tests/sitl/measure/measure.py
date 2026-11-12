@@ -120,10 +120,13 @@ CRITERIA = {
         "rampup이 시작되지 않았고 landed true, 내부는 rampup 시작 뒤이고 t_p - t_A < T_lf - 0.10 s이며 landed "
         "true, 경계는 그 뒤이거나 landed false다. 창 밖(WINDOW_MISSED)은 t_lf가 취소 전송 /clock 이하인 회다.",
         "첫 disarm의 대응: ULog의 command 400과 ack 400을 파일 순서로 1:1 대응한다(arm 재전송의 ack와 섞이지 않게). "
-        "수가 다르면 ACK_COUNT, 첫 disarm이 ULog에 없으면 first_disarm_lost로 INCONCLUSIVE(2)다.",
+        "수가 다르면 ACK_COUNT, 쌍의 간격이 0 이상 상한 이하가 아니면 ACK_PAIR, 첫 disarm이 ULog에 없으면 "
+        "first_disarm_lost로 INCONCLUSIVE(2)다.",
         "spoolup과 내부: 창 안의 시도가 분기 전환 없이 지상 DISARMED이고 r_p가 ACCEPTED여야 PASS다. 어긋나면 "
-        "M5_CONTRADICTED(1). 일관성 검사(첫 disarm의 ack에만. ACCEPTED면 t_p <= t_ml + 12 ms, "
-        "TEMPORARILY_REJECTED면 t_p >= t_ml)가 어긋나면 M5_INCONSISTENT(1). 거부 로그는 기록만 한다.",
+        "M5_CONTRADICTED(1). 일관성 검사(첫 disarm의 ack에만. 처리 시각 앞 12 ms 구간의 land_detected 상태가 "
+        "구간 직전 표본 값부터 이어질 때, ACCEPTED인데 구간 내내 landed와 maybe_landed가 모두 false이거나 "
+        "TEMPORARILY_REJECTED인데 구간 내내 둘 중 하나가 true이면)가 어긋나면 M5_INCONSISTENT(1). 거부 로그는 "
+        "기록만 한다.",
         "경계: r_p가 ACCEPTED이고 분기 전환 없이 지상 DISARMED로 끝날 때만 PASS다. landed가 false가 된 뒤 true로 돌아와 "
         "지상 DISARMED로 끝난 회(ROS 분기 순서 또는 ULog로 판별. 거부 뒤 재전송이 받아들여진 회 포함)는 "
         "M5_CONTRADICTED(1). Hold로 끝나면 HOLD_END(2. 기계가 통과로 올리지 않고 architect가 판정)라 (3)은 경계에서 "
@@ -941,8 +944,12 @@ def main(argv=None):
         fh.write("- 정리 총 소요 9 s 미만(상한 12 s에 여유 3 s). 넘으면 상한을 올리지 않고 architect에게 올린다.\n")
         fh.write("- 계획한 시도 수 %d (기준의 최소 %d). 실패한 시도를 빼지 않고 재시도하지 않는다.\n"
                  % (args.attempts, MIN_ATTEMPTS[item]))
-        fh.write("- %d회 중 0건은 실패율의 95%% 상한이 %s라는 뜻이다. 통과는 실패 없음의 증거가 아니다.\n"
-                 % (args.attempts, mj.upper95_text(args.attempts)))
+        if item == "item3":
+            fh.write("- 통과는 실패 없음의 증거가 아니다. 실패율의 95%% 상한은 27회 전체가 아니라 대역별 유효 시도 수로 "
+                     "적는다(Hold로 끝난 회가 있는 대역은 적지 않는다).\n")
+        else:
+            fh.write("- %d회 중 0건은 실패율의 95%% 상한이 %s라는 뜻이다. 통과는 실패 없음의 증거가 아니다.\n"
+                     % (args.attempts, mj.upper95_text(args.attempts)))
         fh.write("- 이 요약의 결과 절은 measure.py 단독 판정이다. crosscheck.py 뒤의 최종 판정은 이 파일 끝의 "
                  "'최종 판정' 절과 final_summary.json에 있다.\n")
         fh.write("- 판정 코드: tests/support/measure_judge.py. 정본: decisions.md 넘김 목록의 px4-engineer 행.\n")
@@ -1058,12 +1065,17 @@ def main(argv=None):
         for sub in subitems:
             rs = [r for r in rows_all if r["item"] == sub]
             j = mj.judge_run(rs, MIN_ATTEMPTS[item])
+            if sub == "3":       # 95% 상한은 대역별로 적는다(아래 줄). 27회 전체의 수로 적지 않는다
+                bound = "대역별 상한은 아래 줄"
+            else:
+                bound = "-" if not j["n_valid"] else mj.upper95_text(j["n_valid"])
             fh.write("%s: 시도 %d(유효 %d), PASS %d, 기준과 다른 관측(exit 1) %d, 제외(자극 불성립) %d, 그 밖 %d, "
                      "유효 시도 수 충분 %s, 전부 PASS %s, 무실패일 때 실패율 95%% 상한 %s\n" % (
                          sub, j["n"], j["n_valid"], j["n_pass"], j["n_fail"], j["n_excluded"], j["n_other"],
-                         j["enough"],
-                         j["all_pass"], "-" if not j["n_valid"]
-                         else mj.upper95_text(j["n_valid"])))
+                         j["enough"], j["all_pass"], bound))
+            if sub == "3":
+                for line in mb.live_band_lines(rs):
+                    fh.write(line + "\n")
             for r in rs:
                 if r["verdict"] != "PASS":
                     fh.write("  시도 %d %s: %s\n" % (r["attempt"], r["verdict"], "; ".join(r["reasons"])))

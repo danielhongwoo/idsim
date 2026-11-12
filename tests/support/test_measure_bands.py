@@ -89,7 +89,7 @@ def inner_ud(r=0, delay_us=1235 * MS, p_off=13 * MS, t_ml=None, t_lf=None):
     fd = T0 + delay_us
     land = [ldr(ramp, ige=True)]
     if t_ml is not None:
-        land.append(ldr(T0 + t_ml, landed=t_lf is None, ml=False))
+        land.append(ldr(T0 + t_ml, landed=False, ml=False))      # maybe_landed가 false가 된 표본(landed도 false)
     if t_lf is not None:
         land.append(ldr(T0 + t_lf, landed=False, ml=False, ige=True))
     return make_ud(land, [ack(T0, 0), ack(fd + p_off, r)], [cmd(T0 - 12 * MS, 1.0), cmd(fd)], ramp=ramp)
@@ -287,9 +287,18 @@ def test_spoolup_and_inner_pass():
     assert final(mkrow(T0 + 1235 * MS, 1.223), inner_ud()) == "PASS"
 
 
+def inner_hold_ud(cover_hold=True, extra=(), r=0):
+    """내부 대역(t_p 1248 ms, ACCEPTED, landed true)에서 처리된 첫 disarm인데 그 뒤 landed가 false가 되어 Hold로 끝난
+    ULog(합성. 실제로는 반증 관측이다)."""
+    land = [ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1400 * MS, landed=False, ml=False, ige=True)]
+    if cover_hold:
+        land = cover(land, T0 + 1235 * MS + S)
+    return make_ud(land + list(extra), [ack(T0, 0), ack(T0 + 1248 * MS, r)], [cmd(T0 + 1235 * MS)],
+                   ramp=T0 + 1016 * MS)
+
+
 def test_inner_hold_is_m5_contradicted_exit1():
-    ud = make_ud(cover([ldr(T0 + 1016 * MS, ige=True)], T0 + 1235 * MS + S), [ack(T0, 0), ack(T0 + 1248 * MS, 0)],
-                 [cmd(T0 + 1235 * MS)], ramp=T0 + 1016 * MS)
+    ud = inner_hold_ud()
     row = mkrow(T0 + 1235 * MS, 1.223, live="HOLD_END", end="HOLD", seq="GA", trans=1, hold_span=60.0)
     v, why, _ = mb.final_verdict_item3(row, mb.analyze_row(row, ud))
     assert v == "M5_CONTRADICTED" and v in mj.EXIT1_VERDICTS
@@ -324,7 +333,7 @@ def test_boundary_g_a_g_ending_disarmed_is_m5_contradicted_exit1_by_ros_branches
     ud = inner_ud(delay_us=1735 * MS, p_off=13 * MS, t_ml=1752 * MS)
     row = mkrow(T0 + 1735 * MS, 1.724, live="PASS", end="DISARMED", seq="GAG", trans=2)
     v, why, _ = mb.final_verdict_item3(row, mb.analyze_row(row, ud))
-    assert v == "M5_CONTRADICTED" and v in mj.EXIT1_VERDICTS and any("공중 분기" in w for w in why)
+    assert v == "M5_CONTRADICTED" and v in mj.EXIT1_VERDICTS and any("true로 돌아와" in w for w in why)
 
 
 def test_boundary_landed_returns_before_disarm_is_m5_contradicted_by_ulog_even_if_ros_missed_it():
@@ -351,7 +360,8 @@ def test_boundary_rejected_first_disarm_but_ended_disarmed_is_m5_contradicted():
     row = mkrow(T0 + 1735 * MS, 1.724, live="PASS", end="DISARMED", seq="G", trans=0)
     v = mb.final_verdict_item3(row, mb.analyze_row(row, ud))[0]
     assert v == "M5_INCONSISTENT"          # t_p < t_ml인데 거부 -> 일관성 위반이 대역 결과보다 앞
-    land = [ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1744 * MS, landed=True, ml=False, ige=True)]
+    # 구간 안에서 값이 바뀌어(1744에 둘 다 false) 거부가 불일치가 아니고, 지상 DISARMED로 끝났으니 반증이다
+    land = [ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1744 * MS, landed=False, ml=False, ige=True)]
     ud2 = make_ud(land, [ack(T0, 0), ack(T0 + 1748 * MS, 1)], [cmd(T0 + 1735 * MS)], ramp=T0 + 1016 * MS)
     v2, why, _ = mb.final_verdict_item3(row, mb.analyze_row(row, ud2))
     assert v2 == "M5_CONTRADICTED" and any("r_p=1" in w for w in why)
@@ -374,11 +384,45 @@ def test_boundary_hold_is_hold_end_exit2_and_denied_log_is_record_only():
         "log_denied_dt_us"] == 5 * MS
 
 
-def test_consistency_accepted_after_maybe_landed_plus_12ms_is_exit1():
-    ud = inner_ud(delay_us=1735 * MS, p_off=13 * MS, t_ml=1735 * MS)     # t_ml 1735, t_p 1748 = t_ml + 13 ms
-    assert final(mkrow(T0 + 1735 * MS, 1.724), ud) == "M5_INCONSISTENT"
-    ok = inner_ud(delay_us=1735 * MS, p_off=13 * MS, t_ml=1736 * MS)      # t_p = t_ml + 12 ms는 허용
-    assert final(mkrow(T0 + 1735 * MS, 1.724), ok) == "PASS"
+def test_consistency_accepted_needs_both_false_for_the_whole_12ms_window():
+    row = mkrow(T0 + 1735 * MS, 1.724)
+    # t_p 1748 앞 12 ms 구간 [1736, 1748]. t_ml(둘 다 false로 바뀐 표본)이 1736 이하이면 구간 시작 값이 false라 불일치
+    for t_ml in (1735, 1736):
+        ud = inner_ud(delay_us=1735 * MS, p_off=13 * MS, t_ml=t_ml * MS)
+        assert final(row, ud) == "M5_INCONSISTENT", t_ml
+    # 구간 안(1737)에서 false가 되면 시작 값은 true였으므로 값이 바뀐 회라 불일치가 아니다
+    ok = inner_ud(delay_us=1735 * MS, p_off=13 * MS, t_ml=1737 * MS)
+    assert final(row, ok) == "PASS"
+    an = mb.analyze_row(row, ok)
+    assert an["tp_minus_tml_s"] == pytest.approx(0.011) and an["ld_states_before_tp"] == [[1, 1], [0, 0]]
+
+
+def test_accepted_after_maybe_landed_returned_true_is_not_inconsistent():
+    # maybe_landed가 false가 됐다가(1740) 다시 true(1745)로 돌아온 뒤 1748에 ACCEPTED. 구간 안에서 값이 바뀌었다
+    land = [ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1740 * MS, landed=False, ml=False),
+            ldr(T0 + 1745 * MS, landed=False, ml=True)]
+    ud = make_ud(land, [ack(T0, 0), ack(T0 + 1748 * MS, 0)], [cmd(T0 + 1735 * MS)], ramp=T0 + 1016 * MS)
+    assert mb.analyze_row(mkrow(T0 + 1735 * MS, 1.724), ud)["consistency_problems"] == []
+    # 구간 내내 maybe_landed true였던 ACCEPTED, 구간 내내 둘 다 false였던 REJECTED는 일관(수락 규칙대로)
+    all_true = make_ud([ldr(T0 + 1016 * MS, ige=True)], [ack(T0, 0), ack(T0 + 1748 * MS, 0)],
+                       [cmd(T0 + 1735 * MS)], ramp=T0 + 1016 * MS)
+    assert mb.analyze_row(mkrow(T0 + 1735 * MS, 1.724), all_true)["consistency_problems"] == []
+
+
+def test_rejected_inconsistent_only_when_true_for_the_whole_window_and_changes_are_not_inconsistent():
+    row = mkrow(T0 + 1735 * MS, 1.724)
+    for_true = make_ud([ldr(T0 + 1016 * MS, ige=True)], [ack(T0, 0), ack(T0 + 1748 * MS, 1)],
+                       [cmd(T0 + 1735 * MS)], ramp=T0 + 1016 * MS)
+    assert mb.analyze_row(row, for_true)["consistency_problems"] != []
+    # 구간 안(1740)에서 둘 다 false로 바뀌면 거부는 불일치가 아니다
+    changed = make_ud([ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1740 * MS, landed=False, ml=False)],
+                      [ack(T0, 0), ack(T0 + 1748 * MS, 1)], [cmd(T0 + 1735 * MS)], ramp=T0 + 1016 * MS)
+    assert mb.analyze_row(row, changed)["consistency_problems"] == []
+    # 구간 안에서 false에서 true로 바뀌면 수락도 불일치가 아니다
+    up = make_ud([ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1730 * MS, landed=False, ml=False),
+                  ldr(T0 + 1742 * MS, landed=False, ml=True)],
+                 [ack(T0, 0), ack(T0 + 1748 * MS, 0)], [cmd(T0 + 1735 * MS)], ramp=T0 + 1016 * MS)
+    assert mb.analyze_row(row, up)["consistency_problems"] == []
 
 
 def test_consistency_rejected_requires_only_t_p_not_before_t_ml():
@@ -464,7 +508,13 @@ def test_window_missed_by_ulog_even_if_ros_said_ok_and_window_independent_checks
     land = [ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1744 * MS, landed=False, ml=False, ige=True)]
     ud = make_ud(land, [ack(T0, 0), ack(T0 + 1760 * MS, 1)], [cmd(T0 + 1748 * MS)], ramp=T0 + 1016 * MS)
     row = mkrow(T0 + 1748 * MS, 1.724, live="PASS", end="DISARMED")
-    assert final(row, ud) == "WINDOW_MISSED"
+    # 창 밖이어도 거부 뒤 지상 DISARMED로 끝난 회는 반증(M5_CONTRADICTED, 1)이다. 제외로 단정하지 않는다
+    v, why, _ = mb.final_verdict_item3(row, mb.analyze_row(row, ud))
+    assert v == "M5_CONTRADICTED" and any("r_p=1" in w for w in why)
+    # 수락되고(maybe_landed가 true라 일관) 돌아온 landed도 없으면 창 밖 제외
+    ok = make_ud([ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1744 * MS, landed=False, ml=True, ige=True)],
+                 [ack(T0, 0), ack(T0 + 1760 * MS, 0)], [cmd(T0 + 1748 * MS)], ramp=T0 + 1016 * MS)
+    assert final(row, ok) == "WINDOW_MISSED"
     # live가 FAIL(창과 무관한 기준 위반)이면 그대로 FAIL
     assert final(mkrow(T0 + 1748 * MS, 1.724, live="FAIL", reasons=["상승"]), ud) == "FAIL"
     # live WINDOW_MISSED인데 ULog는 창 안이면 끝난 방식(지상 DISARMED = PASS)으로 되돌린다
@@ -543,6 +593,128 @@ def test_2b_hold_observation_from_ulog():
     assert mb.final_verdict_2b(row, mb.hold_observation(none, 0, 60 * S))[2] == "HOLD_OBS"
     # live가 이미 M3_CONTRADICTED이면 그대로
     assert mb.final_verdict_2b(dict(row, verdict="M3_CONTRADICTED"), None)[0] == "M3_CONTRADICTED"
+
+
+def test_inner_hold_with_insufficient_hold_observation_is_still_exit1():
+    # 대역이 정해진 회의 반증은 Hold 뒤 관찰이 모자라도 올린다(2가 아니다)
+    row = mkrow(T0 + 1235 * MS, 1.223, live="HOLD_END", end="HOLD", seq="GA", trans=1, hold_span=60.0)
+    v, why, kind = mb.final_verdict_item3(row, mb.analyze_row(row, inner_hold_ud(cover_hold=False)))
+    assert v == "M5_CONTRADICTED" and kind == ""
+    # live가 INCONCLUSIVE(관찰 표본 부족)였던 행도 먼저 반증을 본다
+    row2 = mkrow(T0 + 1235 * MS, 1.223, live="INCONCLUSIVE", end="HOLD", seq="GA", trans=1, hold_span=60.0,
+                 reasons=["관찰 부족"])
+    assert mb.final_verdict_item3(row2, mb.analyze_row(row2, inner_hold_ud(cover_hold=False)))[0] == "M5_CONTRADICTED"
+
+
+def test_inner_aerial_branch_with_only_maybe_landed_true_is_exit1_not_exit2():
+    start = T0 + 1235 * MS + S
+    ud = inner_hold_ud(extra=[ldr(start + 30 * S + 100 * MS, landed=False, ml=True)])
+    row = mkrow(T0 + 1235 * MS, 1.223, live="HOLD_END", end="HOLD", seq="GA", trans=1, hold_span=60.0)
+    assert mb.final_verdict_item3(row, mb.analyze_row(row, ud))[0] == "M5_CONTRADICTED"
+
+
+def test_undetermined_band_with_aerial_branch_and_insufficient_observation_is_exit2():
+    # 첫 disarm이 유실되어 대역을 정할 수 없고 Hold 관찰도 모자라다: 볼 수 있는 반증이 없으므로 2
+    land = [ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1744 * MS, landed=False, ml=False, ige=True)]
+    ud = make_ud(land, [ack(T0, 0)], [], ramp=T0 + 1016 * MS)
+    row = mkrow(T0 + 1735 * MS, 1.724, live="HOLD_END", end="HOLD", seq="GA", trans=1, hold_span=60.0)
+    v, _, kind = mb.final_verdict_item3(row, mb.analyze_row(row, ud))
+    assert (v, kind) == ("INCONCLUSIVE", "HOLD_OBS")
+
+
+def test_window_missed_with_landed_return_before_disarm_is_exit1():
+    land = [ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1744 * MS, landed=False, ml=False, ige=True),
+            ldr(T0 + 1900 * MS, landed=True, ml=True)]
+    ud = make_ud(land, [ack(T0, 0), ack(T0 + 1960 * MS, 0)], [cmd(T0 + 1950 * MS)], ramp=T0 + 1016 * MS)
+    ud.rows["vehicle_status"].append({"timestamp": T0 + 2000 * MS, "arming_state": 1})
+    ud.keys["vehicle_status"].append(T0 + 2000 * MS)
+    row = mkrow(T0 + 1950 * MS, 1.724, live="WINDOW_MISSED", end="DISARMED", seq="G", trans=0)
+    an = mb.analyze_row(row, ud)
+    assert an["window_missed"] is True and an["ulog_landed_returned"] is True
+    assert mb.final_verdict_item3(row, an)[0] == "M5_CONTRADICTED"
+
+
+def test_window_missed_ramp_mismatch_keeps_exclusion_with_the_reason():
+    land = [ldr(T0 + 1016 * MS, ige=True), ldr(T0 + 1744 * MS, landed=False, ml=True, ige=True)]
+    ud = make_ud(land, [ack(T0, 0), ack(T0 + 1760 * MS, 0)], [cmd(T0 + 1748 * MS)], ramp=T0 + 1016 * MS,
+                 thrust_ramp=T0 + 1100 * MS)
+    row = mkrow(T0 + 1748 * MS, 1.724, live="PASS", end="DISARMED")
+    v, why, _ = mb.final_verdict_item3(row, mb.analyze_row(row, ud))
+    assert v == "WINDOW_MISSED" and any("RAMP_MISMATCH" in w and "추력 하락" in w for w in why)
+
+
+def test_pair_gap_check_catches_count_matching_but_misaligned_acks():
+    # arm 재전송의 ack 하나가 빠지고 구간 끝 뒤(0.3 s)에 ack 하나가 더 있어 개수만 맞는다
+    ud = make_ud([], [ack(T0, 0), ack(T0 + 24 * MS, 0), ack(T0 + 10 * S + 300 * MS, 0)],
+                 [cmd(T0 - 12 * MS, 1.0), cmd(T0 - 8 * MS, 1.0), cmd(T0 + 12 * MS)], arm_cmd=False)
+    row = mkrow(T0 + 12 * MS, 0.0)
+    an = mb.analyze_row(row, ud)
+    assert an["n_cmd400"] == an["n_ack400"] == 3 and an["ack_count_mismatch"] is False
+    assert an["t_p"] is None and an["ack_pair_bad"]
+    v, why, kind = mb.final_verdict_item3(row, an)
+    assert (v, kind) == ("INCONCLUSIVE", "ACK_PAIR") and "순번 대응" in why[0]
+    # ack가 command보다 앞인 쌍도 어긋난 것이다
+    before = make_ud([], [ack(T0, 0), ack(T0 + 8 * MS, 0)], [cmd(T0 - 12 * MS, 1.0), cmd(T0 + 12 * MS)],
+                     arm_cmd=False)
+    assert mb.final_verdict_item3(row, mb.analyze_row(row, before))[2] == "ACK_PAIR"
+    # 상한 경계: 100 ms는 허용, 101 ms는 어긋남
+    edge = make_ud([], [ack(T0, 0), ack(T0 + 12 * MS + mb.PAIR_MAX_GAP_US, 0)],
+                   [cmd(T0 - 12 * MS, 1.0), cmd(T0 + 12 * MS)], arm_cmd=False)
+    assert mb.analyze_row(row, edge)["ack_pair_bad"] == []
+    over = make_ud([], [ack(T0, 0), ack(T0 + 12 * MS + mb.PAIR_MAX_GAP_US + 1, 0)],
+                   [cmd(T0 - 12 * MS, 1.0), cmd(T0 + 12 * MS)], arm_cmd=False)
+    assert mb.analyze_row(row, over)["ack_pair_bad"] != []
+
+
+def test_hold_observation_counts_the_sample_before_the_window_as_the_start_value():
+    start = 100 * S
+    ud = mb.UlogData({"vehicle_land_detected": [ldr(start - 500 * MS, landed=True, ml=True)]
+                      + [ldr(start + i * S, landed=False, ml=False) for i in range(1, 61)]})
+    obs = mb.hold_observation(ud, start, start + 60 * S)
+    assert obs["landed_true"] == 1 and obs["prev_sample_ts"] == start - 500 * MS
+    assert mb.hold_landed_true(obs) is not None
+    ud2 = mb.UlogData({"vehicle_land_detected": [ldr(start - 500 * MS, landed=False, ml=True)]
+                       + [ldr(start + i * S, landed=False, ml=False) for i in range(1, 61)]})
+    obs2 = mb.hold_observation(ud2, start, start + 60 * S)
+    assert obs2["landed_true"] == 0 and obs2["maybe_landed_true_only"] == 1
+    assert mb.hold_insufficient(obs2)[0] == "MAYBE_LANDED"
+
+
+def test_2b_landed_true_in_ulog_is_exit1_even_if_live_was_inconclusive():
+    ud = mb.UlogData({"vehicle_land_detected": [ldr(S, landed=False, ml=False), ldr(20 * S, landed=True)]})
+    obs = mb.hold_observation(ud, 0, 60 * S)
+    inc = {"verdict": "INCONCLUSIVE", "reasons": ["관찰 표본 부족"], "inconclusive_kind": ""}
+    assert mb.final_verdict_2b(inc, obs)[0] == "M3_CONTRADICTED"
+    # landed true가 없으면 live INCONCLUSIVE는 그대로(ULog 부족 판정으로 덮지 않는다)
+    sparse = mb.hold_observation(mb.UlogData({}), 0, 60 * S)
+    assert mb.final_verdict_2b(inc, sparse)[0] == "INCONCLUSIVE"
+    assert mb.final_verdict_2b(dict(inc, verdict="FAIL"), obs)[0] == "FAIL"
+
+
+def test_boundary_aerial_sentence_needs_unclassified_planned_boundary_rows_to_have_no_aerial_branch():
+    plan = full_plan()
+    plan[-1] = (plan[-1][0], "M5_CONTRADICTED", None)       # 경계로 계획했으나 대역을 정하지 못한 행이 공중 분기
+    s = mb.band_summary(*rows_for(plan))
+    assert s["unclassified_boundary_aerial"] == 1 and s["boundary_aerial_none"] is False
+    assert not any("공중 분기는 생기지 않았다" in x for x in mb.top_lines(s))
+    plan2 = full_plan()
+    plan2[-1] = (plan2[-1][0], "INCONCLUSIVE", None)         # 공중 분기가 아닌 미확정 행은 문구를 막지 않는다
+    s2 = mb.band_summary(*rows_for(plan2))
+    assert s2["unclassified_boundary_aerial"] == 0 and s2["boundary_aerial_none"] is True
+
+
+def test_upper_bound_omitted_for_bands_with_hold_end_and_live_lines_are_per_band():
+    s = mb.band_summary(*rows_for(full_plan("HOLD_END")))
+    lines = mb.top_lines(s)
+    boundary = next(x for x in lines if x.strip().startswith("경계:"))
+    assert "95%" not in boundary
+    assert "95%" in next(x for x in lines if x.strip().startswith("spoolup:"))
+    rows, _, _ = rows_for(full_plan("HOLD_END"))
+    for r, p in zip(rows, full_plan("HOLD_END")):
+        r["verdict"] = p[1]
+    live = mb.live_band_lines(rows)
+    assert len(live) == 3 and "95%" not in live[2] and "95%" in live[0]
+    assert not any(mj.upper95_text(27) in x for x in live)
 
 
 def test_t_lf_samples_per_arm_event():

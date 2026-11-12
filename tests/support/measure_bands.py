@@ -37,22 +37,28 @@ timestamp(us)이고 SITL에서 4 ms 단위로 양자화된다.
 verdict(최종)
   PASS               spoolup/inner에서 분기 전환 없이 지상 DISARMED이고 r_p ACCEPTED, 기존 기준 만족.
                      boundary에서도 r_p ACCEPTED이고 분기 전환 없이 지상 DISARMED일 때만.
-  M5_CONTRADICTED(1) 첫 disarm이 spoolup/inner에서 처리되었는데 r_p가 ACCEPTED가 아니거나 공중 분기로 간 회.
-                     boundary에서 landed false 뒤 landed가 true로 돌아와 지상 DISARMED로 끝난 회(공중 -> 지상 복귀,
-                     첫 disarm이 거부된 뒤 재전송이 받아들여진 회 포함). 판별은 ROS(branch_sequence의 A,
+  M5_CONTRADICTED(1) 대역이 정해진 회에서 첫 disarm이 spoolup/inner에서 처리되었는데 r_p가 ACCEPTED가 아니거나 공중
+                     분기로 간 회. boundary에서 landed false 뒤 landed가 true로 돌아와 지상 DISARMED로 끝난 회와
+                     r_p가 ACCEPTED가 아닌데 지상 DISARMED로 끝난 회. 공중 분기 판별은 ROS(branch_sequence의 A,
                      branch_transitions)와 ULog(t_lf 뒤 DISARMED 전의 landed true 표본) 둘 다.
-  M5_INCONSISTENT(1) 첫 disarm의 수락 여부가 maybe_landed와 맞지 않음(일관성 검사. 첫 disarm에 대응한 ack에만).
-  M3_CONTRADICTED(1) Hold 뒤 관찰에서 ULog에 landed true가 있음.
+  M5_INCONSISTENT(1) 첫 disarm의 수락 여부가 [t_p - 12 ms, t_p] 구간의 vehicle_land_detected 상태와 맞지 않음.
+                     ACCEPTED인데 구간 내내 landed와 maybe_landed가 모두 false, TEMPORARILY_REJECTED인데 구간 내내
+                     둘 중 하나가 true. 구간 시작 값은 구간 직전 마지막 표본이다. 첫 disarm에 대응한 ack에만 적용한다.
+  M3_CONTRADICTED(1) Hold 뒤 관찰에서 ULog에 landed true가 있음(관찰 구간 시작 시점의 값 포함).
   HOLD_END(2)        boundary에서 Hold로 끝남(기계가 통과로 올리지 않는다. architect가 판정).
   WINDOW_MISSED      t_lf가 측정기 취소 전송 /clock 이하(자극이 성립하지 않은 회).
   INCONCLUSIVE(2)    Hold 뒤 관찰의 ULog 표본이 구간을 덮지 못함(HOLD_OBS), maybe_landed만 true(MAYBE_LANDED),
                      측정기가 disarm을 보내지 않음(NO_DISARM), 첫 disarm이 ULog에 없음(FIRST_DISARM_LOST),
-                     command와 ack의 수가 다름(ACK_COUNT), 대응하는 ack 없음(NO_ACK), t_ramp 판별 불일치
-                     (RAMP_MISMATCH), 대역을 정할 수 없음(BAND_UNKNOWN).
-판정 순서(1이 2보다 앞서도록 정한 순서. 앞 단계가 이기고 px4-engineer 승인 대상이다)
-  live FAIL(창과 무관한 기준) -> M3_CONTRADICTED -> 관찰 부족과 maybe_landed만 true(INCONCLUSIVE)
-  -> WINDOW_MISSED -> 판정 불가(NO_DISARM, FIRST_DISARM_LOST, ACK_COUNT, NO_ACK, RAMP_MISMATCH, BAND_UNKNOWN)
-  -> M5_INCONSISTENT -> 대역별 결과.
+                     command와 ack의 수가 다름(ACK_COUNT), 쌍의 간격이 어긋남(ACK_PAIR), 대응하는 ack 없음(NO_ACK),
+                     t_ramp 판별 불일치(RAMP_MISMATCH), 대역을 정할 수 없음(BAND_UNKNOWN).
+판정 순서(앞 단계가 이긴다. 1(기준과 다른 관측)이 2(판정 불가)에 가려지는 것은 대역이 정해지지 않았거나 관찰이
+부족한 회에서 그 관측을 볼 수 없는 경우뿐이다)
+  (1) live FAIL(창과 무관한 기준)  (2) M3_CONTRADICTED  (3) 대역 확정 계산(verdict 없음. NO_DISARM,
+  FIRST_DISARM_LOST, ACK_COUNT, ACK_PAIR, NO_ACK, RAMP_MISMATCH, BAND_UNKNOWN이면 미확정)
+  (4) 대역이 정해진 회: M5_INCONSISTENT, 이어서 M5_CONTRADICTED(Hold 뒤 관찰과 창 밖 여부를 보기 전. live가
+  INCONCLUSIVE였던 행과 창 밖 회도 거친다)  (5) Hold 뒤 관찰 부족, maybe_landed만 true(INCONCLUSIVE)
+  (6) WINDOW_MISSED(제외. 사유에 (3)의 미확정 사유를 함께 남긴다)  (7) 대역 미확정 회의 판정 불가(INCONCLUSIVE)
+  (8) 대역별 결과(PASS, 경계의 HOLD_END).
 거부 로그('Disarming denied: not landed')는 판정에 쓰지 않고 유무와 ack와의 시각 차이만 기록한다.
 """
 import bisect
@@ -96,15 +102,19 @@ THRUST_BEFORE_US = 20_000         # 추력 하락 표본이 t_ramp 앞 20 ms 뒤
 THRUST_AFTER_US = 40_000
 TAKEOFF_STATE_RAMPUP = 4
 
-# Hold 뒤 관찰의 ULog 표본이 구간을 덮었는가(px4-engineer 승인 대상). vehicle_land_detected는 값이 바뀔 때와
+# Hold 뒤 관찰의 ULog 표본이 구간을 덮었는가(px4-engineer 승인). vehicle_land_detected는 값이 바뀔 때와
 # 미변경 시 1 Hz로 남는다(근거 실행: 60 s에 60-61개). 이웃 표본 사이(구간 앞 마지막 표본과 구간 끝 포함)의 최대
 # 간격이 2 s(1 Hz 주기의 두 배)를 넘으면 덮지 못한 것이다. 표본이 하나도 없어도 덮지 못한 것이다.
 HOLD_OBS_MAX_GAP_US = 2_000_000
 # 마지막 command ack를 구간 끝(ros_end) 뒤로 얼마나 더 찾는가(끝 직전에 보낸 명령의 ack용)
 ACK_SLACK_US = 500_000
 
-# 일관성 검사
-ACCEPT_AFTER_ML_US = 12_000       # ACCEPTED면 t_p <= t_ml + 12 ms
+# 대응한 command와 ack 쌍의 간격 상한(px4-engineer 승인 대상). 모든 쌍이 0 <= ack.timestamp - command.timestamp
+# <= 이 값이어야 한다. 근거 실행은 65쌍이 8-20 ms였다. 어긋나면 순번 대응을 믿을 수 없다(ACK_PAIR).
+PAIR_MAX_GAP_US = 100_000
+
+# 일관성 검사: 처리 시각 앞 이 구간의 vehicle_land_detected 상태(구간 직전 마지막 표본을 시작 값으로 쓴다)
+CONSISTENCY_WINDOW_US = 12_000
 DENIED_LOG_NEAR_US = 4_000        # 거부 로그가 [t_p - 4 ms, t_p] 안인가(기록만 하고 판정에 쓰지 않는다)
 RESULT_ACCEPTED = 0
 RESULT_TEMP_REJECTED = 1
@@ -308,28 +318,39 @@ def ramp_check(t_ramp, t_p, takeoff4_ts, drop_ts, thrust_samples):
     return problems
 
 
-def consistency(r_p, t_p, t_ml):
-    """첫 disarm의 수락 여부와 maybe_landed의 일관성. 사유 목록(빈 목록이면 일치).
+def window_states(ud, t_p):
+    """[t_p - 12 ms, t_p] 구간의 (landed, maybe_landed) 상태 목록. 구간 직전(시작 시각 이하) 마지막 표본의 값이
+    구간 시작 상태이고, 구간 안에서 새로 나온 표본이 이어진다."""
+    lo = t_p - CONSISTENCY_WINDOW_US
+    start = ud.last_at_or_before("vehicle_land_detected", lo)
+    rows = ([start] if start is not None else []) + ud.between("vehicle_land_detected", lo, t_p)
+    return [(bool(r["landed"]), bool(r["maybe_landed"])) for r in rows]
 
-    첫 disarm에 대응한 ack에만 적용한다(t_p가 없으면 부르지 않는다).
-    ACCEPTED면 t_p <= t_ml + 12 ms. TEMPORARILY_REJECTED면 t_p >= t_ml. t_ml이 없으면(maybe_landed가 false가
-    된 적 없음) ACCEPTED는 조건이 성립하고 REJECTED는 어긋난다. 그 밖의 result는 이 검사 대상이 아니다.
-    거부 때의 logged message는 판정에 쓰지 않는다(analyze_row가 유무와 시각 차이만 기록한다).
+
+def consistency(r_p, states):
+    """첫 disarm의 수락 여부와 처리 시각 앞 12 ms 구간의 landed/maybe_landed 상태의 일관성. 사유 목록(빈 목록이면 일치).
+
+    ACCEPTED인데 구간 내내 landed와 maybe_landed가 모두 false였거나, TEMPORARILY_REJECTED인데 구간 내내 둘 중
+    하나가 true였으면 맞지 않는 것이다. 구간 안에서 두 분류 사이로 값이 바뀐 회는 어느 결과도 불일치가 아니다
+    (PX4는 landed || maybe_landed로 판단한다. Commander.cpp 644-662행). 첫 disarm에 대응한 ack에만 적용한다.
+    states가 비어 있으면 판단하지 않는다. maybe_landed가 처음 false가 된 시각 하나와 견주지 않는다.
     """
     problems = []
-    if r_p == RESULT_ACCEPTED:
-        if t_ml is not None and t_p > t_ml + ACCEPT_AFTER_ML_US:
-            problems.append("ACCEPTED인데 t_p가 t_ml보다 %.1f ms 뒤 (기준 %.0f ms 이내)"
-                            % ((t_p - t_ml) / 1000.0, ACCEPT_AFTER_ML_US / 1000.0))
-    elif r_p == RESULT_TEMP_REJECTED:
-        if t_ml is None or t_p < t_ml:
-            problems.append("TEMPORARILY_REJECTED인데 t_p가 t_ml보다 앞(또는 t_ml 없음)")
+    if not states:
+        return problems
+    if r_p == RESULT_ACCEPTED and all(not landed and not maybe for landed, maybe in states):
+        problems.append("ACCEPTED인데 처리 시각 앞 %.0f ms 구간 내내 landed와 maybe_landed가 모두 false"
+                        % (CONSISTENCY_WINDOW_US / 1000.0))
+    elif r_p == RESULT_TEMP_REJECTED and all(landed or maybe for landed, maybe in states):
+        problems.append("TEMPORARILY_REJECTED인데 처리 시각 앞 %.0f ms 구간 내내 landed 또는 maybe_landed가 true"
+                        % (CONSISTENCY_WINDOW_US / 1000.0))
     return problems
 
 
 def hold_observation(ud, start, end):
     """Hold 뒤 관찰 구간 (start, end]의 ULog 전체 표본에서 landed true와 maybe_landed true를 센다.
 
+    구간 직전(start 이하)의 마지막 표본은 구간 시작 시점의 값이므로 landed나 maybe_landed가 true이면 센다.
     covered는 ULog 표본이 구간을 덮었는가다: 표본이 있고, 구간 앞의 마지막 표본(없으면 start)부터 구간 안 표본들과
     end까지 이웃 사이 최대 간격이 HOLD_OBS_MAX_GAP_US 이하.
     """
@@ -337,12 +358,14 @@ def hold_observation(ud, start, end):
     prev = ud.last_at_or_before("vehicle_land_detected", start)
     times = [int(prev["timestamp"]) if prev is not None else start] + [int(r["timestamp"]) for r in rows] + [end]
     gap = max(b - a for a, b in zip(times, times[1:]))
-    landed = [int(r["timestamp"]) for r in rows if r["landed"]]
-    maybe = [int(r["timestamp"]) for r in rows if r["maybe_landed"] and not r["landed"]]
+    seen = ([prev] if prev is not None else []) + rows
+    landed = [int(r["timestamp"]) for r in seen if r["landed"]]
+    maybe = [int(r["timestamp"]) for r in seen if r["maybe_landed"] and not r["landed"]]
     return {"samples": len(rows), "max_gap_s": gap / US, "covered": bool(rows) and gap <= HOLD_OBS_MAX_GAP_US,
             "landed_true": len(landed), "maybe_landed_true_only": len(maybe),
             "first_landed_true_ts": landed[0] if landed else None,
-            "first_maybe_landed_ts": maybe[0] if maybe else None}
+            "first_maybe_landed_ts": maybe[0] if maybe else None,
+            "prev_sample_ts": None if prev is None else int(prev["timestamp"])}
 
 
 def classify_band(t_a, t_ramp, t_p, ld_p, t_lf_ref_s=None):
@@ -368,8 +391,9 @@ def match_first_disarm(ud, arm_ts, hi, fd):
     """구간의 command 400과 ack 400을 파일 순서로 1:1 대응해 첫 disarm의 ack를 찾는다.
 
     fd: 측정기가 처음 보낸 disarm의 [recv_ros_us, Px4Timestamp] 또는 None.
-    돌려주는 dict: n_cmd, n_ack, index(첫 disarm의 command 순번 또는 None), ack(대응한 ack 행 또는 None).
-    command와 ack의 수가 다르면 ack는 None이다(대응을 믿을 수 없다).
+    돌려주는 dict: n_cmd, n_ack, index(첫 disarm의 command 순번 또는 None), ack(대응한 ack 행 또는 None),
+    pair_bad([(순번, ack - command 간격 us)]. 모든 쌍이 0 <= 간격 <= PAIR_MAX_GAP_US여야 한다).
+    command와 ack의 수가 다르거나 간격이 어긋난 쌍이 있으면 ack는 None이다(순번 대응을 믿을 수 없다).
     """
     cmds = [c for c in ud.cmd_file if int(c["command"]) == CMD_ARM_DISARM and arm_ts <= int(c["timestamp"]) <= hi]
     acks = [a for a in ud.ack_file
@@ -380,8 +404,14 @@ def match_first_disarm(ud, arm_ts, hi, fd):
             if int(c["timestamp"]) == fd[1] and float(c["param1"]) == 0.0:
                 k = i
                 break
-    ack = acks[k] if (k is not None and len(cmds) == len(acks)) else None
-    return {"n_cmd": len(cmds), "n_ack": len(acks), "index": k, "ack": ack, "acks": acks}
+    pair_bad = []
+    if len(cmds) == len(acks):
+        for i, (c, a) in enumerate(zip(cmds, acks)):
+            gap = int(a["timestamp"]) - int(c["timestamp"])
+            if not 0 <= gap <= PAIR_MAX_GAP_US:
+                pair_bad.append((i, gap))
+    ack = acks[k] if (k is not None and len(cmds) == len(acks) and not pair_bad) else None
+    return {"n_cmd": len(cmds), "n_ack": len(acks), "index": k, "ack": ack, "acks": acks, "pair_bad": pair_bad}
 
 
 def analyze_row(row, ud, t_lf_ref_s=None):
@@ -417,6 +447,7 @@ def analyze_row(row, ud, t_lf_ref_s=None):
     a["n_cmd400"] = m["n_cmd"]
     a["n_ack400"] = m["n_ack"]
     a["ack_count_mismatch"] = m["n_cmd"] != m["n_ack"]
+    a["ack_pair_bad"] = [[i, g] for i, g in m["pair_bad"]]
     a["first_disarm_index"] = m["index"]
     ack_p = m["ack"]
     t_p = None if ack_p is None else int(ack_p["timestamp"])
@@ -430,7 +461,8 @@ def analyze_row(row, ud, t_lf_ref_s=None):
     denied = [mm["ts"] for mm in ud.logged if LOG_DENIED in mm["msg"]]
     disarmed_log = [mm["ts"] for mm in ud.logged if LOG_DISARMED in mm["msg"]]
     near = [t_p - x for x in denied if t_p is not None and abs(t_p - x) <= 100_000]
-    cons = [] if t_p is None else consistency(r_p, t_p, t_ml)
+    states = [] if t_p is None else window_states(ud, t_p)
+    cons = [] if t_p is None else consistency(r_p, states)
     ramp_problems = ramp_check(t_ramp, t_p, tk4, drop_ts, n_thrust)
     aa = [r for r in ud.between("actuator_armed", arm_ts, hi) if r["armed"]]
     lp = ud.between("vehicle_local_position", t_a, t_p if t_p is not None else hi, lo_incl=True)
@@ -460,6 +492,7 @@ def analyze_row(row, ud, t_lf_ref_s=None):
         "z_at_tp_m": None if not lp else float(lp[-1]["z"]),
         "z_min_to_tp_m": None if not lp else float(min(r["z"] for r in lp)),
         "consistency_problems": cons, "ramp_problems": ramp_problems,
+        "ld_states_before_tp": [[int(x), int(y)] for x, y in states],
     })
     # 창 밖: t_lf가 측정기 취소 전송 /clock 이하
     cancel = (row.get("injection") or {}).get("cancel_clock_us")
@@ -514,22 +547,80 @@ def _ramp_text(an):
         v(e["thrust_drop_minus_tA_s"]))
 
 
+def band_undetermined(an):
+    """대역 확정 계산(verdict 없음). 대역을 정할 수 없으면 (kind, 사유), 정해졌으면 None.
+
+    순서: NO_DISARM, FIRST_DISARM_LOST, ACK_COUNT, ACK_PAIR, NO_ACK, RAMP_MISMATCH, BAND_UNKNOWN.
+    """
+    if not an["first_disarm_sent"]:
+        return "NO_DISARM", "측정기가 disarm을 보내지 않았다(첫 분기가 공중). 대역을 정할 수 없음"
+    if an["first_disarm_lost"]:
+        return "FIRST_DISARM_LOST", "first_disarm_lost: 측정기가 처음 보낸 disarm(param1 0)이 ULog vehicle_command에 없음"
+    if an["ack_count_mismatch"]:
+        return "ACK_COUNT", ("구간의 command 400 %d개와 ack 400 %d개의 수가 다름. 순번 대응을 믿을 수 없음"
+                             % (an["n_cmd400"], an["n_ack400"]))
+    if an["ack_pair_bad"]:
+        return "ACK_PAIR", ("command와 ack 쌍의 간격이 0 이상 %.0f ms 이하가 아님(순번, 간격 us): %s. 순번 대응을 믿을 수 없음"
+                            % (PAIR_MAX_GAP_US / 1000.0, an["ack_pair_bad"]))
+    if an["t_p"] is None:
+        return "NO_ACK", "첫 disarm에 대응하는 ack가 ULog에 없음"
+    if an["ramp_problems"]:
+        return "RAMP_MISMATCH", "t_ramp 판별 불일치: " + "; ".join(an["ramp_problems"]) + ". " + _ramp_text(an)
+    if an["band"] is None:
+        return "BAND_UNKNOWN", "대역을 정할 수 없음(ld_p 없음, 또는 rampup 전인데 landed false)"
+    return None
+
+
+def m5_contradicted(an, f):
+    """대역이 정해진 회의 M5 반증 사유 목록(빈 목록이면 없음).
+
+    spoolup, 내부: r_p가 ACCEPTED가 아니거나 공중 분기(Hold로 끝남, ROS 분기 순서의 A나 전환, ULog landed 복귀).
+    경계: 지상 DISARMED로 끝났는데 landed가 돌아왔거나(ROS 또는 ULog) r_p가 ACCEPTED가 아님. 경계의 Hold 종료는
+    반증이 아니다(HOLD_END)."""
+    band = an["band"]
+    ros_aerial = "A" in (f.get("branch_sequence") or "") or bool(f.get("branch_transitions", 0))
+    aerial = ros_aerial or an["ulog_landed_returned"]
+    why = []
+    if band in (BAND_SPOOLUP, BAND_INNER):
+        if f.get("end_reason") == "HOLD":
+            why.append("첫 disarm이 %s 대역에서 처리되었는데 Hold로 끝남" % band)
+        if an["r_p"] != RESULT_ACCEPTED:
+            why.append("첫 disarm이 %s 대역에서 처리되었는데 r_p=%s (ACCEPTED 아님)" % (band, an["r_p"]))
+        if aerial:
+            why.append("%s 대역에서 공중 분기를 거침(ROS 분기 순서 %s, 전환 %s회, ULog landed 복귀 %s)" % (
+                band, f.get("branch_sequence"), f.get("branch_transitions"), an["ulog_landed_returned"]))
+    elif f.get("end_reason") == "DISARMED":
+        if an["r_p"] != RESULT_ACCEPTED:
+            why.append("경계에서 r_p=%s (ACCEPTED 아님)인데 지상 DISARMED로 끝남" % an["r_p"])
+        if aerial:
+            why.append("경계에서 landed가 false가 된 뒤 true로 돌아와 지상 DISARMED로 끝남(ROS 분기 순서 %s, 전환 %s회, "
+                       "ULog landed 복귀 %s)" % (f.get("branch_sequence"), f.get("branch_transitions"),
+                                              an["ulog_landed_returned"]))
+    return why
+
+
 def final_verdict_item3(row, an):
     """(3)의 한 시도의 최종 verdict. (verdict, 사유 목록, kind).
 
     live verdict(row["verdict"])는 ROS 표본으로 정한 것이고 대역은 ULog만 안다. 판정 순서(앞 단계가 이긴다):
-      1 live FAIL(창과 무관한 기준)  2 M3_CONTRADICTED(Hold 뒤 관찰의 ULog landed true)
-      3 관찰 부족과 maybe_landed만 true(INCONCLUSIVE)  4 WINDOW_MISSED
-      5 판정 불가(NO_DISARM, FIRST_DISARM_LOST, ACK_COUNT, NO_ACK, RAMP_MISMATCH, BAND_UNKNOWN: INCONCLUSIVE)
-      6 M5_INCONSISTENT  7 대역별 결과
-    live가 PASS, HOLD_END, WINDOW_MISSED가 아니면(INCONCLUSIVE 등) 2만 ULog로 보고 live를 유지한다.
-    live WINDOW_MISSED는 창과 무관한 기준을 모두 만족한 회이므로 끝난 방식(PASS 또는 HOLD_END)으로 되돌려
-    ULog의 창 판정으로 다시 정한다(ROS 도착이 늦을 수 있어 landed 시점은 ULog가 정본이다).
+      (1) live FAIL(창과 무관한 기준)
+      (2) M3_CONTRADICTED(Hold 뒤 관찰의 ULog landed true)
+      (3) 대역 확정 계산(verdict 없음)
+      (4) 대역이 정해진 회: M5_INCONSISTENT, 이어서 M5_CONTRADICTED(둘 다 1. Hold 뒤 관찰과 창 밖 여부를 보지
+          않는다. live가 INCONCLUSIVE였던 행과 창 밖 회도 거친다)
+      (5) Hold 뒤 관찰 부족, maybe_landed만 true(INCONCLUSIVE)
+      (6) WINDOW_MISSED(제외. (3)의 미확정 사유가 있으면 사유에 남긴다)
+      (7) 대역 미확정 회의 판정 불가(INCONCLUSIVE)
+      (8) 대역별 결과(PASS, 경계의 HOLD_END)
+    live가 PASS, HOLD_END, WINDOW_MISSED, INCONCLUSIVE가 아니면 live를 유지한다. live WINDOW_MISSED는 창과 무관한
+    기준을 모두 만족한 회이므로 끝난 방식(PASS 또는 HOLD_END)으로 되돌려 ULog의 창 판정으로 다시 정한다.
     """
     live = row["verdict"]
     f = row["facts"]
     if live == "FAIL":
         return "FAIL", list(row["reasons"]), ""
+    if live not in ("PASS", "HOLD_END", "WINDOW_MISSED", "INCONCLUSIVE"):
+        return live, list(row["reasons"]), row.get("inconclusive_kind", "")
     if "error" in an:
         return "INCONCLUSIVE", [an["error"]], "ULOG"
     hold = f.get("end_reason") == "HOLD"
@@ -537,50 +628,30 @@ def final_verdict_item3(row, an):
     if live == "WINDOW_MISSED":
         base = "HOLD_END" if hold else "PASS"
     why = hold_landed_true(an.get("hold_obs")) if hold else None
-    if why is not None and base in ("PASS", "HOLD_END", "INCONCLUSIVE"):
+    if why is not None:
         return "M3_CONTRADICTED", [why], ""
-    if base not in ("PASS", "HOLD_END"):
+    undetermined = band_undetermined(an)
+    if undetermined is None:
+        if an["consistency_problems"]:
+            return "M5_INCONSISTENT", list(an["consistency_problems"]), ""
+        why = m5_contradicted(an, f)
+        if why:
+            return "M5_CONTRADICTED", why, ""
+    if base == "INCONCLUSIVE":
         return live, list(row["reasons"]), row.get("inconclusive_kind", "")
     if hold:
         ins = hold_insufficient(an.get("hold_obs"))
         if ins is not None:
             return "INCONCLUSIVE", [ins[1]], ins[0]
     if an["window_missed"]:
-        return "WINDOW_MISSED", ["t_lf %.3f s <= 취소 전송 /clock (t_A 기준 %.3f s). 창 밖" % (
-            an["tlf_minus_tA_s"], (an["cancel_clock_us"] - an["t_A"]) / US)], ""
-    if not an["first_disarm_sent"]:
-        return "INCONCLUSIVE", ["측정기가 disarm을 보내지 않았다(첫 분기가 공중). 대역을 정할 수 없음"], "NO_DISARM"
-    if an["first_disarm_lost"]:
-        return "INCONCLUSIVE", ["first_disarm_lost: 측정기가 처음 보낸 disarm(param1 0)이 ULog vehicle_command에 없음"], \
-            "FIRST_DISARM_LOST"
-    if an["ack_count_mismatch"]:
-        return "INCONCLUSIVE", ["구간의 command 400 %d개와 ack 400 %d개의 수가 다름. 순번 대응을 믿을 수 없음"
-                                % (an["n_cmd400"], an["n_ack400"])], "ACK_COUNT"
-    if an["t_p"] is None:
-        return "INCONCLUSIVE", ["첫 disarm에 대응하는 ack가 ULog에 없음"], "NO_ACK"
-    if an["ramp_problems"]:
-        return "INCONCLUSIVE", ["t_ramp 판별 불일치: " + "; ".join(an["ramp_problems"]) + ". " + _ramp_text(an)], \
-            "RAMP_MISMATCH"
-    band = an["band"]
-    if band is None:
-        return "INCONCLUSIVE", ["대역을 정할 수 없음(ld_p 없음, 또는 rampup 전인데 landed false)"], "BAND_UNKNOWN"
-    if an["consistency_problems"]:
-        return "M5_INCONSISTENT", list(an["consistency_problems"]), ""
-    ros_aerial = "A" in (f.get("branch_sequence") or "") or bool(f.get("branch_transitions", 0))
-    aerial = ros_aerial or an["ulog_landed_returned"]
-    accepted = an["r_p"] == RESULT_ACCEPTED
-    if band in (BAND_SPOOLUP, BAND_INNER) or base == "PASS":
-        # spoolup, 내부, 그리고 지상 DISARMED로 끝난 경계: 받아들여져 분기 전환 없이 끝나야 한다
-        why = []
-        if base == "HOLD_END":
-            why.append("첫 disarm이 %s 대역에서 처리되었는데 Hold로 끝남" % band)
-        if not accepted:
-            why.append("첫 disarm이 %s 대역에서 처리되었는데 r_p=%s (ACCEPTED 아님)" % (band, an["r_p"]))
-        if aerial:
-            why.append("%s 대역에서 공중 분기를 거침(ROS 분기 순서 %s, 전환 %s회, ULog landed 복귀 %s)" % (
-                band, f.get("branch_sequence"), f.get("branch_transitions"), an["ulog_landed_returned"]))
-        if why:
-            return "M5_CONTRADICTED", why, ""
+        reasons = ["t_lf %.3f s <= 취소 전송 /clock (t_A 기준 %.3f s). 창 밖" % (
+            an["tlf_minus_tA_s"], (an["cancel_clock_us"] - an["t_A"]) / US)]
+        if undetermined is not None:
+            reasons.append("대역 미확정(%s): %s" % undetermined)
+        return "WINDOW_MISSED", reasons, ""
+    if undetermined is not None:
+        return "INCONCLUSIVE", [undetermined[1]], undetermined[0]
+    if base == "PASS":
         return "PASS", [], ""
     # 경계에서 Hold로 끝남
     if an["r_p"] not in (RESULT_ACCEPTED, RESULT_TEMP_REJECTED):
@@ -589,18 +660,19 @@ def final_verdict_item3(row, an):
 
 
 def final_verdict_2b(row, hold_obs):
-    """(2)의 2b 최종 verdict(ULog 전체 표본 기준). live가 COND_NOT_REACHED일 때만 바뀐다: landed true가 ULog에
-    있으면 M3_CONTRADICTED(1), ULog 표본이 관찰 구간을 덮지 못하면 INCONCLUSIVE(HOLD_OBS), maybe_landed만
-    true이면 INCONCLUSIVE(MAYBE_LANDED). 그 밖은 live를 유지한다."""
-    if row["verdict"] != "COND_NOT_REACHED":
+    """(2)의 2b 최종 verdict(ULog 전체 표본 기준). ULog에 landed true가 있으면 live가 COND_NOT_REACHED나
+    INCONCLUSIVE여도 M3_CONTRADICTED(1)다. live가 COND_NOT_REACHED이면 ULog 표본이 관찰 구간을 덮지 못할 때
+    INCONCLUSIVE(HOLD_OBS), maybe_landed만 true일 때 INCONCLUSIVE(MAYBE_LANDED)다. 그 밖은 live를 유지한다."""
+    if row["verdict"] not in ("COND_NOT_REACHED", "INCONCLUSIVE"):
         return row["verdict"], list(row["reasons"]), row.get("inconclusive_kind", "")
     why = hold_landed_true(hold_obs)
     if why is not None:
         return "M3_CONTRADICTED", [why], ""
-    ins = hold_insufficient(hold_obs)
-    if ins is not None:
-        return "INCONCLUSIVE", [ins[1]], ins[0]
-    return row["verdict"], list(row["reasons"]), ""
+    if row["verdict"] == "COND_NOT_REACHED":
+        ins = hold_insufficient(hold_obs)
+        if ins is not None:
+            return "INCONCLUSIVE", [ins[1]], ins[0]
+    return row["verdict"], list(row["reasons"]), row.get("inconclusive_kind", "")
 
 
 # ---------------------------------------------------------------------------
@@ -629,6 +701,7 @@ def band_summary(rows, finals, analyses):
     by_band = {b: dict(blank(), by_delay={}) for b in BANDS}
     unclassified = blank()
     plan_ok = {}       # 계획 지연값 -> 계획 대역의 유효 시도 수
+    unclassified_boundary_aerial = 0       # 경계로 계획했으나 대역을 정하지 못한 행 중 공중 분기로 간 회
     for r in rows:
         v = finals.get((r["item"], r["attempt"]), r["verdict"])
         an = analyses.get(r["attempt"]) or {}
@@ -639,6 +712,8 @@ def band_summary(rows, finals, analyses):
                   or bool(an.get("ulog_landed_returned")))
         if band is None:
             targets = [unclassified]
+            if aerial and delay is not None and planned_band(delay) == BAND_BOUNDARY:
+                unclassified_boundary_aerial += 1
         else:
             targets = [by_band[band], by_band[band]["by_delay"].setdefault(str(delay), blank())]
         for t in targets:
@@ -668,7 +743,9 @@ def band_summary(rows, finals, analyses):
         met[b] = d["met"]
     bd = by_band[BAND_BOUNDARY]
     return {"bands": by_band, "unclassified": unclassified, "all_met": all(met.values()),
-            "boundary_aerial_none": bd["valid"] >= 1 and bd["aerial"] == 0}
+            "unclassified_boundary_aerial": unclassified_boundary_aerial,
+            "boundary_aerial_none": (bd["valid"] >= 1 and bd["aerial"] == 0
+                                     and unclassified_boundary_aerial == 0)}
 
 
 BOUNDARY_NO_AERIAL_TEXT = ("경계에서 공중 분기는 생기지 않았다(M5의 경계 문장이 실측으로 받쳐진 것은 아니다)")
@@ -684,7 +761,7 @@ def top_lines(summary):
         if b != BAND_BOUNDARY:
             extra = ", 지연값별 유효 %s, 지연값별 충족 %s" % (d["per_planned_delay_valid"], d["met_per_delay"])
         bound = ""
-        if d["valid"] and d["exit1"] == 0:
+        if d["valid"] and d["exit1"] == 0 and d["hold_end"] == 0:     # Hold로 끝난 회가 있는 대역은 상한을 적지 않는다
             bound = ", 무실패일 때 실패율 95%% 상한 %s" % mj.upper95_text(d["valid"])
         lines.append("  %s: %s (유효 %d/%d, n %d, PASS %d, 제외 %d, 공중 분기 %d%s%s)" % (
             names[b], "충족" if d["met"] else "미달", d["valid"], d["min"], d["n"], d["pass"], d["excluded"],
@@ -760,3 +837,27 @@ def header_lines(delays, attempts, image_keys, takeoff_alt_m=None):
         "대역은 t_p(ULog로 본 첫 disarm의 처리 시각) 기준이다. 내부/경계 경계는 T_lf - %.2f s = %.3f s." % (
             BOUNDARY_MARGIN_S, ref["min_s"] - BOUNDARY_MARGIN_S),
     ]
+
+
+def live_band_lines(rows):
+    """measure.py 단독 결과 절의 (3) 줄: 계획한 지연값의 대역별 집계(ROS 표본 기준의 잠정 값).
+
+    실제 대역은 ULog의 t_p로 정하므로 crosscheck 뒤에만 안다. 여기서는 계획 대역(지연값이 속한 대역)별로 시도,
+    유효(live PASS, FAIL 등과 경계의 HOLD_END), PASS, HOLD_END, 기준과 다른 관측을 세고, 무실패일 때 실패율 95% 상한은
+    Hold로 끝난 회가 없는 대역에만 대역별 유효 수로 적는다(27회 전체의 수가 아니다).
+    """
+    names = {BAND_SPOOLUP: "spoolup", BAND_INNER: "내부", BAND_BOUNDARY: "경계"}
+    out = []
+    for b in BANDS:
+        rs = [r for r in rows if (r.get("injection") or {}).get("delay_s_nominal") is not None
+              and planned_band(r["injection"]["delay_s_nominal"]) == b]
+        valid = sum(1 for r in rs if _is_valid(r["verdict"], b))
+        exit1 = sum(1 for r in rs if r["verdict"] in mj.EXIT1_VERDICTS)
+        hold_end = sum(1 for r in rs if r["verdict"] == "HOLD_END")
+        bound = ("" if not valid or exit1 or hold_end
+                 else ", 무실패일 때 실패율 95%% 상한 %s" % mj.upper95_text(valid))
+        out.append("  계획 대역 %s: 시도 %d, 유효 %d(최소 %d), PASS %d, HOLD_END %d, 기준과 다른 관측 %d, "
+                   "WINDOW_MISSED %d%s" % (
+                       names[b], len(rs), valid, MIN_VALID_BY_BAND[b], sum(1 for r in rs if r["verdict"] == "PASS"),
+                       hold_end, exit1, sum(1 for r in rs if r["verdict"] == "WINDOW_MISSED"), bound))
+    return out

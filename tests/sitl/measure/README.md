@@ -36,6 +36,7 @@ ULog에서 읽는 것(`ulog_min.read_topics`가 파일을 한 번만 읽는다):
 - t_ml, t_lf: t_A 뒤 `maybe_landed`, `landed`가 false인 첫 표본.
 - t_p, r_p: 측정기가 처음 보낸 disarm(`vehicle_command` 400, param1 0, `timestamp` = 보낸 `Px4Timestamp`)에 대응하는 `vehicle_command_ack`의 `timestamp`(처리 시각)와 `result`. 대응은 `timestamp`의 크기가 아니라 ULog에 기록된 command 400과 ack 400의 파일 순서(1:1)로 한다. arm의 재전송 ack가 t_A 뒤 `timestamp`로 남거나 arm ack와 disarm ack의 `timestamp`가 같아도 섞이지 않는다. 근거는 Commander가 주기당 command 하나를 FIFO로 처리하고 ack가 처리 순서대로 기록되는 것이다([소스]. 실측은 없다).
 - first_disarm_lost: 그 disarm의 `vehicle_command`가 ULog에 없음. INCONCLUSIVE(2). 구간의 command 400과 ack 400의 수가 다르면 `ACK_COUNT`로 INCONCLUSIVE(2)이고 이 검사가 일관성 검사보다 앞선다.
+- ack를 찾는 구간은 구간 끝(`ros_end`) 뒤 0.5 s(`ACK_SLACK_US`)까지다. 다음 시도의 시작이 이보다 가까우면(`--settle-s`가 0.5 미만) 다음 시도의 arm ack가 구간에 들어와 `ACK_COUNT`로 빠진다. 쌍 간격 상한 `PAIR_MAX_GAP_US`(100 ms)는 px4-engineer 승인 대상이다(근거 실행은 65쌍이 8-20 ms).
 - ld_p: `timestamp`가 t_p 이하인 마지막 `vehicle_land_detected`.
 
 대역(t_p 기준. 계획한 지연값과 무관):
@@ -48,20 +49,25 @@ ULog에서 읽는 것(`ulog_min.read_topics`가 파일을 한 번만 읽는다):
 
 내부 시간대인데 ld_p `landed`가 false이면 경계로 분류하고 "T_lf가 앞선 최솟값보다 작다"는 관측으로 기록한다(`t_lf_below_ref`). 창 밖(`WINDOW_MISSED`)은 t_lf가 측정기의 취소 전송 `/clock` 이하인 회다.
 
-최종 verdict(crosscheck 뒤). 판정 순서는 아래와 같고 앞 단계가 이긴다(px4-engineer 승인 대상):
+최종 verdict(crosscheck 뒤). 판정 순서는 아래와 같고 앞 단계가 이긴다:
 
 1. 창과 무관한 기준을 어긴 회(`measure.py` 단독의 FAIL, 1).
-2. `M3_CONTRADICTED`(1): Hold 뒤 60 s 관찰(item3의 Hold 종료와 item2의 2b)의 ULog 전체 표본에 `landed` true가 있음. ULog 표본이 부족해도 true가 보이면 이 단계다.
-3. INCONCLUSIVE(2): Hold 뒤 관찰의 ULog `vehicle_land_detected` 표본이 구간을 덮지 못함(0개 포함, `HOLD_OBS`)이거나 `maybe_landed`만 true(`MAYBE_LANDED`. 기록만 한다). 덮었는지의 기준은 구간 앞의 마지막 표본과 구간 끝을 포함한 이웃 표본 사이 최대 간격 2 s 이하이다(`HOLD_OBS_MAX_GAP_US`. 근거 실행은 60 s에 60-61개, 값이 안 바뀌면 1 Hz. px4-engineer 승인 대상).
-4. `WINDOW_MISSED`: t_lf가 측정기 취소 전송 `/clock` 이하(제외).
-5. INCONCLUSIVE(2) 판정 불가: `NO_DISARM`(측정기가 disarm을 보내지 않음), `FIRST_DISARM_LOST`, `ACK_COUNT`, `NO_ACK`, `RAMP_MISMATCH`(t_ramp 판별 불일치. in_ground_effect, takeoff_state, 추력 하락의 시각을 사유에 남긴다), `BAND_UNKNOWN`.
-6. `M5_INCONSISTENT`(1): 첫 disarm에 대응한 ack의 수락 여부가 `maybe_landed`와 맞지 않음. r_p가 ACCEPTED이면 t_p <= t_ml + 12 ms, TEMPORARILY_REJECTED이면 t_p >= t_ml. 그 밖의 result는 대상이 아니다. 첫 disarm이 유실된 회에는 적용하지 않는다. 거부 때의 `Disarming denied: not landed` logged message는 판정에 쓰지 않고 유무와 t_p와의 시각 차이만 기록한다(`log_denied_dt_us`).
-7. 대역별 결과.
+2. `M3_CONTRADICTED`(1): Hold 뒤 60 s 관찰(item3의 Hold 종료와 item2의 2b)의 ULog 전체 표본에 `landed` true가 있음. 관찰 구간 직전의 마지막 표본은 구간 시작 시점의 값이라 그것이 true여도 센다. ULog 표본이 부족해도 true가 보이면 이 단계다. 2b는 `measure.py` 단독이 INCONCLUSIVE였어도 ULog에 `landed` true가 있으면 1이다.
+3. 대역 확정 계산(verdict 없음). 아래 중 하나면 대역 미확정이다: `NO_DISARM`(측정기가 disarm을 보내지 않음), `FIRST_DISARM_LOST`(그 command가 ULog에 없음), `ACK_COUNT`(command 400과 ack 400의 수가 다름), `ACK_PAIR`(대응한 쌍의 ack가 command보다 앞이거나 간격이 `PAIR_MAX_GAP_US`(100 ms)를 넘음), `NO_ACK`, `RAMP_MISMATCH`(t_ramp 판별 불일치. in_ground_effect, takeoff_state, 추력 하락의 시각을 사유에 남긴다), `BAND_UNKNOWN`.
+4. 대역이 정해진 회: `M5_INCONSISTENT`, 이어서 `M5_CONTRADICTED`(둘 다 1). Hold 뒤 관찰이 모자라도, 창 밖이어도, `measure.py` 단독이 INCONCLUSIVE였어도 이 단계를 거친다.
+5. INCONCLUSIVE(2): Hold 뒤 관찰의 ULog `vehicle_land_detected` 표본이 구간을 덮지 못함(0개 포함, `HOLD_OBS`)이거나 `maybe_landed`만 true(`MAYBE_LANDED`. 기록만 한다). 덮었는지의 기준은 구간 앞의 마지막 표본과 구간 끝을 포함한 이웃 표본 사이 최대 간격 2 s 이하이다(`HOLD_OBS_MAX_GAP_US`. 근거 실행은 60 s에 60-61개, 최대 간격 1.004 s).
+6. `WINDOW_MISSED`: t_lf가 측정기 취소 전송 `/clock` 이하(제외). 3단계에서 대역이 미확정이었으면 그 사유(예: `RAMP_MISMATCH`의 근거 시각)를 사유에 함께 남기고 제외를 유지한다.
+7. 대역 미확정 회의 판정 불가(INCONCLUSIVE, 2).
+8. 대역별 결과(PASS, 경계의 `HOLD_END`).
+
+그래서 대역이 정해진 회의 기준과 다른 관측(1)은 Hold 뒤 관찰이 모자라도 올라가고, 관찰이 모자라 판정하지 않는 것은 그런 관측이 없는 회뿐이다. 일관성 검사와 landed 복귀는 창 밖 회에도 본다. 첫 disarm이 유실된 회는 대응하는 ack가 없으므로 수락 여부를 보지 않는다.
+
+`M5_INCONSISTENT`(1): 첫 disarm에 대응한 ack의 수락 여부가 처리 시각 앞 12 ms 구간 `[t_p - 12 ms, t_p]`의 `vehicle_land_detected` 상태와 맞지 않음. 구간 직전(시작 시각 이하) 마지막 표본의 값이 구간 시작 상태이고 구간 안의 표본이 이어진다. ACCEPTED인데 구간 내내 `landed`와 `maybe_landed`가 모두 false였거나, TEMPORARILY_REJECTED인데 구간 내내 둘 중 하나가 true였으면 맞지 않는 것이다. `maybe_landed`가 처음 false가 된 시각(t_ml) 하나와 견주지 않으며 t_ml과 t_p - t_ml은 기록만 한다. 구간 안에서 두 분류 사이로 값이 바뀐 회(예: `maybe_landed`가 false로 갔다가 true로 돌아옴)는 어느 결과도 불일치가 아니다. 거부 때의 `Disarming denied: not landed` logged message는 판정에 쓰지 않고 유무와 t_p와의 시각 차이(`log_denied_dt_us`)만 기록한다.
 
 대역별 결과:
 
-- spoolup, 내부: 분기 전환 없이 지상 DISARMED이고 r_p가 ACCEPTED이며 기존 기준을 만족하면 PASS. 어긋나면 `M5_CONTRADICTED`(1): 첫 disarm이 이 두 대역에서 처리되었는데 r_p가 ACCEPTED가 아니거나 공중 분기(Hold로 끝남, 지상 -> 공중 -> 지상 포함)로 간 회. `M5_CONTRADICTED`는 대역 문장이 반증된 것이고, `M5_INCONSISTENT`는 PX4의 disarm 수락 규칙과 ULog의 시각이 맞지 않는 것이다.
-- 경계: r_p가 ACCEPTED이고 분기 전환 없이 지상 DISARMED로 끝날 때만 PASS. `landed`가 false가 된 뒤 true로 돌아와 지상 DISARMED로 끝난 회(공중 -> 지상 복귀, 첫 disarm이 거부된 뒤 재전송이 받아들여진 회, r_p가 TEMPORARILY_REJECTED인데 지상 DISARMED로 끝난 회)는 `M5_CONTRADICTED`(1)이다. 판별은 ROS(분기 순서에 A, 전환 횟수)와 ULog(t_lf 뒤 DISARMED 전의 `landed` true 표본) 둘 다 쓴다. Hold로 끝나면 `HOLD_END`(2)이고 기계가 통과로 올리지 않는다. 그런 회가 있으면 종료 코드는 0이 아니고 architect가 ULog의 선후 기록으로 판정한다. 판정 입력으로 r_p, t_p >= t_ml 여부, logged message 유무와 시각 차이, t_p - t_ml, ld_p의 네 필드(`landed`, `maybe_landed`, `ground_contact`, `in_ground_effect`), t_p 시각의 추력을 `bands_item3.json`에 기록한다.
+- spoolup, 내부: 분기 전환 없이 지상 DISARMED이고 r_p가 ACCEPTED이며 기존 기준을 만족하면 PASS. 어긋나면 `M5_CONTRADICTED`(1): 첫 disarm이 이 두 대역에서 처리되었는데 r_p가 ACCEPTED가 아니거나 공중 분기(Hold로 끝남, 지상 -> 공중 -> 지상 포함)로 간 회. `M5_CONTRADICTED`는 대역 문장이 반증된 것이고, `M5_INCONSISTENT`는 PX4의 disarm 수락 규칙과 ULog의 상태가 맞지 않는 것이다.
+- 경계: r_p가 ACCEPTED이고 분기 전환 없이 지상 DISARMED로 끝날 때만 PASS. `landed`가 false가 된 뒤 true로 돌아와 지상 DISARMED로 끝난 회(공중 -> 지상 복귀, 첫 disarm이 거부된 뒤 재전송이 받아들여진 회)와 r_p가 ACCEPTED가 아닌데 지상 DISARMED로 끝난 회는 `M5_CONTRADICTED`(1)이다. 판별은 ROS(분기 순서에 A, 전환 횟수)와 ULog(t_lf 뒤 DISARMED 전의 `landed` true 표본) 둘 다 쓴다. Hold로 끝나면 `HOLD_END`(2)이고 기계가 통과로 올리지 않는다. 그런 회가 있으면 종료 코드는 0이 아니고 architect가 ULog의 선후 기록으로 판정한다. 판정 입력으로 r_p, t_p - t_ml, 구간의 상태 목록(`ld_states_before_tp`), logged message 유무와 시각 차이, ld_p의 네 필드(`landed`, `maybe_landed`, `ground_contact`, `in_ground_effect`), t_p 시각의 추력을 `bands_item3.json`에 기록한다.
 - 창과 무관한 기준(OFFBOARD가 아닌 ARMED 0개, 정리 총 소요 9 s 미만, 상승 0.2 m 이하, 표의 종료)과 `measure.py` 단독 판정 함수는 그대로다.
 
 `measure.py` 단독 verdict는 ROS 표본이 근거인 잠정 판정이다. (3)의 대역과 최종 verdict는 `crosscheck.py` 뒤에만 정해진다(`summary_item3.txt` 맨 위의 대역 충족 여부 절과 끝의 최종 판정 절, `final_summary.json`).
