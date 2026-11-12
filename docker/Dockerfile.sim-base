@@ -12,9 +12,12 @@
 # - ARG 이름은 docker/versions.env의 항목 이름과 같다.
 #     GZ_RELEASE          Gazebo 릴리스 이름. 예: harmonic -> apt 패키지 gz-harmonic
 #     PX4_GZ_MODELS_REF   PX4-gazebo-models 커밋 SHA(40자리 전체)
+#     GZ_APT_KEY_FPR      OSRF apt 서명 key의 주 key 지문(40자리 16진수)
+#     GZ_SIM_VERSION      기대하는 gz-sim upstream 버전. 예: 8.15.0 (deb revision 없이)
 #   versions.env는 이 파일이 만들지 않는다. 값이 비면 빌드가 실패한다.
 # - ros-base는 Ubuntu 24.04(noble), amd64, root 사용자이며 apt를 쓸 수 있다.
 #   curl, git, gnupg 유무는 가정하지 않고 여기서 설치한다.
+# - bake의 sim-base target이 GZ_APT_KEY_FPR, GZ_SIM_VERSION을 넘긴다(devops-engineer).
 #
 # 결과물
 # - /opt/px4-gz/{models,worlds,server.config,simulation-gazebo}
@@ -38,6 +41,8 @@ FROM ${BASE_IMAGE}
 
 ARG GZ_RELEASE
 ARG PX4_GZ_MODELS_REF
+ARG GZ_APT_KEY_FPR
+ARG GZ_SIM_VERSION
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -48,6 +53,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 #    키: https://packages.osrfoundation.org/gazebo.gpg
 #        -> /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
 #    목록: /etc/apt/sources.list.d/gazebo-stable.list
+#    gazebo.gpg URL은 내용이 고정되지 않으므로(만료일 연장 등) 받은 파일에 주 key가
+#    하나뿐이며 그 지문이 versions.env의 GZ_APT_KEY_FPR과 같은지 검사한다(ros-base의
+#    ros.key 검사와 같은 방식). 다르면 저장소를 등록하기 전에 실패한다.
 #    lsb_release 대신 /etc/os-release의 VERSION_CODENAME을 쓴다(lsb-release 미설치 대비).
 #    gz-<릴리스> 메타 패키지는 -dev 헤더까지 끌어온다. px4 builder의 gz_bridge가
 #    find_package로 OSRF 헤더를 찾기 때문에 런타임 패키지만으로 줄이지 않는다.
@@ -64,13 +72,22 @@ ENV DEBIAN_FRONTEND=noninteractive
 #    - libqt5svg5: Qt SVG 이미지 플러그인. 없으면 gz sim -g의 툴바와 플러그인 아이콘
 #      (SVG)을 읽지 못해 아이콘이 비고 경고가 찍힌다. gz 패키지가 끌어오지 않는다.
 RUN test -n "${GZ_RELEASE}" || { echo "GZ_RELEASE is empty" >&2; exit 1; } \
+ && test -n "${GZ_APT_KEY_FPR}" || { echo "GZ_APT_KEY_FPR is empty (versions.env 확인)" >&2; exit 1; } \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
       git \
+      gnupg \
  && curl -fsSL https://packages.osrfoundation.org/gazebo.gpg \
       --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg \
+ && gnupg_home="$(mktemp -d)" \
+ && fpr="$(GNUPGHOME="${gnupg_home}" gpg --show-keys --with-colons /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg \
+      | awk -F: '$1 == "pub" { n++; want = 1; next } $1 == "fpr" && want { print; want = 0 } END { if (n != 1) exit 1 }' \
+      | cut -d: -f10)" \
+ && rm -rf "${gnupg_home}" \
+ && echo "gazebo.gpg fingerprint=${fpr} expected=${GZ_APT_KEY_FPR}" \
+ && { test "${fpr}" = "${GZ_APT_KEY_FPR}" || { echo "gazebo.gpg 지문이 versions.env의 GZ_APT_KEY_FPR과 다르다" >&2; exit 1; }; } \
  && . /etc/os-release \
  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] https://packages.osrfoundation.org/gazebo/ubuntu-stable ${VERSION_CODENAME} main" \
       > /etc/apt/sources.list.d/gazebo-stable.list \
@@ -87,6 +104,24 @@ RUN test -n "${GZ_RELEASE}" || { echo "GZ_RELEASE is empty" >&2; exit 1; } \
       libqt5svg5 \
  && rm -rf /var/lib/apt/lists/* \
  && gz sim --versions
+
+# 1-1. gz-sim 버전 대조. apt는 정확한 판을 pin하지 않는다(OSRF 저장소에서 옛 판이 빠지면
+#      build가 깨진다). 대신 설치된 판이 versions.env의 GZ_SIM_VERSION과 같은 upstream
+#      버전인지 단정한다. docs/interface.md 시간 기준 절이 이 판의 소스 행을 근거로 쓴다.
+#      - 패키지: libgz-sim<major>. major는 GZ_SIM_VERSION의 첫 자리에서 얻는다(harmonic은 8).
+#        GZ_RELEASE와 major가 어긋나면 패키지가 없어 dpkg-query가 실패한다.
+#      - dpkg 판은 <upstream>-<revision>이다(예: 8.15.0-1~noble). revision은 패키징 재빌드와
+#        배포판 접미사라 소스가 같으므로 비교에서 뺀다. "<GZ_SIM_VERSION>-" 접두로 비교해
+#        8.15.0이 8.15.0.1이나 8.15.01과 맞지 않게 한다. epoch가 붙으면 맞지 않아 실패한다.
+#      - GZ_SIM_VERSION은 X.Y.Z 형식만 받는다(deb 판 전체를 넣는 실수를 막는다).
+RUN test -n "${GZ_SIM_VERSION}" || { echo "GZ_SIM_VERSION is empty (versions.env 확인)" >&2; exit 1; } \
+ && printf '%s\n' "${GZ_SIM_VERSION}" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+' \
+ || { echo "GZ_SIM_VERSION=${GZ_SIM_VERSION} 은 X.Y.Z 형식이 아니다(deb revision 없이 쓴다)" >&2; exit 1; } \
+ && pkg="libgz-sim${GZ_SIM_VERSION%%.*}" \
+ && ver="$(dpkg-query -W -f='${Version}' "${pkg}")" \
+ && echo "${pkg} installed=${ver} expected=${GZ_SIM_VERSION}-*" \
+ && case "${ver}" in "${GZ_SIM_VERSION}"-*) ;; \
+      *) echo "${pkg} 설치 판 ${ver}이 versions.env의 GZ_SIM_VERSION=${GZ_SIM_VERSION}과 다르다. OSRF apt에 새 판이 올라왔다. versions.env를 올리고 docs/interface.md 시간 기준 절의 SimulationRunner.cc 행 번호를 다시 확인하라" >&2; exit 1 ;; esac
 
 # 2. PX4-gazebo-models를 고정 커밋으로 받는다.
 #    https://github.com/PX4/PX4-gazebo-models
@@ -131,4 +166,5 @@ ENV GZ_SIM_RESOURCE_PATH=/opt/px4-gz/models:/opt/px4-gz/worlds \
 
 # 5. 빌드 버전 기록. 스모크가 docker/versions.env와 대조한다(architect 결정).
 ENV IDSIM_BUILD_GZ_RELEASE=${GZ_RELEASE} \
-    IDSIM_BUILD_PX4_GZ_MODELS_REF=${PX4_GZ_MODELS_REF}
+    IDSIM_BUILD_PX4_GZ_MODELS_REF=${PX4_GZ_MODELS_REF} \
+    IDSIM_BUILD_GZ_SIM_VERSION=${GZ_SIM_VERSION}
