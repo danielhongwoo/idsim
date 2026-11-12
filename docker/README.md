@@ -106,7 +106,7 @@ python3 tools/ci/build_images.py --mode load
 python3 tools/ci/build_images.py --mode load px4
 ```
 
-이미지 key는 그 이미지의 Dockerfile, bake 정의, COPY하는 파일, `versions.env` 중 그 Dockerfile이 쓰는 줄, 베이스 이미지의 key에서 계산한다. key가 같으면 같은 이미지로 보고, CI는 레지스트리(`ghcr.io/danielhongwoo/idsim/<이미지>:<key>`)에 같은 key가 있으면 빌드를 건너뛴다. 계산 근거는 아래 명령으로 볼 수 있다.
+이미지 key는 그 이미지의 Dockerfile, bake 정의(tags, 공백, 주석을 뺀 빌드 입력), COPY하는 파일, `versions.env` 중 그 Dockerfile이 쓰는 줄, 베이스 이미지의 key에서 계산한다. key가 같으면 같은 이미지로 보고, CI는 레지스트리(`ghcr.io/danielhongwoo/idsim/<이미지>:<key>`)에 같은 key가 있으면 빌드를 건너뛴다. 계산 근거는 아래 명령으로 볼 수 있다.
 
 ```
 python3 tools/ci/image_keys.py --explain px4
@@ -125,7 +125,7 @@ python3 tools/ci/image_keys.py --explain px4
 | `tools/ros_ws.sh clean` | `ros_ws/build`, `install`, `log` 삭제 |
 | `tools/ros_ws.sh shell` | 같은 조건의 대화형 bash |
 
-컨테이너는 `--user <호스트 uid:gid>`, `--network none`, `HOME=/tmp/idsim-home`, `CYCLONEDDS_URI=` 비움, `ROS_DOMAIN_ID=99`로 돈다. 단위 테스트가 같은 호스트의 개발 스택(도메인 20 + k)과 섞이지 않게 하는 조건이다. 실행 전에 이미지에 있는 `IDSIM_BUILD_*` 값만(ENV가 없는 옛 이미지는 통과한다)(`PX4_MSGS_REF`, `PX4_ROS_COM_REF`, `LLVM_MAJOR`, `FOXGLOVE_BRIDGE_VERSION`)를 `versions.env`와 대조해 다르면 중단하므로, `versions.env`를 올린 뒤에는 `python3 tools/ci/build_images.py --mode load ros-ws`로 이미지를 다시 빌드한다. foxglove_bridge는 ROS apt가 최신 빌드 하나만 남겨 정확한 판을 pin할 수 없어, 설치한 dpkg 판이 `FOXGLOVE_BRIDGE_VERSION-` 접두로 시작하는지 빌드에서 단정하고 `IDSIM_BUILD_FOXGLOVE_BRIDGE_VERSION`으로 남긴다. 병렬 수는 `IDSIM_JOBS`(기본 min(코어 수, 4))로 바꾼다. 스택이 떠 있을 때 다시 빌드하면 실행 중인 노드의 `.so`가 바뀌므로 경고가 나온다.
+컨테이너는 `--user <호스트 uid:gid>`, `--network none`, `HOME=/tmp/idsim-home`, `CYCLONEDDS_URI=` 비움, `ROS_DOMAIN_ID=99`로 돈다. 단위 테스트가 같은 호스트의 개발 스택(도메인 20 + k)과 섞이지 않게 하는 조건이다. 실행 전에 이미지에 있는 `IDSIM_BUILD_*` 값(`PX4_MSGS_REF`, `PX4_ROS_COM_REF`, `LLVM_MAJOR`, `FOXGLOVE_BRIDGE_VERSION`)만 `versions.env`와 대조해 다르면 중단하고(ENV가 없는 옛 이미지는 통과한다), 그래서 `versions.env`를 올린 뒤에는 `python3 tools/ci/build_images.py --mode load ros-ws`로 이미지를 다시 빌드한다. foxglove_bridge는 ROS apt가 최신 빌드 하나만 남겨 정확한 판을 pin할 수 없어, 설치한 dpkg 판이 `FOXGLOVE_BRIDGE_VERSION-` 접두로 시작하는지 빌드에서 단정하고 `IDSIM_BUILD_FOXGLOVE_BRIDGE_VERSION`으로 남긴다. 병렬 수는 `IDSIM_JOBS`(기본 min(코어 수, 4))로 바꾼다. 스택이 떠 있을 때 다시 빌드하면 실행 중인 노드의 `.so`가 바뀌므로 경고가 나온다.
 
 `colcon test`는 테스트가 실패해도 0을 돌려주고 `colcon test-result`는 빌드가 실패해도 "0 tests"로 0을 돌려준다. 그래서 `test`는 `--return-code-on-test-failure`를 쓰고 테스트 수가 0이면 실패시킨다. 단위 층에는 재시도를 두지 않는다.
 
@@ -135,7 +135,7 @@ clang-format 검사는 CI lint job이 `LINT_PYTHON_IMAGE`에 pip `clang-format==
 
 이미지 빌드의 우분투 apt 미러는 `versions.env`의 `UBUNTU_APT_MIRROR`(기본 `http://kr.archive.ubuntu.com/ubuntu`)이다. `ros-base`와 `xrce-agent`(build 단계)가 첫 `apt-get update` 앞에서 `/etc/apt/sources.list.d/ubuntu.sources`의 archive와 security 주소를 이 값으로 바꾸고, `sim-base`, `px4`, `ros-ws`는 `ros-base`를 상속한다. packages.ros.org와 packages.osrfoundation.org는 바꾸지 않는다. kr 미러는 noble, noble-updates, noble-security를 모두 제공한다.
 
-이 값은 이미지 key에 들어가지 않는다(`tools/ci/image_keys.py`의 `KEY_EXCLUDED_ARGS`). `ubuntu.sources`는 이미지에 남아 미러별로 바이트가 다르지만 런타임이 apt를 쓰지 않으므로 같은 이미지로 본다. 미러 동기화 시차로 패키지 버전이 조금 다를 수 있으나, 이미지 key는 원래 apt 패키지 버전을 고정하지 않는다.
+이 값은 이미지 key에 들어가지 않는다(`tools/ci/image_keys.py`의 `KEY_EXCLUDED_ARGS`). `ubuntu.sources`는 이미지에 남아 미러별로 바이트가 다르지만 런타임이 apt를 쓰지 않으므로 같은 이미지로 본다. 미러 동기화 시차로 패키지 버전이 조금 다를 수 있으나, 이미지 key는 원래 apt 패키지 버전을 고정하지 않는다. 다만 빌드 시점에 gz-sim 판(`GZ_SIM_VERSION`)과 foxglove_bridge 판(`FOXGLOVE_BRIDGE_VERSION`)을 `versions.env`와 대조하므로 이 둘은 막힌다.
 
 다른 미러를 쓰려면 같은 이름의 환경변수를 주고 빌드한다. 환경변수가 `versions.env`보다 우선한다(`build_images.py` 경로에 한함. `versions.env`를 source하는 직접 bake 경로에서는 `versions.env`가 이긴다). 값을 바꿔도 이미 캐시된 `apt` 레이어는 인자가 달라진 단계부터 다시 만들어진다.
 

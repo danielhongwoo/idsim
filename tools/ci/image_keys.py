@@ -3,13 +3,14 @@
 
 key는 이미지마다 다음을 순서대로 이어 붙인 텍스트의 SHA-256 앞 16자리다.
   1. key 방식 이름 (SCHEME). 계산 방식을 바꾸면 이 값을 올려 모든 key를 바꾼다.
-  2. 그 이미지 Dockerfile의 바이트 해시
-  3. docker/docker-bake.hcl에서 그 이미지 target의 빌드 입력을 정규화한 텍스트 (아래 정규화 규칙).
+  2. 이미지 이름 (image <이름>)
+  3. 그 이미지 Dockerfile의 바이트 해시
+  4. docker/docker-bake.hcl에서 그 이미지 target의 빌드 입력을 정규화한 텍스트 (아래 정규화 규칙).
      dockerfile, context, platforms, args, contexts만 넣는다. tags와 공백, 주석, 항목 순서는 넣지 않는다.
-  4. Dockerfile이 COPY/ADD로 빌드 컨텍스트(docker/)에서 가져오는 파일의 해시
-  5. docker/versions.env 중 그 Dockerfile이 ARG로 선언한 이름의 줄 (NAME=값)
-  6. 베이스 이미지의 key (bake contexts의 "target:<이름>"에서 읽는다)
-베이스 key가 6번으로 들어가므로 ros-base가 바뀌면 sim-base, px4, ros-ws key가 모두 바뀐다.
+  5. Dockerfile이 COPY/ADD로 빌드 컨텍스트(docker/)에서 가져오는 파일의 해시
+  6. docker/versions.env 중 그 Dockerfile이 ARG로 선언한 이름의 줄 (NAME=값)
+  7. 베이스 이미지의 이름과 key (bake contexts의 "target:<이름>"에서 읽는다)
+베이스 key가 7번으로 들어가므로 ros-base가 바뀌면 sim-base, px4, ros-ws key가 모두 바뀐다.
 xrce-agent는 베이스 target이 없어 독립이다.
 
 bake 정규화 규칙. 근거: key는 "같은 key면 같은 이미지"를 뜻해야 하므로 이미지 바이트에 영향을 주는
@@ -18,10 +19,10 @@ bake 정규화 규칙. 근거: key는 "같은 key면 같은 이미지"를 뜻해
   - tags는 뺀다. 이미지 이름이지 내용이 아니다 (REGISTRY, KEY_* 변수도 tags에만 쓰인다).
   - 공백, 주석, 항목 순서는 뺀다. args와 contexts는 이름순으로 "이름=식" 한 줄씩 쓴다.
   - args에서 KEY_EXCLUDED_ARGS의 이름은 뺀다.
-  - args의 식은 변수 이름 그대로 해시한다. 변수의 값은 5번(versions.env)이 따로 넣는다.
+  - args의 식은 변수 이름 그대로 해시한다. 변수의 값은 6번(versions.env)이 따로 넣는다.
 
 key에 들어가지 않는 것: UBUNTU_APT_MIRROR(KEY_EXCLUDED_ARGS).
-key에 들어가지 않는 것(빌드 시점 외부 상태): apt 저장소의 패key지 버전, pip 인덱스, 브랜치 이름으로
+key에 들어가지 않는 것(빌드 시점 외부 상태): apt 저장소의 패키지 버전, pip 인덱스, 브랜치 이름으로
 받는 소스. 이것들이 바뀌어도 key는 그대로이며, 같은 key의 이미지는 레지스트리에 한 번만 올라간다.
 
 사용법
