@@ -18,7 +18,8 @@
 #   요약     환경변수 GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
 #   산출물   artifacts/runs/<실행 id>/ 아래. 실패하면 이 디렉터리 전체를 올린다.
 #            compose.yaml, stack.json, params/, px4-N/log/*.ulg, ros_log/, 서비스별 로그,
-#            sitl/ (junit.xml, trace.jsonl, 그래프 snapshot, verdict, summary.md)
+#            sitl/ (junit.xml, trace.jsonl, verdict.json, summary.md, steps.tsv, 원시 표본과 ULog 교차 확인 결과,
+#            logs/<서비스>.log. 전체 목록은 tests/sitl/README.md)
 #            성공하면 sitl/junit.xml, sitl/trace.jsonl, sitl/summary.md만 올린다.
 #   소유     artifacts/runs/ 아래 파일은 모두 호스트 사용자 소유다.
 name: sitl
