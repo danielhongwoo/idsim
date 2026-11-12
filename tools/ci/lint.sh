@@ -228,7 +228,7 @@ check_px4_api() {
   # /fmu 토픽 이름과 idsim_common 내부 이름은 idsim_common 안에서만 쓴다(1a 4단계 쟁점 2, git 이력).
   # 다른 패키지가 문자열을 직접 쓰면 공개 API의 발행 허용 목록을 우회한다. 실수 방지 수준이며 보안 경계가 아니다.
   # 대상은 ros_ws/src 아래 idsim_common 밖의 C++ 파일, .py 파일(launch 포함), yaml 파일(params, remap)과
-  # 생성기 golden의 params 파일이다(tests/의 Python 판정 코드는 대상 아님).
+  # 생성기 golden의 params 파일이다. tests/sitl/, tests/support/는 test-engineer의 예외 목록이 정해진 뒤 연결한다(decisions 쟁점 8).
   local files=() f
   while IFS= read -r f; do
     case "$f" in ros_ws/src/idsim_common/*) ;; *) files+=("$f") ;; esac

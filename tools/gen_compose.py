@@ -691,6 +691,8 @@ def build(fleet_norm, ctx):
     runner.update({
         # 1회 실행용(compose run). 인자 없는 up --wait가 기다리지 않도록 프로필 tools에 둔다
         "profiles": ["tools"],
+        # 상주는 아니지만 PID 1인 pytest가 wrapper의 SIGTERM을 버리지 않게 init을 둔다
+        "init": True,
         "working_dir": REPO_IN_CONTAINER,
         "command": ["true"],
         "depends_on": _healthy(*ops_services) if standalone else _healthy(px4_services[0]),
@@ -924,7 +926,7 @@ def assert_invariants(compose, stack):
     ros_ws_image = stack["images"]["ros_ws"]
     for name, svc in services.items():
         resident_ros_ws = svc.get("image") == ros_ws_image and not service_profiles(svc)
-        if (resident_ros_ws or name == "xrce-agent") and svc.get("init") is not True:
+        if (resident_ros_ws or name in ("xrce-agent", "runner")) and svc.get("init") is not True:
             problems.append(f"{name}: 상주 서비스인데 init: true가 아니다")
     ops_names = stack["services"]["ops"]
     for v in stack["vehicles"]:

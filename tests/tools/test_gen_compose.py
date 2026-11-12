@@ -462,15 +462,14 @@ OPS_CASES = [
 
 @pytest.mark.parametrize("kw", OPS_CASES)
 def test_resident_ros_ws_services_have_init(kw):
-    """성질 1: 상주 ros-ws 서비스(bridge, ops-N)와 xrce-agent는 init: true. 1회 실행용 runner는 상주가 아니다."""
+    """성질 1: 상주 ros-ws 서비스(bridge, ops-N)와 xrce-agent는 init: true. 1회 실행용 runner도 명시해서 init: true."""
     compose, stack, _ = gen(**kw)
     services = compose["services"]
     ros_ws = stack["images"]["ros_ws"]
     resident = [n for n, svc in services.items() if svc["image"] == ros_ws and not svc.get("profiles")]
     assert resident == ["bridge"] + stack["services"]["ops"]
-    for name in resident + ["xrce-agent"]:
+    for name in resident + ["xrce-agent", "runner"]:
         assert services[name]["init"] is True, name
-    assert "init" not in services["runner"]
 
 
 @pytest.mark.parametrize("kw", OPS_CASES)
@@ -559,6 +558,7 @@ def test_assert_invariants_catches_ops_tampering():
         lambda c, st: c["services"]["ops-1"].update(init=False),
         lambda c, st: c["services"]["bridge"].pop("init"),
         lambda c, st: c["services"]["xrce-agent"].pop("init"),
+        lambda c, st: c["services"]["runner"].pop("init"),
         lambda c, st: c["services"]["ops-1"].update(stop_signal="SIGTERM"),
         lambda c, st: c["services"]["ops-1"].update(stop_grace_period="30s"),
         lambda c, st: st["vehicles"][0].update(executor_node="/px4_1/other"),

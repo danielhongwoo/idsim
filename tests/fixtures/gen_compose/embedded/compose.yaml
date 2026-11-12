@@ -86,6 +86,7 @@ services:
           create_host_path: false
     profiles:
       - tools
+    init: true
     working_dir: /opt/idsim
     command:
       - 'true'
