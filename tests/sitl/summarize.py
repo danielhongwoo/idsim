@@ -21,7 +21,7 @@
   summarize.py repeat --out <디렉터리> <verdict.json>...
       repeat_summary.tsv와 armed_criterion.json(Executor 경유 부류)을 쓴다. 종료 코드는 항상 0이다(통과 여부는 회차의 종료 코드).
   summarize.py ulog <실행 디렉터리>
-      px4-N/log/*.ulg가 메시지 경계에서 끝나는지 sitl/ulog_check.txt에 적는다.
+      px4-N/log/*.ulg가 메시지 경계에서 끝나는지 ulog<TAB>... 줄로 stdout에 낸다(run_sitl.sh가 steps.tsv에 붙인다).
   summarize.py ops-running <compose ps -a --format json 파일> <ops 서비스>...
       stop 전에 running이 아닌 ops-N이 있으면 종료 코드 1.
 """
@@ -87,18 +87,16 @@ def cmd_repeat(a):
 
 
 def cmd_ulog(a):
+    """px4-N/log/*.ulg가 메시지 경계에서 끝나는지를 steps.tsv에 붙일 "ulog<TAB>..." 줄로 stdout에 낸다(새 파일을 만들지 않는다)."""
     run = Path(a.run_dir)
     lines = []
     for p in sorted(run.glob("px4-*/log/**/*.ulg")):
         r = ss.ulog_tail_check(p.read_bytes())
-        lines.append("%s bytes=%s messages=%s truncated=%s ok=%s" % (
+        lines.append("ulog\t%s bytes=%s messages=%s truncated=%s ok=%s" % (
             p.relative_to(run), r.get("bytes"), r.get("messages"), r.get("truncated"), r["ok"]))
     if not lines:
-        lines.append("ulg 파일이 없다")
-    out = run / a.sitl_dir
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "ulog_check.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print("\n".join(lines), file=sys.stderr)
+        lines.append("ulog\tulg 파일이 없다")
+    print("\n".join(lines))
     return 0
 
 

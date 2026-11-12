@@ -38,7 +38,7 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 `artifacts/runs/<실행 id>/` 아래. 실패하면 이 디렉터리 전체를, 성공하면 `sitl/junit.xml`, `sitl/trace.jsonl`, `sitl/summary.md`를 CI가 올린다.
 
 - `compose.yaml`, `stack.json`, `params/`, `px4-N/log/*.ulg`, `ros_log/`
-- `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록), `summary.md`, `steps.tsv`(단계별 벽시계 초와 끝의 `rc_*` 종료 코드 줄), `raw_status_A.jsonl`, `armed_a.json`, `ulog_check.txt`(ULog가 메시지 경계에서 끝나는지), `ps_before_stop.jsonl`(stop 전 서비스 상태), `stop_exit.txt`(stop 뒤 서비스 종료 코드), `logs/<서비스>.log`, `health_<서비스>.txt`, `crosscheck_a.json`
+- `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록), `summary.md`, `steps.tsv`(단계별 벽시계 초, 서비스 종료 상태 `stop_exit_*`, ULog 끝 경계 `ulog`, 회차별 종료 코드 `rc_*` 줄), `raw_status_A.jsonl`, `armed_a.json`, `ps_before_stop.jsonl`(stop 전 서비스 상태), `logs/<서비스>.log`, `health_<서비스>.txt`(실패한 회나 unhealthy 서비스만), `crosscheck_a.json`
 
 유지 구간(A의 LOITER, D의 취소 뒤 유지)의 기준 고도로부터의 최대 편차는 통과한 회에도 `trace.jsonl`(`hold_deviation`), `verdict.json`(`hold_deviation_m`), `repeat_summary.tsv`(`hold_dev_*_m`)에 남는다. 항목별 임계값(A의 LOITER 0.4 m, D의 유지 0.25 m)을 넘으면 `summary.md`와 `armed_criterion.json`의 `hold_deviation_notes`에 note가 붙는다(판정 상수 0.5 m 재검토의 근거. 임계값은 `tests/support/sitl_summary.py`의 `HOLD_DEV_NOTE_M`).
 

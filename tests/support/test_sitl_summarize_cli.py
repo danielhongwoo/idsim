@@ -85,7 +85,7 @@ def test_ops_running(tmp_path):
     assert summarize.main(["ops-running", str(ps), "ops-2"]) == 1
 
 
-def test_ulog_check_reports_truncation(tmp_path):
+def test_ulog_check_reports_truncation(tmp_path, capsys):
     log = tmp_path / "px4-1" / "log" / "d"
     log.mkdir(parents=True)
     import struct
@@ -93,7 +93,9 @@ def test_ulog_check_reports_truncation(tmp_path):
     (log / "a.ulg").write_bytes(data)
     (log / "b.ulg").write_bytes(data[:-2])
     assert summarize.main(["ulog", str(tmp_path)]) == 0
-    text = (tmp_path / "sitl" / "ulog_check.txt").read_text(encoding="utf-8")
+    text = capsys.readouterr().out
+    assert all(ln.startswith("ulog\t") for ln in text.splitlines())
+    assert not (tmp_path / "sitl").exists()          # 새 파일을 만들지 않는다
     assert "a.ulg bytes=" in text and "truncated=False" in text and "truncated=True" in text
 
 

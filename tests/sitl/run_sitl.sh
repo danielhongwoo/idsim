@@ -30,8 +30,9 @@
 #   stdout     마지막 줄이 (마지막 회의) 실행 디렉터리 절대 경로 artifacts/runs/<실행 id>. 나머지는 모두 stderr
 #   요약       GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
 #   산출물     <실행 디렉터리>/sitl/: junit.xml, trace.jsonl, verdict.json, summary.md, steps.tsv, raw_status_A.jsonl,
-#              armed_a.json, crosscheck_a.json,  ulog_check.txt, ps_before_stop.jsonl, stop_exit.txt, logs/<서비스>.log,
-#              health_<서비스>.txt. 실행 디렉터리 안에는 compose.yaml, stack.json, params/, px4-N/log/*.ulg, ros_log/
+#              armed_a.json, crosscheck_a.json, ps_before_stop.jsonl, logs/<서비스>.log,
+#              health_<서비스>.txt(실패한 회나 unhealthy 서비스만). steps.tsv 끝에 서비스 종료 상태(stop_exit_*),
+#              ULog 끝 경계(ulog), 회차별 종료 코드(rc_*)가 줄로 붙는다. 실행 디렉터리 안에는 compose.yaml, stack.json, params/, px4-N/log/*.ulg, ros_log/
 #              --repeat이면 artifacts/sitl_repeat/<시각>-k<k>/ 에 repeat_summary.tsv, armed_criterion.json
 #   소유       artifacts/runs/ 아래 파일은 모두 호스트 사용자 소유다(컨테이너를 호스트 uid:gid로 돌린다)
 #
@@ -130,7 +131,7 @@ one_run() { # 회 번호
       t1="$(now)"
       steps="up=$((t1 - t0))"
       say "스택 올리기 실패(INFRA_UP)"
-      collect "$compose" "$run_dir" "$out_name" "" 
+      collect "$compose" "$run_dir" "$out_name" 1
       fallback="INFRA_UP:tools/sim_stack.sh up이 실패했다(compose 로그는 ${out_name}/logs)"
       python3 tests/sitl/summarize.py run "$run_dir" --sitl-dir "$out_name" --steps "$steps" --fallback "$fallback" || true
       finish_summary "$run_dir" "$out_name" "$steps"
@@ -182,7 +183,9 @@ PY
     say "compose stop -t 15 (ULog가 닫히는지 종료 코드를 남긴다)"
     docker compose -f "$compose" stop -t 15 >/dev/null 2>&1 || true
   fi
-  collect "$compose" "$run_dir" "$out_name" "stop"
+  local want_health=0
+  { [ "$pytest_rc" -ne 0 ] || [ "$stop_bad" -ne 0 ]; } && want_health=1
+  collect "$compose" "$run_dir" "$out_name" "$want_health"
   t1="$(now)"
   steps="${steps},collect=$((t1 - t0))"
 
@@ -194,12 +197,15 @@ PY
     steps="${steps},down=$((t1 - t0))"
   fi
 
-  python3 tests/sitl/summarize.py ulog "$run_dir" --sitl-dir "$out_name" || true
+  local ulog_lines
+  ulog_lines="$(python3 tests/sitl/summarize.py ulog "$run_dir" || true)"
   # 시나리오 A의 원시 표본과 ULog의 교차 확인. 종료 코드 1(ULog 기준 비OFFBOARD ARMED 표본)은 실행 실패,
   # 2(입력 없음)는 INFRA로 따로 센다
   python3 tests/sitl/crosscheck_a.py "$run_dir" --sitl-dir "$out_name" >&2
   local cross_rc=$?
-  printf '%s\n' "$steps" | tr ',' '\n' | tr '=' '\t' >"${run_dir}/${out_name}/steps.tsv"
+  # steps.tsv: 단계별 초, 서비스 종료 상태(stop_exit_*), ULog 끝 경계(ulog), 그리고 아래의 rc_ 줄
+  { printf '%s\n' "$steps" | tr ',' '\n' | tr '=' '\t'; printf '%s' "${stop_lines:-}"; [ -z "$ulog_lines" ] || printf '%s\n' "$ulog_lines"; } \
+    >"${run_dir}/${out_name}/steps.tsv"
   python3 tests/sitl/summarize.py run "$run_dir" --sitl-dir "$out_name" --steps "$steps" \
     --fallback "NO_VERDICT:pytest가 verdict.json을 남기지 못했다(종료 코드 ${pytest_rc})"
   local summary_rc=$?
@@ -220,17 +226,23 @@ PY
   say "회 ${i}: pytest 종료 코드 ${pytest_rc}, ULog 교차 확인 ${cross_rc}, 정지 전 ops 상태 $([ "$stop_bad" -eq 0 ] && echo 정상 || echo 비정상), 결과 $([ "$run_rc" -eq 0 ] && echo 통과 || echo 실패)"
 }
 
-# 서비스 종료 코드와 로그, healthcheck 기록을 모은다
-collect() { # compose run_dir out_name stop|""
-  local compose="$1" dir="$2" out="$3" svc cid out_dir
+# 서비스 종료 상태(전역 stop_lines, steps.tsv에 들어간다)와 서비스 로그를 모은다. healthcheck 기록(health_<서비스>.txt)은
+# want_health가 1(실패한 회)이거나 그 서비스가 unhealthy일 때만 남긴다.
+stop_lines=""
+collect() { # compose run_dir out_name want_health
+  local compose="$1" dir="$2" out="$3" want="$4" svc cid out_dir state
   out_dir="${dir}/${out}"
   mkdir -p "${out_dir}/logs"
   [ -f "$compose" ] || return 0
-  docker compose -f "$compose" ps -a --format '{{.Service}} {{.State}} exit={{.ExitCode}}' >"${out_dir}/stop_exit.txt" 2>&1 || true
+  stop_lines="$(docker compose -f "$compose" ps -a --format '{{.Service}} {{.State}} exit={{.ExitCode}}' 2>/dev/null \
+    | awk '{ printf "stop_exit_%s\t%s %s\n", $1, $2, $3 }')"
+  [ -z "$stop_lines" ] || stop_lines="${stop_lines}"$'\n'
   for svc in $(docker compose -f "$compose" ps -a --services 2>/dev/null); do
     docker compose -f "$compose" logs --no-color --timestamps "$svc" >"${out_dir}/logs/${svc}.log" 2>&1 || true
     cid="$(docker compose -f "$compose" ps -a -q "$svc" 2>/dev/null || true)"
-    if [ -n "$cid" ]; then
+    [ -n "$cid" ] || continue
+    state="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$cid" 2>/dev/null || true)"
+    if [ "$want" = "1" ] || [ "$state" = "unhealthy" ]; then
       docker inspect --format '{{range .State.Health.Log}}{{.Start}} -> {{.End}} exit={{.ExitCode}} {{.Output}}{{"\n"}}{{end}}' "$cid" \
         >"${out_dir}/health_${svc}.txt" 2>&1 || true
     fi
