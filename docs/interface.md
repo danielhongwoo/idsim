@@ -6,15 +6,15 @@
 
 ## 고정 시점
 
-PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 식별과 네임스페이스", "VehicleCommand", "Offboard setpoint", "SITL 파라미터", "포트" 절)와 공통 규칙("공통 규칙", "시간 기준", "정의 작성 규칙", "변경 절차와 계약 테스트" 절)은 1a 완료에 고정한다. `idsim_interfaces`의 정의 파일(msg 10개, action 1개)은 Phase 1a에서 모두 만들었고, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춰 파일 단위로 나눈다.
+PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 식별과 네임스페이스", "VehicleCommand", "Offboard setpoint", "SITL 파라미터", "포트" 절)와 공통 규칙("공통 규칙", "시간 기준", "정의 작성 규칙", "변경 절차와 계약 테스트" 절)은 1a 완료에 고정한다. 예외는 "계약 토픽 QoS"의 상태 행이고 그 고정 시점은 그 절에 적는다. `idsim_interfaces`의 정의 파일(msg 10개, action 1개)은 Phase 1a에서 모두 만들었고, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춰 파일 단위로 나눈다.
 
 | 파일 | 묶음 | 고정 시점 | 1a 완료 때 |
 | --- | --- | --- | --- |
 | `action/ExecuteMission.action` | 미션 실행(1a 부분) | 1a 완료 | 고정 |
 | `msg/Mission.msg` | 미션 실행(1a 부분) | 1a 완료 | 고정 |
-| `msg/MissionItem.msg` | 미션 실행(1a 부분). GOTO, TRACK_ENTITY, RTL의 의미는 1b 부분 | 1a 완료(직접 필드와 상수). 세 항목의 의미는 1b 완료 | 직접 필드와 상수, TAKEOFF, LOITER, LAND의 의미 고정 |
-| `msg/YawSetpoint.msg` | 미션 실행(1a 부분) | 1a 완료 | 고정 |
-| `msg/TakeoffItem.msg` | 미션 실행(1a 부분) | 1a 완료 | 고정 |
+| `msg/MissionItem.msg` | 미션 실행(1a 부분). GOTO, TRACK_ENTITY, RTL의 의미와 첫 항목이 아닌 TAKEOFF의 의미는 1b 부분 | 1a 완료(직접 필드와 상수). 1b 부분의 의미는 1b 완료 | 직접 필드와 상수, 첫 항목인 TAKEOFF, LOITER, LAND의 의미 고정 |
+| `msg/YawSetpoint.msg` | 미션 실행(1a 부분). GOTO, TRACK_ENTITY, 첫 항목이 아닌 TAKEOFF의 `MODE_KEEP` 기준 yaw는 1b 부분 | 1a 완료(직접 필드와 상수). 1b 부분의 의미는 1b 완료 | 직접 필드와 상수, `MODE_FIXED`의 의미, 첫 항목인 TAKEOFF의 `MODE_KEEP` 기준 yaw 고정 |
+| `msg/TakeoffItem.msg` | 미션 실행(1a 부분). 첫 항목이 아닌 TAKEOFF의 기준 위치는 1b 부분 | 1a 완료(직접 필드와 상수). 1b 부분의 의미는 1b 완료 | 직접 필드와 상수, 첫 항목인 TAKEOFF의 의미 고정 |
 | `msg/LoiterItem.msg` | 미션 실행(1a 부분) | 1a 완료 | 고정 |
 | `msg/GoToItem.msg` | 미션 실행(1b 부분) | 1b 완료 | 고정 전 |
 | `msg/TrackEntityItem.msg` | 미션 실행(1b 부분) | 1b 완료 | 고정 전 |
@@ -22,7 +22,7 @@ PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 
 | `msg/VehicleState.msg` | 기체 요약 | Phase 2 완료(WebSocket JSON 스키마 고정과 함께) | 고정 전 |
 | `msg/MissionEvent.msg` | 미션 기록 | Phase 2 완료(기록물 인덱스가 필드를 검증한 뒤) | 고정 전 |
 
-1a 완료에 함께 고정되는 의미: `ExecuteMission`의 수락 정책, 취소 의미, TAKEOFF, LOITER, LAND 항목의 의미, `reason` 값의 의미(`REASON_TARGET_LOST` 제외). 공중에서 끝나는 미션(마지막 항목이 LAND가 아닌 미션)의 종료 동작은 1a 고정에서 빠지고 1b 완료에 고정한다("공중에서 끝나는 미션" 절).
+1a 완료에 함께 고정되는 의미: `ExecuteMission`의 수락 정책, 취소 의미, 첫 항목인 TAKEOFF와 LOITER, LAND 항목의 의미, `reason` 값의 의미(`REASON_TARGET_LOST` 제외). 공중에서 끝나는 미션(마지막 항목이 LAND가 아닌 미션)의 종료 동작은 1a 고정에서 빠지고 1b 완료에 고정한다("공중에서 끝나는 미션" 절). 첫 항목이 아닌 TAKEOFF(예: `[TAKEOFF, LAND, TAKEOFF, LAND]`의 두 번째)의 기준 위치, 기준 heading, `timeout` 기준 시각도 1b 완료에 정하고 고정한다(이 문서의 TAKEOFF 문장은 준비 단계가 있는 첫 항목에 대한 것이다).
 
 "고정"의 정의.
 
@@ -44,15 +44,15 @@ PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 
 | uXRCE-DDS Agent | `v2.4.3` | `docker/versions.env` `XRCE_AGENT_TAG` |
 | ROS 2 | Jazzy | `docker/versions.env` `ROS_DISTRO` |
 | rmw | `rmw_cyclonedds_cpp`(모든 ROS 2 컨테이너의 `RMW_IMPLEMENTATION`) | `tools/gen_compose.py` `RMW`, `tests/fixtures/px4/v1.17.0/env.txt` |
-| PX4 골든 | `tests/fixtures/px4/v1.17.0/`(`topics.txt`, `qos/`, `env.txt`) | 환경 스모크 golden 단계가 만든다(`docs/smoke-test.md`) |
+| PX4 golden | `tests/fixtures/px4/v1.17.0/`(`topics.txt`, `qos/`, `env.txt`) | 환경 스모크 golden 단계가 만든다(`docs/smoke-test.md`) |
 
-- PX4 태그를 올리는 조건은 환경 스모크 golden 단계의 통과다. 새 태그의 골든은 `tests/fixtures/px4/<PX4_TAG>/`에 새로 두고, 이 문서의 토픽 표를 그 골든으로 다시 만든다.
-- `PX4_MSGS_REF`는 세 곳(`docker/versions.env`, 골든 `env.txt`, ros-ws 이미지의 `IDSIM_BUILD_PX4_MSGS_REF`)이 같아야 하고 `idsim_common`의 `test_topics_golden`이 판정한다. 셋이 다르면 토픽은 보이지만 역직렬화가 조용히 실패할 수 있기 때문이다.
+- PX4 태그를 올리는 조건은 환경 스모크 golden 단계의 통과다. 새 태그의 golden은 `tests/fixtures/px4/<PX4_TAG>/`에 새로 두고, 이 문서의 토픽 표를 그 golden으로 다시 만든다.
+- `PX4_MSGS_REF`는 세 곳(`docker/versions.env`, golden `env.txt`, ros-ws 이미지의 `IDSIM_BUILD_PX4_MSGS_REF`)이 같아야 하고 `idsim_common`의 `test_topics_golden`이 판정한다. 셋이 다르면 토픽은 보이지만 역직렬화가 조용히 실패할 수 있기 때문이다.
 - 이 문서의 PX4 소스 행 번호는 PX4 `v1.17.0` 태그의 원문 기준이다.
 
 ## 공통 규칙
 
-고정 시점: 1a 완료.
+고정 시점: 1a 완료("계약 토픽 QoS"의 상태 행은 그 절에 적은 시점).
 
 `idsim_interfaces`의 모든 정의와 그 정의를 쓰는 노드에 적용된다. 정의별 문장은 각 정의의 절에 있다.
 
@@ -84,11 +84,11 @@ PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 
 
 ### 계약 토픽 QoS
 
-QoS 계약은 reliability와 durability 둘이다. history와 depth는 구현 값이고 계약이 아니다. DDS deadline과 liveliness로 신선도를 판정하지 않는다(벽시계 기준이다). PX4 토픽의 QoS는 "PX4 토픽 QoS" 절에 있다.
+QoS 계약은 reliability와 durability 둘이다. 사건 행은 1a 완료에 고정한다(발행자 Executor와 소비자 통합 테스트가 1a에 있다). 상태 행은 공통 규칙의 1a 고정에서 빠지고 토픽마다 그 메시지 파일과 함께 고정한다(`TargetState`는 1b 완료, `VehicleState`는 Phase 2 완료). 상태 행의 값은 아직 발행자와 구독자로 확인하지 않았기 때문이다. history와 depth는 구현 값이고 계약이 아니다. DDS deadline과 liveliness로 신선도를 판정하지 않는다(벽시계 기준이다). PX4 토픽의 QoS는 "PX4 토픽 QoS" 절에 있다.
 
 | 토픽 묶음 | 발행 | 구독 | 구현(`idsim_common`) |
 | --- | --- | --- | --- |
-| 상태(`VehicleState`, `TargetState`) | RELIABLE, VOLATILE | BEST_EFFORT, VOLATILE | 고정 전(첫 발행자가 생길 때 둔다. 구현 값은 KEEP_LAST 5) |
+| 상태(`VehicleState`, `TargetState`) | RELIABLE, VOLATILE | BEST_EFFORT, VOLATILE | 미구현(첫 발행자가 생길 때 `idsim_common`에 둔다. 구현 값은 KEEP_LAST 5) |
 | 사건(`MissionEvent`) | RELIABLE, VOLATILE | RELIABLE, VOLATILE | `event_pub_qos()`, `event_sub_qos()`(`contract_qos.hpp`. KEEP_LAST 10) |
 
 - 상태 토픽 구독이 BEST_EFFORT인 것은 라이브 발행자와 rosbag2 재생 발행자 어느 쪽과도 맞게 하려는 것이다. 상태 토픽의 주기는 계약이 아니다.
@@ -106,13 +106,13 @@ QoS 계약은 reliability와 durability 둘이다. history와 depth는 구현 �
 
 PX4 timestamp.
 
-- PX4 메시지의 `timestamp` 필드(us)는 PX4 hrt 시각이다. SITL에서 PX4 hrt는 Gazebo `/world/<월드>/clock`의 `sim` 시간(us)이고(gz_bridge가 clock 콜백마다 PX4 lockstep 시계에 쓴다. `src/modules/simulation/gz_bridge/GZBridge.cpp` 331-347행, `platforms/posix/src/px4/common/drv_hrt.cpp` 106-110행, 484-491행), `/clock`도 같은 `sim` 시간(ros_gz_bridge 변환)이라 두 값 사이에 상수 오프셋은 없다. 다만 `/clock`은 gz-transport, bridge, DDS를 거치는 전달 경로만큼 늦으므로 같은 순간의 두 값은 같지 않다. 이 지연은 측정하지 않았다.
+- PX4 메시지의 `timestamp` 필드(us)는 PX4 hrt 시각이다. SITL에서 PX4 hrt는 Gazebo `/world/<월드>/clock`의 `sim` 시간(us)이다(PX4 gz_bridge가 이 토픽의 clock callback마다 PX4 lockstep 시계에 쓴다. `src/modules/simulation/gz_bridge/GZBridge.cpp` 331-347행, `platforms/posix/src/px4/common/drv_hrt.cpp` 106-110행, 484-491행). ROS `/clock`은 ros_gz_bridge가 gz `/clock`을 변환한 것이다(`tools/gen_compose.py`의 `bridge` 서비스). gz `/clock`과 `/world/<월드>/clock`이 같은 `sim` 시간을 싣는다는 것은 gz-sim 원문으로 확인하지 않았다(미확인). [실측] 명령 전송 뒤 처음 받은 `vehicle_status` 표본의 `timestamp - Px4Timestamp`(표본의 PX4 시각 빼기 그 명령에 실은 노드의 ROS 시각)는 1a 6단계 재실측의 169건 모두 +8에서 +20 ms였고 부호가 섞이지 않았다. 그래서 두 시각 사이에 이보다 큰 상수 오프셋은 없다. `/clock`은 gz-transport, bridge, DDS를 거치는 전달 경로만큼 늦으므로 같은 순간의 두 값은 같지 않다. 이 지연만 따로 측정하지는 않았다(위 차이에는 지연, 명령 처리, 표본 publish 간격이 섞여 있다).
 - 그래서 판정과 신선도 검사의 경과 시간은 PX4 `timestamp`를 ROS 시각과 비교하지 않고 메시지를 받은 시점의 ROS 시각으로 잰다. PX4 `timestamp`는 ULog 정렬, PX4 쪽 묵은 setpoint 판정, 같은 토픽 표본끼리의 순서 비교(Executor의 "N회 연속 확인"에서 같은 표본 건너뛰기)에 쓴다.
-- 예외 하나: 취소의 지상 분기에서 DISARMED 표본을 셀 때 Executor는 표본의 PX4 `timestamp`를 첫 disarm에 실은 timestamp(노드의 ROS 시각)와 비교한다("취소" 절). `/clock`이 늦으므로(지연 크기는 미측정) 이 비교만으로는 disarm 처리 뒤의 표본임이 보장되지 않는다. 수신 tick 조건(`ros_ws/src/idsim_mission/src/core/rules.cpp`의 `is_after_disarm_send`)은 전송 이전 tick의 표본만 거른다. 처리 전 DISARMED 표본 하나는 지연 창에서 통과할 수 있고, 이를 막는 것은 서로 다른 `timestamp`를 가진 DISARMED 표본 3개의 연속 확인(`kConfirmSamples = 3`)과, arm과 disarm이 같은 `vehicle_command` queue에서 FIFO로 처리된다는 점이다([소스] `Commander.cpp` 1888-1902행. [실측] arm 직후에 disarm을 보낸 10회가 모두 DISARMED로 끝났다). 3개가 되려면 표본 간격 약 0.5 s로 arm이 약 1 s 동안 처리되지 않아야 한다.
+- 예외 하나: 취소의 지상 분기에서 DISARMED 표본을 셀 때 Executor는 표본의 PX4 `timestamp`를 첫 disarm에 실은 timestamp(노드의 ROS 시각)와 비교한다("취소" 절). `/clock`이 늦으므로(지연 크기는 미측정) 이 비교만으로는 disarm 처리 뒤의 표본임이 보장되지 않는다. `ros_ws/src/idsim_mission/src/core/rules.cpp`의 `is_after_disarm_send`는 이 timestamp 조건(표본 `timestamp`가 첫 disarm의 timestamp보다 엄격히 큼)과 수신 tick 조건(표본을 받은 tick이 첫 disarm을 보낸 tick보다 뒤)을 함께 본다. tick 조건은 전송 이전 tick에 받은 표본만 거른다. 처리 전 DISARMED 표본 하나는 지연 창에서 통과할 수 있고, 이를 막는 것은 서로 다른 `timestamp`를 가진 DISARMED 표본 3개의 연속 확인(`kConfirmSamples = 3`)과, arm과 disarm이 같은 `vehicle_command` queue에서 FIFO로 처리된다는 점이다([소스] `Commander.cpp` 1888-1902행. [실측] arm 직후에 disarm을 보낸 10회가 모두 DISARMED로 끝났다). 3개가 되려면 표본 간격 약 0.5 s로 arm이 약 1 s 동안 처리되지 않아야 한다.
 - 공통 SITL 파라미터 `UXRCE_DDS_SYNCT=0`(`config/px4/sitl_params.env`)으로 uXRCE-DDS 세션의 시간 동기화를 끈다. 그러면 세션 `time_offset`이 0이다.
-- PX4는 /fmu/in 메시지를 받을 때 `timestamp`가 0이면 수신 시각으로 채우고, 아니면 `min(timestamp - time_offset, 수신 시각)`으로 쓴다(`Tools/msg/templates/ucdr/msg.h.em` 167-169행. `config/px4/sitl_params.env`의 근거 주석). 그래서 0이나 벽시계 값을 넣으면 PX4에는 "지금"으로 보이고, 묵은 setpoint를 `COM_OF_LOSS_T`로 판정하는 경로가 조용히 꺼진다. ROS 시각은 PX4 hrt보다 늦으므로 노드가 넣은 값은 이 `min`에서 잘리지 않는다(전달 경로 구조에서 추정한 것이고, 위 지연 미측정과 같은 근거다).
+- PX4는 /fmu/in 메시지를 받을 때 `timestamp`가 0이면 수신 시각으로 채우고, 아니면 `min(timestamp - time_offset, 수신 시각)`으로 쓴다(`Tools/msg/templates/ucdr/msg.h.em` 167-169행. `config/px4/sitl_params.env`의 근거 주석). 그래서 0이나 벽시계 값을 넣으면 PX4에는 "지금"으로 보이고, 묵은 setpoint를 `COM_OF_LOSS_T`로 판정하는 경로가 조용히 꺼진다. ROS 시각은 PX4 hrt보다 늦으므로 노드가 넣은 값은 이 `min`에서 잘리지 않는다. 근거는 전달 경로 구조와 위의 [실측](전송 뒤 첫 표본의 `timestamp`가 169건 모두 전송에 실은 값보다 8-20 ms 컸다. 노드 값이 PX4 hrt보다 크게 앞섰다면 나오지 않는 값이다)이고, 잘림 여부를 직접 본 것은 아니다. 시나리오 T(묵은 `timestamp`의 Offboard 신호를 PX4가 묵은 것으로 판정한다)는 노드 값이 그대로 쓰인다는 간접 근거다.
 - 규칙: 노드가 /fmu/in에 넣는 `timestamp`는 노드 시계의 ROS 시각(us)이다. 0과 벽시계 값은 보내지 않는다. `idsim_common::Px4Timestamp::now(clock)`가 유일한 생성 경로이고, 시계가 `RCL_ROS_TIME`이면서 ROS 시간 override가 켜져 있고(`/clock` 구독 중) 값이 1 us 이상일 때만 값을 만든다. 그 밖(override가 꺼진 ROS 시계, `RCL_SYSTEM_TIME`, `RCL_STEADY_TIME`, `/clock` 수신 전의 0)에서는 값이 없고, 값이 없으면 /fmu/in에 아무것도 보내지 않는다. Executor는 activate 때 값을 만들 수 없으면 activate를 실패시키고, goal 실행 중에 만들 수 없으면 그 tick의 발행과 명령을 버리고 goal을 ABORTED로 끝낸다(정리 중이 아니면 `REASON_INTERNAL`, 정리 중이면 원래 reason을 유지하고 detail에 적는다. `ros_ws/src/idsim_mission/src/core/mission_runner.cpp`). `VehicleCommandBuilder`와 setpoint 헬퍼는 `Px4Timestamp` 인자로만 timestamp를 받는다(`ros_ws/src/idsim_common/include/idsim_common/px4_timestamp.hpp`, `test/test_px4_timestamp.cpp`).
-- `UXRCE_DDS_SYNCT=0`에서 uXRCE-DDS client는 시간 동기화 콜백을 달지 않으므로(`on_time_no_sync`. `src/modules/uxrce_dds_client/uxrce_dds_client.cpp` 206행, 318-323행) client 쪽의 `timesync_status` 발행이 없다. DDS writer는 만들어지므로 `fmu/out/timesync_status` 토픽은 그래프에 남지만 표본은 오지 않는다. MAVLink 모듈이 같은 uORB 토픽에 쓰는 경우(GCS가 TIMESYNC를 보낼 때)는 확인하지 않았다. 이 토픽으로 시간 동기 상태를 판정하지 않고, 이 토픽의 수신을 기다리지 않는다.
+- `UXRCE_DDS_SYNCT=0`에서 uXRCE-DDS client는 시간 동기화 callback을 달지 않으므로(`on_time_no_sync`. `src/modules/uxrce_dds_client/uxrce_dds_client.cpp` 206행, 318-323행) client 쪽의 `timesync_status` 발행이 없다. DDS writer는 만들어지므로 `fmu/out/timesync_status` 토픽은 그래프에 남지만 표본은 오지 않는다. MAVLink 모듈이 같은 uORB 토픽에 쓰는 경우(GCS가 TIMESYNC를 보낼 때)는 확인하지 않았다. 이 토픽으로 시간 동기 상태를 판정하지 않고, 이 토픽의 수신을 기다리지 않는다.
 - `UXRCE_DDS_SYNCT=0`은 SITL 전용 값이다. 실기체에서는 1로 되돌리며, 파라미터 한 줄이라 운용 노드는 차이를 모른다.
 
 ## 정의 작성 규칙
@@ -179,12 +179,12 @@ PX4 쪽은 지구 NED, 동체 FRD이고 ROS와 Gazebo 쪽은 지구 ENU, 동체 
 - `_v<N>` 접미사는 px4_msgs 타입의 `MESSAGE_VERSION` 상수에서 파생한다. 상수가 없거나 0이면 접미사가 없다(PX4 `dds_topics.h.em`과 같은 규칙). 접미사는 PX4 태그마다 바뀔 수 있으므로 어디에도 하드코딩하지 않는다.
 - C++에서 토픽 이름은 `idsim_common`의 기술자(`idsim_common::px4::topics::*`)로만 얻는다. 기술자는 메시지 타입, 방향, 논리 이름, 발행 허용을 하나로 묶고, 논리 이름에 `_v<N>`을 쓰면 컴파일 오류다. 기술자 목록은 `ros_ws/src/idsim_common/include/idsim_common/detail/px4_topic_list.inc` 하나다. 공개 API는 `px4_io.hpp`의 `topic_name`, `create_subscription`, `create_publisher`다.
 - Python(통합 테스트, 스모크)에서는 `tests/support/px4_topic.py`가 같은 규칙으로 이름을 조립한다.
-- 다른 패키지와 테스트 코드에 `fmu/in/`, `fmu/out/` 문자열이 생기면 `tools/ci/lint.sh`의 `px4-api` 검사가 실패한다. 예외는 파일 이름으로만 둔다(`tests/support/px4_raw.py`, `tests/support/px4_measure_pub.py`, `tests/support/px4_topic.py`, `tests/support/test_px4_topic_names.py`).
-- 골든 비교 테스트: `idsim_common`의 `test_topics_golden`(C++)과 `tests/support/test_px4_topic_names.py`(Python)가 기술자 또는 조립 규칙이 만든 이름 집합과 골든 `topics.txt`의 집합을 양방향으로 비교한다. 골든 디렉터리가 없으면 실패한다. 그래서 PX4 태그를 올려 접미사가 바뀌면 이 테스트가 먼저 실패하고, 소스는 바꾸지 않아도 이름이 따라간다.
+- `tools/ci/lint.sh`의 `px4-api` 검사는 `ros_ws/src`(`idsim_common` 밖의 C++, .py, yaml 파일), 생성기 golden의 params 파일, `tests/sitl/`과 `tests/support/` 아래의 .py, yaml 파일에서 `fmu/in/`, `fmu/out/` 문자열이 생기면 실패한다. 예외는 파일 이름으로만 둔다(`tests/support/px4_raw.py`, `tests/support/px4_measure_pub.py`, `tests/support/px4_topic.py`, `tests/support/test_px4_topic_names.py`). 환경 스모크(`tests/smoke/`)와 `tools/`는 이 검사의 범위 밖이다. 스모크는 `tests/support/px4_topic.py`를 쓰지 않고 토픽을 정규식(`check_px4.py`의 `topic_regex`)으로 찾는다.
+- golden 비교 테스트: `idsim_common`의 `test_topics_golden`(C++)과 `tests/support/test_px4_topic_names.py`(Python)가 기술자 또는 조립 규칙이 만든 이름 집합과 golden `topics.txt`의 집합을 양방향으로 비교한다. golden 디렉터리가 없으면 실패한다. 그래서 PX4 태그를 올려 접미사가 바뀌면 이 테스트가 먼저 실패하고, 소스는 바꾸지 않아도 이름이 따라간다.
 
 ### 토픽 표
 
-`tools/to_interface.py`가 `tests/fixtures/px4/v1.17.0/`에서 만든 표다. 토픽 이름은 네임스페이스를 뗀 상대 이름이다. QoS 열은 골든의 발행자 값(reliability, durability, history(depth))이고, /fmu/in 토픽은 골든에 발행자가 없어 "-"다. PX4 쪽 /fmu/in reader의 QoS는 "PX4 토픽 QoS" 절에 있다. 이 표의 토픽 이름은 참고용이며 코드는 이 표가 아니라 기술자로 이름을 얻는다.
+`tools/to_interface.py`가 `tests/fixtures/px4/v1.17.0/`과 환경 스모크의 원시 산출물에서 만든 표에서 측정 주기 열을 뺀 것이다. 측정 주기는 계약이 아니라 이 표에 넣지 않는다. 토픽 이름은 네임스페이스를 뗀 상대 이름이다. QoS 열은 golden의 발행자 값(reliability, durability, history(depth))이고, /fmu/in 토픽은 golden에 발행자가 없어 "-"다. PX4 쪽 /fmu/in reader의 QoS는 "PX4 토픽 QoS" 절에 있다. 이 표의 토픽 이름은 참고용이며 코드는 이 표가 아니라 기술자로 이름을 얻는다.
 
 | 토픽 | 방향 | 타입 | 발행자 QoS |
 | --- | --- | --- | --- |
@@ -255,7 +255,7 @@ PX4 쪽은 지구 NED, 동체 FRD이고 ROS와 Gazebo 쪽은 지구 ENU, 동체 
 | `fmu/out/wind` | PX4 -> ROS 2 | `px4_msgs/msg/Wind` | BEST_EFFORT, TRANSIENT_LOCAL, KEEP_LAST(1) |
 
 - 65개다(in 38, out 27). `mode_completed`는 in과 out 양쪽에 있다. 같은 타입을 여러 토픽이 쓰고(`VehicleCommand`, `VehicleOdometry` 등) 논리 이름과 타입 이름이 다른 토픽이 있다(`vehicle_gps_position`은 `SensorGps`). 그래서 타입에서 이름을 만들거나 타입으로 이름을 역조회하지 않는다.
-- 측정 주기는 계약이 아니다. 수신 판정은 "T초 안에 1회 이상"이고 주기에 묶지 않는다. 주기 하한 계약은 필요한 토픽에 한해 Phase 3에서 넣는다. 이 표에는 측정 주기 열을 두지 않는다(골든에는 주기가 없고, 주기 참고값은 환경 스모크의 원시 산출물에서만 나온다).
+- 측정 주기는 계약이 아니다. 수신 판정은 "T초 안에 1회 이상"이고 주기에 묶지 않는다. 주기 하한 계약은 필요한 토픽에 한해 Phase 3에서 넣는다. 이 표에는 측정 주기 열을 두지 않는다(golden에는 주기가 없고, 주기 참고값은 환경 스모크의 원시 산출물에서만 나온다).
 
 ### 공개 /fmu/in 목록과 허용 절차
 
@@ -269,22 +269,22 @@ idsim이 발행할 수 있는 /fmu/in은 셋뿐이다.
 
 - 나머지 /fmu/in 35개와 /fmu/out 전부는 `Restricted`이고 공개 API로 발행자를 만들 수 없다(`create_publisher`의 `static_assert`, 음성 컴파일 테스트 `test/compile_fail/`). /fmu/out은 구독만 한다.
 - Fleet Manager, Telemetry Collector, 그 밖의 운용 서비스는 /fmu/in에 쓰지 않는다.
-- 테스트 harness의 예외는 둘이다. `tests/support/px4_raw.py`(통합 테스트. 시나리오 T의 `offboard_control_mode`와 비상 정리 전용 `vehicle_command`), `tests/support/px4_measure_pub.py`(PX4 재실측 전용. `tests/sitl/measure/` 밖에서 쓰지 않는다).
+- 공개 API 밖에서 /fmu/in에 쓰는 테스트 코드는 셋이다. `tests/support/px4_raw.py`(통합 테스트. 시나리오 T의 `offboard_control_mode`와 비상 정리 전용 `vehicle_command`), `tests/support/px4_measure_pub.py`(PX4 재실측 전용. `tests/sitl/measure/` 밖에서 쓰지 않는다), `tests/smoke/check_px4.py`(환경 스모크 px4-in 단계의 `--arm`. arm과 disarm의 `vehicle_command`만). 앞의 둘은 `px4-api` lint가 이름으로 예외에 두고 `tests/support/test_px4_publishers_pinned.py`가 발행자 목록을 고정한다. 셋째는 `px4-api` lint의 범위 밖이고 발행자 목록을 고정하는 테스트가 없어 코드 리뷰로만 잡는다.
 - `Restricted`를 `Allowed`로 바꾸는 PR에는 다섯 가지가 함께 있어야 한다. (1) `px4_topic_list.inc`의 해당 항목 변경, (2) PX4 인터페이스 owner의 승인, (3) PR 본문에 허용 근거, (4) `test_topics_traits`의 허용 목록 기대 집합 갱신, (5) 이 문서의 공개 /fmu/in 목록 갱신.
 - 발행 차단은 실수 방지 수준이며 보안 경계가 아니다. rclcpp를 직접 부르거나 이름 문자열을 직접 쓰는 우회는 `px4-api` lint와 코드 리뷰로만 잡는다. 같은 DDS 도메인의 어떤 참가자도 /fmu/in에 쓸 수 있다.
 
 ### PX4 토픽 QoS
 
-reliability와 durability가 계약이다. history와 depth는 계약 밖이다(골든의 `depth=1`은 rmw가 원격 엔드포인트에 보여 주는 값이다). PX4 쪽 엔드포인트는 uXRCE-DDS Agent가 PX4 client의 요청으로 만드는 엔드포인트다.
+reliability와 durability가 계약이다. history와 depth는 계약 밖이다(golden의 `depth=1`은 rmw가 원격 endpoint에 보여 주는 값이다). PX4 쪽 endpoint는 uXRCE-DDS Agent가 PX4 client의 요청으로 만드는 endpoint다.
 
-| 방향 | PX4 쪽 엔드포인트 | idsim 쪽 엔드포인트 | 함수 |
+| 방향 | PX4 쪽 endpoint | idsim 쪽 endpoint | 함수 |
 | --- | --- | --- | --- |
-| /fmu/out | writer: BEST_EFFORT, TRANSIENT_LOCAL(골든 `qos/fmu/out/*.txt` 27개 모두 같다. `src/modules/uxrce_dds_client/utilities.hpp` 78-82행) | reader: BEST_EFFORT, VOLATILE | `px4_out_qos()` |
+| /fmu/out | writer: BEST_EFFORT, TRANSIENT_LOCAL(golden `qos/fmu/out/*.txt` 27개 모두 같다. `src/modules/uxrce_dds_client/utilities.hpp` 78-82행) | reader: BEST_EFFORT, VOLATILE | `px4_out_qos()` |
 | /fmu/in | reader: BEST_EFFORT, VOLATILE(`src/modules/uxrce_dds_client/utilities.hpp` 136-137행) | writer: BEST_EFFORT, VOLATILE | `px4_in_qos()` |
 
 - 두 함수는 `ros_ws/src/idsim_common/include/idsim_common/qos.hpp`에 있고 구현 값은 KEEP_LAST 5, liveliness Automatic이다. 이 값은 `rmw_qos_profile_sensor_data`의 reliability, durability와 같다. Python 판정 코드는 `qos_profile_sensor_data`를 쓴다.
 - 기본 QoS(RELIABLE) 구독은 PX4의 BEST_EFFORT writer와 맞지 않아 아무것도 받지 못한다. 그래서 `create_subscription`과 `create_publisher`는 options의 `qos_overriding_options`를 비워 `qos_overrides.*` 파라미터로 QoS를 바꾸지 못하게 한다.
-- TRANSIENT_LOCAL 구독은 쓰지 않는다. 에이전트가 늦게 붙은 reader에게 이력을 주지 않음을 실측했다. 구독자는 연결 직후 첫 표본을 기다린다.
+- TRANSIENT_LOCAL 구독은 쓰지 않는다. Agent가 늦게 붙은 reader에게 이력을 주지 않음을 실측했다. 구독자는 연결 직후 첫 표본을 기다린다.
 - BEST_EFFORT라 /fmu/in 명령은 손실될 수 있다. 명령을 보내는 쪽은 ack 또는 상태 관측으로 확인하고, 확인될 때까지 다시 보낸다. Executor는 확인을 기다리는 명령을 `command_resend_period`(기본 0.5 s, ROS 시각)마다 다시 보낸다(`ros_ws/src/idsim_mission/include/idsim_mission/core/config.hpp`). 한 번만 보내고 확인하지 않는 예외(지상 disarm 1회 등)는 "비행 중 감시" 절에 있다.
 
 ## 기체 식별과 네임스페이스
@@ -377,11 +377,11 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 | `SDLOG_MODE` | 2 | ULog를 부팅부터 종료까지 | 컨테이너 한 번 실행에 ULog 한 파일. 첫 disarm 뒤 기록도 남는다 |
 | `UXRCE_DDS_SYNCT` | 0 | uXRCE-DDS 시간 동기화 끔 | "시간 기준" 절. SITL 전용이고 실기체에서는 1 |
 
-- `NAV_DLL_ACT` 값 0이 "GCS 연결 손실 failsafe를 걸지 않음"이라는 것은 navigator 파라미터 원문과 대조하지 않았다(미확인. 0이 아닐 때만 연결 손실 failsafe를 거는 쪽은 `failsafe.cpp` 515행으로 확인했다). 보수적 동작: 판정과 CI에 QGC를 쓰지 않는다.
+- `NAV_DLL_ACT` 값 0은 파라미터 정의(`src/modules/commander/commander_params.c`의 `NAV_DLL_ACT`)에 `Disabled`로 적혀 있다. `failsafe.cpp` 515행은 파라미터 값이 enum `gcs_connection_loss_failsafe_mode::Disabled`와 다를 때만 GCS 연결 손실 failsafe를 건다. 이 enum의 정수 값이 0인지는 enum 정의(`failsafe.h`)와 대조하지 않았다(미확인). 보수적 동작: 판정과 CI에 QGC를 쓰지 않는다.
 - 기체별 `px4_params`는 공통 파일 값을 덮을 수 있고 생성기는 경고만 낸다. 위 표의 파라미터를 기체별로 덮으면 그 기체는 이 계약 밖이다.
 - `PX4_SIM_SPEED_FACTOR`는 주지 않는다(주면 rcS 197-210행이 `COM_OF_LOSS_T` 등 손실 타임아웃을 덮어쓴다). 배속은 Phase 3에서 정한다.
 - `COM_RC_IN_MODE=4`의 영향: QGroundControl의 수동 모드 비행과 가상 조이스틱을 쓸 수 없다. QGC는 모니터링과 ARM, TAKEOFF, LAND 같은 명령에만 쓴다. 수동 계열 모드(Position, Altitude, Manual) 진입이 가능한지와 부팅 직후의 기본 모드는 확인하지 않았다(미확인). 보수적 동작: idsim은 수동 계열 모드를 요청하지 않고, Executor는 부팅 모드에 기대지 않고 arm 전에 Offboard를 요청한다.
-- 생성기가 px4 서비스 환경에 넣는 값(파라미터 파일 밖): `PX4_SYS_AUTOSTART`, `PX4_SIM_MODEL`, `PX4_GZ_WORLD`, `PX4_GZ_MODELS`, `PX4_GZ_MODEL_POSE`, `PX4_GZ_STANDALONE=1`, `PX4_UXRCE_DDS_NS`, `PX4_UXRCE_DDS_PORT`, `ROS_DOMAIN_ID`, `IDSIM_MAVLINK_OFFSET`, `GZ_PARTITION`, `GZ_IP`(`tools/gen_compose.py`).
+- 생성기가 px4 서비스 환경에 넣는 값(파라미터 파일 밖): `PX4_SYS_AUTOSTART`, `PX4_SIM_MODEL`, `PX4_GZ_WORLD`, `PX4_GZ_MODELS`, `PX4_GZ_MODEL_POSE`, `PX4_UXRCE_DDS_NS`, `PX4_UXRCE_DDS_PORT`, `ROS_DOMAIN_ID`, `IDSIM_MAVLINK_OFFSET`, `GZ_PARTITION`, `GZ_IP`, `HOME=/tmp`, 기체별 `px4_params`의 `PX4_PARAM_<이름>`, 그리고 변형에 따라 하나: standalone 변형(Gazebo가 `gazebo` 서비스에 있다)은 `PX4_GZ_STANDALONE=1`, embedded 변형(PX4가 Gazebo를 직접 띄운다. 진단용)은 `HEADLESS=1`(`tools/gen_compose.py`).
 - px4 서비스에는 `PX4_HOME_*`를 주지 않는다. 월드 원점은 gazebo wrapper가 `world.origin`으로 적용한다. gz 경로에서 `PX4_HOME_*`의 소비자는 `px4-rc.gzsim`의 원점 호출뿐이지만 SIH 경로 `px4-rc.sihsim`도 이 변수를 읽는다. SIH 변형을 더할 때는 원점의 출처가 둘이 되지 않도록 `PX4_HOME_*`와 `world.origin`의 관계를 다시 정한다. 지금 SIH 변형은 없다(생성기 단위 테스트 `tests/tools/test_gen_compose.py`가 `PX4_HOME_*`의 부재를 단정한다).
 
 ## 포트
@@ -393,8 +393,8 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 | 용도 | 프로토콜 | 식 | k = 0, N = 1 | 정해지는 곳 |
 | --- | --- | --- | --- | --- |
 | ROS 2 도메인 | DDS | `ROS_DOMAIN_ID` = 20 + k | 20 | `tools/gen_compose.py` |
-| DDS 포트 구간 | RTPS UDP | 7400 + 250 x (20 + k) 부터 249개. 실사용 끝은 참가자 인덱스 상한 50에서 + 11 + 2 x 50 | 12400-12649(실사용 12511까지) | `tools/gen_compose.py`, `config/cyclonedds.xml` |
-| uXRCE-DDS 에이전트 | UDP | 8888 + k(`PX4_UXRCE_DDS_PORT`와 같다) | 8888 | `tools/gen_compose.py` |
+| DDS 포트 구간 | RTPS UDP | 7400 + 250 x (20 + k) 부터 250개. 실사용 끝은 참가자 인덱스 상한 50에서 + 11 + 2 x 50 | 12400-12649(실사용 12511까지) | `tools/gen_compose.py`, `config/cyclonedds.xml` |
+| uXRCE-DDS Agent | UDP | 8888 + k(`PX4_UXRCE_DDS_PORT`와 같다) | 8888 | `tools/gen_compose.py` |
 | gz-transport | - | `GZ_PARTITION` = `idsim-k`, `GZ_IP` = 127.0.0.1 | `idsim-0` | `tools/gen_compose.py` |
 | MAVLink GCS(원격, QGC가 듣는다) | UDP | 14550 + 1000k(스택 안 모든 기체 공통) | 14550 | `docker/px4/px4-rc.mavlink` |
 | MAVLink GCS(PX4 로컬) | UDP | 18570 + 1000k + N | 18571 | `docker/px4/px4-rc.mavlink` |
@@ -423,7 +423,7 @@ QGroundControl.
 미션은 항목의 목록이고, 항목은 `type`과 그 type의 서브메시지 하나로 이뤄진다.
 
 - `Mission.mission_id`: `mission_id` 규칙의 문자열. 발급 주체는 1b에서는 YAML 로더, Phase 3에서는 Fleet이다. `Mission.items`: 1개 이상이고 순서대로 실행한다.
-- `MissionItem.type`: `TYPE_*`. 0은 무효다. `MissionItem.timeout`: 이 항목의 제한 시간(ROS 시각). 0보다 크다. 넘기면 ITEM_TIMEOUT이다. 기준 시각은 항목이 시작된 시각이다(첫 항목인 TAKEOFF는 준비 단계의 arm 확인 시점. "준비 단계" 절).
+- `MissionItem.type`: `TYPE_*`. 0은 무효다. `MissionItem.timeout`: 이 항목의 제한 시간(ROS 시각). 0보다 크다. 넘기면 ITEM_TIMEOUT이다. 기준 시각은 항목이 시작된 시각이다(첫 항목인 TAKEOFF는 준비 단계의 arm 확인 시점. "준비 단계" 절. 첫 항목이 아닌 TAKEOFF는 1b에서 정한다).
 - 서브메시지는 type에 맞는 하나만 채우고 나머지는 기본값이어야 한다. RTL과 LAND는 서브메시지가 없다.
 - 항목은 두 부류다. setpoint 항목(TAKEOFF, GOTO, TRACK_ENTITY, LOITER)은 Offboard setpoint로 처리하고, 모드 명령 항목(RTL, LAND)은 PX4 고유 모드로 전환한다. 이 구분은 필드로 두지 않고 type에서 파생한다. 모든 `TYPE_*`가 정확히 한 부류에 속한다는 것을 `idsim_mission` 단위 테스트가 단정한다.
 - 모든 값은 명시적이다. "0이면 기본값" 규칙은 없다. 기본값은 미션을 만드는 쪽(YAML 로더)이 채운다. 표적 신선도 임계, setpoint 주기 같은 안전 값은 메시지가 아니라 노드 파라미터다.
@@ -431,9 +431,9 @@ QGroundControl.
 
 | 정의 | 필드 | 의미 |
 | --- | --- | --- |
-| `YawSetpoint` | `mode` | `MODE_KEEP`(1): 항목의 기준 yaw를 유지한다(TAKEOFF는 기준 위치를 읽을 때의 heading). `MODE_FIXED`(2): `yaw_rad`로. 0은 무효 |
+| `YawSetpoint` | `mode` | `MODE_KEEP`(1): 항목의 기준 yaw를 유지한다(첫 항목인 TAKEOFF는 기준 위치를 읽을 때의 heading. 첫 항목이 아닌 TAKEOFF와 GOTO, TRACK_ENTITY의 기준은 1b에서 정한다). `MODE_FIXED`(2): `yaw_rad`로. 0은 무효 |
 | `YawSetpoint` | `yaw_rad` | world ENU yaw, `[-pi, pi)`. `MODE_FIXED`일 때만 쓰고 아니면 0이어야 한다 |
-| `TakeoffItem` | `height_m` | 기준 위치에서 올라갈 상대 높이(m). 0보다 크다. 기준 위치는 준비 단계에서 setpoint 발행을 시작할 때(arm 전, 지상) 읽은 위치다 |
+| `TakeoffItem` | `height_m` | 기준 위치에서 올라갈 상대 높이(m). 0보다 크다. 첫 항목인 TAKEOFF의 기준 위치는 준비 단계에서 setpoint 발행을 시작할 때(arm 전, 지상) 읽은 위치다. 첫 항목이 아닌 TAKEOFF의 기준 위치는 1b에서 정한다 |
 | `TakeoffItem` | `acceptance_m` | 수직 허용 오차(m). 0보다 크다 |
 | `TakeoffItem` | `yaw` | 상승 중의 yaw |
 | `LoiterItem` | `duration` | 항목 시작 때의 setpoint를 유지할 시간(ROS 시각). 0보다 크고 그 항목의 `timeout`보다 짧다 |
@@ -442,17 +442,17 @@ QGroundControl.
 
 | 항목 | 시작 조건 | 동작 | 완료 | feedback phase |
 | --- | --- | --- | --- | --- |
-| TAKEOFF | 지상(`landed` true)이고 DISARMED. 아니면 PRECONDITION_FAILED | 준비 단계에서 setpoint 발행을 시작할 때(arm 전, 지상) 읽은 위치가 기준 위치다. 목표점은 그 위치 위 `height_m`이고 처음부터 목표점을 보낸다. `MODE_KEEP`의 yaw는 그때의 heading이다. 비행제어의 자동 이륙 모드가 아니라 Offboard position setpoint로 상승한다. 상승 속도는 비행제어 파라미터가 제한한다 | 고도 추정이 유효하고 목표 고도와의 차가 `acceptance_m`보다 작다 | EXECUTING |
+| TAKEOFF(첫 항목) | 지상(`landed` true)이고 DISARMED. 아니면 PRECONDITION_FAILED | 준비 단계에서 setpoint 발행을 시작할 때(arm 전, 지상) 읽은 위치가 기준 위치다. 목표점은 그 위치 위 `height_m`이고 처음부터 목표점을 보낸다. `MODE_KEEP`의 yaw는 그때의 heading이다. 비행제어의 자동 이륙 모드가 아니라 Offboard position setpoint로 상승한다. 상승 속도는 비행제어 파라미터가 제한한다 | 고도 추정이 유효하고 목표 고도와의 차가 `acceptance_m`보다 작다 | EXECUTING |
 | LOITER | 앞 항목 완료 | 직전 setpoint를 Offboard로 유지한다. 비행제어의 Hold 모드가 아니다 | 항목 시작부터 ROS 시각으로 `duration` 경과 | EXECUTING |
 | LAND | 앞 항목 완료, 또는 `[LAND]` 한 항목 미션이면 준비 단계 끝 | Land 명령(NAV_LAND)을 보내 비행제어의 Land 모드로 전환한다("LAND 항목" 절) | 지상 판정 뒤 DISARMED 확인까지(자동 disarm을 기다린다) | WAITING_MODE |
 
 - `MissionItem.TYPE_LOITER`(Offboard에서 setpoint 유지)와 `VehicleState.MODE_HOLD`(비행제어의 Hold 모드)는 다른 것이다. 취소가 만드는 상태는 뒤의 것이다.
-- GOTO, TRACK_ENTITY, RTL의 의미는 1b 완료에 고정한다("GoToItem과 TrackEntityItem" 절).
+- GOTO, TRACK_ENTITY, RTL의 의미는 1b 완료에 고정한다("GoToItem과 TrackEntityItem" 절). 첫 항목이 아닌 TAKEOFF의 의미도 1b 완료에 고정한다.
 
 미션 검증(INVALID_MISSION).
 
 - 계약: 항목 1개 이상, `type`이 `TYPE_*` 가운데 하나, `timeout` > 0, 쓰지 않는 서브메시지는 기본값, 서브메시지 값의 범위(`height_m` > 0, `acceptance_m` > 0, `duration` > 0이고 `timeout`보다 짧다, `YawSetpoint.mode`가 유효, `MODE_KEEP`이면 `yaw_rad` 0, `MODE_FIXED`이면 `yaw_rad`가 `[-pi, pi)`, 모든 실수가 유한), `mission_id` 규칙. `builtin_interfaces/Duration`의 `nanosec`은 1e9보다 작아야 한다.
-- 1a 노드의 임시 제한(계약 문장이 아니다. 1b에서 푼다): `type`은 TAKEOFF, LOITER, LAND만 받는다. 마지막 항목은 LAND이고 LAND는 마지막에만 온다. 첫 항목은 TAKEOFF 또는 LAND다. 따라서 LAND로 시작하는 미션은 `[LAND]` 한 항목뿐이다. 이 제한에 걸린 미션도 INVALID_MISSION으로 끝나고 `detail`에 이유가 적힌다.
+- 1a 노드의 임시 제한(계약 문장이 아니다. 1b에서 푼다): `type`은 TAKEOFF, LOITER, LAND만 받는다. 마지막 항목은 LAND이고 LAND는 마지막에만 온다. 첫 항목은 TAKEOFF 또는 LAND이고 TAKEOFF는 첫 항목에만 온다. 따라서 LAND로 시작하는 미션은 `[LAND]` 한 항목뿐이다. 이 제한에 걸린 미션도 INVALID_MISSION으로 끝나고 `detail`에 이유가 적힌다.
 
 ## ExecuteMission
 
@@ -638,7 +638,7 @@ setpoint 항목의 ITEM_TIMEOUT과 준비 단계의 실패(ARM_REJECTED, MODE_SW
 
 ### 끝난 뒤 기체 상태
 
-goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 테스트)가 다음 동작을 정하는 근거다. 표의 상태는 Executor가 끝낼 때 기대하는 상태이고, 소비자는 다음 미션 전에 `vehicle_status`와 `landed`(Phase 2부터는 `VehicleState`)로 실제 상태를 확인한다. "근거"의 [실측]은 SITL에서 관찰한 것, [소스]는 PX4 v1.17.0 원문으로 확인한 것, 미확인은 그 경로를 실측하지 않아 지금 동작을 적은 것이다.
+goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 테스트)가 다음 동작을 정하는 근거다. 표의 상태는 Executor가 끝낼 때 기대하는 상태이고, 소비자는 다음 미션 전에 `vehicle_status`와 `landed`(Phase 2부터는 `VehicleState`)로 실제 상태를 확인한다. "근거"의 [실측]은 SITL에서 관찰한 것, [소스]는 PX4 v1.17.0 원문으로 확인한 것, [단위 테스트]는 기체 없이 노드나 core의 단위 테스트로 확인한 것, 미확인은 그 경로를 실측하지 않아 지금 동작을 적은 것이다.
 
 | 끝난 방식 | 기체 상태 | 근거 |
 | --- | --- | --- |
@@ -647,7 +647,7 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 | CANCELED(지상 분기) | 지상 DISARMED | [실측] PX4에 직접 보낸 이륙 직후의 지상 setpoint와 disarm(spoolup, rampup 대역 모두 지상 DISARMED). Executor 경유는 단위 테스트 |
 | CANCELED(상태 표본 없이 끝남) | 보장하지 않는다(이 goal은 아무것도 보내지 않았다) | 미확인 |
 | 지면 바로 위에서 Hold로 끝난 CANCELED 또는 ITEM_TIMEOUT | ARMED, `landed` false인 채 지상이나 지면 근처에 머문다. 높이가 약 0 m여도 Hold 중이라 모터가 돈다. 스스로 disarm되지 않는다. `landed`와 `nav_state`로는 낮은 높이의 Hold와 같고, 지상에 arm으로 남은 상태(`landed` true. DISARM_FAILED 뒤)와는 `landed`로 갈린다. 이어 보낸 `[LAND]` 미션은 시작 조건을 통과한다 | [실측] 이륙 ramp 중, 0.5 m 호버, 이륙 직후 취소의 경계 1회(60 s 관찰). 같은 상태에서 직접 보낸 NAV_LAND는 disarm까지 갔다. Executor가 보낸 `[LAND]`는 미확인 |
-| INVALID_MISSION, VEHICLE_ID_MISMATCH, BUSY | 이 goal은 기체에 아무것도 보내지 않았다. 기체 상태는 이 goal과 무관하다(BUSY이면 실행 중인 goal이 그대로 돈다) | [실측] 시나리오 B, C(goal 뒤 5 s 동안 ARMED 없음) |
+| INVALID_MISSION, VEHICLE_ID_MISMATCH, BUSY | 이 goal은 기체에 아무것도 보내지 않았다. 기체 상태는 이 goal과 무관하다(BUSY이면 실행 중인 goal이 그대로 돈다) | INVALID_MISSION, VEHICLE_ID_MISMATCH는 [실측] 시나리오 B, C(goal 뒤 5 s 동안 ARMED 없음). BUSY는 [단위 테스트] `idsim_mission`의 `ExecutorNodeTest.SecondGoalIsBusy`(두 번째 goal이 feedback 0건으로 ABORTED, REASON_BUSY이고 첫 goal은 계속된다)와 `ScreenGoal.OrderIsIdThenInvalidThenBusy` |
 | NOT_READY, PRECONDITION_FAILED | 이 goal은 기체에 아무것도 보내지 않았다. 기체는 있던 상태 그대로다 | 구현 규칙(발행 시작 전에만 쓴다) |
 | ARM_REJECTED | 정리를 거친다. arm을 보냈으므로 지상 disarm 분기: 보통 지상 DISARMED. disarm이 확인되지 않았으면 `detail`에 적고 지상에 arm으로 남았을 수 있다. 공중이 되었으면 Hold 또는 Land 진행 중 | 정리 분기의 PX4 쪽 사실은 [실측](이륙 직후 취소의 재실측). 이 reason으로 끝나는 경로는 SITL에서 돌리지 않았다(단위 테스트) |
 | MODE_SWITCH_FAILED(준비 단계) | arm 전이므로 지상 DISARMED. 발행은 멈춰 있다. `nav_state`는 OFFBOARD로 남을 수 있으나 DISARMED라 해가 없고 다음 TAKEOFF를 막지 않는다 | 미확인. 보수적 동작: 발행 중단만 한다 |
