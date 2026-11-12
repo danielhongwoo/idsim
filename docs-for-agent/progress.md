@@ -6,7 +6,7 @@
 
 | Phase | 상태 |
 | --- | --- |
-| 1a | 진행 중. 1-5단계 완료, 6단계 진행 중, 7단계 시작 전 |
+| 1a | 진행 중. 1-6단계 완료, 7단계 시작 전 |
 | 1b | 시작 전 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
@@ -21,7 +21,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 | 3 `config/fleet.yaml`과 `tools/gen_compose.py` | 완료 |
 | 4 `idsim_common` | 완료 |
 | 5 `idsim_interfaces` | 완료. 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md` |
-| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0-P5 완료(P4는 PR #36. 로컬 `run_sitl.sh --repeat 10` 10/10, CI `sitl` 첫 실행 통과. P5는 PR #38). 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인했다. 남은 것은 Executor feedback stamp 정리(다음 작업 1)다 |
+| 6 이륙-호버-착륙 노드와 통합 테스트 | 완료. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0-P5 완료(P4는 PR #36. 로컬 `run_sitl.sh --repeat 10` 10/10, CI `sitl` 첫 실행 통과. P5는 PR #38). 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인했다. Executor의 feedback stamp는 tick 입력 시각이고 시나리오 A의 LOITER 유지 판정에 시계 양자 허용이 없다 |
 | 7 `docs/interface.md` | 시작 전 |
 
 환경.
@@ -57,9 +57,8 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. Executor의 feedback stamp를 tick 입력 시각으로 찍는다(ros2-engineer). 지금은 publish 때 시각을 다시 읽어 `/clock` 한 양자(4 ms)만큼 어긋날 수 있고, 시나리오 A의 LOITER 유지 판정이 그 한 양자를 허용한다. 고치면 허용을 되돌린다(test-engineer).
-2. 1a 7단계 `docs/interface.md`(문서 작업). ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 넣을 것은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록의 architect 7단계 행에 있고, 실측 근거가 없는 항목은 "미확인"과 보수적 동작으로 적는다.
-3. CI 후속 PR. `Dockerfile.px4`의 pip 고정과 `PX4_OPTICAL_FLOW_REF` 반영, `ls | grep` 정리(px4-engineer). `Dockerfile.sim-base`의 `GZ_APT_KEY_FPR` 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 이미지 key 재료 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 key에서 뺀 것이 "같은 key는 같은 바이트"의 예외라는 점 포함). `image_keys.py`가 bake 블록의 tags와 공백까지 해시하는 것 정리(devops-engineer).
+1. 1a 7단계 `docs/interface.md`(문서 작업). ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 넣을 것은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록의 architect 7단계 행에 있고, 실측 근거가 없는 항목은 "미확인"과 보수적 동작으로 적는다.
+2. CI 후속 PR. `Dockerfile.px4`의 pip 고정과 `PX4_OPTICAL_FLOW_REF` 반영, `ls | grep` 정리(px4-engineer). `Dockerfile.sim-base`의 `GZ_APT_KEY_FPR` 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 이미지 key 재료 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 key에서 뺀 것이 "같은 key는 같은 바이트"의 예외라는 점 포함). `image_keys.py`가 bake 블록의 tags와 공백까지 해시하는 것 정리(devops-engineer).
 
 ## 미해결 사항
 
@@ -81,7 +80,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 빌드와 CI.
 
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
-- 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 3의 CI 후속 PR).
+- 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 2의 CI 후속 PR).
 - apt 미러: 지정 미러가 막히면 콜드 빌드가 실패한다. apt `Acquire::Retries` 미적용. CI에서는 Canonical 노드의 동기화 시차로 apt 단계가 간헐적으로 실패할 수 있다(대안: apt 단계 재시도, CI 미러 변경).
 - `docker/Dockerfile.px4` 132행 주석이 없는 문서 이름 `smoke-test-phase1a.md`를 가리킨다. 주석만 고쳐도 px4 이미지 key가 바뀌므로 다음에 그 파일을 바꿀 때 `smoke-test.md`로 함께 고친다(px4-engineer).
 - `.github/workflows/build.yml`, `build-images.yml`, `tools/ci/image_keys.py`에 음차("키", "잡")가 남아 있다. 다음에 고칠 때 바꾼다.
