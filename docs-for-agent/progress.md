@@ -76,6 +76,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
 - 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 1의 CI 후속 PR).
 - apt 미러: 지정 미러가 막히면 콜드 빌드가 실패한다. apt `Acquire::Retries` 미적용. CI에서는 Canonical 노드의 동기화 시차로 apt 단계가 간헐적으로 실패할 수 있다(대안: apt 단계 재시도, CI 미러 변경).
+- gz-sim 버전이 고정되어 있지 않다(`docker/versions.env`는 `GZ_RELEASE=harmonic`만 둔다). `docs/interface.md` 시간 기준 절은 sim-base 이미지에 설치된 gz-sim 8.15.0의 소스 행을 근거로 쓴다. architect 제안: `versions.env`에 기대 버전 `GZ_SIM_VERSION`을 두고 sim-base build나 스모크 images 단계가 설치 버전과 대조해 다르면 실패하게 한다(apt 정확 고정은 옛 패키지가 저장소에서 빠질 때 build가 깨진다). devops-engineer와 architect가 정한다.
 - `docker/Dockerfile.px4` 132행 주석이 없는 문서 이름 `smoke-test-phase1a.md`를 가리킨다. 주석만 고쳐도 px4 이미지 key가 바뀌므로 다음에 그 파일을 바꿀 때 `smoke-test.md`로 함께 고친다(px4-engineer).
 - `.github/workflows/build.yml`, `build-images.yml`, `tools/ci/image_keys.py`에 음차("키", "잡")가 남아 있다. 다음에 고칠 때 바꾼다.
 - clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다(`src/`의 소스가 include하는 헤더만 검사된다). 헤더 전용 검사를 둘지, `test/`를 tidy 대상에 넣을지 정한다(ros2-engineer, devops-engineer).
