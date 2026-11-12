@@ -57,6 +57,11 @@ def _keys_with_bake(tmp_path, monkeypatch, transform):
     return _keys(_versions())
 
 
+def _material(name):
+    images = image_keys.load_images()
+    return images[name].bake_material
+
+
 def _sub(text, old, new):
     """치환 대상이 원문에 있고 치환 뒤 텍스트가 실제로 바뀌었음을 단정한다."""
     assert old in text, old
@@ -102,14 +107,14 @@ def test_unknown_attr_target_stops(tmp_path, monkeypatch):
     # 경우 (a): 멀티스테이지 target은 이미지 바이트를 바꾼다
     _stops(tmp_path, monkeypatch,
            lambda t: _sub(t, 'dockerfile = "Dockerfile.px4"', 'dockerfile = "Dockerfile.px4"\n  target = "builder"'),
-           "지원하지 않는 속성")
+           r"target px4\.target: 지원하지 않는 속성")
 
 
 def test_unknown_attr_labels_stops(tmp_path, monkeypatch):
     # 경우 (b): labels는 이미지 config를 바꾼다
     _stops(tmp_path, monkeypatch,
            lambda t: _sub(t, 'dockerfile = "Dockerfile.px4"', 'dockerfile = "Dockerfile.px4"\n  labels = { a = "b" }'),
-           "지원하지 않는 속성")
+           r"target px4\.labels: 지원하지 않는 속성")
 
 
 def test_inherited_map_merges_per_entry(tmp_path, monkeypatch):
@@ -121,11 +126,6 @@ def test_inherited_map_merges_per_entry(tmp_path, monkeypatch):
     for name in base:
         assert changed[name] != base[name], name
     assert "bake args EXTRA=\"1\"" in _material("px4")
-
-
-def _material(name):
-    images = image_keys.load_images()
-    return images[name].bake_material
 
 
 def test_child_map_entries_override_parent_entry(tmp_path, monkeypatch):
@@ -158,53 +158,56 @@ def test_interpolation_in_arg_stops(tmp_path, monkeypatch):
     # 경우 (d): "${PX4_TAG}"의 첫 }에서 맵이 잘려 뒤 항목이 사라지던 경우
     _stops(tmp_path, monkeypatch,
            lambda t: _sub(t, "PX4_TAG           = PX4_TAG\n", 'PX4_TAG           = "${PX4_TAG}"\n    ZZZ = PX4_GZ_MODELS_REF\n'),
-           "해석할 수 없는 값")
+           r"\.args\.PX4_TAG: 해석할 수 없는 값")
 
 
 def test_interpolation_in_scalar_and_list_stops(tmp_path, monkeypatch):
     _stops(tmp_path, monkeypatch,
            lambda t: _sub(t, 'dockerfile = "Dockerfile.px4"', 'dockerfile = "Dockerfile.${PX4_TAG}"'),
-           "해석할 수 없는 값")
+           r"target px4\.dockerfile: 해석할 수 없는 값")
     _stops(tmp_path, monkeypatch,
            lambda t: _sub(t, 'platforms = ["linux/amd64"]', 'platforms = ["linux/${ARCH}"]'),
-           "해석할 수 없는 값")
+           r"target [\w-]+\.platforms: 목록에 해석할 수 없는 값")
 
 
 def test_interpolation_in_tags_is_still_ignored(tmp_path, monkeypatch):
-    # tags의 보간은 원래 있던 것이고 key에 들어가지 않는다
-    assert 'tags = ["idsim/px4:local", "${REGISTRY}' in open(image_keys.BAKE_FILE, encoding="utf-8").read()
-    assert _keys_with_bake(tmp_path, monkeypatch, lambda t: t) == _keys(_versions())
+    # tags의 보간은 원래 있던 것이고 key에 들어가지 않는다. 보간 부분을 바꿔도 멈추지 않고 key가 같아야 한다
+    base = _keys(_versions())
+    changed = _keys_with_bake(
+        tmp_path, monkeypatch,
+        lambda t: _sub(t, '"${REGISTRY}/px4:', '"${OTHER}/px4:'))
+    assert changed == base
 
 
 def test_non_string_scalar_stops(tmp_path, monkeypatch):
     # 경우 (e): context = VAR 처럼 문자열이 아닌 스칼라가 조용히 빠지던 경우
     _stops(tmp_path, monkeypatch,
            lambda t: _sub(t, 'context   = "docker"', "context   = CTX"),
-           "해석할 수 없는 값")
+           r"target [\w-]+\.context: 해석할 수 없는 값")
 
 
 def test_complex_map_value_stops():
     blocks = image_keys.parse_bake_blocks(
         'target "c" {\n  dockerfile = "d"\n  args = { A = upper(X) }\n}\n')
-    with pytest.raises(SystemExit, match="해석할 수 없는 값"):
+    with pytest.raises(SystemExit, match=r"target c\.args\.A: 해석할 수 없는 값"):
         image_keys.bake_material(blocks, "c")
 
 
 def test_unbalanced_value_stops():
     blocks = image_keys.parse_bake_blocks(
         'target "c" {\n  dockerfile = "d"\n  platforms = ["a"\n}\n')
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit, match="문자열이나 괄호가 닫히지 않는다"):
         image_keys.bake_material(blocks, "c")
 
 
 def test_duplicate_attr_and_entry_stop():
     blocks = image_keys.parse_bake_blocks(
         'target "c" {\n  dockerfile = "d"\n  dockerfile = "e"\n}\n')
-    with pytest.raises(SystemExit, match="중복"):
+    with pytest.raises(SystemExit, match=r"target c\.dockerfile: 속성이 중복이다"):
         image_keys.bake_material(blocks, "c")
     blocks = image_keys.parse_bake_blocks(
         'target "c" {\n  dockerfile = "d"\n  args = { A = X, A = Y }\n}\n')
-    with pytest.raises(SystemExit, match="중복"):
+    with pytest.raises(SystemExit, match=r"target c\.args: 항목 A가 중복이다"):
         image_keys.bake_material(blocks, "c")
 
 
