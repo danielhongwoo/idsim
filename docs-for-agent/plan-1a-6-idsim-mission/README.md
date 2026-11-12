@@ -38,13 +38,12 @@
 
 ## 진행 순서
 
-P0-P3은 끝났다. 남은 순서는 아래와 같다.
+P0-P3, P4의 core 변경, 재실측 (2), (3), (5)는 끝났다. 남은 순서는 아래와 같다. 기준은 대표 시나리오의 통과이고, 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮는다(`decisions.md` U6).
 
-1. P4의 선행 작업: 측정 스크립트(`tests/sitl/measure/`)와 px4-engineer의 필수 재실측 (2), (3), (5).
-2. P4. core 변경을 먼저 넣고, 로컬에서 `tests/sitl/run_sitl.sh --repeat 3`이 통과한 뒤 PR을 올리고 `sitl` job의 첫 실행을 본다. 첫 3회의 단계별 시간과 RTF를 PR 본문에 기록한다.
-3. P5. 브라우저 실접속을 확인한다.
-4. 사용자 육안 확인(QGC, Gazebo GUI에서 같은 비행). `tools/sim_stack.sh up --viz` 뒤 `tests/sitl/run_sitl.sh --attach <실행 디렉터리>`로 시나리오 A를 돌린다.
-5. 7단계(`docs/interface.md`)로 넘어간다. 계약 고정 전에 px4-engineer의 나머지 필수 재실측이 끝나야 한다(`decisions.md` 넘김 목록).
+1. P4 통합. 로컬 `tests/sitl/run_sitl.sh --repeat 3`이 통과한 커밋으로 PR을 올리고 `sitl` job의 첫 실행을 본다. 첫 3회의 단계별 시간과 RTF를 PR 본문에 기록한다.
+2. P5. 브라우저 실접속을 확인한다.
+3. 사용자 육안 확인(QGC, Gazebo GUI에서 같은 비행). `tools/sim_stack.sh up --viz` 뒤 `tests/sitl/run_sitl.sh --attach <실행 디렉터리>`로 시나리오 A를 돌린다.
+4. 7단계(`docs/interface.md`) 문서 작업. 새 실측을 기다리지 않는다.
 
 ## 검토
 
@@ -73,11 +72,8 @@ P0-P3은 끝났다. 남은 순서는 아래와 같다.
   - CI `sitl` job이 통과하고 실패 때 아티팩트가 올라가는 것을 한 번 확인한다(일부러 실패시킨 실행 또는 첫 실패 실행).
   - `artifacts/runs/`에 호스트 사용자 소유가 아닌 파일이 없다.
   - 문서 반영 목록 반영(reviewer 확인).
-  - `ops-N`의 정지와 실패 탐지를 쟀다: stop 검증 10회(goal 실행 중 stop 4회 이상: PREPARING, TAKEOFF, LOITER, LAND 각 1회 이상. 유예 안 종료, 정리 로그, exit code 분포, 종료 사건 수신 여부), `vehicle.id`가 빠진 params의 결함 주입으로 unhealthy 보고까지의 시간(예상 약 54 s, 최악 70 s), CI 첫 3회의 probe 시간. 값이 `decisions.md` 쟁점 2와 다르면 architect에게 알린다. 기록은 시도마다 한 행이고 실패한 시도를 빼지 않는다. 10회 통과는 실패율 상한 약 26%를 뜻할 뿐이라고 요약에 적는다.
-  - 측정 스크립트가 `tests/sitl/measure/`에 있다(소유 test-engineer, 절차 승인 px4-engineer).
   - 생성기 성질 테스트 넷(상주 ros-ws 서비스의 `init: true`, `ops-N`의 `stop_signal`과 `stop_grace_period`, params에 `lifecycle.` key 없음, healthcheck FQN과 `executor_node` 일치)이 통과한다.
-  - px4-engineer의 필수 재실측 (2), (3), (5)가 끝나 있고 결과가 `decisions.md`의 표와 맞다(다르면 표와 구현을 먼저 고친다).
-  - P6의 1회 판정 확인: `vehicle_status` 원시 표본 기록에서 ARMED 3회 확인까지 간 실행이 10회 이상이고 그 전부에서 OFFBOARD가 아닌 ARMED 표본이 0개다. 실행은 `tests/sitl/run_sitl.sh --repeat 10`의 시나리오 A로 얻거나 재실측 (3), (5)의 해당 실행과 합산하고, 어느 쪽의 실행인지 PR 본문에 구분해 적는다(`decisions.md` 넘김 목록).
+  - 재실측 (2), (3), (5)와 ARMED 표본 기준이 `decisions.md` "재실측 결과와 기준"대로 통과했다(충족).
 - P5: `tools/sim_stack.sh up --viz` 뒤 브라우저에서 Lichtblick이 foxglove_bridge에 붙고 setpoint와 `vehicle_local_position`이 같은 플롯에 놓인다. 두 포트가 127.0.0.1에만 열려 있다.
 - 6단계 전체(roadmap 1a 완료 기준 중 이 단계 몫): 통합 테스트 로컬 3회 연속 통과, CI `sitl` 통과, QGC와 Gazebo GUI로 같은 비행을 사용자가 확인.
 
@@ -85,11 +81,11 @@ P0-P3은 끝났다. 남은 순서는 아래와 같다.
 
 `decisions.md`의 "넘김 목록"이 정본이다. 요약.
 
-- 7단계: 필수 재실측(px4), `docs/interface.md`에 M1-M7, reason별 ABORTED 뒤 기체 상태 표, source 표, 발행 규칙, 공중에서 끝나는 미션의 "고정 전" 표시.
+- 7단계: `docs/interface.md`에 M1-M7, reason별 ABORTED 뒤 기체 상태 표, source 표, 발행 규칙, 공중에서 끝나는 미션의 "고정 전" 표시. 실측 근거가 없는 항목은 "미확인"과 보수적 동작으로 적는다.
 - 1b: 공중에서 끝나는 미션의 종료 동작, 공중 시작 미션, 1a 임시 제한 해제, `bridge.yaml`.
 - Phase 2: replay job의 trigger(사용자 결정 U4), recorder와 MCAP 업로드, `MissionEvent` QoS 재검토 제안, ULog 종료 확인.
 - Phase 3: `validate_mission`의 Fleet 공용, 취소 뒤 `[LAND]` 절차.
 
 ## 사용자 결정
 
-U1-U4는 `decisions.md` 머리의 "사용자 결정"에 있다. 남은 확인은 GHCR 패키지 다섯과 buildcache의 Public 설정이다.
+U1-U4와 U6은 `decisions.md` 머리의 "사용자 결정"에 있다. 남은 확인은 GHCR 패키지 다섯과 buildcache의 Public 설정이다.
