@@ -113,6 +113,7 @@ def test_crosscheck_unhandled_exception_is_infra_not_violation(tmp_path):
     sitl.mkdir()
     (sitl / "armed_a.json").write_text('{"takeoff_start_seen": true}', encoding="utf-8")   # land_start 키가 없다
     (sitl / "raw_status_A.jsonl").write_text('{"timestamp": 1}\n', encoding="utf-8")        # 키가 모자란 표본 -> KeyError
+    (tmp_path / "stack.json").write_text('{"vehicles": [{"ulog_dir": "px4-1/log"}]}', encoding="utf-8")
     (tmp_path / "px4-1" / "log").mkdir(parents=True)
     (tmp_path / "px4-1" / "log" / "a.ulg").write_bytes(b"x")
     assert cc.main([str(tmp_path)]) == 2

@@ -96,7 +96,9 @@ def _main(argv=None):
     try:
         armed_a = json.loads((out / "armed_a.json").read_text(encoding="utf-8"))
         raw = [json.loads(ln) for ln in (out / "raw_status_A.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()]
-        ulogs = sorted(run.glob("px4-*/log/**/*.ulg"), key=lambda p: p.stat().st_mtime)
+        # 시나리오 A 기체(vehicles[0])의 ulog_dir(실행 디렉터리 기준, 예: px4-1/log)로 한정한다
+        ulog_dir = json.loads((run / "stack.json").read_text(encoding="utf-8"))["vehicles"][0]["ulog_dir"]
+        ulogs = sorted(run.glob(ulog_dir + "/**/*.ulg"), key=lambda p: p.stat().st_mtime)
     except OSError as e:
         print("입력을 읽지 못했다: %s" % e, file=sys.stderr)
         return 2
