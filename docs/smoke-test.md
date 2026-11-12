@@ -64,9 +64,9 @@ compose 프로젝트 이름. 모든 compose 파일은 `name:`을 명시한다(�
 
 이미지의 빌드 버전 ENV. 각 Dockerfile은 자기가 받은 버전 ARG를 `IDSIM_BUILD_<key>` ENV로 남긴다. px4는 `IDSIM_BUILD_PX4_TAG`, ros-ws는 `IDSIM_BUILD_PX4_MSGS_REF`와 `IDSIM_BUILD_PX4_ROS_COM_REF`, xrce-agent는 `IDSIM_BUILD_XRCE_AGENT_TAG`, sim-base는 `IDSIM_BUILD_GZ_RELEASE`와 `IDSIM_BUILD_PX4_GZ_MODELS_REF`. `run_smoke.sh`는 images 전에 각 컨테이너의 이 값을 `versions.env`와 대조해 하나라도 다르면 실패한다. `versions.env`만 올리고 이미지를 다시 빌드하지 않은 채 옛 이미지의 측정값이 새 태그의 골든으로 저장되는 것을 막기 위해서다.
 
-원시(비추적): `artifacts/runs/<실행 id>/smoke/`(같은 디렉터리에 생성된 `compose.yaml`, `stack.json`, `px4-N/log/`의 ULog가 있다. 실행 id는 `--run-dir`의 마지막 요소이고, `--run-dir`가 없으면 `<UTC YYYYmmdd-HHMMSS>-k<k>`이고 스모크는 `<UTC>-k<k>-<단계>`). `hz` 측정값은 골든이 아니라 여기와 `docs/interface.md`의 참고 범위값에만 적고, 측정 조건(태그, 속도 배수, 벽시계 여부)을 병기한다. CI에서는 이 디렉터리를 job artifact로 올린다.
+원시(비추적): `artifacts/runs/<실행 id>/smoke/`(같은 디렉터리에 생성된 `compose.yaml`, `stack.json`, `px4-N/log/`의 ULog가 있다. 실행 id는 `--run-dir`의 마지막 요소이고, `--run-dir`가 없으면 `<UTC YYYYmmdd-HHMMSS>-k<k>`이고 스모크는 `<UTC>-k<k>-<단계>`). `hz` 측정값은 골든이 아니라 여기에만 남고, 측정 조건(태그, 속도 배수, 벽시계 여부)을 병기한다. 측정 주기는 계약이 아니라 `docs/interface.md`의 토픽 표에 넣지 않는다. CI에서는 이 디렉터리를 job artifact로 올린다.
 
-사람이 읽는 요약(토픽 표, QoS, 파라미터, 주기 참고값)은 `tools/to_interface.py`가 골든과 원시 산출물에서 만들어 `docs/interface.md` 초안으로 넘긴다.
+`docs/interface.md`의 PX4 토픽 표(이름, 방향, 타입, 발행자 QoS)는 `tools/to_interface.py`가 골든과 원시 산출물에서 만든 표에서 측정 주기 열을 뺀 것이다.
 
 ## 골든 파일 단위 테스트
 
