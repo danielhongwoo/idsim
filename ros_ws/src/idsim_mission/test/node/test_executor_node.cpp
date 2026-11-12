@@ -225,7 +225,8 @@ private:
     if (cmd.command == VC::VEHICLE_CMD_COMPONENT_ARM_DISARM && cmd.param1 == 0.0F) {
       ++disarms_;
     }
-    if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 4.0F) {
+    // Hold = AUTO(param2 4) + AUTO_LOITER(param3 3). 다른 AUTO sub mode는 세지 않는다.
+    if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 4.0F && cmd.param3 == 3.0F) {
       ++holds_;
     }
     if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 6.0F) {
