@@ -38,12 +38,10 @@
 
 ## 진행 순서
 
-P0-P3, P4의 core 변경, 재실측 (2), (3), (5)는 끝났다. 남은 순서는 아래와 같다. 기준은 대표 시나리오의 통과이고, 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮는다(`decisions.md` U6).
+P0-P5, 재실측 (2), (3), (5), 사용자 육안 확인(QGC, Gazebo GUI)은 끝났다. 남은 순서는 아래와 같다. 기준은 대표 시나리오의 통과이고, 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮는다(`decisions.md` U6).
 
-1. P4 통합. 로컬 `tests/sitl/run_sitl.sh --repeat 3`이 통과한 커밋으로 PR을 올리고 `sitl` job의 첫 실행을 본다. 첫 3회의 단계별 시간과 RTF를 PR 본문에 기록한다.
-2. P5. 브라우저 실접속을 확인한다.
-3. 사용자 육안 확인(QGC, Gazebo GUI에서 같은 비행). `tools/sim_stack.sh up --viz` 뒤 `tests/sitl/run_sitl.sh --attach <실행 디렉터리>`로 시나리오 A를 돌린다.
-4. 7단계(`docs/interface.md`) 문서 작업. 새 실측을 기다리지 않는다.
+1. Executor feedback stamp를 tick 입력 시각으로 찍고, 시나리오 A의 LOITER 유지 판정에서 `/clock` 한 양자 허용을 되돌린다.
+2. 7단계(`docs/interface.md`) 문서 작업. 새 실측을 기다리지 않는다.
 
 ## 검토
 
