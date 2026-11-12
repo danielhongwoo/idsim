@@ -21,7 +21,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 | 3 `config/fleet.yaml`과 `tools/gen_compose.py` | 완료 |
 | 4 `idsim_common` | 완료 |
 | 5 `idsim_interfaces` | 완료. 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md` |
-| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0(CI trigger), P1(ros-ws 이미지의 foxglove_bridge), P2(`idsim_common` 추가), P3a(런타임 확인)는 완료. P3(`idsim_mission` 패키지)도 완료(승인 내역과 넘기는 항목은 PR #27 본문). `decisions.md`는 지금 유효한 계약만 담은 한 판이고 P4 착수 전 설계 토론의 결정(P6의 ARMED 관측 뒤 감시, 정리의 상한)이 들어 있다. P4 선행 측정 스크립트(`tests/sitl/measure/`)와 P4 core 변경(그 결정의 상태기 구현과 단위 테스트, 승인 내역은 PR 본문)은 완료. PX4 직접 명령 부류의 본 측정((2), (3), (5), `armed`)도 통과. P4의 생성기와 통합 중 devops 몫(`ops-N` 서비스, params와 `stack.json` key, `sim_stack.sh up --infra-only`, `build_images.py --mode pull`, `px4-api` 범위, `sitl.yml` 골격)은 완료. `tests/sitl/`(`run_sitl.sh`), `sitl` job의 호출 연결, 문서와 P5(viz)는 진행 중이거나 시작 전 |
+| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0-P3과 P3a는 완료(P3 승인 내역은 PR #27 본문). P4 core 변경과 PX4 직접 명령 부류의 본 측정은 완료. P4 생성기와 통합(브랜치 `feat/1a-6-p4-integration`, PR 전): devops 몫(`ops-N`, params와 `stack.json` key, `sim_stack.sh up --infra-only`, `build_images.py --mode pull`, `px4-api` 범위, `sitl.yml`), test-engineer 몫(`tests/sitl/run_sitl.sh`, 시나리오 B, C, A, D, T, `tests/support/`의 sitl 모듈, 시나리오 A의 ULog 교차 확인), architect의 문서 반영은 끝났다. 로컬 `run_sitl.sh --repeat 3`은 3/3, 시나리오 A `--repeat 10`은 10/10이라 P4 머지 조건 중 측정 부분(재실측 (2), (3), (5)와 두 부류의 ARMED 표본 기준)은 충족됐다. 남은 것은 px4-engineer 필수 승인의 재확인, 최종 커밋에서의 재실행, CI `sitl` 첫 실행, `ops-N` 정지와 결함 주입 측정, P5(viz) |
 | 7 `docs/interface.md` | 시작 전 |
 
 환경.
@@ -54,8 +54,8 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. P4의 선행 측정(PX4 직접 명령 부류): 측정 스크립트는 `tests/sitl/measure/`(사용법은 같은 디렉터리 `README.md`, 절차 승인 px4-engineer)다. 재실측 (2), (5)와 `armed` 항목은 통과했고((2)는 architect 판정), (3)은 spoolup, rampup 내부, 경계 세 대역 27회로 다시 정해 통과했다(경계 대역의 Hold로 끝난 1회는 architect 판정). 기준과 실측 근거는 `plan-1a-6-idsim-mission/decisions.md`의 "P4의 실측 기록" 절과 넘김 목록 px4-engineer 행에 있다. 다른 개발 PC에서 (3)을 돌리려면 그 호스트의 `armed` 기록으로 T_lf와 지연값을 정한 뒤 커밋하고 돌린다(image key나 TAKEOFF 높이가 근거 실행과 다르면 측정 스크립트가 거부한다). P4 머지 조건으로 남은 것은 Executor 경유(시나리오 A) 부류의 ARMED 표본 기준 10회 이상이며, 그 기록은 P4 시나리오가 `tests/support/px4_raw.py`, `measure_judge.py`, `measure_check.py`를 써서 남긴다.
-2. P4 통합의 남은 몫(test-engineer, devops-engineer, architect의 문서 반영). `tests/sitl/`와 `run_sitl.sh`(`sitl.yml` 머리 주석이 기대하는 계약을 따른다), `stack.py` 접근자, 로컬 3회 연속 통과 뒤 CI `sitl` job의 첫 실행(단계별 시간, RTF, probe 시간 기록), `ops-N` 정지와 실패 탐지의 측정 기록. 함께 할 것: `idsim_mission/config/ops.example.yaml`의 손으로 쓴 식별자를 지우거나 install에서 빼기(ros2-engineer), 노드 이름 기본값 `mission_executor`와 생성기의 대조, CI 첫 몇 회의 노드 테스트(`test_executor_node`) 소요 기록(벽시계 1 ms당 sim 2 ms라 runner가 느리면 LINK_LOST로 흔들릴 수 있다. 흔들리면 재시도나 상한 늘리기로 덮지 않는다).
+1. P4 머지 준비. px4-engineer 필수 승인의 재확인(조건 두 개, 비상 정리 Land의 match 대기와 재전송, ULog 교차 확인의 판정 승격을 반영한 커밋). 최종 커밋에서 `tests/sitl/run_sitl.sh --repeat 3`과 시나리오 A의 `--repeat 10`을 다시 돌려 부류별 실행 수와 표본 수를 PR 본문에 적는다(지금 10/10은 최종 커밋 이전 커밋의 실행이다). PR을 올려 CI `sitl` job의 첫 실행을 보고 첫 3회의 단계별 시간, 판정 구간 RTF, probe 시간, runner의 `docker version`을 PR 본문에 남긴다(올림 기준: 15분 초과나 RTF 0.7 미만). reviewer 검토. 다른 개발 PC에서 재실측 (3)을 돌리려면 그 호스트의 `armed` 기록으로 T_lf와 지연값을 정한 뒤 커밋하고 돌린다(image key나 TAKEOFF 높이가 근거 실행과 다르면 측정 스크립트가 거부한다).
+2. P4 통합의 남은 몫. `ops-N` 정지 검증 10회(goal 실행 중 stop 4회 이상)와 `vehicle.id` 누락 결함 주입의 측정 기록(devops-engineer, test-engineer). 루트 `README.md`와 `docker/README.md`의 `run_sitl.sh`, `sim_stack.sh up --infra-only` 안내(devops-engineer). 시나리오 A의 LOITER와 D의 유지 구간에서 기준 고도로부터의 최대 편차를 trace와 회차 요약에 기록(test-engineer. 유지 상수를 다시 보는 조건의 입력, `decisions.md` 쟁점 9). `tests/sitl/README.md`의 종료 코드 줄에 ULog 교차 확인을 더하기(test-engineer. `run_sitl.sh` 머리 주석에는 있다). 함께 할 것: `idsim_mission/config/ops.example.yaml`의 손으로 쓴 식별자를 지우거나 install에서 빼기(ros2-engineer), 노드 이름 기본값 `mission_executor`와 생성기의 대조, CI 첫 몇 회의 노드 테스트(`test_executor_node`) 소요 기록(벽시계 1 ms당 sim 2 ms라 runner가 느리면 LINK_LOST로 흔들릴 수 있다. 흔들리면 재시도나 상한 늘리기로 덮지 않는다).
 3. P5 viz(devops-engineer). `foxglove`와 `lichtblick` 서비스, 브라우저 실접속 확인.
 4. 6단계 마무리: 통합 테스트 로컬 3회 연속 통과, CI `sitl` 통과, 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인.
 5. 1a 7단계 `docs/interface.md`. ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 계약 고정 전에 px4-engineer의 나머지 필수 재실측이 끝나야 한다. 6단계에서 넘어온 것은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록의 architect 7단계 행에 있다(reason별 ABORTED 뒤 기체 상태 표, 정리의 상한, 정리 중 failsafe인 기체에 Hold를 보낼지, 아무것도 하지 않은 goal의 취소 동작 재검토).
@@ -65,12 +65,14 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 1a 6단계.
 
+- CI `sitl` job은 아직 한 번도 돌지 않았다. 첫 실행에서 단계별 시간, 판정 구간 RTF, probe 시간, runner의 Docker 판(`start_interval`은 Engine 25 이상), 실패 때 `artifacts/runs/`가 job artifact로 올라가는지를 기록한다(쟁점 11). 1a 실행당 10-13분과 판정 구간 ROS 시각 90-110 s는 아직 추정이다.
+- `ops-N` 정지와 실패 탐지의 측정 기록이 없다: stop 검증 10회(goal 실행 중 stop에서 종료 사건 ABORTED, REASON_INTERNAL이 구독자에게 오는지, on_shutdown이 SIGINT 뒤에 도는지는 실측이 없다), `vehicle.id` 누락에서 unhealthy까지의 시간(예상 약 54 s, 최악 70 s). 값이 `decisions.md` 쟁점 2와 다르면 architect에게 올린다.
+- 시나리오 A의 ULog 교차 확인은 실행마다 돌고 `--repeat`의 `armed_criterion.json`이 `passed_with_ulog`를 적지만, 부류별 10회 기준을 여러 `--repeat` 묶음과 PX4 직접 명령 부류의 ULog까지 합산해 판정하는 자동화는 없다(test-engineer). 지금은 사람이 묶음별 결과를 합친다.
+- 유지 구간 상수(`HOVER_HOLD_TOL_M` 0.5 m, `HOVER_HOLD_S` 5 s, `DISARMED_HOLD_S` 5 s)는 실측 분포 없이 정한 값이다. 다시 보는 조건은 `decisions.md` 쟁점 9에 있다.
 - 감시 표의 행 순위는 필수 재실측 (4) 전까지 잠정이다. 필수 재실측 여덟 항목은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록에 있다.
 - 스모크 images 단계(`tests/smoke/run_smoke.sh`의 check_s0)가 `LLVM_MAJOR`와 `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다. `tools/ros_ws.sh`의 대조는 이미지에 있는 ENV만 돌아서 그 ENV가 없는 옛 ros-ws 이미지가 통과한다. 옛 `:local` 이미지로 `sim_stack.sh up --viz`를 하면 foxglove만 죽는다. P4 또는 P5 전에 images 단계에 넣는다(test-engineer). `ros_ws.sh`에 `versions.env`의 이름 기준 존재 검사를 둘지는 devops-engineer와 test-engineer가 정한다.
 - foxglove_bridge의 판은 `FOXGLOVE_BRIDGE_VERSION` 접두 단정까지만 고정된다. ROS sync로 새 판이 오면 ros-ws key가 바뀌는 PR의 빌드가 실패한다(의도한 동작). 같은 판 안의 revision과 의존 패키지는 고정되지 않는다.
 - Lichtblick 공식 이미지(1.30.0. 이미지 label의 2.5.2는 베이스 Caddy의 버전)가 두 서브프로토콜을 제시하는 것만 확인했다. foxglove_bridge와의 브라우저 실접속은 P5에서 확인한다.
-- PX4 timestamp와 `/clock`이 같은 축이라는 것의 회귀 판정은 P4의 SITL fixture 사전조건(`/clock` 정렬)과 시나리오 T가 생길 때까지 없다. 스모크 clock 단계에는 넣지 않는다(`decisions.md` 쟁점 9).
-- `artifacts/`를 CI job 아티팩트로 올리는 것은 `sitl` job을 만드는 P4에서 확인한다.
 - 측정 스크립트가 T_lf를 조건이 같은 앞선 기록 전부(재실측 (3)의 관측 포함)의 최솟값으로 구하고 ULog의 PX4 파라미터(`MPC_THR_HOVER`, `COM_SPOOLUP_TIME`)를 근거 실행과 비교하도록 고친다(test-engineer, `decisions.md` 넘김 목록 (3) 정의). 다음 (3) 실행 전에 한다. 파라미터 목록은 px4-engineer가 승인한다.
 - 거부된 disarm의 ack와 logged message의 시각 차이는 실측이 1회뿐이다. 판정 검사로 올릴지는 표본이 쌓인 뒤 정한다(architect, px4-engineer).
 - PX4 버전을 올리면 "ULog의 `vehicle_command` `timestamp`가 측정기의 stamp와 같다"와 "ack 기록 순서가 처리 순서와 같다"를 다시 확인한다(px4-engineer).

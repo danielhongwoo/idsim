@@ -1,6 +1,6 @@
 # Phase 1a 6번 작업 idsim_mission 작업 계획
 
-설계 결정과 계약은 `decisions.md`에 있다. 지금 어디까지 왔는지는 `docs-for-agent/progress.md`에 있다(P0-P3 완료, P4와 P5는 시작 전). 경위와 검토 내역은 커밋 메시지와 PR 본문에 있다.
+설계 결정과 계약은 `decisions.md`에 있다. 지금 어디까지 왔는지는 `docs-for-agent/progress.md`에 있다. 경위와 검토 내역은 커밋 메시지와 PR 본문에 있다.
 
 ## 이 디렉터리의 파일
 
