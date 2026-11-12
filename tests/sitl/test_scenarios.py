@@ -237,18 +237,18 @@ def _scenario_d(s, raw):
     s.mission.wait_result(s.waiter, run, 30.0, "D cancel result")
     check_goal(s, run, terminal_status=sj.STATUS_CANCELED, reason=sj.REASON_NONE)
 
+    # 표본이 늦게 도착할 수 있으므로 기준(AUTO_LOITER 3회 연속)은 그대로 두고 도착을 기다린다
+    s.waiter.wait_until(lambda: not sj.cancel_hover_findings(raw.status, t_cancel)[0], 10.0,
+                        "D 취소 뒤 AUTO_LOITER %d회 연속" % sj.N_CONSECUTIVE)
     findings, hit = sj.cancel_hover_findings(raw.status, t_cancel)
     sw.raise_if(findings)
     ref_z = raw.last_pos()[3]
     t_hold0 = raw.now_us()
     s.waiter.hold_for(sj.HOVER_HOLD_S, "D 고도 유지")
-    hold = sj.altitude_hold_findings(raw.pos, t_hold0, raw.now_us(), ref_z)
-    s.record_hold_deviation("D_hover", sj.altitude_max_deviation(raw.pos, t_hold0, raw.now_us(), ref_z))
-    last = raw.last_status()
-    if last.arming_state != mj.ARMING_STATE_ARMED:
-        hold.append((sw.WRONG_RESULT, "취소 뒤 유지 구간에서 기체가 ARMED가 아니다"))
-    if any(x.landed for x in raw.landed if x.recv_ros_us > t_hold0):
-        hold.append((sw.WRONG_RESULT, "취소 뒤 유지 구간에서 landed가 true였다"))
+    t_hold1 = raw.now_us()
+    hold = sj.altitude_hold_findings(raw.pos, t_hold0, t_hold1, ref_z)
+    s.record_hold_deviation("D_hover", sj.altitude_max_deviation(raw.pos, t_hold0, t_hold1, ref_z))
+    hold += sj.hover_state_findings(raw.status, raw.landed, t_hold0, t_hold1)
     s.trace.event("cancel_hover", confirmed_ts=hit.ts_us, ref_z=ref_z, findings=[list(f) for f in hold])
     sw.raise_if(hold)
 

@@ -41,7 +41,7 @@ REASON_NONE = 0
 REASON_INVALID_MISSION = 1
 REASON_VEHICLE_ID_MISMATCH = 2
 
-# ExecuteMission.Feedback.phase / MissionItem.type
+# ExecuteMission.Feedback.phase / MissionItem.type. 생성 코드 상수와 같은지는 test_sitl_constants.py가 고정한다
 PHASE_PREPARING = 1
 PHASE_EXECUTING = 2
 TYPE_TAKEOFF = 1
@@ -331,13 +331,42 @@ def sequence_findings(status, armed_after_us):
     return [], {"armed_ts": armed.ts_us, "land_ts": land.ts_us, "disarmed_ts": c.confirmed_at.ts_us}
 
 
-def never_armed_findings(status, from_us, to_us):
-    """[from_us, to_us] 동안(수신 ROS 시각) ARMED 표본이 하나도 없는가(B와 C의 "기체에 손대지 않음")."""
-    armed = [s for s in status if from_us <= s.recv_ros_us <= to_us and mj.is_armed(s)]
+# 구간 안 표본 수 하한. "표본이 없어서 ARMED가 없다"는 통과가 아니다(vacuous 방지). 하한은 N_CONSECUTIVE(3)다:
+# 구간은 5 s(ROS 시각)이고 vehicle_status는 최소 2 Hz([소스] 상태가 바뀌면 즉시, 아니면 주기 발행)라 10개 안팎이
+# 오는데, 한 번의 유실과 늦은 도착을 견디면서 "구간을 덮었다"고 볼 최소치로 3을 둔다. vehicle_land_detected는
+# 값이 바뀔 때와 1 Hz로만 나오므로([실측] measure_judge) 5 s 구간의 하한을 2로 둔다.
+MIN_STATUS_SAMPLES = N_CONSECUTIVE
+MIN_LANDED_SAMPLES = 2
+
+
+def never_armed_findings(status, from_us, to_us, min_samples=MIN_STATUS_SAMPLES):
+    """[from_us, to_us] 동안(수신 ROS 시각) ARMED 표본이 하나도 없는가(B, C, T의 "기체에 손대지 않음").
+    구간 안의 vehicle_status가 min_samples개 미만이면 판정하지 못한 것이므로 실패다."""
+    inside = [s for s in status if from_us <= s.recv_ros_us <= to_us]
+    if len(inside) < min_samples:
+        return [(sw.WRONG_RESULT, "ARMED 없음을 판정할 vehicle_status 표본이 %d개뿐이다(최소 %d)"
+                 % (len(inside), min_samples))]
+    armed = [s for s in inside if mj.is_armed(s)]
     if armed:
         return [(sw.WRONG_RESULT, "ARMED 표본이 %d개 나왔다(첫 표본 수신 %d us). 이 goal은 기체에 손대면 안 된다"
                  % (len(armed), armed[0].recv_ros_us))]
     return []
+
+
+def hover_state_findings(status, landed, from_us, to_us):
+    """D의 취소 뒤 유지 구간 전체에서 ARMED이고 landed가 false인가(수신 ROS 시각). 표본 수 하한을 둔다."""
+    st = [s for s in status if from_us <= s.recv_ros_us <= to_us]
+    ld = [x for x in landed if from_us <= x.recv_ros_us <= to_us]
+    f = []
+    if len(st) < MIN_STATUS_SAMPLES:
+        f.append((sw.WRONG_RESULT, "유지 구간의 vehicle_status 표본이 %d개뿐이다(최소 %d)" % (len(st), MIN_STATUS_SAMPLES)))
+    elif not all(mj.is_armed(s) for s in st):
+        f.append((sw.WRONG_RESULT, "유지 구간에 ARMED가 아닌 vehicle_status 표본이 있다"))
+    if len(ld) < MIN_LANDED_SAMPLES:
+        f.append((sw.WRONG_RESULT, "유지 구간의 vehicle_land_detected 표본이 %d개뿐이다(최소 %d)" % (len(ld), MIN_LANDED_SAMPLES)))
+    elif any(x.landed for x in ld):
+        f.append((sw.WRONG_RESULT, "유지 구간에 landed가 true인 표본이 있다"))
+    return f
 
 
 def cancel_hover_findings(status, after_recv_us):

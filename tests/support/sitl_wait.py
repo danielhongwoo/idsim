@@ -30,7 +30,7 @@ TIMEOUT_SIM = "TIMEOUT_SIM"
 CLOCK_STALLED = "CLOCK_STALLED"
 CLOCK_SLOW = "CLOCK_SLOW"
 CLOCK_ABSENT = "CLOCK_ABSENT"
-# 시각이 뒤로 가는 경우. decisions.md의 verdict 분류 목록에 이름이 없어 더한 분류다(보고 사항).
+# 시각이 뒤로 가는 경우(Gazebo 재시작, /clock 발행자가 둘). 멈춤이나 느림과 원인이 달라 따로 분류한다(decisions.md 쟁점 10).
 CLOCK_BACKWARD = "CLOCK_BACKWARD"
 NO_PUBLISHER = "NO_PUBLISHER"
 SERVER_ABSENT = "SERVER_ABSENT"

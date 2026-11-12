@@ -209,9 +209,28 @@ def test_sequence_requires_armed_before_disarmed():
 def test_never_armed():
     D = mj.ARMING_STATE_DISARMED
     assert sj.never_armed_findings([st(i, D, recv=i) for i in (1, 2, 3)], 0, 10) == []
-    f = sj.never_armed_findings([st(1, D, recv=1), st(2, recv=2)], 0, 10)
-    assert cats(f) == [sw.WRONG_RESULT]
-    assert sj.never_armed_findings([st(20, recv=20)], 0, 10) == []   # 구간 밖
+    f = sj.never_armed_findings([st(1, D, recv=1), st(2, D, recv=2), st(3, recv=3)], 0, 10)
+    assert cats(f) == [sw.WRONG_RESULT] and "ARMED 표본이" in f[0][1]
+    assert sj.never_armed_findings([st(20, D, recv=20)] + [st(i, D, recv=i) for i in (1, 2, 3)], 0, 10) == []   # 구간 밖
+
+
+def test_never_armed_needs_samples_in_range():
+    D = mj.ARMING_STATE_DISARMED
+    f = sj.never_armed_findings([st(1, D, recv=1), st(2, D, recv=2)], 0, 10)
+    assert cats(f) == [sw.WRONG_RESULT] and "표본이 2개뿐" in f[0][1]
+    assert cats(sj.never_armed_findings([], 0, 10)) == [sw.WRONG_RESULT]
+    assert sj.never_armed_findings([st(i, D, recv=i) for i in (1, 2, 3)], 0, 10) == []
+
+
+def test_hover_state_needs_samples_and_whole_range():
+    L = [mj.LandedSample(i, i, False) for i in (1, 2)]
+    S = [st(i, recv=i) for i in (1, 2, 3)]
+    assert sj.hover_state_findings(S, L, 0, 10) == []
+    assert len(sj.hover_state_findings(S[:2], L, 0, 10)) == 1                      # 상태 표본 부족
+    assert len(sj.hover_state_findings(S, L[:1], 0, 10)) == 1                      # landed 표본 부족
+    assert len(sj.hover_state_findings(S[:2] + [st(3, mj.ARMING_STATE_DISARMED, recv=3)], L, 0, 10)) == 1
+    assert len(sj.hover_state_findings(S, L + [mj.LandedSample(3, 3, True)], 0, 10)) == 1
+    assert len(sj.hover_state_findings([], [], 0, 10)) == 2
 
 
 def test_cancel_hover_confirmation():
