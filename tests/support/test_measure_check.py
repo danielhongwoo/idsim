@@ -403,7 +403,7 @@ OKROW = {"item": "5", "attempt": 1, "ros_missing_in_ulog": 0, "ulog_samples_in_r
 
 def test_pass_count_met_but_unjudged_rows_remain_is_exit_two():
     cases = [
-        [srow("3", i, "PASS") for i in (1, 2, 3)] + [srow("3", i, "HOLD_END") for i in (4, 5, 6)],
+        [srow("2a", i, "PASS") for i in (1, 2, 3)] + [srow("2a", i, "HOLD_END") for i in (4, 5, 6)],
         [srow("5", i, "PASS") for i in range(1, 11)] + [srow("5", 11, "ERROR"), srow("5", 12, "ERROR")],
         [srow("armed", i, "PASS") for i in range(1, 11)] + [srow("armed", 11, "CLOCK_STALLED")],
         [srow("5", i, "PASS") for i in range(1, 11)] + [srow("5", 11, "INCONCLUSIVE")],
@@ -463,8 +463,8 @@ def test_item_problems_flags_missing_rows_and_done():
 
 
 def test_window_missed_is_excluded_from_valid_and_not_pass_counts():
-    rows = [srow("3", i, "PASS") for i in (1, 2, 3)] + [srow("3", 4, "WINDOW_MISSED")]
-    s = mc.final_summary(rows, {})["3"]
+    rows = [srow("2a", i, "PASS") for i in (1, 2, 3)] + [srow("2a", 4, "WINDOW_MISSED")]
+    s = mc.final_summary(rows, {})["2a"]
     assert s["n"] == 4 and s["n_valid"] == 3 and s["n_pass"] == 3
     assert s["n_excluded"] == 1 and s["n_not_pass"] == 0 and s["enough"]
     assert mc.crosscheck_status([OKROW], GOOD, summary=mc.final_summary(rows, {})) == 0

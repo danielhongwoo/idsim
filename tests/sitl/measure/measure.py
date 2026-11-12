@@ -27,8 +27,10 @@ px4-engineer 행이다.
 항목
   item2  (2) 지상 setpoint 발행 중의 Hold. 시도마다 행 둘: 2a(Hold 확인과 정리 소요), 2b(Hold를 확인하고
          발행을 멈춘 뒤 landed가 true에 닿는지, 닿으면 그 상태에서 disarm).
-  item3  (3) 이륙 직후의 지상 setpoint와 disarm. trigger는 첫 ARMED 표본이고, 그 시점 landed가 true인
-         시도만 창 안이다(아니면 WINDOW_MISSED). Hold로 끝나면 60 s 관찰하고 HOLD_END로 둔다.
+  item3  (3) 이륙 직후의 지상 setpoint와 disarm. 세 대역(spoolup, rampup 내부, 경계)을 지연값 아홉 개(각
+         3회, 합 27회, 라운드 로빈)로 잰다. trigger는 첫 ARMED 표본의 PX4 timestamp + 지연(/clock 기준)이고,
+         그 시점 landed가 true인 시도만 창 안이다(아니면 WINDOW_MISSED). Hold로 끝나면 60 s 관찰하고
+         HOLD_END로 둔다. 대역은 ULog의 첫 disarm 처리 시각으로 crosscheck가 정한다(measure_bands.py).
   item5  (5) arm 전송 직후(0-0.2 s sim)의 취소 경쟁. 주입 지연은 --delays를 시도 수만큼 돌려 쓴다.
   armed  PX4 직접 명령의 arm -> ARMED 3회 -> 이륙 -> NAV_LAND 구간의 vehicle_status 표본 기록. 첫 ARMED
          표본을 본 뒤 arm 재전송을 멈춘다. 시나리오 A(Executor 경유)의 대응이나 대체가 아니다. 시나리오 A는
@@ -42,7 +44,8 @@ px4-engineer 행이다.
 
 종료 코드와 verdict의 뜻
   0  모든 시도 PASS이고 시도 수 충분.
-  1  기준과 다른 관측(verdict FAIL, M3_CONTRADICTED)이나 ARMED 위반(어느 부류든)이 있음. 문서의 기대가
+  1  기준과 다른 관측(verdict FAIL, M3_CONTRADICTED, crosscheck 뒤 (3)의 M5_CONTRADICTED, M5_INCONSISTENT)이나
+     ARMED 위반(어느 부류든)이 있음. 문서의 기대가
      반증됐다는 뜻이며 PX4 결함이라는 뜻이 아니다. 2보다 앞선다. M3_CONTRADICTED는 2b에서 landed가
      true에 닿은 경우로 M3 문장과 다른 관측이다(disarm 수락과 고도 변화는 facts에 기록).
      지상 기준 높이(climb_m의 기준)는 arm 직전 1 s의 vehicle_local_position z 중앙값이고 표본 수가 facts의
@@ -73,6 +76,7 @@ import rclpy  # noqa: E402
 
 from px4_msgs.msg import VehicleStatus  # noqa: E402
 
+from tests.support import measure_bands as mb  # noqa: E402
 from tests.support import measure_check as mc  # noqa: E402
 from tests.support import measure_judge as mj  # noqa: E402
 from tests.support import stack as stk  # noqa: E402
@@ -86,7 +90,9 @@ ITEMS = ("item2", "item3", "item5", "armed")
 MIN_ATTEMPTS = {"item2": mc.MIN_ATTEMPTS_BY_ITEM["2b"], "item3": mc.MIN_ATTEMPTS_BY_ITEM["3"],
                 "item5": mc.MIN_ATTEMPTS_BY_ITEM["5"], "armed": mc.MIN_ATTEMPTS_BY_ITEM["armed"]}
 DEFAULT_ATTEMPTS = dict(MIN_ATTEMPTS)
-DELAY_RANGE_S = (0.0, 0.2)
+# (3)의 기본 시도 수는 고정한 지연값 아홉 개 x 3회다(최소 유효 시도의 합 20과 다르다)
+DEFAULT_ATTEMPTS["item3"] = len(mb.ITEM3_DELAYS_S) * mb.REPEATS
+DELAY_RANGE_S = (0.0, 0.2)       # (5) 전용. (3)은 measure_bands.ITEM3_DELAYS_S의 고정 목록만 받는다
 
 STOP_ARM_RESEND_AFTER_FIRST_ARMED = True   # armed 항목: P6처럼 첫 ARMED 표본에서 arm 재전송을 멈춘다
 
@@ -104,20 +110,27 @@ CRITERIA = {
         "시도 3회 모두 위 기준을 만족해야 통과한다. 3회는 실패율 95% 상한이 약 100%라 실패 없음의 증거가 아니다.",
     ],
     "item3": [
-        "TAKEOFF 목표점으로 arm한 뒤 첫 ARMED 표본에서 landed가 true인 시도만 창 안이다. 아니면 자극이 성립하지 "
-        "않은 회지만 창과 무관한 기준(OFFBOARD가 아닌 ARMED 0개, 정리 총 소요 9 s 미만, 상승 0.2 m 이하, "
-        "TIMEOUT_GROUND/TIMEOUT_HOLD/LIMIT/DISARMED_AIR는 FAIL, 지상 종료면 끝난 뒤 ARMED 없음과 마지막 DISARMED, "
-        "Hold 종료면 60 s M3 상태와 표본 조건)을 전부 적용한다. 위반이 있으면 FAIL(1), Hold 종료의 관찰 표본이 "
-        "모자라면 INCONCLUSIVE(2), 모두 만족하면 WINDOW_MISSED로 유효 시도에도 not-pass에도 넣지 않고 끝난 방식별로 "
-        "따로 센다(취소 시 높이를 facts와 요약에 남긴다). DISARMED 종료는 요구하지 않는다. 시도 수는 실행 전에 "
-        "정하고 결과를 보고 더하지 않는다. 그 시점에 지상 setpoint로 바꾸고 disarm.",
-        "mode_confirm_timeout(3 s) 안에 DISARMED 3회, 상승 0.2 m 이하, 정리 총 소요 9 s 미만, "
-        "OFFBOARD가 아닌 ARMED 표본 0개(구간 끝 = min(ARMED 3회 확인, 정리 종료, 측정기의 첫 Hold 전송)), "
-        "끝난 뒤 지상에 armed로 남지 않음.",
-        "Hold로 끝나면(end_reason HOLD) 상승 0.2 m 이하, 총 소요 9 s 미만이고 --hold-observe-s(60) 동안 "
-        "ARMED, AUTO_LOITER, landed false, 고도 변화 0.2 m 이하이면 HOLD_END(종료 코드 2), 어긋나면 FAIL, "
-        "관찰이 60 s 미만이면 INCONCLUSIVE. TIMEOUT_GROUND, TIMEOUT_HOLD, LIMIT, DISARMED_AIR는 FAIL.",
-        "시도 3회 모두 통과해야 통과한다. 3회는 실패율 95% 상한이 약 100%라 실패 없음의 증거가 아니다.",
+        "TAKEOFF 목표점으로 arm한 뒤 첫 ARMED 표본의 PX4 timestamp + 지연(/clock 기준. 이미 넘었으면 즉시)에 지상 "
+        "setpoint로 바꾸고 disarm. 지연값은 아홉 개(%s s)로 실행 전에 고정했고 각 %d회, 합 %d회다. 결과를 보고 "
+        "지연값이나 시도를 더하지 않는다." % (", ".join(str(x) for x in mb.ITEM3_DELAYS_S), mb.REPEATS,
+                                          len(mb.ITEM3_DELAYS_S) * mb.REPEATS),
+        "대역은 계획한 지연값이 아니라 ULog로 본 첫 disarm의 처리 시각 t_p로 정한다(crosscheck.py). spoolup은 t_p에 "
+        "rampup이 시작되지 않았고 landed true, 내부는 rampup 시작 뒤이고 t_p - t_A < T_lf - 0.10 s이며 landed "
+        "true, 경계는 그 뒤이거나 landed false다. 창 밖(WINDOW_MISSED)은 t_lf가 취소 전송 /clock 이하인 회다.",
+        "spoolup과 내부: 창 안의 시도가 분기 전환 없이 지상 DISARMED이고 r_p가 ACCEPTED여야 PASS다. 어긋나면 "
+        "M5_CONTRADICTED(1). 일관성 검사(ACCEPTED면 t_p <= t_ml + 12 ms, TEMPORARILY_REJECTED면 t_p >= t_ml이고 "
+        "'Disarming denied: not landed' 로그가 [t_p - 4 ms, t_p] 안)가 어긋나면 M5_INCONSISTENT(1).",
+        "경계: 지상 DISARMED로 끝나면 PASS, Hold로 끝나면 HOLD_END(2. 기계가 통과로 올리지 않는다). 그래서 (3)은 "
+        "경계에서 Hold가 나오면 종료 코드 0이 될 수 없다. Hold 뒤 60 s 관찰에서 ULog에 landed true가 있으면 "
+        "M3_CONTRADICTED(1), maybe_landed만 true이면 기록하고 2다.",
+        "창과 무관한 기준: OFFBOARD가 아닌 ARMED 0개, 정리 총 소요 9 s 미만, 상승 0.2 m 이하, TIMEOUT_GROUND/"
+        "TIMEOUT_HOLD/LIMIT/DISARMED_AIR는 FAIL, 지상 종료면 끝난 뒤 ARMED 없음과 마지막 DISARMED, Hold 종료면 "
+        "60 s M3 상태와 표본 조건. 위반이 있으면 FAIL(1), Hold 종료의 관찰 표본이 모자라면 INCONCLUSIVE(2).",
+        "최소 유효 시도: spoolup %d, 내부 %d, 경계 %d(spoolup과 내부는 계획한 지연값마다 %d). 모자라면 2. "
+        "첫 disarm이 PX4에 닿지 않은 회(first_disarm_lost)와 t_ramp 판별이 다른 근거와 어긋난 회는 INCONCLUSIVE(2)다."
+        % (mb.MIN_VALID_BY_BAND["spoolup"], mb.MIN_VALID_BY_BAND["inner"], mb.MIN_VALID_BY_BAND["boundary"],
+           mb.MIN_VALID_PER_DELAY),
+        "각 대역의 0건 실패는 실패 없음의 증거가 아니다. 통계적 증명이 아니라 문서 기대의 반증 확인이다.",
     ],
     "item5": [
         "arm 전송 뒤 0-0.2 s(sim)에 지상 setpoint와 disarm. 지연은 --delays를 돌려 쓴다.",
@@ -446,7 +459,8 @@ def nominal_injection(item, a, args):
         return {"item": "5", "delay_s_nominal": args.delays[a % len(args.delays)],
                 "trigger": "arm 전송 + sim 지연"}
     if item == "item3":
-        return {"item": "3", "trigger": "첫 ARMED 표본(그 시점 landed 최신값이 true인 시도만 창 안)"}
+        return {"item": "3", "delay_s_nominal": args.item3_delays[a % len(args.item3_delays)],
+                "trigger": "첫 ARMED 표본의 PX4 timestamp + 명목 지연(/clock 기준)"}
     if item == "item2":
         return {"item": "2a", "trigger": "첫 ARMED 뒤 첫 landed==false 표본"}
     return {"item": "armed", "trigger": "arm 전송 -> ARMED 3회 확인(= TAKEOFF 시작)"}
@@ -507,14 +521,27 @@ def wait_first_armed(rig, idx_s, arm_recv, record):
 
 
 def attempt_item3(rig, args, a):
+    """(3) 한 시도. trigger는 첫 ARMED 표본의 PX4 timestamp(수신 /clock이 아님) + 명목 지연이다.
+
+    ts + 지연까지 /clock(노드의 sim 시각)으로 기다리고 이미 넘었으면 즉시 보낸다. 벽시계 sleep을 쓰지
+    않고 기다리는 동안 TAKEOFF 목표점 발행을 이어 간다. /clock이 멈추면 ClockStalled(CLOCK_STALLED).
+    """
     raw = rig.raw
+    nominal = args.item3_delays[a % len(args.item3_delays)]
     ref = prepare(rig, args)
     idx_s = len(raw.status)
     arm_recv, arm_ts = rig.send("arm")
     first = {}
     wait_first_armed(rig, idx_s, arm_recv, first)
+    s1 = first["s"]
+    target_us = s1.ts_us + int(round(nominal * US))
+    if not rig.wait(lambda: raw.now_us() >= target_us, nominal + 5.0):
+        raise Precondition("trigger 시각(첫 ARMED ts + %.3f s)에 /clock이 %.0f s 안에 닿지 못함"
+                           % (nominal, nominal + 5.0))
     cancel_us = raw.now_us()
-    landed_at_cancel = None if first["landed"] is None else first["landed"].landed
+    ld_c = raw.last_landed()
+    pos_c = raw.last_pos()
+    landed_at_cancel = None if ld_c is None else ld_c.landed
     model = run_cleanup(rig, cancel_us)
     hold_case = model.end_reason == "HOLD"
     z_end = raw.last_pos()[3]
@@ -526,11 +553,14 @@ def attempt_item3(rig, args, a):
     f.update(armed_facts(raw, idx_s, arm_recv, model.end_us, cutoff_us=first_hold_recv(model)))
     fd = f["first_disarm_send"]
     f.update(ack_facts(raw, arm_recv, None if fd is None else fd[0], first_hold_recv(model)))
-    height = None if first["pos"] is None else ref["z"] - first["pos"][3]
+    height = None if pos_c is None else ref["z"] - pos_c[3]
     f.update({"arm_send": [arm_recv, arm_ts], "landed_at_cancel": landed_at_cancel,
               "height_at_cancel_m": height,
-              "sim_s_first_armed_after_arm": (first["s"].recv_ros_us - arm_recv) / US})
-    inj = {"item": "3", "trigger": "첫 ARMED 표본(그 시점 landed 최신값이 true인 시도만 창 안)",
+              "sim_s_first_armed_after_arm": (s1.recv_ros_us - arm_recv) / US})
+    inj = {"item": "3", "delay_s_nominal": nominal, "delay_s_actual": (cancel_us - s1.ts_us) / US,
+           "first_armed_ts_us": s1.ts_us, "first_armed_recv_lag_s": (s1.recv_ros_us - s1.ts_us) / US,
+           "cancel_clock_us": cancel_us,
+           "trigger": "첫 ARMED 표본의 PX4 timestamp + 명목 지연(/clock 기준)",
            "arm_send_ros_us": arm_recv, "sim_s_arm_to_cancel": (cancel_us - arm_recv) / US}
     return [("3", inj, f)]
 
@@ -818,6 +848,8 @@ def parse_args(argv):
                     help="(3)이 Hold로 끝났을 때의 관찰(sim 초)")
     ap.add_argument("--delays", default="0,0.05,0.1,0.15,0.2",
                     help="item5 주입 지연 목록(sim 초, 0-0.2 범위)")
+    ap.add_argument("--item3-delays", default=",".join(str(x) for x in mb.ITEM3_DELAYS_S),
+                    help="item3 주입 지연 목록(sim 초). 고정 목록(measure_bands.ITEM3_DELAYS_S)의 값만 받는다")
     args = ap.parse_args(argv)
     try:
         args.delays = [float(x) for x in args.delays.split(",")]
@@ -833,12 +865,20 @@ def parse_args(argv):
         args.attempts = DEFAULT_ATTEMPTS[args.item]
     if args.attempts < 1:
         ap.error("--attempts는 1 이상이어야 한다")
+    try:
+        args.item3_delays = mb.parse_item3_delays(args.item3_delays)
+    except ValueError as e:
+        ap.error(str(e))
+    if args.item == "item3" and args.attempts % len(args.item3_delays):
+        ap.error("item3의 --attempts(%d)는 지연값 수(%d)의 배수여야 한다(지연값마다 같은 횟수)"
+                 % (args.attempts, len(args.item3_delays)))
     return args
 
 
 def args_record(args):
     return {"takeoff_alt": args.takeoff_alt, "settle_s": args.settle_s, "tail_s": args.tail_s,
-            "observe_s": args.observe_s, "hold_observe_s": args.hold_observe_s, "delays": args.delays, "attempts": args.attempts}
+            "observe_s": args.observe_s, "hold_observe_s": args.hold_observe_s, "delays": args.delays, "attempts": args.attempts,
+            "item3_delays": args.item3_delays}
 
 
 def main(argv=None):
@@ -849,6 +889,13 @@ def main(argv=None):
     out.mkdir(parents=True, exist_ok=True)
     meta = run_meta(st)
     item = args.item
+
+    # (3)은 T_lf를 정한 근거 실행과 같은 image key에서만 돈다. 다르면 스택에 아무것도 보내지 않고 거부한다.
+    if item == "item3":
+        problem = mb.image_key_problem(meta["image_keys"])
+        if problem is not None:
+            print("INFRA_IMAGE_KEY: " + problem, file=sys.stderr)
+            return 2
 
     # 기록 덮어쓰기 금지: 같은 항목의 기록이 있으면 시작하지 않는다
     names = ["measure_%s.jsonl", "raw_%s.jsonl", "summary_%s.txt", "distribution_%s.json", "done_%s.json"]
@@ -878,6 +925,10 @@ def main(argv=None):
         fh.write("보증 범위: 이 측정은 PX4 쪽 사실(명령 수락 여부, 표본 순서와 지연, landed 전환, 상승)만 본다. "
                  "정리 총 소요 9 s 기준은 측정용 CleanupModel의 소요이고 core의 소요를 보증하지 않는다.\n")
         fh.write("실행 인자 %s\n" % json.dumps(args_record(args), sort_keys=True))
+        if item == "item3":
+            fh.write("\n## (3)의 지연값과 T_lf의 출처 (실행 전에 기록)\n")
+            for line in mb.header_lines(args.item3_delays, args.attempts, meta["image_keys"]):
+                fh.write("- %s\n" % line)
         fh.write("\n## 통과 기준 (실행 전에 기록)\n")
         for line in CRITERIA[item]:
             fh.write("- %s\n" % line)

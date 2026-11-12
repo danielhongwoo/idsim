@@ -26,6 +26,9 @@ verdict와 종료 코드의 뜻
   FAIL (1)               기준과 다른 관측. 문서의 기대가 반증됐다는 뜻이며 PX4 결함이라는 뜻이 아니다.
   M3_CONTRADICTED (1)    2b에서 landed가 true에 닿음. M3 문장(Hold로 끝난 기체는 스스로 내려앉지 않는다)과
                          다른 관측이라 architect에게 올린다. disarm 수락과 고도 변화는 facts에 기록한다.
+  M5_CONTRADICTED (1)    (3)에서 첫 disarm이 spoolup이나 rampup 내부 대역에서 처리되었는데 r_p가 ACCEPTED가
+                         아니거나 공중 분기로 넘어감. crosscheck(ULog)의 최종 판정에서만 나온다(measure_bands.py).
+  M5_INCONSISTENT (1)    (3)에서 disarm의 수락 여부가 ULog의 maybe_landed와 맞지 않음(일관성 검사).
   그 밖 (2)              기계가 판정하지 않는다. COND_NOT_REACHED(조건에 닿지 못함: 2b에서 landed가
                          true에 닿지 않음), HOLD_END((3)이 전이 표에 있는 Hold 종료로 끝남), INCONCLUSIVE
                          (판정에 필요한 전제가 없음: 관찰 60 s 미만, arm 수락 증거 없음), WINDOW_MISSED,
@@ -60,7 +63,7 @@ OBSERVE_MAX_STATUS_GAP_S = 2.0
 OBSERVE_MAX_LANDED_GAP_S = 4.0
 
 # 종료 코드 1로 읽는 verdict(기준과 다른 관측). M3_CONTRADICTED는 2b에서 landed가 true에 닿은 경우다.
-EXIT1_VERDICTS = ("FAIL", "M3_CONTRADICTED")
+EXIT1_VERDICTS = ("FAIL", "M3_CONTRADICTED", "M5_CONTRADICTED", "M5_INCONSISTENT")
 # 자극이 성립하지 않아 시도 수에도 not-pass 집계에도 넣지 않는 verdict(행과 횟수는 기록하고 따로 적는다).
 # WINDOW_MISSED는 (3)에서 취소 시점에 landed가 이미 false였던 회, ARM_NOT_ACCEPTED는 (5)에서 ULog 교차
 # 확인 뒤에도 arm 수락 증거가 없는 회다(교차 확인 전의 live 행은 INCONCLUSIVE kind ARM_EVIDENCE로 2).
@@ -68,7 +71,7 @@ EXIT1_VERDICTS = ("FAIL", "M3_CONTRADICTED")
 EXCLUDED_VERDICTS = ("WINDOW_MISSED", "ARM_NOT_ACCEPTED")
 # 시도 수로 세는 verdict. INCONCLUSIVE, COND_NOT_REACHED, HOLD_END, PRECONDITION 등은 기준에 대한
 # 판정이 아니므로 세지 않고(not-pass로 집계해 종료 코드 2), EXCLUDED_VERDICTS는 세지도 집계하지도 않는다.
-VALID_VERDICTS = ("PASS", "FAIL", "M3_CONTRADICTED")
+VALID_VERDICTS = ("PASS", "FAIL", "M3_CONTRADICTED", "M5_CONTRADICTED", "M5_INCONSISTENT")
 
 # 아래 네 값(12, 3, 3, 0.5)은 idsim_mission의 노드 파라미터 기본값(core/config.hpp의 Timeouts:
 # mode_confirm_timeout 3 s, hold_confirm_timeout 3 s, command_resend_period 0.5 s,

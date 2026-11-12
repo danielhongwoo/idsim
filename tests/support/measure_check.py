@@ -21,6 +21,7 @@ ROS/ULog 합산(armed_rows, aggregate_armed), 종료 코드 집계(run_status, c
 종료 코드: 0 통과, 1 기준과 다른 관측(FAIL, M3_CONTRADICTED, ARMED 위반(어느 부류든), 대조 불일치),
 2 그 밖(입력 부족, 유효 시도 수 부족, 인프라, ERROR, 판정하지 않는 verdict). 1이 2보다 앞선다.
 """
+from tests.support import measure_bands as mb
 from tests.support import measure_judge as mj
 
 # ARMED 기준(비OFFBOARD ARMED 표본 0개)에 합산할 항목(architect 결정). 2a는 위반 수에는 넣지만
@@ -28,8 +29,9 @@ from tests.support import measure_judge as mj
 # 이 상수 하나로 둔다.
 ARMED_SUM_ITEMS = ("2a", "3", "5", "armed")
 
-# 항목별 최소 시도 수(PASS 기준 횟수). measure.py와 crosscheck.py가 같은 값을 쓴다.
-MIN_ATTEMPTS_BY_ITEM = {"2a": 3, "2b": 3, "3": 3, "5": 10, "armed": 10}
+# 항목별 최소 시도 수(PASS 기준 횟수). measure.py와 crosscheck.py가 같은 값을 쓴다. (3)은 대역별 최소치
+# (measure_bands.MIN_VALID_BY_BAND)의 합이고, 최종 판정의 충족 여부는 대역별로 따로 본다(final_summary).
+MIN_ATTEMPTS_BY_ITEM = {"2a": 3, "2b": 3, "3": sum(mb.MIN_VALID_BY_BAND.values()), "5": 10, "armed": 10}
 
 CROSS_FIELDS = (("arming_state", "arming_state"), ("nav_state", "nav_state"),
                 ("failsafe", "failsafe"), ("nav_state_user_intention", "intention"))
@@ -215,7 +217,7 @@ def aggregate_armed(entries, min_reached=10):
     return crit
 
 
-def final_summary(rows, finals, min_by_item=MIN_ATTEMPTS_BY_ITEM):
+def final_summary(rows, finals, min_by_item=MIN_ATTEMPTS_BY_ITEM, analyses=None):
     """crosscheck 뒤 최종 판정(final_verdict) 기준의 항목별 요약.
 
     rows: measure 행(item, attempt, injection, verdict). finals: {(item, attempt): 최종 verdict}.
@@ -226,6 +228,9 @@ def final_summary(rows, finals, min_by_item=MIN_ATTEMPTS_BY_ITEM):
     by_delay((5)의 명목 지연값별 n, n_valid, n_pass, n_excluded)를 낸다. 판정 안 된 행이 하나라도 있으면
     PASS 횟수를 채워도 enough가 아니다(종료 코드 2). 시도 수는 실행 전에 정하고 결과를 보고 더하지 않는다.
     2b는 (가) 미도달(COND_NOT_REACHED)과 (나) M3_CONTRADICTED를 case_ga, case_na로 따로 센다.
+    (3)은 analyses({시도 번호: measure_bands.analyze_row 결과})가 있으면 실제 대역별 집계(bands)를 더하고
+    enough를 "PASS가 아닌 행 없음 그리고 세 대역의 최소 유효 시도 충족"으로 바꾼다(Hold로 끝난 경계 행은
+    HOLD_END라 PASS가 아니므로 (3)은 경계에서 Hold가 나오면 0이 될 수 없다).
     """
     out = {}
     for r in rows:
@@ -252,6 +257,12 @@ def final_summary(rows, finals, min_by_item=MIN_ATTEMPTS_BY_ITEM):
     for sub, d in out.items():
         d["min"] = min_by_item[sub]
         d["enough"] = d["n_pass"] >= d["min"] and d["n_not_pass"] == 0
+        if sub == "3":
+            if analyses is None:       # ULog 분석 없이는 대역을 모른다
+                d["enough"] = False
+            else:
+                d["bands"] = mb.band_summary([r for r in rows if r["item"] == "3"], finals, analyses)
+                d["enough"] = d["n_not_pass"] == 0 and d["bands"]["all_met"]
         if sub == "2b":
             d["case_ga"] = d["by_verdict"].get("COND_NOT_REACHED", 0)
             d["case_na"] = d["by_verdict"].get("M3_CONTRADICTED", 0)
@@ -371,12 +382,15 @@ def final_section(rows, finals, summary):
             bound = ", 무실패일 때 실패율 95%% 상한 %s" % mj.upper95_text(d["n_valid"])
         else:
             bound = ""
-        lines.append("%s: 시도 %d, 유효 %d, PASS %d(최소 %d), 제외(자극 불성립) %d, PASS가 아닌 행 %d, "
+        lines.append("%s: 시도 %d, 유효 %d, PASS %d%s, 제외(자극 불성립) %d, PASS가 아닌 행 %d, "
                      "기준과 다른 관측 %d, 유효 시도 수 충분 %s, verdict별 %s%s" % (
-                         sub, d["n"], d["n_valid"], d["n_pass"], d["min"], d["n_excluded"], d["n_not_pass"],
+                         sub, d["n"], d["n_valid"], d["n_pass"],
+                         "" if d.get("bands") else "(최소 %d)" % d["min"], d["n_excluded"], d["n_not_pass"],
                          d["n_exit1"], d["enough"], dict(sorted(d["by_verdict"].items())), bound))
         if d["by_delay"]:
             lines.append("  지연값별: %s" % dict(sorted(d["by_delay"].items())))
+        if d.get("bands"):
+            lines.extend(mb.top_lines(d["bands"]))
     diff = [r for r in rows if finals.get((r["item"], r["attempt"]), r["verdict"]) != r["verdict"]]
     if diff:
         lines.append("measure.py 단독 판정과 다른 행:")

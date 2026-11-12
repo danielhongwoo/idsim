@@ -17,7 +17,8 @@
 #
 # 사용법: tests/sitl/measure/run_measure.sh [--stack k] [--attempts N] [--keep] <item>...
 #   item: item2 (재실측 2), item3 (재실측 3), item5 (재실측 5), armed (PX4 직접 명령, Executor 없음), all
-#   --attempts N   모든 item의 시도 수(기본: item2 3, item3 3, item5 10, armed 10)
+#   --attempts N   모든 item의 시도 수(기본: item2 3, item3 27, item5 10, armed 10). item3은 9의 배수만 받는다
+#                  (지연값 아홉 개 x 3회). item3과 다른 item을 같이 돌릴 때는 쓰지 않는다
 #   --keep         끝나도 스택을 내리지 않는다
 #   스택 번호 기본값은 7(실험용). 0은 사용자 스택이라 IDSIM_MEASURE_ALLOW_STACK0=1 없이는 거부한다.
 #   MEASURE_ARGS    measure.py에 그대로 넘길 인자(예: "--observe-s 20 --delays 0,0.1")

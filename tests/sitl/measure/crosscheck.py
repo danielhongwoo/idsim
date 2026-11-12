@@ -37,12 +37,18 @@ final_summary.json, 최종 판정 절이 붙은 summary_<item>.txt)이 이미 �
     INCONCLUSIVE였던 (5) 행의 최종 판정이 PASS가 되고(final_verdict), 끝내 없으면 INCONCLUSIVE로 남는다.
   - 최종 판정(final_verdict) 기준의 항목별 유효 시도 수(전체와 (5)의 지연값별)와 PASS 횟수가 최소 시도
     수 이상인가(final_summary.json). INCONCLUSIVE는 유효 시도가 아니다.
+  - (3): 시도마다 ULog로 t_A, t_ramp, t_ml, t_lf, t_p, r_p를 구하고 대역(spoolup, 내부, 경계)과 최종 verdict를 정한다
+    (tests/support/measure_bands.py. 정의와 규칙은 README의 "(3)의 대역과 판정"). bands_item3.json에 시도마다 분석을
+    남기고, summary_item3.txt 맨 위에 대역별 충족 여부를 둔다. 2b와 (3)의 Hold 뒤 60 s 관찰은 ULog 전체 표본으로
+    본다(landed true는 M3_CONTRADICTED, maybe_landed만 true는 INCONCLUSIVE).
+  - 각 ULog의 T_lf 표본(첫 ARMED 뒤 landed false까지) 수, 최솟값, 최댓값과 그 최솟값으로 계산한 (3)의 지연 목록을
+    출력한다(image key가 바뀌어 T_lf를 다시 정할 때 쓴다).
   - 각 ULog 안의 '[commander] Armed by external command' 줄 총수를 출력한다.
 결과: crosscheck_<항목>.json, armed_criterion.json(부류별), final_summary.json, 끝에 요약 줄.
 summary_<item>.txt가 있으면 끝에 '최종 판정' 절을 덧붙인다(crosscheck 뒤 최종 verdict 기준).
 
 종료 코드: 0 PX4 직접 부류의 통과(ULog 표본이 실제로 대조됨), 1 위반 또는 불일치 또는 대조가 비어 있음
-(어느 부류든 ARMED 위반, 최종 판정 FAIL과 M3_CONTRADICTED 포함), 2 입력 부족 또는 ULog를 못 읽음 또는
+(어느 부류든 ARMED 위반, 최종 판정 FAIL, M3_CONTRADICTED, M5_CONTRADICTED, M5_INCONSISTENT 포함), 2 입력 부족 또는 ULog를 못 읽음 또는
 (5)의 증거 미확인 또는 PASS 횟수 부족 또는 ARMED 3회 도달 실행 부족 또는 commit/image key 없음 또는
 measure.py 완료 기록(done_<항목>.json) 없음 또는 이 판 이전의 기록(필요한 키가 없음). 자극이 성립하지
 않은 회((3)의 WINDOW_MISSED, ULog 교차 확인 뒤에도 arm 수락 증거가 없는 (5)의 ARM_NOT_ACCEPTED)는 유효 시도에도
@@ -59,6 +65,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from tests.support import measure_bands as mb  # noqa: E402
 from tests.support import measure_check as mc  # noqa: E402
 from tests.support import ulog_min  # noqa: E402
 
@@ -69,10 +76,13 @@ def load_jsonl(path):
 
 
 def load_ulog(path, cache):
+    """ULog 한 파일을 한 번만 읽는다(수백 MB). (vehicle_status {ts: 행}, 정렬된 ts 목록, logged message,
+    measure_bands.UlogData)를 돌려준다. 모든 multi_id는 0이다."""
     if path not in cache:
-        rows = ulog_min.read_topic(path, "vehicle_status")
-        by_ts = {int(r["timestamp"]): r for r in rows}
-        cache[path] = (by_ts, sorted(by_ts), ulog_min.read_logged(path))
+        topics = ulog_min.read_topics(path, {n: 0 for n in mb.UlogData.NAMES})
+        by_ts = {int(r["timestamp"]): r for r in topics["vehicle_status"]}
+        logged = ulog_min.read_logged(path)
+        cache[path] = (by_ts, sorted(by_ts), logged, mb.UlogData(topics, logged))
     return cache[path]
 
 
@@ -89,6 +99,7 @@ def main(argv=None):
         os.path.basename(f)[len("measure_"):-len(".jsonl")] for f in files]
     outputs = [mdir / ("crosscheck_%s.json" % it) for it in requested]
     outputs += [mdir / "armed_criterion.json", mdir / "final_summary.json"]
+    outputs += [mdir / ("bands_%s.json" % it) for it in requested if it == "item3"]
     existing = [str(o) for o in outputs if o.exists()]
     for it in requested:       # 최종 판정 절이 이미 붙은 요약도 덮어쓰기와 같다
         sp = mdir / ("summary_%s.txt" % it)
@@ -110,6 +121,8 @@ def main(argv=None):
     rows_by_item = {}
     rows_by_name = {}
     done_items = set()
+    analyses = {}          # item 3: {시도 번호: measure_bands.analyze_row}
+    reasons = {}           # {(item, 시도 번호): 최종 verdict의 사유}
     for mf in files:
         item = os.path.basename(mf)[len("measure_"):-len(".jsonl")]
         rows = load_jsonl(mf)
@@ -141,16 +154,31 @@ def main(argv=None):
             else:
                 path = ulog if os.path.isabs(ulog) else os.path.join(args.repo_root, ulog)
                 try:
-                    by_ts, ts_list, logged = load_ulog(path, cache)
+                    by_ts, ts_list, logged, ud = load_ulog(path, cache)
                 except (OSError, ulog_min.UlogError) as e:
                     err = str(e)
                 else:
                     res = mc.check_row(row, by_attempt.get(row["attempt"], []), by_ts, ts_list, logged)
+                    if row["item"] == "3" and f is not None and "arm_send" in f:
+                        an = mb.analyze_row(row, ud)
+                        analyses[row["attempt"]] = an
+                        fv, why, kind = mb.final_verdict_item3(row, an)
+                        finals[("3", row["attempt"])] = fv
+                        reasons[("3", row["attempt"])] = why
+                    elif row["item"] == "2b" and f is not None and "hold_end_ros_us" in f \
+                            and f.get("observe_span_s") is not None:
+                        start = f["hold_end_ros_us"]
+                        obs = mb.hold_observation(ud, start, start + int(f["observe_span_s"] * mb.US))
+                        fv, why, kind = mb.final_verdict_2b(row, obs)
+                        finals[("2b", row["attempt"])] = fv
+                        reasons[("2b", row["attempt"])] = why
+                        row["hold_obs_ulog"] = obs
             if err is not None:
                 results.append({"item": row["item"], "attempt": row["attempt"], "error": err})
             elif res is not None:
                 results.append(res)
-                finals[(row["item"], row["attempt"])] = res["final_verdict"]
+                if (row["item"], row["attempt"]) not in finals:     # (3)의 최종 판정은 대역 분석이 정한다
+                    finals[(row["item"], row["attempt"])] = res["final_verdict"]
             if row["item"] in mc.ARMED_SUM_ITEMS:
                 if measurable:
                     entries.append({
@@ -181,15 +209,38 @@ def main(argv=None):
                           r["ulog_armed_non_offboard"], r["ulog_armed_non_offboard_after_window"],
                           r["ulog_min_interval_ms"], r["final_verdict"],
                           "(증거 미확인)" if r["evidence_pending"] else ""))
-    for path, (_, _, logged) in sorted(cache.items()):
+    for path, (_, _, logged, ud) in sorted(cache.items()):
         n_armed_log = sum(1 for m in logged if mc.ARM_LOG_TEXT in m["msg"])
         print("ULog %s: '%s' 줄 %d개" % (os.path.relpath(path, args.repo_root), mc.ARM_LOG_TEXT, n_armed_log))
+        tlf = mb.t_lf_samples(ud)
+        if tlf:
+            print("ULog %s: T_lf 표본 %d개, 최솟값 %.3f s, 최댓값 %.3f s. 이 최솟값으로 계산한 (3)의 지연 목록 %s"
+                  % (os.path.relpath(path, args.repo_root), len(tlf), min(tlf), max(tlf),
+                     mb.plan_item3_delays(min(tlf))))
     problems = mc.item_problems(requested, rows_by_item, done_items)
     for line in problems:
         print("요청한 항목의 기록이 없다: %s" % line)
     done = not problems
     crit = mc.aggregate_armed(entries)
-    summary = mc.final_summary(all_rows, finals)
+    summary = mc.final_summary(all_rows, finals, analyses=analyses if analyses else None)
+    if analyses:
+        item3_rows = [r for r in all_rows if r["item"] == "3"]
+        with open(mdir / "bands_item3.json", "w") as fh:
+            json.dump({"t_lf_ref": mb.T_LF_REF, "delays_s": list(mb.ITEM3_DELAYS_S),
+                       "attempts": {str(a): dict(an, final_verdict=finals.get(("3", a)),
+                                                 final_reasons=reasons.get(("3", a), []))
+                                    for a, an in sorted(analyses.items())},
+                       "summary": summary["3"].get("bands")}, fh, indent=1, sort_keys=True)
+            fh.write("\n")
+        for r in sorted(item3_rows, key=lambda x: x["attempt"]):
+            an = analyses.get(r["attempt"])
+            if an is not None:
+                print("대역 (3) 시도 %d: 지연 %s 대역 %s t_p-t_A %s r_p %s 최종 %s %s" % (
+                    r["attempt"], (r.get("injection") or {}).get("delay_s_nominal"), an.get("band"),
+                    an.get("tp_minus_tA_s"), an.get("r_p"), finals.get(("3", r["attempt"])),
+                    "; ".join(reasons.get(("3", r["attempt"]), []))))
+        for line in mb.top_lines(summary["3"]["bands"]):
+            print(line)
     with open(mdir / "final_summary.json", "w") as fh:
         json.dump(summary, fh, indent=1, sort_keys=True)
         fh.write("\n")
@@ -205,8 +256,14 @@ def main(argv=None):
     for it, item_rows in rows_by_name.items():
         sp = mdir / ("summary_%s.txt" % it)
         if sp.exists():       # measure.py가 만든 요약이 있으면 최종 판정 절을 덧붙인다
-            sp.write_text(mc.append_final_section(
-                sp.read_text(), mc.final_section(item_rows, finals, summary)))
+            lines = mc.final_section(item_rows, finals, summary)
+            if it == "item3" and analyses:
+                lines = lines + mb.delay_table_lines([r for r in item_rows if r["item"] == "3"], finals,
+                                                     analyses)
+            text = mc.append_final_section(sp.read_text(), lines)
+            if it == "item3" and analyses:
+                text = mb.insert_top_block(text, mb.top_lines(summary["3"]["bands"]))
+            sp.write_text(text)
     crit["note"] = ("이 통과는 PX4 직접 명령 부류(px4_direct)의 통과다. P4 머지 조건은 Executor 경유 부류"
                     "(scenario_a)의 통과가 따로 필요하다. armed_non_offboard 합산은 ROS 기록과 ULog 기록의 합이고 "
                     "2a 행은 n_reached에서 빠지고 violation_total에는 남는다.")

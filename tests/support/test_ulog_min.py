@@ -84,3 +84,48 @@ def test_read_logged_messages_l_and_c(tmp_path):
     rows = ulog_min.read_logged(str(p))
     assert rows[0] == {"level": 6, "ts": 1234, "msg": "[commander] Armed by external command"}
     assert rows[1] == {"level": 4, "ts": 99, "msg": "tagged text"}
+
+
+def build_multi(truncate=0):
+    """토픽 둘(vehicle_status multi 0과 1, other multi 0)이 섞인 합성 ULog."""
+    out = b"ULog\x01\x12\x35" + b"\x01" + struct.pack("<Q", 0) + msg(0x42, b"\x00" * 40)
+    out += msg(0x46, b"vehicle_status:uint64_t timestamp;uint8_t arming_state;")
+    out += msg(0x46, b"other:uint64_t timestamp;float x;")
+    out += msg(0x41, struct.pack("<BH", 0, 1) + b"vehicle_status")
+    out += msg(0x41, struct.pack("<BH", 1, 2) + b"vehicle_status")      # multi_id 1
+    out += msg(0x41, struct.pack("<BH", 0, 3) + b"other")
+    out += msg(0x44, struct.pack("<H", 1) + struct.pack("<QB", 10, 1))
+    out += msg(0x44, struct.pack("<H", 2) + struct.pack("<QB", 11, 9))
+    out += msg(0x44, struct.pack("<H", 3) + struct.pack("<Qf", 12, 2.5))
+    out += msg(0x44, struct.pack("<H", 1) + struct.pack("<QB", 20, 2))
+    out += msg(0x44, struct.pack("<H", 3) + struct.pack("<Qf", 21, 3.5))
+    return out[:len(out) - truncate] if truncate else out
+
+
+def test_read_topics_reads_several_topics_in_one_pass_and_filters_multi_id(tmp_path):
+    p = tmp_path / "f.ulg"
+    p.write_bytes(build_multi())
+    got = ulog_min.read_topics(str(p), {"vehicle_status": 0, "other": 0, "absent": 0})
+    assert [r["timestamp"] for r in got["vehicle_status"]] == [10, 20]       # multi_id 1(11)은 빠진다
+    assert [r["x"] for r in got["other"]] == [2.5, 3.5]
+    assert got["absent"] == []
+    only1 = ulog_min.read_topics(str(p), {"vehicle_status": 1})
+    assert [r["arming_state"] for r in only1["vehicle_status"]] == [9]
+
+
+def test_read_topics_truncated_and_bad_magic(tmp_path):
+    p = tmp_path / "g.ulg"
+    p.write_bytes(build_multi(truncate=3))
+    got = ulog_min.read_topics(str(p), {"vehicle_status": 0, "other": 0})
+    assert [r["timestamp"] for r in got["other"]] == [12]                    # 마지막 other 표본은 잘렸다
+    assert [r["timestamp"] for r in got["vehicle_status"]] == [10, 20]
+    bad = tmp_path / "h.ulg"
+    bad.write_bytes(b"nope" * 10)
+    with pytest.raises(ulog_min.UlogError):
+        ulog_min.read_topics(str(bad), {"vehicle_status": 0})
+
+
+def test_read_topic_equals_read_topics_single(tmp_path):
+    p = tmp_path / "i.ulg"
+    p.write_bytes(build_multi())
+    assert ulog_min.read_topic(str(p), "other") == ulog_min.read_topics(str(p), {"other": 0})["other"]
