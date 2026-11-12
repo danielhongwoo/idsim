@@ -66,6 +66,7 @@ def cmd_repeat(a):
     for p in a.verdicts:
         f = Path(p).with_name("crosscheck_a.json")
         cc.append(json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None)
+    crit["hold_deviation_notes"] = [(v.get("run_id"), n) for v in verdicts for n in ss.hold_notes(v)]
     crit["ulog_crosscheck"] = ss.ulog_crosscheck_totals(cc)
     crit["passed_with_ulog"] = bool(crit["passed"] and crit["ulog_crosscheck"]["n_checked"] == len(verdicts)
                                     and crit["ulog_crosscheck"]["ulog_violation_total"] == 0)
@@ -78,6 +79,8 @@ def cmd_repeat(a):
     print("회차 %d, 통과 %d. ARMED 기준(scenario_a): 도달 %d회, 위반 %d건, 통과 %s, ULog 교차 확인 %d회 위반 %d건, ULog 포함 통과 %s" % (
         len(verdicts), passed, crit["n_reached"], crit["violation_total"], crit["passed"],
         crit["ulog_crosscheck"]["n_checked"], crit["ulog_crosscheck"]["ulog_violation_total"], crit["passed_with_ulog"]))
+    for rid, n in crit["hold_deviation_notes"]:
+        print("note: %s: %s" % (rid, n))
     return 0
 
 

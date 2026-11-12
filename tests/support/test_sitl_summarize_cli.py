@@ -95,3 +95,43 @@ def test_ulog_check_reports_truncation(tmp_path):
     assert summarize.main(["ulog", str(tmp_path)]) == 0
     text = (tmp_path / "sitl" / "ulog_check.txt").read_text(encoding="utf-8")
     assert "a.ulg bytes=" in text and "truncated=False" in text and "truncated=True" in text
+
+
+def _crosscheck_module():
+    p = Path(__file__).resolve().parents[1] / "sitl" / "crosscheck_a.py"
+    sp = importlib.util.spec_from_file_location("sitl_crosscheck_a", p)
+    m = importlib.util.module_from_spec(sp)
+    sp.loader.exec_module(m)
+    return m
+
+
+def test_crosscheck_unhandled_exception_is_infra_not_violation(tmp_path):
+    cc = _crosscheck_module()
+    sitl = tmp_path / "sitl"
+    sitl.mkdir()
+    (sitl / "armed_a.json").write_text('{"takeoff_start_seen": true}', encoding="utf-8")   # land_start 키가 없다
+    (sitl / "raw_status_A.jsonl").write_text('{"timestamp": 1}\n', encoding="utf-8")        # 키가 모자란 표본 -> KeyError
+    (tmp_path / "px4-1" / "log").mkdir(parents=True)
+    (tmp_path / "px4-1" / "log" / "a.ulg").write_bytes(b"x")
+    assert cc.main([str(tmp_path)]) == 2
+    res = json.loads((sitl / "crosscheck_a.json").read_text(encoding="utf-8"))
+    assert res["status"] == 2 and "KeyError" in res["reason"]
+
+
+def test_crosscheck_missing_inputs_is_two(tmp_path):
+    assert _crosscheck_module().main([str(tmp_path)]) == 2
+
+
+def test_hold_deviation_is_recorded_and_noted(tmp_path):
+    v = verdict()
+    v["hold_deviation_m"] = {"A_loiter": 0.1, "D_hover": 0.31}
+    assert ss.hold_notes(v) == ["D_hover 유지 구간 최대 편차 0.310 m > 0.25 m (판정 상수 0.5 m 재검토 근거)"]
+    row = dict(zip(ss.tsv_header(), ss.tsv_row(v)))
+    assert row["hold_dev_A_loiter_m"] == "0.100" and row["hold_dev_D_hover_m"] == "0.310"
+    assert "note: D_hover" in ss.summary_md(v)
+    v["passed"] = True
+    write_verdict(tmp_path / "r", v)
+    out = tmp_path / "g"
+    assert summarize.main(["repeat", "--out", str(out), str(tmp_path / "r" / "sitl" / "verdict.json")]) == 0
+    crit = json.loads((out / "armed_criterion.json").read_text(encoding="utf-8"))
+    assert crit["hold_deviation_notes"][0][1].startswith("D_hover")

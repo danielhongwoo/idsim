@@ -198,6 +198,7 @@ def test_a_normal_flight(session):
     loiter_recv = fb_loiter.recv_us
     land_recv = fb_land.recv_us
     findings += sj.altitude_hold_findings(raw.pos, loiter_recv, land_recv, z0 - TAKEOFF_M)
+    s.record_hold_deviation("A_loiter", sj.altitude_max_deviation(raw.pos, loiter_recv, land_recv, z0 - TAKEOFF_M))
     findings += sj.flight_window_findings(raw.status, fb_take.stamp_us, fb_land.stamp_us)
     # ULog 교차 확인(crosscheck_a.py)이 비행 구간의 끝으로 쓴다
     armed.update(land_start_recv_us=fb_land.recv_us, land_start_stamp_us=fb_land.stamp_us)
@@ -242,6 +243,7 @@ def _scenario_d(s, raw):
     t_hold0 = raw.now_us()
     s.waiter.hold_for(sj.HOVER_HOLD_S, "D 고도 유지")
     hold = sj.altitude_hold_findings(raw.pos, t_hold0, raw.now_us(), ref_z)
+    s.record_hold_deviation("D_hover", sj.altitude_max_deviation(raw.pos, t_hold0, raw.now_us(), ref_z))
     last = raw.last_status()
     if last.arming_state != mj.ARMING_STATE_ARMED:
         hold.append((sw.WRONG_RESULT, "취소 뒤 유지 구간에서 기체가 ARMED가 아니다"))

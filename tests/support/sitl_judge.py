@@ -240,6 +240,13 @@ def first_reached(pos, z0_ned, height_m, acceptance_m, after_recv_us=0):
     return None
 
 
+def altitude_max_deviation(pos, from_us, to_us, ref_z_ned):
+    """[from_us, to_us] 안의 z_valid 표본이 기준 고도에서 벗어난 최대량(m). 표본이 없으면 None.
+    통과한 회에도 남겨 판정 상수(HOVER_HOLD_TOL_M) 재검토의 근거로 쓴다."""
+    inside = [abs(p[3] - ref_z_ned) for p in pos if from_us <= p[0] <= to_us and p[6]]
+    return max(inside) if inside else None
+
+
 def altitude_hold_findings(pos, from_us, to_us, ref_z_ned, tol_m=HOVER_HOLD_TOL_M):
     """[from_us, to_us] 안의 모든 표본이 ref 고도에서 tol_m 안인가. 표본이 없으면 실패."""
     inside = [p for p in pos if from_us <= p[0] <= to_us and p[6]]

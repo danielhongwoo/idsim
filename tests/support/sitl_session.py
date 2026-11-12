@@ -61,6 +61,7 @@ class SitlSession:
         self.rtf_start = None
         self.milestones = {}
         self.gate_info = {}
+        self.hold_dev = {}       # 유지 구간의 기준 고도로부터 최대 편차(m). A_loiter, D_hover
         self.armed_a = None      # 시나리오 A의 ARMED 표본 기록(armed_a.json과 같은 내용)
 
     # --- 시각 ---
@@ -154,6 +155,11 @@ class SitlSession:
         """이정표(ROS 시각 us)를 남긴다. None이면 관측하지 못한 것이다."""
         self.milestones.setdefault(scenario, {})[name] = t_us
         self.trace.event("milestone", scenario=scenario, name=name, at_us=t_us)
+
+    def record_hold_deviation(self, name, dev_m):
+        """유지 구간의 최대 편차를 통과한 회에도 trace와 verdict에 남긴다(판정 상수 재검토의 근거)."""
+        self.hold_dev[name] = None if dev_m is None else round(dev_m, 3)
+        self.trace.event("hold_deviation", name=name, max_dev_m=self.hold_dev[name])
 
     def z_ref(self):
         """goal 직전의 기준 높이(NED z). z_valid인 마지막 표본."""

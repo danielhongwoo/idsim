@@ -54,7 +54,7 @@ def build_row(armed_a, raw_status):
     return row, raw
 
 
-def main(argv=None):
+def _main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("run_dir")
     ap.add_argument("--sitl-dir", default="sitl")
@@ -98,6 +98,26 @@ def main(argv=None):
              res["ulog_armed_non_offboard"], res["ulog_flight_armed_non_offboard"], status,
              " " + "; ".join(notes) if notes else ""), file=sys.stderr)
     return status
+
+
+def main(argv=None):
+    """_main을 감싼다. 파싱 중의 미처리 예외(KeyError, ulog_min 예외 등)가 Python 기본 종료 코드 1로 나가면
+    run_sitl.sh가 기체 위반으로 세므로, 어떤 예외든 2(INFRA)로 돌려주고 사유를 crosscheck_a.json에 남긴다."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    try:
+        return _main(args)
+    except SystemExit:
+        raise
+    except Exception as e:  # noqa: BLE001 어떤 예외든 판정 불가(2)로 접는다
+        reason = "예외 %s: %s" % (type(e).__name__, e)
+        print("판정 불가: %s" % reason, file=sys.stderr)
+        try:
+            out = Path(args[0]) / (args[args.index("--sitl-dir") + 1] if "--sitl-dir" in args else "sitl")
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "crosscheck_a.json").write_text(json.dumps({"status": 2, "reason": reason}) + "\n", encoding="utf-8")
+        except Exception:  # noqa: BLE001 사유 기록은 최선 노력이다
+            pass
+        return 2
 
 
 if __name__ == "__main__":

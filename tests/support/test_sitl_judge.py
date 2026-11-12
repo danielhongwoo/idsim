@@ -223,3 +223,9 @@ def test_cancel_hover_confirmation():
     f, hit = sj.cancel_hover_findings(s[:3], 50)
     assert hit is None and cats(f) == [sw.WRONG_RESULT]
     assert sj.cancel_hover_findings(s, 250)[1] is None            # 기준 시각 뒤 표본만
+
+
+def test_altitude_max_deviation():
+    p = [pos(1, -5.0), pos(2, -5.2), pos(3, -4.9, valid=False), pos(9, -3.0)]
+    assert abs(sj.altitude_max_deviation(p, 0, 5, -5.0) - 0.2) < 1e-9
+    assert sj.altitude_max_deviation(p, 20, 30, -5.0) is None

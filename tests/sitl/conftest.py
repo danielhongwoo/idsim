@@ -117,6 +117,7 @@ def pytest_sessionfinish(session, exitstatus):
         "scenarios": [_STATE["results"][i] for i in ss.SCENARIOS if i in _STATE["results"]],
         "rtf": _STATE["rtf"],
         "armed_a": getattr(s, "armed_a", None) if s is not None else None,
+        "hold_deviation_m": dict(getattr(s, "hold_dev", {})) if s is not None else {},
         "exitstatus": int(exitstatus),
     }
     verdict["passed"] = ss.run_passed(verdict) and int(exitstatus) == 0

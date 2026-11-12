@@ -22,6 +22,8 @@ from tests.support import measure_judge as mj
 
 SCENARIOS = ("B", "C", "A", "D", "T")     # 실행 순서(decisions.md 쟁점 9)
 SCHEMA = 1
+HOLD_DEV_NOTE_M = 0.25                    # 유지 구간 최대 편차가 이 값을 넘으면 note(판정 상수 0.5 m 재검토 근거)
+HOLD_DEV_COLUMNS = ("A_loiter", "D_hover")
 ARMED_MIN_REACHED = 10                    # 부류마다 ARMED 3회 확인까지 간 실행 10회 이상
 
 
@@ -59,6 +61,7 @@ def tsv_header():
     cols += ["verdict_" + s for s in SCENARIOS]
     cols += ["A_%s_s" % m for _, m in MILESTONE_COLUMNS]
     cols += ["rtf", "sim_s", "wall_s", "armed_a_samples", "armed_a_non_offboard", "armed_a_armed3"]
+    cols += ["hold_dev_%s_m" % n for n in HOLD_DEV_COLUMNS]
     return cols
 
 
@@ -82,7 +85,16 @@ def tsv_row(verdict, wall_total_s=None):
     cells += [ms.get(m) for _, m in MILESTONE_COLUMNS]
     cells += [rtf.get("rtf"), rtf.get("sim_s"), wall_total_s if wall_total_s is not None else rtf.get("wall_s"),
               armed.get("armed_samples"), armed.get("armed_non_offboard"), armed.get("armed3_reached")]
+    dev = verdict.get("hold_deviation_m") or {}
+    cells += [dev.get(n) for n in HOLD_DEV_COLUMNS]
     return [_fmt(c) for c in cells]
+
+
+def hold_notes(verdict):
+    """유지 구간 최대 편차가 HOLD_DEV_NOTE_M(0.25 m)를 넘은 항목의 note 목록."""
+    return ["%s 유지 구간 최대 편차 %.3f m > %.2f m (판정 상수 0.5 m 재검토 근거)" % (n, v, HOLD_DEV_NOTE_M)
+            for n, v in sorted((verdict.get("hold_deviation_m") or {}).items())
+            if v is not None and v > HOLD_DEV_NOTE_M]
 
 
 def armed_rows(verdicts):
@@ -145,6 +157,10 @@ def summary_md(verdict, step_seconds=None):
     if a:
         lines += ["", "시나리오 A ARMED 표본: %s개, OFFBOARD가 아닌 ARMED 표본 %s개, ARMED 3회 확인 %s" % (
             a.get("armed_samples"), a.get("armed_non_offboard"), a.get("armed3_reached"))]
+    dev = verdict.get("hold_deviation_m") or {}
+    if dev:
+        lines += ["", "유지 구간 최대 편차(m): " + ", ".join("%s %s" % (k, _fmt(v)) for k, v in sorted(dev.items()))]
+    lines += ["note: " + n for n in hold_notes(verdict)]
     ms = {s["id"]: s for s in verdict.get("scenarios", [])}.get("A", {}).get("milestones", {})
     if ms:
         lines += ["", "## 시나리오 A 이정표(goal 전송 기준 ROS 시각 초)", "", "| 이정표 | 초 |", "| --- | --- |"]
