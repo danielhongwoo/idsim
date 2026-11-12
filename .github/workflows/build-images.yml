@@ -1,7 +1,7 @@
-# build.yml이 부르는 재사용 워크플로. 권한은 부르는 잡이 정한다(PR: packages read, main: packages write).
+# build.yml이 부르는 재사용 워크플로. 권한은 부르는 job이 정한다(PR: packages read, main: packages write).
 #
 # 무료 러너(4 vCPU, 16 GB, 루트 디스크 여유 약 14 GB) 대응
-# - plan 단계에서 키를 확인해 빌드할 것이 없으면 정리와 빌드를 하지 않는다(대부분의 실행).
+# - plan 단계에서 key를 확인해 빌드할 것이 없으면 정리와 빌드를 하지 않는다(대부분의 실행).
 # - 빌드할 것이 있으면 먼저 러너의 쓰지 않는 도구(dotnet, Android SDK, GHC, CodeQL 등)를 지워
 #   루트 디스크를 넓힌다. px4 builder 단계만 7.7 GB이고 sim-base 2.97 GB 위에 쌓이므로 14 GB로는 모자란다.
 # - --load를 쓰지 않는다. 결과는 레지스트리로 바로 푸시하거나(main) 빌더 캐시에만 둔다(PR).
@@ -28,7 +28,7 @@ jobs:
       MODE: ${{ inputs.push && 'push' || 'pr' }}
       # 러너(미국)에서는 kr 미러가 느리거나 불안정할 것으로 추정되므로(미실측) 우분투 기본 미러로 덮어쓴다.
       # versions.env의 UBUNTU_APT_MIRROR(호스트 로컬 빌드용)보다 이 환경변수가 우선한다(build_images.py).
-      # 미러는 이미지 키에 들어가지 않으므로 GHCR 키와 캐시에 영향이 없다.
+      # 미러는 이미지 key에 들어가지 않으므로 GHCR key와 캐시에 영향이 없다.
       UBUNTU_APT_MIRROR: http://archive.ubuntu.com/ubuntu
     steps:
       - name: checkout

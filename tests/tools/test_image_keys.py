@@ -44,3 +44,37 @@ def test_env_override_only_for_excluded_args():
 def test_versions_win_when_env_unset():
     env = build_images.make_env({}, {"UBUNTU_APT_MIRROR": "http://kr/"}, {})
     assert env["UBUNTU_APT_MIRROR"] == "http://kr/"
+
+
+def _keys_with_bake(tmp_path, monkeypatch, transform):
+    with open(image_keys.BAKE_FILE, encoding="utf-8") as f:
+        text = f.read()
+    bake = tmp_path / "docker-bake.hcl"
+    bake.write_text(transform(text), encoding="utf-8")
+    monkeypatch.setattr(image_keys, "BAKE_FILE", str(bake))
+    return _keys(_versions())
+
+
+def test_bake_tags_and_whitespace_do_not_change_keys(tmp_path, monkeypatch):
+    base = _keys(_versions())
+
+    def edit(t):
+        t = t.replace("idsim/px4:local", "idsim/px4:renamed")
+        t = t.replace("  tags = [", "\n\n      tags    =   [")
+        t = t.replace("PX4_TAG           = PX4_TAG", "PX4_TAG=PX4_TAG   # 주석")
+        return t + "\n# 끝 주석\n"
+
+    assert _keys_with_bake(tmp_path, monkeypatch, edit) == base
+
+
+def test_bake_args_and_dockerfile_change_keys(tmp_path, monkeypatch):
+    base = _keys(_versions())
+    args = _keys_with_bake(
+        tmp_path, monkeypatch,
+        lambda t: t.replace("LLVM_MAJOR      = LLVM_MAJOR", "LLVM_MAJOR      = ROS_DISTRO"))
+    assert args["ros-ws"] != base["ros-base"] and args["ros-ws"] != base["ros-ws"]
+    assert args["px4"] == base["px4"]
+    dockerfile = _keys_with_bake(
+        tmp_path, monkeypatch,
+        lambda t: t.replace('"Dockerfile.xrce-agent"', '"Dockerfile.ros-base"'))
+    assert dockerfile["xrce-agent"] != base["xrce-agent"]
