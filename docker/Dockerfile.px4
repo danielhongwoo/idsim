@@ -101,8 +101,8 @@ RUN test -n "${PX4_TAG}" || { echo "PX4_TAG is empty" >&2; exit 1; } \
 #    (requirements.txt도 empy>=3.3,<4). ROS가 apt로 넣은 패키지가 조건을 만족하면
 #    pip는 건드리지 않는다.
 #    모든 패키지를 정확한 버전으로 고정한다. 의존성으로 딸려 오는 것(attrs 이하 여섯)도
-#    고정해 resolver가 새 버전을 고를 여지를 없앤다. 값의 출처: sim-base 이미지
-#    46b8599200ec 위에서 이 단계를 고정 전 목록으로 실행한 결과의 pip list.
+#    고정해 resolver가 새 버전을 고를 여지를 없앤다. 값의 출처: sim-base 위에서
+#    이 단계를 고정 전 목록으로 실행한 결과의 pip list.
 #    empy, lark, lxml, numpy, packaging, pyyaml, six는 sim-base에 apt로 이미 있는
 #    버전과 같아 pip가 설치하지 않는다.
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
@@ -161,8 +161,7 @@ RUN recorded="$(git ls-tree HEAD Tools/simulation/gz | awk '{print $3}')" \
 # 돌린다. 그 저장소에는 PX4_OPTICAL_FLOW_REF 커밋 하나만 받고 master를 그 커밋에
 # 둔다. ExternalProject의 git clone과 "git checkout master"가 이 커밋을 꺼낸다.
 # 서브모듈(external/klt_feature_tracker)은 고정된 커밋이 기록한 SHA로 받는다.
-# 같은 스니펫을 cmake 3.28.3(이 단계의 cmake)에서 실행해 HEAD가 이 값이 되는 것을
-# 확인했다(2026-11-13). 빌드 뒤 6단계에서 체크아웃된 커밋을 다시 대조한다.
+# 같은 스니펫을 cmake 3.28.3(이 단계의 cmake)에서 실행하면 HEAD가 이 값이 된다. 빌드 뒤 6단계에서 체크아웃된 커밋을 다시 대조한다.
 # 결과물은 runtime에 들어가지 않는다.
 ARG PX4_OPTICAL_FLOW_REF
 RUN { test "${#PX4_OPTICAL_FLOW_REF}" -eq 40 && case "${PX4_OPTICAL_FLOW_REF}" in *[!0-9a-f]*) false ;; esac; } \
@@ -195,7 +194,10 @@ RUN b=build/px4_sitl_default \
  && test -f "${b}/rootfs/gz_env.sh" \
  && grep -q "PX4_GZ_MODELS=/opt/PX4-Autopilot/Tools/simulation/gz/models" "${b}/rootfs/gz_env.sh" \
  && grep -q "PX4_GZ_SERVER_CONFIG=/opt/PX4-Autopilot/src/modules/simulation/gz_bridge/server.config" "${b}/rootfs/gz_env.sh" \
- && test "$(git -C "${b}/OpticalFlow/src/OpticalFlow" rev-parse HEAD)" = "${PX4_OPTICAL_FLOW_REF}" \
+ && actual="$(git -C "${b}/OpticalFlow/src/OpticalFlow" rev-parse HEAD)" \
+ && echo "OpticalFlow actual=${actual} expected=${PX4_OPTICAL_FLOW_REF}" \
+ && { test "${actual}" = "${PX4_OPTICAL_FLOW_REF}" \
+      || { echo "PX4-OpticalFlow checkout commit differs from PX4_OPTICAL_FLOW_REF" >&2; exit 1; }; } \
  && set -- "${b}"/bin/px4-gz_* \
  && test -e "$1" \
  && printf '%s\n' "$@"
