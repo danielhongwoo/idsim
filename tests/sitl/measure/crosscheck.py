@@ -245,9 +245,11 @@ def main(argv=None):
         json.dump(summary, fh, indent=1, sort_keys=True)
         fh.write("\n")
     for sub_item, d in sorted(summary.items()):
-        print("최종 %s: 시도 %d, 유효 %d, PASS %d(최소 %d), 제외(자극 불성립) %d, PASS가 아닌 행 %d, "
+        print("최종 %s: 시도 %d, 유효 %d, PASS %d%s, 제외(자극 불성립) %d, PASS가 아닌 행 %d, "
               "기준과 다른 관측 %d, verdict별 %s%s%s" % (
-            sub_item, d["n"], d["n_valid"], d["n_pass"], d["min"], d["n_excluded"], d["n_not_pass"],
+            sub_item, d["n"], d["n_valid"], d["n_pass"],
+            "(대역별 최소는 아래 대역별 충족 여부)" if d.get("bands") else "(최소 %d)" % d["min"],
+            d["n_excluded"], d["n_not_pass"],
             d["n_exit1"],
             json.dumps(d["by_verdict"], sort_keys=True),
             ", (가) 미도달 %d회, (나) M3_CONTRADICTED %d회" % (d["case_ga"], d["case_na"])
@@ -259,7 +261,7 @@ def main(argv=None):
             lines = mc.final_section(item_rows, finals, summary)
             if it == "item3" and analyses:
                 lines = lines + mb.delay_table_lines([r for r in item_rows if r["item"] == "3"], finals,
-                                                     analyses)
+                                                     analyses, reasons)
             text = mc.append_final_section(sp.read_text(), lines)
             if it == "item3" and analyses:
                 text = mb.insert_top_block(text, mb.top_lines(summary["3"]["bands"]))

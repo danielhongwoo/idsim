@@ -44,11 +44,15 @@ def test_item3_default_is_nine_delays_times_three(measure):
     assert a.attempts == 27 == measure.DEFAULT_ATTEMPTS["item3"]
 
 
-def test_item3_attempts_must_be_a_multiple_of_the_delay_count(measure):
-    assert measure.parse_args(["--item", "item3", "--attempts", "18"]).attempts == 18
-    with pytest.raises(SystemExit):
-        measure.parse_args(["--item", "item3", "--attempts", "20"])
-    assert measure.parse_args(["--item", "item3", "--item3-delays", "0,0.5", "--attempts", "4"]).attempts == 4
+def test_item3_accepts_only_27_attempts_and_the_full_delay_list(measure):
+    assert measure.parse_args(["--item", "item3", "--attempts", "27"]).attempts == 27
+    for n in ("18", "20", "9", "28"):
+        with pytest.raises(SystemExit):
+            measure.parse_args(["--item", "item3", "--attempts", n])
+    with pytest.raises(SystemExit):                      # 부분 목록
+        measure.parse_args(["--item", "item3", "--item3-delays", "0,0.5"])
+    # item5의 시도 수는 그대로
+    assert measure.parse_args(["--item", "item5", "--attempts", "12"]).attempts == 12
 
 
 def test_item3_delays_only_from_the_fixed_list_and_item5_range_is_unchanged(measure):

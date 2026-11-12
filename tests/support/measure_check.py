@@ -229,8 +229,8 @@ def final_summary(rows, finals, min_by_item=MIN_ATTEMPTS_BY_ITEM, analyses=None)
     PASS 횟수를 채워도 enough가 아니다(종료 코드 2). 시도 수는 실행 전에 정하고 결과를 보고 더하지 않는다.
     2b는 (가) 미도달(COND_NOT_REACHED)과 (나) M3_CONTRADICTED를 case_ga, case_na로 따로 센다.
     (3)은 analyses({시도 번호: measure_bands.analyze_row 결과})가 있으면 실제 대역별 집계(bands)를 더하고
-    enough를 "PASS가 아닌 행 없음 그리고 세 대역의 최소 유효 시도 충족"으로 바꾼다(Hold로 끝난 경계 행은
-    HOLD_END라 PASS가 아니므로 (3)은 경계에서 Hold가 나오면 0이 될 수 없다).
+    enough를 "세 대역의 최소 유효 시도 충족"으로 바꾼다. PASS가 아닌 행(경계의 HOLD_END 포함)은 enough가 아니라
+    crosscheck_status가 n_not_pass로 보고 2로 만든다(경계에서 Hold가 나오면 0이 될 수 없다).
     """
     out = {}
     for r in rows:
@@ -262,7 +262,7 @@ def final_summary(rows, finals, min_by_item=MIN_ATTEMPTS_BY_ITEM, analyses=None)
                 d["enough"] = False
             else:
                 d["bands"] = mb.band_summary([r for r in rows if r["item"] == "3"], finals, analyses)
-                d["enough"] = d["n_not_pass"] == 0 and d["bands"]["all_met"]
+                d["enough"] = d["bands"]["all_met"]
         if sub == "2b":
             d["case_ga"] = d["by_verdict"].get("COND_NOT_REACHED", 0)
             d["case_na"] = d["by_verdict"].get("M3_CONTRADICTED", 0)
@@ -332,6 +332,8 @@ def crosscheck_status(results, crit, summary=None, meta=True, done=True):
                 fail = True
             elif not d["enough"]:
                 other = True
+            elif d.get("bands") and d["n_not_pass"]:       # (3)은 PASS가 아닌 행(HOLD_END 등)이 있으면 2
+                other = True
     if not results or not meta or not done:
         other = True
     return 1 if fail else (2 if other else 0)
@@ -378,7 +380,7 @@ def final_section(rows, finals, summary):
     subs = sorted({r["item"] for r in rows})
     for sub in subs:
         d = summary[sub]
-        if d["n_valid"] and d["n_exit1"] == 0:
+        if d["n_valid"] and d["n_exit1"] == 0 and not d.get("bands"):      # (3)은 대역별 유효 수로 따로 적는다
             bound = ", 무실패일 때 실패율 95%% 상한 %s" % mj.upper95_text(d["n_valid"])
         else:
             bound = ""

@@ -12,11 +12,11 @@ tests/sitl/measure/run_measure.sh [--stack 7] [--attempts N] [--keep] item2|item
 
 - 스택 번호 기본값은 7(실험용). 0은 사용자 스택이라 거부한다.
 - `item2` 재실측 (2), `item3` 재실측 (3), `item5` 재실측 (5), `armed` PX4 직접 명령의 arm -> ARMED 3회 -> 이륙 -> 착륙 구간 기록.
-- 기본 시도 수: item2 3, item3 27(지연값 아홉 개 x 3회), item5 10, armed 10. item2, item5, armed는 통과 기준의 최소 시도 수와 같고, item3은 대역별 최소 유효 시도(아래)보다 많다. item3의 `--attempts`는 지연값 수(9)의 배수여야 한다. `run_measure.sh --attempts`는 모든 item에 적용되므로 item3과 다른 item을 함께 돌릴 때는 쓰지 않는다.
+- 기본 시도 수: item2 3, item3 27(지연값 아홉 개 x 3회), item5 10, armed 10. item2, item5, armed는 통과 기준의 최소 시도 수와 같고, item3은 대역별 최소 유효 시도(아래)보다 많다. item3의 `--attempts`는 27만 받는다(다른 수나 일부 지연값만의 실행은 받지 않는다). `run_measure.sh --attempts`는 모든 item에 적용되므로 item3과 다른 item을 함께 돌릴 때는 쓰지 않는다.
 - `all`은 item3, item5, item2, armed 순으로 한 스택에서 돈다. 같은 item을 두 번 주면 거부하고, 기존 기록 파일이 있으면 덮어쓰지 않고 거부한다.
 - `--keep`을 주면 끝나도 스택을 내리지 않는다. `measure.py`는 마지막 시도 뒤 기체를 DISARMED, `landed` true로 되돌리고(`--keep`이어도) 그 결과를 요약에 적는다. 되돌리지 못하면 Hold armed로 남아 있을 수 있다.
 - 같은 실행 id의 `measure/`에 기록이 있으면 스택을 올리기 전에 거부한다.
-- 추가 인자: `MEASURE_ARGS="--observe-s 60 --hold-observe-s 60 --delays 0,0.05,0.1,0.15,0.2 --takeoff-alt 5 --tail-s 3 --settle-s 3"`. `--delays`((5) 전용)는 0-0.2 s 범위만, `--tail-s`는 0보다 커야 한다. `--item3-delays`((3) 전용)는 고정 목록(아래)의 값만 받고 중복을 거부한다. 다른 값은 코드의 고정 목록을 고쳐야 한다.
+- 추가 인자: `MEASURE_ARGS="--observe-s 60 --hold-observe-s 60 --delays 0,0.05,0.1,0.15,0.2 --takeoff-alt 5 --tail-s 3 --settle-s 3"`. `--delays`((5) 전용)는 0-0.2 s 범위만, `--tail-s`는 0보다 커야 한다. `--item3-delays`((3) 전용)는 고정 목록(아래) 아홉 개를 모두 포함해야 하고(순서는 자유) 부분 목록과 중복을 거부한다. 다른 값은 코드의 고정 목록을 고쳐야 한다.
 - 이 스크립트는 `tools/sim_stack.sh up`으로 스택을 올린다. P4 뒤에는 `up`이 Executor도 띄워 setpoint가 섞이므로 `sim_stack.sh up --infra-only`로 바꿔야 한다.
 
 ## (3)의 대역과 판정
@@ -25,7 +25,7 @@ tests/sitl/measure/run_measure.sh [--stack 7] [--attempts N] [--keep] item2|item
 
 실행 전에 고정한 지연값(이 호스트): spoolup 0, 0.5 s / 내부 1.074, 1.223, 1.372, 1.521 s / 경계 1.644, 1.694, 1.724 s. 지연값마다 3회, 합 27회이고 라운드 로빈 순서다. 계산식은 spoolup 0과 0.5 / 내부 T_r + {0.1, 0.3, 0.5, 0.7} x (T_lf - T_r) / 경계 T_lf - {0.10, 0.05, 0.02}이고, T_r은 `COM_SPOOLUP_TIME` 1.0 s, T_lf는 ULog의 `vehicle_land_detected` `landed` false `timestamp` - 첫 ARMED `vehicle_status` `timestamp`의 최솟값이다. 근거는 실행 `20261112-011246-k5-measure`의 13개 표본(최솟값 1.744 s, 최댓값 1.804 s)이고 image key `px4` 81678f535f7e4b05, `sim-base` cd6a22462ff15990에서 얻었다. 지연값과 T_r, T_lf의 출처는 실행 전에 `summary_item3.txt` 머리에 적힌다. 결과를 보고 지연값이나 시도를 더하지 않는다.
 
-image key가 근거 실행과 다르면 실행을 거부한다(`measure.py`가 스택에 아무것도 보내기 전에 종료 코드 2). 같은 key로 `armed` item을 먼저 돌리면 `crosscheck.py`가 ULog의 T_lf 표본 수, 최솟값, 최댓값과 그 최솟값으로 계산한 지연 목록을 출력한다. 그 값으로 `measure_bands.py`의 `T_LF_REF`와 `ITEM3_DELAYS_S`를 고친 뒤 (3)을 돌린다.
+image key(px4, sim-base)나 TAKEOFF 목표 높이(`--takeoff-alt`, 근거 실행 5.0 m)가 근거 실행과 다르면 실행을 거부한다(`measure.py`가 스택에 아무것도 보내기 전에 종료 코드 2). 같은 key로 `armed` item을 먼저 돌리면 `crosscheck.py`가 ULog의 T_lf 표본 수, 최솟값, 최댓값과 그 최솟값으로 계산한 지연 목록을 출력한다. 그 값으로 `measure_bands.py`의 `T_LF_REF`와 `ITEM3_DELAYS_S`를 고친 뒤 (3)을 돌린다. 고친 뒤에는 커밋하고 돌린다(`dirty`가 true인 실행은 머지 조건으로 세지 않는다).
 
 trigger: 첫 ARMED 표본의 PX4 `timestamp`(수신 `/clock`이 아니다) + 명목 지연까지 `/clock`으로 기다렸다가 지상 setpoint로 바꾸고 disarm한다. 이미 지났으면 즉시 보낸다. 기다리는 동안 TAKEOFF 목표점 발행을 이어 가고, `/clock`이 멈추면 `CLOCK_STALLED`다. 행의 `injection`에 명목 지연(`delay_s_nominal`), 실제 지연(`delay_s_actual` = 취소 `/clock` - 첫 ARMED `timestamp`), 첫 ARMED 수신 지연(`first_armed_recv_lag_s` = 수신 - `timestamp`), 취소 `/clock`(`cancel_clock_us`)이 남는다.
 
@@ -34,8 +34,8 @@ ULog에서 읽는 것(`ulog_min.read_topics`가 파일을 한 번만 읽는다):
 - t_A: arm 전송 뒤 첫 `arming_state` 2인 `vehicle_status`의 `timestamp`.
 - t_ramp: t_A 뒤 `in_ground_effect` true인 첫 `vehicle_land_detected`(없을 수 있다). 교차 확인: `takeoff_state` 4 표본이 있으면 t_ramp와 8 ms 안, 추력(`vehicle_thrust_setpoint` xyz[2])이 "arm 뒤 0.9 s 바닥 중앙값 - 0.002" 아래로 내려간 첫 표본이 [t_ramp - 20 ms, t_ramp + 40 ms] 안. 어긋나면 기록하고 INCONCLUSIVE(2).
 - t_ml, t_lf: t_A 뒤 `maybe_landed`, `landed`가 false인 첫 표본.
-- t_p, r_p: t_A 뒤(엄격히 뒤) command 400의 첫 `vehicle_command_ack`의 `timestamp`(처리 시각)와 `result`. arm의 ack는 arm이 처리된 주기에 나와 `timestamp`가 t_A와 같아서 엄격 비교로 가려진다.
-- first_disarm_lost: 측정기가 처음 보낸 disarm에 대응하는 `vehicle_command`(command 400, param1 0, `timestamp` = 측정기가 실은 `Px4Timestamp`)가 ULog에 없음. INCONCLUSIVE(2).
+- t_p, r_p: 측정기가 처음 보낸 disarm(`vehicle_command` 400, param1 0, `timestamp` = 보낸 `Px4Timestamp`)에 대응하는 `vehicle_command_ack`의 `timestamp`(처리 시각)와 `result`. 대응은 `timestamp`의 크기가 아니라 ULog에 기록된 command 400과 ack 400의 파일 순서(1:1)로 한다. arm의 재전송 ack가 t_A 뒤 `timestamp`로 남거나 arm ack와 disarm ack의 `timestamp`가 같아도 섞이지 않는다. 근거는 Commander가 주기당 command 하나를 FIFO로 처리하고 ack가 처리 순서대로 기록되는 것이다([소스]. 실측은 없다).
+- first_disarm_lost: 그 disarm의 `vehicle_command`가 ULog에 없음. INCONCLUSIVE(2). 구간의 command 400과 ack 400의 수가 다르면 `ACK_COUNT`로 INCONCLUSIVE(2)이고 이 검사가 일관성 검사보다 앞선다.
 - ld_p: `timestamp`가 t_p 이하인 마지막 `vehicle_land_detected`.
 
 대역(t_p 기준. 계획한 지연값과 무관):
@@ -48,18 +48,25 @@ ULog에서 읽는 것(`ulog_min.read_topics`가 파일을 한 번만 읽는다):
 
 내부 시간대인데 ld_p `landed`가 false이면 경계로 분류하고 "T_lf가 앞선 최솟값보다 작다"는 관측으로 기록한다(`t_lf_below_ref`). 창 밖(`WINDOW_MISSED`)은 t_lf가 측정기의 취소 전송 `/clock` 이하인 회다.
 
-최종 verdict(crosscheck 뒤. 1이 2보다 앞선다):
+최종 verdict(crosscheck 뒤). 판정 순서는 아래와 같고 앞 단계가 이긴다(px4-engineer 승인 대상):
 
-- spoolup, 내부: 분기 전환 없이 지상 DISARMED이고 r_p가 ACCEPTED이며 기존 기준을 만족하면 PASS. 첫 disarm이 이 두 대역에서 처리되었는데 r_p가 ACCEPTED가 아니거나 공중 분기(Hold로 끝남, 지상 -> 공중 -> 지상 포함)로 간 회는 `M5_CONTRADICTED`(1)다.
-- 일관성 검사(어긋나면 `M5_INCONSISTENT`, 1): r_p가 ACCEPTED이면 t_p <= t_ml + 12 ms. TEMPORARILY_REJECTED이면 t_p >= t_ml이고 `Disarming denied: not landed` logged message가 [t_p - 4 ms, t_p] 안. 그 밖의 result는 이 검사 대상이 아니다.
-- 경계: 지상 DISARMED로 끝나면 PASS, Hold로 끝나면 `HOLD_END`(2. 기계가 통과로 올리지 않고 architect가 판정). 판정 입력으로 r_p, t_p >= t_ml 여부, t_p 전 ACCEPTED 400 ack 개수, logged message 유무, t_p - t_ml, ld_p의 네 필드(`landed`, `maybe_landed`, `ground_contact`, `in_ground_effect`), t_p 시각의 추력을 `bands_item3.json`에 기록한다. 그래서 (3)은 경계에서 Hold가 한 번이라도 나오면 종료 코드 0이 될 수 없다.
-- Hold 뒤 60 s 관찰(item3의 Hold 종료와 item2의 2b)은 ULog 전체 표본으로 본다. `landed` true가 있으면 `M3_CONTRADICTED`(1), `maybe_landed`만 true이면 기록하고 INCONCLUSIVE(2).
-- first_disarm_lost, t_ramp 판별 불일치, 대역을 정하지 못함, 측정기가 disarm을 보내지 않음(첫 분기가 공중)은 INCONCLUSIVE(2).
+1. 창과 무관한 기준을 어긴 회(`measure.py` 단독의 FAIL, 1).
+2. `M3_CONTRADICTED`(1): Hold 뒤 60 s 관찰(item3의 Hold 종료와 item2의 2b)의 ULog 전체 표본에 `landed` true가 있음. ULog 표본이 부족해도 true가 보이면 이 단계다.
+3. INCONCLUSIVE(2): Hold 뒤 관찰의 ULog `vehicle_land_detected` 표본이 구간을 덮지 못함(0개 포함, `HOLD_OBS`)이거나 `maybe_landed`만 true(`MAYBE_LANDED`. 기록만 한다). 덮었는지의 기준은 구간 앞의 마지막 표본과 구간 끝을 포함한 이웃 표본 사이 최대 간격 2 s 이하이다(`HOLD_OBS_MAX_GAP_US`. 근거 실행은 60 s에 60-61개, 값이 안 바뀌면 1 Hz. px4-engineer 승인 대상).
+4. `WINDOW_MISSED`: t_lf가 측정기 취소 전송 `/clock` 이하(제외).
+5. INCONCLUSIVE(2) 판정 불가: `NO_DISARM`(측정기가 disarm을 보내지 않음), `FIRST_DISARM_LOST`, `ACK_COUNT`, `NO_ACK`, `RAMP_MISMATCH`(t_ramp 판별 불일치. in_ground_effect, takeoff_state, 추력 하락의 시각을 사유에 남긴다), `BAND_UNKNOWN`.
+6. `M5_INCONSISTENT`(1): 첫 disarm에 대응한 ack의 수락 여부가 `maybe_landed`와 맞지 않음. r_p가 ACCEPTED이면 t_p <= t_ml + 12 ms, TEMPORARILY_REJECTED이면 t_p >= t_ml. 그 밖의 result는 대상이 아니다. 첫 disarm이 유실된 회에는 적용하지 않는다. 거부 때의 `Disarming denied: not landed` logged message는 판정에 쓰지 않고 유무와 t_p와의 시각 차이만 기록한다(`log_denied_dt_us`).
+7. 대역별 결과.
+
+대역별 결과:
+
+- spoolup, 내부: 분기 전환 없이 지상 DISARMED이고 r_p가 ACCEPTED이며 기존 기준을 만족하면 PASS. 어긋나면 `M5_CONTRADICTED`(1): 첫 disarm이 이 두 대역에서 처리되었는데 r_p가 ACCEPTED가 아니거나 공중 분기(Hold로 끝남, 지상 -> 공중 -> 지상 포함)로 간 회. `M5_CONTRADICTED`는 대역 문장이 반증된 것이고, `M5_INCONSISTENT`는 PX4의 disarm 수락 규칙과 ULog의 시각이 맞지 않는 것이다.
+- 경계: r_p가 ACCEPTED이고 분기 전환 없이 지상 DISARMED로 끝날 때만 PASS. `landed`가 false가 된 뒤 true로 돌아와 지상 DISARMED로 끝난 회(공중 -> 지상 복귀, 첫 disarm이 거부된 뒤 재전송이 받아들여진 회, r_p가 TEMPORARILY_REJECTED인데 지상 DISARMED로 끝난 회)는 `M5_CONTRADICTED`(1)이다. 판별은 ROS(분기 순서에 A, 전환 횟수)와 ULog(t_lf 뒤 DISARMED 전의 `landed` true 표본) 둘 다 쓴다. Hold로 끝나면 `HOLD_END`(2)이고 기계가 통과로 올리지 않는다. 그런 회가 있으면 종료 코드는 0이 아니고 architect가 ULog의 선후 기록으로 판정한다. 판정 입력으로 r_p, t_p >= t_ml 여부, logged message 유무와 시각 차이, t_p - t_ml, ld_p의 네 필드(`landed`, `maybe_landed`, `ground_contact`, `in_ground_effect`), t_p 시각의 추력을 `bands_item3.json`에 기록한다.
 - 창과 무관한 기준(OFFBOARD가 아닌 ARMED 0개, 정리 총 소요 9 s 미만, 상승 0.2 m 이하, 표의 종료)과 `measure.py` 단독 판정 함수는 그대로다.
 
 `measure.py` 단독 verdict는 ROS 표본이 근거인 잠정 판정이다. (3)의 대역과 최종 verdict는 `crosscheck.py` 뒤에만 정해진다(`summary_item3.txt` 맨 위의 대역 충족 여부 절과 끝의 최종 판정 절, `final_summary.json`).
 
-집계(`final_summary.json`의 `3.bands`와 요약 맨 위): 실제 대역별, 계획 지연값별 n, 유효(PASS, FAIL, M3_CONTRADICTED, M5_CONTRADICTED, M5_INCONSISTENT와 경계의 HOLD_END), PASS, 제외, 공중 분기 회수. 최소 유효 시도는 spoolup 6, 내부 10, 경계 4이고 spoolup과 내부는 계획한 지연값마다 그 대역의 유효 시도가 2 이상이어야 한다. 모자라면 2다. 경계에서 공중 분기가 0회이면 요약에 "경계에서 공중 분기는 생기지 않았다(확인되지 않음)"가 적힌다. 지연값별로 t_p - t_A, t_ramp - t_A, t_lf - t_A, 대역, r_p, first_disarm_lost가 표로 남고, 첫 disarm과 `landed` false의 부호 있는 간격은 t_p - t_lf로 잰다.
+집계(`final_summary.json`의 `3.bands`와 요약 맨 위): 실제 대역별, 계획 지연값별 n, 유효(PASS, FAIL, M3_CONTRADICTED, M5_CONTRADICTED, M5_INCONSISTENT와 경계의 HOLD_END), PASS, 제외, 공중 분기 회수(ROS 분기 순서, 전환, ULog `landed` 복귀). 최소 유효 시도는 spoolup 6, 내부 10, 경계 4이고 spoolup과 내부는 계획한 지연값이 계획한 대역으로 분류된 유효 시도가 지연값마다 2 이상이어야 한다. `enough`는 이 최소치만 본다. 종료 코드 2는 PASS가 아닌 행(경계의 HOLD_END 포함)에서 나온다. 요약에 "경계 유효 n회(최소 4 충족), HOLD_END n회는 architect 판정 대기"가 따로 적힌다. 경계의 유효 시도가 1회 이상이고 공중 분기가 0회일 때만 "경계에서 공중 분기는 생기지 않았다(M5의 경계 문장이 실측으로 받쳐진 것은 아니다)"가 적히고, 경계 시도가 0회면 이 문장을 적지 않는다. 무실패일 때 실패율 95% 상한은 27회가 아니라 대역별 유효 시도 수로 적는다. 지연값별로 t_p - t_A, t_ramp - t_A, t_lf - t_A, 대역, r_p, first_disarm_lost가 표로 남고, 첫 disarm과 `landed` false의 부호 있는 간격은 t_p - t_lf로 잰다.
 
 실행 시간: 보통 약 7분, 최악 약 22분으로 추정한다(최악은 Hold로 끝난 회마다 60 s 관찰이 붙는 경우). 측정하지 않은 추정이다.
 

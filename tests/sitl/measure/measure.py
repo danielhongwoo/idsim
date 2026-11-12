@@ -107,7 +107,9 @@ CRITERIA = {
         "AUTO_LOITER, landed 전환 0회, 고도 변화 0.2 m 이하인 한 COND_NOT_REACHED(종료 코드 2), 어긋나면 FAIL. "
         "관찰 구간이 60 s 미만이거나 표본 수가 모자라거나(vehicle_status 초당 1개, vehicle_land_detected "
         "초당 0.5개 미만) 마지막 표본이 관찰 끝에서 1 s(landed는 2 s) 넘게 지났으면 INCONCLUSIVE.",
-        "시도 3회 모두 위 기준을 만족해야 통과한다. 3회는 실패율 95% 상한이 약 100%라 실패 없음의 증거가 아니다.",
+        "시도 3회 모두 위 기준을 만족해야 통과한다. 3회 중 0건은 실패율의 95%% 상한이 %s라는 뜻이라 실패 없음의 증거가 "
+        "아니다. crosscheck가 Hold 뒤 관찰을 ULog 전체 표본으로 다시 본다(landed true는 M3_CONTRADICTED, ULog 표본이 "
+        "구간을 덮지 못하거나 maybe_landed만 true이면 INCONCLUSIVE)." % mj.upper95_text(3),
     ],
     "item3": [
         "TAKEOFF 목표점으로 arm한 뒤 첫 ARMED 표본의 PX4 timestamp + 지연(/clock 기준. 이미 넘었으면 즉시)에 지상 "
@@ -117,12 +119,16 @@ CRITERIA = {
         "대역은 계획한 지연값이 아니라 ULog로 본 첫 disarm의 처리 시각 t_p로 정한다(crosscheck.py). spoolup은 t_p에 "
         "rampup이 시작되지 않았고 landed true, 내부는 rampup 시작 뒤이고 t_p - t_A < T_lf - 0.10 s이며 landed "
         "true, 경계는 그 뒤이거나 landed false다. 창 밖(WINDOW_MISSED)은 t_lf가 취소 전송 /clock 이하인 회다.",
+        "첫 disarm의 대응: ULog의 command 400과 ack 400을 파일 순서로 1:1 대응한다(arm 재전송의 ack와 섞이지 않게). "
+        "수가 다르면 ACK_COUNT, 첫 disarm이 ULog에 없으면 first_disarm_lost로 INCONCLUSIVE(2)다.",
         "spoolup과 내부: 창 안의 시도가 분기 전환 없이 지상 DISARMED이고 r_p가 ACCEPTED여야 PASS다. 어긋나면 "
-        "M5_CONTRADICTED(1). 일관성 검사(ACCEPTED면 t_p <= t_ml + 12 ms, TEMPORARILY_REJECTED면 t_p >= t_ml이고 "
-        "'Disarming denied: not landed' 로그가 [t_p - 4 ms, t_p] 안)가 어긋나면 M5_INCONSISTENT(1).",
-        "경계: 지상 DISARMED로 끝나면 PASS, Hold로 끝나면 HOLD_END(2. 기계가 통과로 올리지 않는다). 그래서 (3)은 "
-        "경계에서 Hold가 나오면 종료 코드 0이 될 수 없다. Hold 뒤 60 s 관찰에서 ULog에 landed true가 있으면 "
-        "M3_CONTRADICTED(1), maybe_landed만 true이면 기록하고 2다.",
+        "M5_CONTRADICTED(1). 일관성 검사(첫 disarm의 ack에만. ACCEPTED면 t_p <= t_ml + 12 ms, "
+        "TEMPORARILY_REJECTED면 t_p >= t_ml)가 어긋나면 M5_INCONSISTENT(1). 거부 로그는 기록만 한다.",
+        "경계: r_p가 ACCEPTED이고 분기 전환 없이 지상 DISARMED로 끝날 때만 PASS다. landed가 false가 된 뒤 true로 돌아와 "
+        "지상 DISARMED로 끝난 회(ROS 분기 순서 또는 ULog로 판별. 거부 뒤 재전송이 받아들여진 회 포함)는 "
+        "M5_CONTRADICTED(1). Hold로 끝나면 HOLD_END(2. 기계가 통과로 올리지 않고 architect가 판정)라 (3)은 경계에서 "
+        "Hold가 나오면 종료 코드 0이 될 수 없다. Hold 뒤 60 s 관찰에서 ULog에 landed true가 있으면 M3_CONTRADICTED(1), "
+        "ULog 표본이 구간을 덮지 못하거나 maybe_landed만 true이면 INCONCLUSIVE(2)다.",
         "창과 무관한 기준: OFFBOARD가 아닌 ARMED 0개, 정리 총 소요 9 s 미만, 상승 0.2 m 이하, TIMEOUT_GROUND/"
         "TIMEOUT_HOLD/LIMIT/DISARMED_AIR는 FAIL, 지상 종료면 끝난 뒤 ARMED 없음과 마지막 DISARMED, Hold 종료면 "
         "60 s M3 상태와 표본 조건. 위반이 있으면 FAIL(1), Hold 종료의 관찰 표본이 모자라면 INCONCLUSIVE(2).",
@@ -869,9 +875,9 @@ def parse_args(argv):
         args.item3_delays = mb.parse_item3_delays(args.item3_delays)
     except ValueError as e:
         ap.error(str(e))
-    if args.item == "item3" and args.attempts % len(args.item3_delays):
-        ap.error("item3의 --attempts(%d)는 지연값 수(%d)의 배수여야 한다(지연값마다 같은 횟수)"
-                 % (args.attempts, len(args.item3_delays)))
+    if args.item == "item3" and args.attempts != DEFAULT_ATTEMPTS["item3"]:
+        ap.error("item3의 --attempts는 %d만 받는다(지연값 %d개 x %d회 고정): %d"
+                 % (DEFAULT_ATTEMPTS["item3"], len(mb.ITEM3_DELAYS_S), mb.REPEATS, args.attempts))
     return args
 
 
@@ -892,7 +898,7 @@ def main(argv=None):
 
     # (3)은 T_lf를 정한 근거 실행과 같은 image key에서만 돈다. 다르면 스택에 아무것도 보내지 않고 거부한다.
     if item == "item3":
-        problem = mb.image_key_problem(meta["image_keys"])
+        problem = mb.image_key_problem(meta["image_keys"], args.takeoff_alt)
         if problem is not None:
             print("INFRA_IMAGE_KEY: " + problem, file=sys.stderr)
             return 2
@@ -927,7 +933,7 @@ def main(argv=None):
         fh.write("실행 인자 %s\n" % json.dumps(args_record(args), sort_keys=True))
         if item == "item3":
             fh.write("\n## (3)의 지연값과 T_lf의 출처 (실행 전에 기록)\n")
-            for line in mb.header_lines(args.item3_delays, args.attempts, meta["image_keys"]):
+            for line in mb.header_lines(args.item3_delays, args.attempts, meta["image_keys"], args.takeoff_alt):
                 fh.write("- %s\n" % line)
         fh.write("\n## 통과 기준 (실행 전에 기록)\n")
         for line in CRITERIA[item]:
