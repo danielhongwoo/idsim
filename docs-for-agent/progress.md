@@ -56,7 +56,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. P4 통합 PR. 최종 커밋에서 `tests/sitl/run_sitl.sh --repeat 3`을 돌리고 PR을 올려 CI `sitl` 첫 실행의 단계별 시간과 판정 구간 RTF를 PR 본문에 남긴다(올림 기준: 15분 초과나 RTF 0.7 미만). px4-engineer 승인과 reviewer 검토. 함께 할 것: `idsim_mission/config/ops.example.yaml`의 손으로 쓴 식별자를 지우거나 install에서 빼기(ros2-engineer).
+1. P4 통합 PR. 최종 커밋에서 `tests/sitl/run_sitl.sh --repeat 3`을 돌리고 PR을 올려 CI `sitl` 첫 실행의 단계별 시간과 판정 구간 RTF를 PR 본문에 남긴다(올림 기준: 15분 초과나 RTF 0.7 미만). px4-engineer 승인과 reviewer 검토.
 2. P5 viz(devops-engineer). `foxglove`와 `lichtblick` 서비스, 브라우저 실접속 확인.
 3. 6단계 마무리: 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인.
 4. 1a 7단계 `docs/interface.md`(문서 작업). ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 넣을 것은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록의 architect 7단계 행에 있고, 실측 근거가 없는 항목은 "미확인"과 보수적 동작으로 적는다.

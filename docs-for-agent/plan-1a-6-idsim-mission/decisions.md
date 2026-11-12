@@ -584,7 +584,6 @@ ARMED 표본 기준(쟁점 4 P6의 1회 판정)
 P0-P3과 P4의 core 변경은 끝났다. 남은 것은 P4 통합의 머지와 P5다.
 
 ros2-engineer
-- P4: `idsim_mission/config/ops.example.yaml`의 손으로 쓴 식별자를 지우거나 install에서 뺀다.
 - P4, P5 검토: launch와 params의 대응, foxglove params.
 
 px4-engineer
