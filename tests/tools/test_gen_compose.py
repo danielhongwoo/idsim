@@ -4,8 +4,9 @@ lint 잡의 python 이미지(PyYAML == versions.env의 LINT_PYYAML_VERSION, pyte
 디렉터리로 `python3 -m pytest tests/tools`로 돈다. docker가 필요 없다(compose config 검사는 lint.sh의
 compose-config 항목).
 
-골든: tests/fixtures/gen_compose/<사례>/{fleet.yaml, compose.yaml, stack.json}. 사례의 fleet.yaml을 고정 인자
-(GOLDEN_CTX)로 생성해 compose.yaml, stack.json과 바이트 단위로 비교한다. 골든 파일이 없으면 실패한다.
+골든: tests/fixtures/gen_compose/<사례>/{fleet.yaml, compose.yaml, stack.json, params/ops-N.yaml}. 사례의
+fleet.yaml을 고정 인자로 생성해 실행 디렉터리의 파일 전체(파일 집합과 바이트)와 비교한다. 골든 파일이 없거나
+남는 파일이 있으면 실패한다. 빈 디렉터리(px4-N, ros_log/*)는 git이 추적하지 못하므로 render_dirs 테스트가 따로 본다.
 갱신은 --update-golden(저장소를 쓰기 가능하게 마운트한 환경에서):
   python3 -m pytest tests/tools --update-golden -p no:cacheprovider
 diff는 리뷰에서 본다. 고정 인자 중 versions_env의 sha256만 상수로 둔다(도구 버전 줄을 고칠 때마다
@@ -126,36 +127,69 @@ def gen(f=None, **ctx_kw):
 
 
 # ------------------------------------------------------------------ 골든
-def _golden_outputs(case):
+def _golden_build(case):
     k, variant = GOLDEN_CASES[case]
     rel = f"tests/fixtures/gen_compose/{case}/fleet.yaml"
     path = os.path.join(REPO, rel)
     norm, _ = gc.validate_fleet(gc.load_yaml(_read(path)))
     ctx = make_ctx(k=k, variant=variant, fleet_path=rel, fleet_sha=gc._sha256_file(path))
     compose, stack, _ = gc.build(norm, ctx)
-    return gc.dump_compose(compose), gc.dump_stack(stack)
+    return compose, stack
+
+
+def _golden_outputs(case):
+    """{상대 경로: 본문}. 실행 디렉터리에 생기는 파일 전체(생성기의 render_files)."""
+    return gc.render_files(*_golden_build(case))
+
+
+def _golden_files(case_dir):
+    """골든 디렉터리의 파일 집합(입력 fleet.yaml 제외). 상대 경로는 /로 쓴다."""
+    out = set()
+    for root, _, names in os.walk(case_dir):
+        for name in names:
+            rel = os.path.relpath(os.path.join(root, name), case_dir).replace(os.sep, "/")
+            if rel != "fleet.yaml":
+                out.add(rel)
+    return out
 
 
 @pytest.mark.parametrize("case", sorted(GOLDEN_CASES))
 def test_golden(case, request):
     case_dir = os.path.join(GOLDEN_DIR, case)
     assert os.path.isfile(os.path.join(case_dir, "fleet.yaml")), f"골든 입력 없음: {case_dir}/fleet.yaml"
-    compose_text, stack_text = _golden_outputs(case)
+    outputs = _golden_outputs(case)
     update = request.config.getoption("--update-golden", default=False)
     changed = []
-    for name, text in (("compose.yaml", compose_text), ("stack.json", stack_text)):
-        path = os.path.join(case_dir, name)
-        if update:
-            # 내용이 바뀐 파일만 쓴다(git diff가 실제 변경만 보이게). 쓴 사례는 통과가 아니라 skip으로 표시한다
+    if update:
+        # 내용이 바뀐 파일만 쓴다(git diff가 실제 변경만 보이게). 쓴 사례는 통과가 아니라 skip으로 표시한다
+        for rel, text in sorted(outputs.items()):
+            path = os.path.join(case_dir, rel)
             if not os.path.isfile(path) or _read(path) != text:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(text)
-                changed.append(name)
-            continue
-        assert os.path.isfile(path), f"골든 없음: {path} (--update-golden으로 만든다)"
-        assert _read(path) == text, f"골든 불일치: {path} (의도한 변경이면 --update-golden)"
-    if changed:
-        pytest.skip(f"골든 갱신: {case}/{', '.join(changed)} (git diff로 검토한다)")
+                changed.append(rel)
+        for rel in sorted(_golden_files(case_dir) - set(outputs)):
+            os.remove(os.path.join(case_dir, rel))
+            changed.append(f"{rel}(삭제)")
+        for root, dirs, names in os.walk(case_dir, topdown=False):
+            if root != case_dir and not dirs and not names:
+                os.rmdir(root)
+        if changed:
+            pytest.skip(f"골든 갱신: {case}/{', '.join(changed)} (git diff로 검토한다)")
+        return
+    assert _golden_files(case_dir) == set(outputs), \
+        f"골든 파일 집합 불일치: 없음 {sorted(set(outputs) - _golden_files(case_dir))}, " \
+        f"남음 {sorted(_golden_files(case_dir) - set(outputs))} (의도한 변경이면 --update-golden)"
+    for rel, text in sorted(outputs.items()):
+        assert _read(os.path.join(case_dir, rel)) == text, f"골든 불일치: {case}/{rel} (의도한 변경이면 --update-golden)"
+
+
+@pytest.mark.parametrize("case", sorted(GOLDEN_CASES))
+def test_golden_has_no_fmu_strings(case):
+    """생성 파일 어디에도 /fmu 토픽 문자열이 없다(토픽 이름은 idsim_common 안에서만 쓴다)."""
+    for rel, text in _golden_outputs(case).items():
+        assert "fmu/" not in text, (case, rel)
 
 
 @pytest.mark.parametrize("case", sorted(GOLDEN_CASES))
@@ -175,6 +209,18 @@ def test_golden_stack_loads_with_support_loader(case):
     else:
         px4 = [v.service for v in s.vehicles]
         assert s.startup_stages == [["xrce-agent", "gazebo"], px4, ["bridge"]]
+    # 6단계 key: 기존 로더는 모르는 필드를 무시하고, 새 key는 원본 dict로 읽힌다
+    for v in s.vehicles:
+        assert v.raw["vehicle_id"] == v.ns[1:]
+        if variant == "embedded":
+            assert v.raw["params_file"] is None and v.raw["executor_node"] is None
+            assert s.services["ops"] == [] and s.raw["startup"]["node_stages"] == []
+        else:
+            assert v.raw["params_file"] == f"params/ops-{v.id}.yaml"
+            assert v.raw["executor_node"] == f"{v.ns}/mission_executor"
+            assert s.services["ops"] == [f"ops-{x.id}" for x in s.vehicles]
+            assert s.raw["startup"]["node_stages"] == [s.services["ops"]]
+            assert s.raw["run"]["params_dir"] == "params"
     assert s.vehicle_by_ns(s.vehicles[0].ns) is s.vehicles[0]
     assert s.vehicles[0].ns == "/" + s.vehicles[0].px4_ns
     assert s.service("agent") == "xrce-agent" and s.service("runner") == "runner"
@@ -264,7 +310,7 @@ def test_properties(kw):
     assert "user" not in agent
     if "gazebo" in services:
         assert "user" not in services["gazebo"]
-    for name in ("bridge", "runner", "gz-gui"):
+    for name in ["bridge", "runner", "gz-gui"] + [f"ops-{i}" for i in range(1, n + 1)]:
         if name in services:
             assert services[name]["user"] == "1000:1000"
     # 러너는 tools 프로필, 단계에는 프로필 서비스가 없다
@@ -278,7 +324,7 @@ def test_properties(kw):
 def test_standalone_services_and_healthchecks():
     compose, stack, _ = gen()
     s = compose["services"]
-    assert list(s) == ["xrce-agent", "gazebo", "px4-1", "bridge", "runner", "gz-gui"]
+    assert list(s) == ["xrce-agent", "gazebo", "px4-1", "bridge", "ops-1", "runner", "gz-gui"]
     hc = s["gazebo"]["healthcheck"]["test"][1]
     assert hc == ('gz service -i --service /world/default/scene/info | grep -q "Service providers"'
                   " && test -f /tmp/idsim/ready")
@@ -303,6 +349,8 @@ def test_standalone_services_and_healthchecks():
     assert s["runner"]["environment"]["IDSIM_STACK_FILE"] == \
         "/opt/idsim/artifacts/runs/20261109-090000-k0/stack.json"
     assert stack["startup"]["stages"] == [["xrce-agent", "gazebo"], ["px4-1"], ["bridge"]]
+    assert stack["startup"]["node_stages"] == [["ops-1"]]
+    assert s["runner"]["depends_on"] == {"ops-1": {"condition": "service_healthy"}}
 
 
 def test_origin_absent_gives_no_env_and_null():
@@ -325,7 +373,12 @@ def test_embedded_variant():
     assert any("origin" in w for w in warnings)
     for role in ("gazebo", "bridge", "gz_gui", "foxglove", "lichtblick"):
         assert role in stack["services"] and stack["services"][role] is None
-    assert stack["startup"] == {"stages": [["xrce-agent"], ["px4-1"]], "model_precheck": False}
+    # 노드 서비스는 만들지 않는다(embedded에는 /clock bridge가 없다)
+    assert stack["services"]["ops"] == []
+    assert not [n for n in s if n.startswith("ops-")]
+    assert gc.render_files(compose, stack).keys() == {"compose.yaml", "stack.json"}
+    assert stack["startup"] == {"stages": [["xrce-agent"], ["px4-1"]], "node_stages": [],
+                                "model_precheck": False}
     assert stack["services"]["profiles"] == {"tools": ["runner"], "viz": []}
 
 
@@ -389,6 +442,127 @@ def test_dump_compose_has_no_anchor_and_quotes_strings():
     text = gc.dump_compose(gen(three_vehicles())[0])
     assert "&id" not in text and "*id" not in text
     assert "restart: 'no'" in text
+
+
+# ------------------------------------------------------------------ ops-N 성질(decisions.md 쟁점 2)
+OPS_CASES = [
+    pytest.param(dict(), id="1대-k0"),
+    pytest.param(dict(k=9), id="1대-k9"),
+    pytest.param(dict(f=three_vehicles()), id="3대-k0"),
+    pytest.param(dict(f=three_vehicles(), k=7), id="3대-k7"),
+]
+
+
+@pytest.mark.parametrize("kw", OPS_CASES)
+def test_resident_ros_ws_services_have_init(kw):
+    """성질 1: 상주 ros-ws 서비스(bridge, ops-N)와 xrce-agent는 init: true. 1회 실행용 runner는 상주가 아니다."""
+    compose, stack, _ = gen(**kw)
+    services = compose["services"]
+    ros_ws = stack["images"]["ros_ws"]
+    resident = [n for n, svc in services.items() if svc["image"] == ros_ws and not svc.get("profiles")]
+    assert resident == ["bridge"] + stack["services"]["ops"]
+    for name in resident + ["xrce-agent"]:
+        assert services[name]["init"] is True, name
+    assert "init" not in services["runner"]
+
+
+@pytest.mark.parametrize("kw", OPS_CASES)
+def test_ops_stop_signal_and_grace(kw):
+    """성질 2: ops-N은 SIGINT로 멈추고 유예 10 s. bridge 등 ros2 run 서비스에는 stop_signal을 두지 않는다."""
+    compose, stack, _ = gen(**kw)
+    for name in stack["services"]["ops"]:
+        assert compose["services"][name]["stop_signal"] == "SIGINT", name
+        assert compose["services"][name]["stop_grace_period"] == "10s", name
+    for name, svc in compose["services"].items():
+        if name not in stack["services"]["ops"]:
+            assert "stop_signal" not in svc, name
+
+
+@pytest.mark.parametrize("kw", OPS_CASES)
+def test_ops_params_have_identity_only(kw):
+    """성질 3: params는 /** 아래 use_sim_time과 vehicle.id, ns, sysid뿐이다. lifecycle. key와 튜닝 값이 없다."""
+    compose, stack, _ = gen(**kw)
+    files = gc.render_files(compose, stack)
+    for v in stack["vehicles"]:
+        text = files[v["params_file"]]
+        doc = gc.load_yaml(text)
+        assert list(doc) == ["/**"] and list(doc["/**"]) == ["ros__parameters"]
+        assert doc["/**"]["ros__parameters"] == {
+            "use_sim_time": True, "vehicle.id": v["vehicle_id"], "vehicle.ns": v["ns"], "vehicle.sysid": v["sysid"]}
+        assert "lifecycle" not in text.split("\n", 2)[2] and "command_source" not in text.split("\n", 2)[2]
+        assert not [ln for ln in text.splitlines() if ln.lstrip().startswith("lifecycle.")]
+    assert set(files) == {"compose.yaml", "stack.json"} | {v["params_file"] for v in stack["vehicles"]}
+
+
+@pytest.mark.parametrize("kw", OPS_CASES)
+def test_ops_healthcheck_names_executor_node(kw):
+    """성질 4: healthcheck의 노드 FQN, launch 인자 executor_name, stack.json executor_node가 한 상수에서 나온다."""
+    compose, stack, _ = gen(**kw)
+    for v in stack["vehicles"]:
+        ops = compose["services"][f"ops-{v['id']}"]
+        fqn = v["executor_node"]
+        assert fqn == f"{v['ns']}/{gc.EXECUTOR_NODE_NAME}"
+        assert gc.EXECUTOR_NODE_NAME == "mission_executor"
+        probe = ops["healthcheck"]["test"][1]
+        assert f"ros2 lifecycle get --no-daemon {fqn} " in probe
+        assert probe.count(fqn) == 1 and "/px4_" not in probe.replace(fqn, "")
+        assert f"executor_name:={gc.EXECUTOR_NODE_NAME}" in ops["command"]
+        assert f"namespace:={v['ns']}" in ops["command"]
+        hc = ops["healthcheck"]
+        assert (hc["interval"], hc["timeout"], hc["retries"], hc["start_period"], hc["start_interval"]) == \
+            ("10s", "10s", 2, "20s", "2s")
+        assert "timeout 8 " in probe and "ROS_LOG_DIR=/tmp/hc" in probe and "cat /tmp/hc.out" in probe
+
+
+def test_ops_service_details():
+    compose, stack, _ = gen(f=three_vehicles(), k=2)
+    s = compose["services"]
+    assert list(s) == ["xrce-agent", "gazebo", "px4-1", "px4-2", "px4-3", "bridge", "ops-1", "ops-2", "ops-3",
+                       "runner", "gz-gui"]
+    ops = s["ops-2"]
+    assert ops["command"] == ["ros2", "launch", "idsim_mission", "vehicle_ops.launch.py", "namespace:=/px4_2",
+                              "executor_name:=mission_executor",
+                              "params_file:=/opt/idsim/artifacts/runs/20261109-090000-k2/params/ops-2.yaml"]
+    assert ops["environment"]["ROS_LOG_DIR"].endswith("/ros_log/ops-2")
+    assert ops["environment"]["ROS_DOMAIN_ID"] == "22" and "GZ_PARTITION" not in ops["environment"]
+    assert ops["restart"] == "no" and ops["network_mode"] == "host"
+    assert ops["depends_on"] == {"bridge": {"condition": "service_healthy"},
+                                 "px4-2": {"condition": "service_healthy"}}
+    assert s["runner"]["depends_on"] == {f"ops-{i}": {"condition": "service_healthy"} for i in (1, 2, 3)}
+    assert stack["startup"]["node_stages"] == [["ops-1", "ops-2", "ops-3"]]
+    assert stack["services"]["ops"] == ["ops-1", "ops-2", "ops-3"]
+    for v in stack["vehicles"]:
+        assert v["vehicle_id"] == v["ns"][1:] == v["px4_ns"]
+        assert v["params_file"] == f"params/ops-{v['id']}.yaml"
+    assert stack["run"]["params_dir"] == "params"
+    assert stack["generator"]["version"] == 3
+
+
+def test_render_dirs():
+    compose, stack, _ = gen(f=three_vehicles())
+    assert gc.render_dirs(compose, stack) == ["px4-1", "px4-2", "px4-3", "ros_log/bridge", "ros_log/ops-1",
+                                              "ros_log/ops-2", "ros_log/ops-3", "ros_log/runner"]
+    compose, stack, _ = gen(variant="embedded")
+    assert gc.render_dirs(compose, stack) == ["px4-1", "ros_log/runner"]
+
+
+def test_assert_invariants_catches_ops_tampering():
+    norm, _ = gc.validate_fleet(fleet())
+    for mutate in (
+        lambda c, st: c["services"]["ops-1"].update(init=False),
+        lambda c, st: c["services"]["bridge"].pop("init"),
+        lambda c, st: c["services"]["xrce-agent"].pop("init"),
+        lambda c, st: c["services"]["ops-1"].update(stop_signal="SIGTERM"),
+        lambda c, st: c["services"]["ops-1"].update(stop_grace_period="30s"),
+        lambda c, st: st["vehicles"][0].update(executor_node="/px4_1/other"),
+        lambda c, st: st["vehicles"][0].update(vehicle_id="px4_2"),
+        lambda c, st: c["services"]["runner"].update(depends_on={"bridge": {"condition": "service_healthy"}}),
+        lambda c, st: st["startup"].update(node_stages=[]),
+    ):
+        compose, stack, _ = gc.build(norm, make_ctx())
+        mutate(compose, stack)
+        with pytest.raises(gc.FleetError, match="단정 실패"):
+            gc.assert_invariants(compose, stack)
 
 
 # ------------------------------------------------------------------ 거부
@@ -590,6 +764,15 @@ def test_cli_run_dir_only(tmp_path, capsys):
     assert rc == 0 and capsys.readouterr().out.strip() == rd
     st = _stack_of(out)
     assert st["run"]["id"] == "myrun" and st["run"]["host_dir"] == rd
+
+
+def test_cli_writes_params_and_log_dirs(tmp_path):
+    rc, out = _cli(tmp_path, "--run-id", "tree")
+    assert rc == 0
+    assert sorted(os.listdir(out)) == ["compose.yaml", "params", "px4-1", "ros_log", "stack.json"]
+    assert os.listdir(out / "params") == ["ops-1.yaml"]
+    assert sorted(os.listdir(out / "ros_log")) == ["bridge", "ops-1", "runner"]
+    assert _read(str(out / "params" / "ops-1.yaml")) == gc.render_ops_params(_stack_of(out)["vehicles"][0])
 
 
 def test_cli_run_id_only(tmp_path):

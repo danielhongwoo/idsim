@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # tools/gen_compose.py의 호스트 진입점. 생성기를 ros-ws 컨테이너 안에서 돌린다(호스트에 PyYAML이 필요 없다).
 #
-# 사용법: tools/gen_compose.sh [--stack k] [--fleet f] [--variant standalone|embedded] [--run-id id]
+# 사용법: tools/gen_compose.sh [--stack k] [--fleet f] [--variant standalone|embedded]
 #                              [--run-dir 경로] [--image-tag t | --registry r] [그 밖의 gen_compose.py 인자...]
-#   --run-dir를 주지 않으면 <저장소>/artifacts/runs/<run-id>. 실행 디렉터리는 <저장소>/artifacts/runs/<run-id>여야 한다.
-#   --run-dir만 주면 run-id는 그 마지막 요소가 된다(어긋나면 생성기가 거부한다).
+#   --run-dir를 주지 않으면 <저장소>/artifacts/runs/<UTC YYYYmmdd-HHMMSS>-k<k>. 실행 디렉터리는 <저장소>/artifacts/runs/<실행 id>여야 한다.
+#   실행 id는 실행 디렉터리의 마지막 요소다. 따로 받지 않는다(--run-id는 없다).
 #   성공하면 실행 디렉터리의 호스트 절대 경로 한 줄을 stdout에 쓴다(경고는 stderr).
 #
 # 컨테이너 조건
@@ -23,12 +23,11 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 args=()
 for a in "$@"; do
   case "$a" in
-    --stack=*|--run-id=*|--run-dir=*|--image-tag=*|--registry=*|--fleet=*|--variant=*) args+=("${a%%=*}" "${a#*=}") ;;
+    --stack=*|--run-dir=*|--image-tag=*|--registry=*|--fleet=*|--variant=*) args+=("${a%%=*}" "${a#*=}") ;;
     *) args+=("$a") ;;
   esac
 done
 stack="${IDSIM_STACK_INDEX:-0}"
-run_id=""
 run_dir=""
 image_tag="local"
 registry=""
@@ -39,7 +38,7 @@ while [ "$i" -lt "${#args[@]}" ]; do
   next="${args[$((i + 1))]:-}"
   case "$a" in
     --stack) stack="$next"; i=$((i + 2)); continue ;;
-    --run-id) run_id="$next"; i=$((i + 2)); continue ;;
+    --run-id|--run-id=*) echo "gen_compose.sh: --run-id는 없다. 실행 id는 --run-dir의 마지막 요소다" >&2; exit 2 ;;
     --run-dir) run_dir="$next"; i=$((i + 2)); continue ;;
     --image-tag) image_tag="$next"; i=$((i + 2)); continue ;;
     --registry) registry="$next"; i=$((i + 2)); continue ;;
@@ -53,12 +52,10 @@ case "$stack" in
   [0-9]) ;;
   *) echo "gen_compose.sh: 스택 번호는 0-9: '${stack}'" >&2; exit 2 ;;
 esac
-if [ -z "$run_id" ] && [ -n "$run_dir" ]; then
+if [ -n "$run_dir" ]; then
   run_id="$(basename "$run_dir")"
-elif [ -z "$run_id" ]; then
+else
   run_id="$(date -u +%Y%m%d-%H%M%S)-k${stack}"
-fi
-if [ -z "$run_dir" ]; then
   run_dir="${repo_root}/artifacts/runs/${run_id}"
 fi
 created_dir=0

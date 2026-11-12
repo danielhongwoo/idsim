@@ -4,7 +4,7 @@
     "git_commit": "0000000000000000000000000000000000000000",
     "git_dirty": false,
     "script": "tools/gen_compose.py",
-    "version": 2
+    "version": 3
   },
   "images": {
     "lichtblick": null,
@@ -38,6 +38,7 @@
     "compose_file": "compose.yaml",
     "host_dir": "/work/idsim/artifacts/runs/20261109-090000-k3",
     "id": "20261109-090000-k3",
+    "params_dir": "params",
     "ros_log_dir": "ros_log"
   },
   "schema": 1,
@@ -48,6 +49,9 @@
     "gazebo": "gazebo",
     "gz_gui": "gz-gui",
     "lichtblick": null,
+    "ops": [
+      "ops-1"
+    ],
     "profiles": {
       "tools": [
         "runner"
@@ -84,6 +88,11 @@
   },
   "startup": {
     "model_precheck": true,
+    "node_stages": [
+      [
+        "ops-1"
+      ]
+    ],
     "stages": [
       [
         "xrce-agent",
@@ -112,6 +121,7 @@
         "UXRCE_DDS_DOM_ID": "23",
         "UXRCE_DDS_KEY": "2"
       },
+      "executor_node": "/px4_1/mission_executor",
       "expected_params": {
         "COM_DISARM_PRFLT": "-1.0",
         "COM_OBL_RC_ACT": "4",
@@ -132,6 +142,7 @@
         "gcs_remote": 17550
       },
       "ns": "/px4_1",
+      "params_file": "params/ops-1.yaml",
       "pose": {
         "x": 0.0,
         "y": 0.0,
@@ -144,7 +155,8 @@
       "sim_model": "gz_x500",
       "sysid": 2,
       "ulog_dir": "px4-1/log",
-      "uxrce_key": 2
+      "uxrce_key": 2,
+      "vehicle_id": "px4_1"
     }
   ],
   "world": {

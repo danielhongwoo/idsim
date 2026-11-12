@@ -10,6 +10,7 @@ services:
       - udp4
       - -p
       - '8888'
+    init: true
     healthcheck:
       test:
         - CMD-SHELL
@@ -234,10 +235,143 @@ services:
       retries: 3
       start_period: 60s
       start_interval: 5s
+    init: true
     depends_on:
       px4-1:
         condition: service_healthy
       px4-2:
+        condition: service_healthy
+      px4-3:
+        condition: service_healthy
+  ops-1:
+    image: idsim/ros-ws:local
+    network_mode: host
+    restart: 'no'
+    user: 1000:1000
+    environment:
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      CYCLONEDDS_URI: file:///opt/idsim/config/cyclonedds.xml
+      ROS_DOMAIN_ID: '20'
+      PYTHONDONTWRITEBYTECODE: '1'
+      HOME: /tmp
+      ROS_LOG_DIR: /opt/idsim/artifacts/runs/20261109-090000-k0/ros_log/ops-1
+    volumes:
+      - type: bind
+        source: /work/idsim
+        target: /opt/idsim
+        read_only: false
+        bind:
+          create_host_path: false
+    command:
+      - ros2
+      - launch
+      - idsim_mission
+      - vehicle_ops.launch.py
+      - namespace:=/px4_1
+      - executor_name:=mission_executor
+      - params_file:=/opt/idsim/artifacts/runs/20261109-090000-k0/params/ops-1.yaml
+    init: true
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - . /opt/ros/$${ROS_DISTRO}/setup.sh; ROS_LOG_DIR=/tmp/hc timeout 8 ros2 lifecycle get --no-daemon /px4_1/mission_executor > /tmp/hc.out 2>&1; cat /tmp/hc.out; grep -q '^active' /tmp/hc.out
+      interval: 10s
+      timeout: 10s
+      retries: 2
+      start_period: 20s
+      start_interval: 2s
+    depends_on:
+      bridge:
+        condition: service_healthy
+      px4-1:
+        condition: service_healthy
+  ops-2:
+    image: idsim/ros-ws:local
+    network_mode: host
+    restart: 'no'
+    user: 1000:1000
+    environment:
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      CYCLONEDDS_URI: file:///opt/idsim/config/cyclonedds.xml
+      ROS_DOMAIN_ID: '20'
+      PYTHONDONTWRITEBYTECODE: '1'
+      HOME: /tmp
+      ROS_LOG_DIR: /opt/idsim/artifacts/runs/20261109-090000-k0/ros_log/ops-2
+    volumes:
+      - type: bind
+        source: /work/idsim
+        target: /opt/idsim
+        read_only: false
+        bind:
+          create_host_path: false
+    command:
+      - ros2
+      - launch
+      - idsim_mission
+      - vehicle_ops.launch.py
+      - namespace:=/px4_2
+      - executor_name:=mission_executor
+      - params_file:=/opt/idsim/artifacts/runs/20261109-090000-k0/params/ops-2.yaml
+    init: true
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - . /opt/ros/$${ROS_DISTRO}/setup.sh; ROS_LOG_DIR=/tmp/hc timeout 8 ros2 lifecycle get --no-daemon /px4_2/mission_executor > /tmp/hc.out 2>&1; cat /tmp/hc.out; grep -q '^active' /tmp/hc.out
+      interval: 10s
+      timeout: 10s
+      retries: 2
+      start_period: 20s
+      start_interval: 2s
+    depends_on:
+      bridge:
+        condition: service_healthy
+      px4-2:
+        condition: service_healthy
+  ops-3:
+    image: idsim/ros-ws:local
+    network_mode: host
+    restart: 'no'
+    user: 1000:1000
+    environment:
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      CYCLONEDDS_URI: file:///opt/idsim/config/cyclonedds.xml
+      ROS_DOMAIN_ID: '20'
+      PYTHONDONTWRITEBYTECODE: '1'
+      HOME: /tmp
+      ROS_LOG_DIR: /opt/idsim/artifacts/runs/20261109-090000-k0/ros_log/ops-3
+    volumes:
+      - type: bind
+        source: /work/idsim
+        target: /opt/idsim
+        read_only: false
+        bind:
+          create_host_path: false
+    command:
+      - ros2
+      - launch
+      - idsim_mission
+      - vehicle_ops.launch.py
+      - namespace:=/px4_3
+      - executor_name:=mission_executor
+      - params_file:=/opt/idsim/artifacts/runs/20261109-090000-k0/params/ops-3.yaml
+    init: true
+    stop_signal: SIGINT
+    stop_grace_period: 10s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - . /opt/ros/$${ROS_DISTRO}/setup.sh; ROS_LOG_DIR=/tmp/hc timeout 8 ros2 lifecycle get --no-daemon /px4_3/mission_executor > /tmp/hc.out 2>&1; cat /tmp/hc.out; grep -q '^active' /tmp/hc.out
+      interval: 10s
+      timeout: 10s
+      retries: 2
+      start_period: 20s
+      start_interval: 2s
+    depends_on:
+      bridge:
         condition: service_healthy
       px4-3:
         condition: service_healthy
@@ -267,7 +401,11 @@ services:
     command:
       - 'true'
     depends_on:
-      bridge:
+      ops-1:
+        condition: service_healthy
+      ops-2:
+        condition: service_healthy
+      ops-3:
         condition: service_healthy
   gz-gui:
     image: idsim/sim-base:local

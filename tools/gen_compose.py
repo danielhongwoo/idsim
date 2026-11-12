@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""config/fleet.yaml -> <run-dir>/{compose.yaml, stack.json}. 담당: devops-engineer.
+"""config/fleet.yaml -> <run-dir>/{compose.yaml, stack.json, params/ops-N.yaml}. 담당: devops-engineer.
 
 설계는 docs/architecture.md의 "기체 식별과 설정의 단일 출처"와 "Docker Compose 실행 환경 설계" 절,
 stack.json 형식은 tests/support/stack.py(로더)와 같은 schema 1을 따른다.
 
 ros-ws 컨테이너 안에서 실행한다(PyYAML 6.0.1). 호스트 진입점은 tools/gen_compose.sh다.
 구조
-  - 핵심은 순수 함수다: validate_fleet(dict) -> dict, build(fleet, ctx) -> (compose, stack, 경고).
+  - 핵심은 순수 함수다: validate_fleet(dict) -> dict, build(fleet, ctx) -> (compose, stack, 경고),
+    render_files(compose, stack) -> {상대 경로: 본문}(만드는 파일의 유일한 목록), render_dirs(...) -> 빈 디렉터리 목록.
     파일을 읽거나 쓰지 않으며 단위 테스트(tests/tools/test_gen_compose.py)가 이 함수를 직접 부른다.
   - PyYAML은 읽기(load_yaml)와 쓰기(dump_compose)에만 쓴다. 모듈을 불러올 때는 yaml을 import하지 않으므로
     --print-gcs-port와 --print-agent-port는 호스트의 표준 라이브러리 python3로도 돈다(tools/qgc.sh가 쓴다).
@@ -38,7 +39,7 @@ import xml.etree.ElementTree as ET
 
 # ---------------------------------------------------------------- 기준값(생성기 상수)
 SCHEMA = 1
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 GENERATOR_SCRIPT = "tools/gen_compose.py"
 
 STACK_MIN, STACK_MAX = 0, 9
@@ -60,6 +61,17 @@ PARTICIPANT_INDEX_LIMIT = 64
 GZ_IP = "127.0.0.1"
 VIZ_BIND = "127.0.0.1"
 RMW = "rmw_cyclonedds_cpp"
+
+# ops-N(기체별 Mission Executor 컨테이너). 노드 이름의 출처는 이 상수 하나다. launch 파일과 노드 소스는
+# 이름을 직접 적지 않는다(launch는 인자로 받고, 노드 기본 이름은 단위 테스트용이다).
+EXECUTOR_NODE_NAME = "mission_executor"
+OPS_LAUNCH_PKG = "idsim_mission"
+OPS_LAUNCH_FILE = "vehicle_ops.launch.py"
+PARAMS_DIR = "params"
+OPS_STOP_SIGNAL = "SIGINT"
+OPS_STOP_GRACE = "10s"
+# lifecycle get 한 번의 상한. docker exec 한 번이 3.0-4.5 s 걸린다(decisions.md 쟁점 2 실측)
+OPS_PROBE_TIMEOUT_S = 8
 
 SPACING_REJECT_M = 2.0
 SPACING_WARN_M = 4.0
@@ -230,7 +242,7 @@ def _check_param_name(name, where, errors):
 def _unknown_keys(obj, allowed, where, errors):
     for key in obj:
         if key not in allowed:
-            errors.append(f"{where}: 모르는 키 {key!r} (허용: {', '.join(sorted(allowed))})")
+            errors.append(f"{where}: 모르는 key {key!r} (허용: {', '.join(sorted(allowed))})")
 
 
 def validate_fleet(fleet):
@@ -246,7 +258,7 @@ def validate_fleet(fleet):
     _unknown_keys(fleet, FLEET_KEYS, "fleet", errors)
     for key in sorted(FLEET_KEYS):
         if key not in fleet:
-            errors.append(f"fleet: 필수 키 {key!r}가 없다")
+            errors.append(f"fleet: 필수 key {key!r}가 없다")
     if errors:
         raise FleetError("\n".join(errors))
 
@@ -342,7 +354,7 @@ def validate_fleet(fleet):
             missing = [key for key in POSE_KEYS if key not in pose]
             bad = [key for key in POSE_KEYS if key in pose and not _is_number(pose[key])]
             if missing:
-                errors.append(f"{where}.pose: 빠진 키 {', '.join(missing)}")
+                errors.append(f"{where}.pose: 빠진 key {', '.join(missing)}")
             elif bad:
                 errors.append(f"{where}.pose: 숫자가 아닌 값 {', '.join(bad)}")
             else:
@@ -427,10 +439,21 @@ def _base(image):
     return {"image": image, "network_mode": "host", "restart": "no"}
 
 
+def ops_healthcheck(fqn):
+    """ops-N의 healthcheck 명령. lifecycle 상태가 active로 시작하면 통과한다.
+
+    /opt/ros/<distro>/setup.sh만 읽는다(workspace overlay와 로그인 셸 없음). 출력을 버리지 않으므로
+    .State.Health.Log에 `unconfigured [1]` 같은 상태가 남는다. $$는 compose에서 리터럴 $다.
+    """
+    return (". /opt/ros/$${ROS_DISTRO}/setup.sh; "
+            f"ROS_LOG_DIR=/tmp/hc timeout {OPS_PROBE_TIMEOUT_S} ros2 lifecycle get --no-daemon {fqn} > /tmp/hc.out 2>&1; "
+            "cat /tmp/hc.out; grep -q '^active' /tmp/hc.out")
+
+
 def build(fleet_norm, ctx):
     """정규화된 fleet(validate_fleet 결과)와 생성 인자 ctx에서 (compose dict, stack dict, 경고 목록).
 
-    ctx 키: k, variant, uid, gid, run_id, host_repo_root, host_run_dir, images{xrce-agent, sim-base, px4,
+    ctx key: k, variant, uid, gid, run_id, host_repo_root, host_run_dir, images{xrce-agent, sim-base, px4,
     ros-ws}, generated_at, git_commit, git_dirty, inputs{fleet, px4_params_file, versions_env, cyclonedds_xml: {path, sha256}},
     params_env{이름: 값}, participant_index_max.
     """
@@ -496,6 +519,8 @@ def build(fleet_norm, ctx):
     # xrce-agent: root. ROS_DOMAIN_ID를 주지 않는다(도메인은 PX4 client가 세션 생성 때 넘긴다).
     services["xrce-agent"] = dict(_base(images["xrce-agent"]), **{
         "command": ["udp4", "-p", str(aport)],
+        # PID 1은 SIGTERM을 버린다(기본 처리기가 없다). init이 신호를 넘겨 compose down이 유예 끝까지 기다리지 않게 한다
+        "init": True,
         "healthcheck": {
             # /proc/net/udp의 local_address 열에서 포트(16진수, 생성기가 계산)를 찾는다
             "test": ["CMD-SHELL", f'grep -qE "^ *[0-9]+: [0-9A-F]+:{aport_hex} " /proc/net/udp'],
@@ -578,6 +603,7 @@ def build(fleet_norm, ctx):
             "depends_on": deps,
         })
         prev = svc
+        vid = f"px4_{n}"
         expected = dict(ctx["params_env"])
         expected.update(v["px4_params"])
         vehicle_out.append({
@@ -585,6 +611,9 @@ def build(fleet_norm, ctx):
             "instance": n,
             "ns": f"/px4_{n}",
             "px4_ns": f"px4_{n}",
+            "vehicle_id": vid,
+            "params_file": f"{PARAMS_DIR}/ops-{n}.yaml" if standalone else None,
+            "executor_node": f"/{vid}/{EXECUTOR_NODE_NAME}" if standalone else None,
             "sysid": n + 1,
             "uxrce_key": n + 1,
             "airframe": v["airframe"],
@@ -606,6 +635,7 @@ def build(fleet_norm, ctx):
             },
         })
     px4_services = [v["service"] for v in vehicle_out]
+    ops_services = [f"ops-{v['id']}" for v in vehicle_out] if standalone else []
 
     def ros_ws_service(log_name, extra_env=None):
         env = dict(ros_env)
@@ -630,9 +660,32 @@ def build(fleet_norm, ctx):
                 "interval": "30s", "timeout": "5s", "retries": 3,
                 "start_period": "60s", "start_interval": "5s",
             },
+            "init": True,
             "depends_on": _healthy(*px4_services),
         })
         services["bridge"] = bridge
+
+        # ops-N: 기체마다 Mission Executor 컨테이너 하나. 전이는 노드가 스스로 건다(lifecycle.self_start).
+        # healthcheck가 active를 확인하고, 시작 순서의 마지막 단계(startup.node_stages)에서 올린다.
+        for v in vehicle_out:
+            n = v["id"]
+            ops = ros_ws_service(f"ops-{n}")
+            ops.update({
+                "command": ["ros2", "launch", OPS_LAUNCH_PKG, OPS_LAUNCH_FILE,
+                            f"namespace:={v['ns']}",
+                            f"executor_name:={EXECUTOR_NODE_NAME}",
+                            f"params_file:={run_in_container}/{v['params_file']}"],
+                "init": True,
+                "stop_signal": OPS_STOP_SIGNAL,
+                "stop_grace_period": OPS_STOP_GRACE,
+                "healthcheck": {
+                    "test": ["CMD-SHELL", ops_healthcheck(v["executor_node"])],
+                    "interval": "10s", "timeout": "10s", "retries": 2,
+                    "start_period": "20s", "start_interval": "2s",
+                },
+                "depends_on": _healthy("bridge", v["service"]),
+            })
+            services[f"ops-{n}"] = ops
 
     runner = ros_ws_service("runner", {"IDSIM_STACK_FILE": f"{run_in_container}/stack.json"})
     runner.update({
@@ -640,7 +693,7 @@ def build(fleet_norm, ctx):
         "profiles": ["tools"],
         "working_dir": REPO_IN_CONTAINER,
         "command": ["true"],
-        "depends_on": _healthy("bridge" if standalone else px4_services[0]),
+        "depends_on": _healthy(*ops_services) if standalone else _healthy(px4_services[0]),
     })
     services["runner"] = runner
 
@@ -678,7 +731,8 @@ def build(fleet_norm, ctx):
         "generator": {"script": GENERATOR_SCRIPT, "version": GENERATOR_VERSION,
                       "git_commit": ctx["git_commit"], "git_dirty": ctx["git_dirty"]},
         "inputs": ctx["inputs"],
-        "run": {"id": ctx["run_id"], "host_dir": run_dir, "compose_file": "compose.yaml", "ros_log_dir": "ros_log"},
+        "run": {"id": ctx["run_id"], "host_dir": run_dir, "compose_file": "compose.yaml", "ros_log_dir": "ros_log",
+                "params_dir": PARAMS_DIR if standalone else None},
         "user": {"uid": ctx["uid"], "gid": ctx["gid"]},
         "variant": variant,
         "px4": {"start": fleet_norm["px4"]["start"]},
@@ -711,6 +765,7 @@ def build(fleet_norm, ctx):
             "gazebo": "gazebo" if standalone else None,
             "bridge": "bridge" if standalone else None,
             "px4": px4_services,
+            "ops": ops_services,
             "runner": "runner",
             "gz_gui": "gz-gui" if standalone else None,
             "foxglove": None,
@@ -720,12 +775,48 @@ def build(fleet_norm, ctx):
         "startup": {
             "stages": [["xrce-agent", "gazebo"], px4_services, ["bridge"]] if standalone
             else [["xrce-agent"], px4_services],
+            "node_stages": [ops_services] if standalone else [],
             "model_precheck": standalone,
         },
         "vehicles": vehicle_out,
     }
     assert_invariants(compose, stack)
     return compose, stack, warnings
+
+
+# ---------------------------------------------------------------- 실행 디렉터리 내용
+PARAMS_HEADER = (
+    "# 생성 파일. tools/gen_compose.py가 만든다. 손으로 고치지 않는다.\n"
+    "# 식별값만 담는다. 타임아웃, 주기, command_source.*, lifecycle.self_start는 노드 선언 기본값을 쓴다.\n"
+)
+
+
+def render_ops_params(vehicle):
+    """ops-N의 params 파일 본문. /** 아래에 use_sim_time과 vehicle.* 셋뿐이다(손으로 쓴 YAML, PyYAML 불필요)."""
+    return (PARAMS_HEADER
+            + "/**:\n"
+            + "  ros__parameters:\n"
+            + "    use_sim_time: true\n"
+            + f"    vehicle.id: {vehicle['vehicle_id']}\n"
+            + f"    vehicle.ns: {vehicle['ns']}\n"
+            + f"    vehicle.sysid: {vehicle['sysid']}\n")
+
+
+def render_files(compose, stack):
+    """실행 디렉터리에 만드는 파일 {상대 경로: 본문}. 생성 파일의 유일한 목록이다(golden 비교도 이 함수를 쓴다)."""
+    files = {"compose.yaml": dump_compose(compose), "stack.json": dump_stack(stack)}
+    for v in stack["vehicles"]:
+        if v["params_file"] is not None:
+            files[v["params_file"]] = render_ops_params(v)
+    return files
+
+
+def render_dirs(compose, stack):
+    """실행 디렉터리에 빈 채로 만드는 디렉터리. px4 rootfs는 실행마다 새로 만들고, ros_log는 서비스별 하위를 호스트 사용자 소유로 만든다."""
+    dirs = [v["rootfs_dir"] for v in stack["vehicles"]]
+    logs = ["bridge"] + [f"ops-{v['id']}" for v in stack["vehicles"]] + ["runner"]
+    dirs += [f"ros_log/{name}" for name in logs if name in compose["services"]]
+    return dirs
 
 
 # ---------------------------------------------------------------- 생성 직전 단정
@@ -829,6 +920,49 @@ def assert_invariants(compose, stack):
     for v in stack["vehicles"]:
         if v["host_rootfs_dir"] != f"{stack['run']['host_dir']}/{v['rootfs_dir']}" or v["rootfs_dir"] != f"px4-{v['instance']}":
             problems.append(f"{v['service']}: host_rootfs_dir이 run.host_dir/px4-N이 아니다")
+    # init: 상주 ros-ws 서비스(프로필 없음)와 xrce-agent는 PID 1이 신호를 버리지 않게 init을 둔다
+    ros_ws_image = stack["images"]["ros_ws"]
+    for name, svc in services.items():
+        resident_ros_ws = svc.get("image") == ros_ws_image and not service_profiles(svc)
+        if (resident_ros_ws or name == "xrce-agent") and svc.get("init") is not True:
+            problems.append(f"{name}: 상주 서비스인데 init: true가 아니다")
+    ops_names = stack["services"]["ops"]
+    for v in stack["vehicles"]:
+        vid = v["vehicle_id"]
+        if not vid or vid != v["ns"][1:] or "/" in vid:
+            problems.append(f"{v['service']}: vehicle_id {vid!r}가 ns {v['ns']!r}에서 앞의 /를 뗀 토큰 하나가 아니다")
+        if v["params_file"] is None:
+            if v["executor_node"] is not None or ops_names:
+                problems.append(f"{v['service']}: params_file 없이 executor_node나 ops 서비스가 있다")
+            continue
+        if v["executor_node"] != f"{v['ns']}/{EXECUTOR_NODE_NAME}":
+            problems.append(f"{v['service']}: executor_node {v['executor_node']!r}가 ns와 노드 이름 상수에서 나온 값이 아니다")
+        name = f"ops-{v['id']}"
+        ops = services.get(name)
+        if ops is None or name not in ops_names:
+            problems.append(f"{name}가 compose 또는 services.ops에 없다")
+            continue
+        if ops.get("stop_signal") != OPS_STOP_SIGNAL or ops.get("stop_grace_period") != OPS_STOP_GRACE:
+            problems.append(f"{name}: stop_signal, stop_grace_period가 {OPS_STOP_SIGNAL}, {OPS_STOP_GRACE}가 아니다")
+        if ops["healthcheck"]["test"][1] != ops_healthcheck(v["executor_node"]):
+            problems.append(f"{name}: healthcheck의 노드 이름이 stack.json executor_node와 다르다")
+        cmd = ops["command"]
+        if (cmd[:6] != ["ros2", "launch", OPS_LAUNCH_PKG, OPS_LAUNCH_FILE, f"namespace:={v['ns']}",
+                        f"executor_name:={EXECUTOR_NODE_NAME}"]
+                or not cmd[6].startswith("params_file:=/") or not cmd[6].endswith(f"/{v['params_file']}")):
+            problems.append(f"{name}: command가 stack.json과 다르다: {cmd}")
+        if set(ops.get("depends_on", {})) != {"bridge", v["service"]}:
+            problems.append(f"{name}: depends_on이 bridge와 {v['service']}가 아니다")
+    if ops_names:
+        if set(services["runner"].get("depends_on", {})) != set(ops_names):
+            problems.append("runner의 depends_on이 ops 서비스 전부가 아니다")
+        if stack["startup"]["node_stages"] != [ops_names]:
+            problems.append("startup.node_stages가 [ops 서비스 전부]가 아니다")
+    elif stack["startup"]["node_stages"]:
+        problems.append("ops 서비스가 없는데 startup.node_stages가 비어 있지 않다")
+    for name in ops_names:
+        if name not in services:
+            problems.append(f"services.ops의 {name}가 compose에 없다")
     cyc = stack["inputs"].get("cyclonedds_xml")
     if not isinstance(cyc, dict) or not cyc.get("path") or not cyc.get("sha256"):
         problems.append("inputs.cyclonedds_xml {path, sha256}가 없다")
@@ -844,7 +978,7 @@ def assert_invariants(compose, stack):
 
 # ---------------------------------------------------------------- 파일 입출력 (PyYAML은 여기서만)
 def load_yaml(text):
-    """YAML을 읽는다. 중복 키는 거부한다(PyYAML 기본은 뒤 값으로 조용히 덮는다)."""
+    """YAML을 읽는다. 중복 key는 거부한다(PyYAML 기본은 뒤 값으로 조용히 덮는다)."""
     import yaml
 
     class StrictLoader(yaml.SafeLoader):
@@ -855,7 +989,7 @@ def load_yaml(text):
         for key_node, _ in node.value:
             key = loader.construct_object(key_node, deep=deep)
             if key in keys:
-                raise FleetError(f"중복 키 {key!r} ({key_node.start_mark})")
+                raise FleetError(f"중복 key {key!r} ({key_node.start_mark})")
             keys.add(key)
         return yaml.SafeLoader.construct_mapping(loader, node, deep)
 
@@ -978,22 +1112,19 @@ def generate(args, environ=os.environ):
     }
     compose, stack, more = build(fleet_norm, ctx)
     warnings.extend(more)
-    compose_text = dump_compose(compose)
-    stack_text = dump_stack(stack)
+    files = render_files(compose, stack)
 
     out = os.path.abspath(args.out_dir or host_run)
     if os.path.isdir(out) and os.listdir(out):
         raise FleetError(f"출력 디렉터리가 비어 있지 않다: {out} (px4 rootfs는 실행마다 새로 만든다)")
     os.makedirs(out, exist_ok=True)
-    for v in stack["vehicles"]:
-        os.makedirs(os.path.join(out, v["rootfs_dir"]), exist_ok=False)
-    for name in ("bridge", "runner"):
-        if name in compose["services"]:
-            os.makedirs(os.path.join(out, "ros_log", name), exist_ok=False)
-    with open(os.path.join(out, "compose.yaml"), "w", encoding="utf-8") as f:
-        f.write(compose_text)
-    with open(os.path.join(out, "stack.json"), "w", encoding="utf-8") as f:
-        f.write(stack_text)
+    for rel in render_dirs(compose, stack):
+        os.makedirs(os.path.join(out, rel), exist_ok=False)
+    for rel, text in files.items():
+        path = os.path.join(out, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
     return host_run, warnings
 
 
@@ -1014,7 +1145,7 @@ def parse_args(argv):
     p.add_argument("--gid", type=int)
     p.add_argument("--image-tag", default="local")
     p.add_argument("--registry", help="이미지 접두사(기본 idsim). 예: ghcr.io/<소유자>/idsim")
-    p.add_argument("--image", action="append", metavar="NAME=REF", help="이미지 하나를 직접 지정(CI 키 태그)")
+    p.add_argument("--image", action="append", metavar="NAME=REF", help="이미지 하나를 직접 지정(CI key 태그)")
     p.add_argument("--generated-at")
     p.add_argument("--git-commit")
     p.add_argument("--git-dirty", choices=("true", "false"))
