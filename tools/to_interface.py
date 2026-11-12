@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""스모크 골든과 원시 산출물에서 docs/interface.md 용 PX4 토픽 표를 만든다.
+"""스모크 golden과 원시 산출물에서 docs/interface.md 용 PX4 토픽 표를 만든다.
 
 입력
-  골든 디렉터리 (tests/fixtures/px4/<PX4_TAG>/, docs/smoke-test.md 형식)
+  golden 디렉터리 (tests/fixtures/px4/<PX4_TAG>/, docs/smoke-test.md 형식)
     topics.txt          한 줄에 "<상대 토픽> <타입>"
     qos/<상대 토픽>.txt  reliability, durability, history, depth 네 줄(발행자 값)
     env.txt             PX4_TAG, PX4_MSGS_REF, RMW_IMPLEMENTATION, XRCE_AGENT_TAG
@@ -11,8 +11,11 @@
     env_raw.txt         측정 조건(KEY=VALUE)
 
 출력
-  stdout 으로 마크다운. docs/interface.md 초안에 붙여 넣는다.
-  측정 주기는 계약이 아니라 참고값이며 측정 조건을 함께 적는다.
+  stdout 으로 마크다운. 표의 열은 토픽, 방향, 타입, 발행자 QoS, 측정 주기(참고값)이고
+  표 아래에 측정 조건을 적는다.
+  docs/interface.md 의 PX4 토픽 표는 이 표에서 측정 주기 열을 뺀 것이다. 측정 주기는 계약이
+  아니라 interface.md 에 넣지 않는다(docs/smoke-test.md 의 산출물 위치 절).
+  측정 주기 열과 측정 조건은 원시 산출물을 검토할 때 참고로 본다.
 
 사용법
   tools/to_interface.py --artifacts artifacts/runs/<run_id>/smoke/ros [--golden DIR]
@@ -83,7 +86,7 @@ def golden_dir_from_versions() -> Path:
 def read_topics(golden: Path) -> list[tuple[str, str]]:
     path = golden / "topics.txt"
     if not path.is_file():
-        raise InputError(f"골든 topics.txt 가 없다: {path}")
+        raise InputError(f"golden topics.txt 가 없다: {path}")
     topics: list[tuple[str, str]] = []
     for lineno, raw in enumerate(path.read_text(encoding="ascii").splitlines(), 1):
         parts = raw.split()
@@ -93,7 +96,7 @@ def read_topics(golden: Path) -> list[tuple[str, str]]:
             )
         topics.append((parts[0], parts[1]))
     if not topics:
-        raise InputError(f"골든 topics.txt 가 비어 있다: {path}")
+        raise InputError(f"golden topics.txt 가 비어 있다: {path}")
     return topics
 
 
@@ -153,7 +156,7 @@ def direction(rel: str) -> str:
 
 def render(golden: Path, artifacts: Path) -> str:
     if not golden.is_dir():
-        raise InputError(f"골든 디렉터리가 없다: {golden}")
+        raise InputError(f"golden 디렉터리가 없다: {golden}")
     if not artifacts.is_dir():
         raise InputError(f"원시 산출물 디렉터리가 없다: {artifacts}")
     if not (artifacts / "hz").is_dir():
@@ -167,7 +170,7 @@ def render(golden: Path, artifacts: Path) -> str:
     for key in GOLDEN_ENV_KEYS:
         if cond.get(key) and cond[key] != env[key]:
             raise InputError(
-                f"골든과 원시 산출물의 {key} 가 다르다: 골든={env[key]} 원시={cond[key]}"
+                f"golden과 원시 산출물의 {key} 가 다르다: golden={env[key]} 원시={cond[key]}"
             )
 
     topics = read_topics(golden)
@@ -176,13 +179,13 @@ def render(golden: Path, artifacts: Path) -> str:
     for path in sorted(hz_dir.rglob("*.txt")):
         rel = path.relative_to(hz_dir).as_posix()[: -len(".txt")]
         if rel not in known:
-            print(f"to_interface.py: 경고: 골든에 없는 hz 토픽 {rel}", file=sys.stderr)
+            print(f"to_interface.py: 경고: golden에 없는 hz 토픽 {rel}", file=sys.stderr)
 
     rows = []
     for rel, typ in topics:
         qos = read_qos(golden, rel)
         if qos is None and rel.startswith("fmu/out/"):
-            raise InputError(f"발행자 QoS 골든이 없다: {golden / 'qos' / (rel + '.txt')}")
+            raise InputError(f"발행자 QoS golden이 없다: {golden / 'qos' / (rel + '.txt')}")
         rows.append(
             f"| `{rel}` | {direction(rel)} | `{typ}` | {fmt_qos(qos)} | {fmt_hz(read_hz(artifacts, rel))} |"
         )
@@ -200,7 +203,7 @@ def render(golden: Path, artifacts: Path) -> str:
         f"uXRCE-DDS Agent `{env['XRCE_AGENT_TAG']}`, rmw `{env['RMW_IMPLEMENTATION']}`",
         "- 토픽 이름은 네임스페이스를 뗀 상대 이름이다. 실제 이름은 `/px4_<N>/` 접두사가 붙는다.",
         "- 이름의 `_v<N>` 접미사는 태그마다 바뀔 수 있다. 노드는 이 표의 이름을 쓰지 않고 `idsim_common` 매핑으로만 얻는다.",
-        "- QoS 열은 reliability, durability, history(depth) 순이다. out 토픽은 에이전트 발행자 값이고, in 토픽은 골든에 값이 있을 때만 적는다.",
+        "- QoS 열은 reliability, durability, history(depth) 순이다. out 토픽은 에이전트 발행자 값이고, in 토픽은 golden에 값이 있을 때만 적는다.",
         "",
         "| 토픽 | 방향 | 타입 | 발행자 QoS | 측정 주기 (참고값) |",
         "| --- | --- | --- | --- | --- |",
@@ -218,7 +221,7 @@ def render(golden: Path, artifacts: Path) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--golden", type=Path, help="골든 디렉터리 (기본: versions.env 의 PX4_TAG)")
+    parser.add_argument("--golden", type=Path, help="golden 디렉터리 (기본: versions.env 의 PX4_TAG)")
     parser.add_argument("--artifacts", type=Path, required=True, help="capture.sh 의 출력 디렉터리")
     args = parser.parse_args(argv)
     try:

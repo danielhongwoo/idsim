@@ -282,6 +282,46 @@ TEST(ValidateMission, FirstItemTakeoffOrLand)
   EXPECT_NE(check.detail.find("first item"), std::string::npos) << check.detail;
 }
 
+TEST(ValidateMission, TakeoffOnlyAsFirst)
+{
+  // 1a 임시 제한: TAKEOFF는 첫 항목에만 온다. 첫 항목이 아닌 TAKEOFF의 의미는 1b에서 정한다.
+  MissionSpec m;
+  m.mission_id = "tf";
+  m.items = {takeoff_item(), loiter_item(), takeoff_item(), land_item()};
+  EXPECT_TRUE(validate_mission_contract(m).valid) << validate_mission_contract(m).detail;
+  MissionCheck check = validate_mission(m);
+  EXPECT_FALSE(check.valid);
+  EXPECT_NE(check.detail.find("items[2].type"), std::string::npos) << check.detail;
+  EXPECT_NE(check.detail.find("TAKEOFF is allowed only as the first item"), std::string::npos)
+    << check.detail;
+
+  m.items = {takeoff_item(), takeoff_item(), land_item()};
+  EXPECT_TRUE(validate_mission_contract(m).valid) << validate_mission_contract(m).detail;
+  check = validate_mission(m);
+  EXPECT_FALSE(check.valid);
+  EXPECT_NE(check.detail.find("items[1].type"), std::string::npos) << check.detail;
+  EXPECT_NE(check.detail.find("TAKEOFF is allowed only as the first item"), std::string::npos)
+    << check.detail;
+
+  // 첫 항목의 TAKEOFF는 그대로 받는다.
+  m.items = {takeoff_item(), loiter_item(), loiter_item(), land_item()};
+  EXPECT_TRUE(validate_mission(m).valid) << validate_mission(m).detail;
+}
+
+TEST(ScreenGoal, NonFirstTakeoffIsInvalidMission)
+{
+  MissionSpec m;
+  m.mission_id = "tf";
+  m.items = {takeoff_item(), loiter_item(), takeoff_item(), land_item()};
+  const auto termination = screen_goal("v1", "v1", m, false);
+  ASSERT_TRUE(termination.has_value());
+  EXPECT_EQ(termination->status, Status::kAborted);
+  EXPECT_EQ(termination->reason, Reason::kInvalidMission);
+  EXPECT_NE(
+    termination->detail.find("TAKEOFF is allowed only as the first item"), std::string::npos)
+    << termination->detail;
+}
+
 TEST(ValidateMission, LandFirstMeansLengthOne)
 {
   // LAND로 시작하면 LAND는 마지막에만 오므로 길이 1이다.
