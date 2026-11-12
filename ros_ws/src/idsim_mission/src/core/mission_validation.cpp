@@ -250,6 +250,10 @@ MissionCheck validate_mission(const MissionSpec & mission)
     if (type == item_type::kLand && i + 1 != count) {
       return invalid(field(i, "type") + " LAND is allowed only as the last item in 1a");
     }
+    if (type == item_type::kTakeoff && i != 0) {
+      // 첫 항목이 아닌 TAKEOFF의 기준 위치, heading, timeout 기준 시각은 1b에서 정한다.
+      return invalid(field(i, "type") + " TAKEOFF is allowed only as the first item in 1a");
+    }
   }
   if (mission.items.back().type != item_type::kLand) {
     return invalid("last item must be LAND in 1a (missions ending in the air are 1b)");
