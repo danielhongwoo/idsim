@@ -70,7 +70,7 @@ tests/sitl/run_sitl.sh --stack 0 -- -k test_b          # `--` 뒤는 pytest 인�
 - `--stack k`는 스택 번호(0-9, 없으면 `IDSIM_STACK_INDEX`, 없으면 0). 로컬과 CI(`sitl.yml`)가 같은 명령을 쓴다.
 - 사용자가 QGC와 Gazebo GUI로 눈으로 확인할 때는 `tools/sim_stack.sh up --viz`로 스택을 올리고 출력된 실행 디렉터리를 `--attach`로 넘겨 시나리오 A 등을 돌린다. `--attach`는 스택을 올리지도 내리지도 않고, 산출물은 `<실행 디렉터리>/sitl-attach-<시각>/`에 쓴다.
 - `ros_ws/install/idsim_mission/`이 없으면 빌드하지 않고 안내와 함께 실패한다(`tools/ros_ws.sh build`).
-- 종료 코드는 0 전체 통과, 1 시나리오 실패, 2 사용법, 선행 조건, 스택 올리기 실패. 마지막 stdout 줄이 실행 디렉터리다.
+- 종료 코드는 0 전체 통과, 1 시나리오 실패, 정지 검사 실패, ULog 교차 확인 실패, 2 사용법, 선행 조건, 스택 올리기 실패, ULog 교차 확인 입력 없음과 판정 불가. 마지막 stdout 줄이 실행 디렉터리다.
 - 시나리오와 판정, 산출물은 `tests/sitl/README.md`를 본다.
 
 ## 화면으로 보기
