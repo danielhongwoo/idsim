@@ -64,7 +64,7 @@ def cmd_repeat(a):
     crit = ss.armed_criterion(verdicts)
     crit["note"] = ("ROS 기록만의 판정이다. Executor 경유(scenario_a) 부류의 ARMED 3회 확인까지 간 실행이 10회 이상이고 "
                     "OFFBOARD가 아닌 ARMED 표본이 0개여야 통과다. ULog 교차 확인(crosscheck_a.py)이 따로 필요하다. "
-                    "10회 중 0건은 실패율 95%% 상한이 약 26%%라는 뜻이며 플래키 없음의 증거가 아니다.")
+                    "10회 중 0건은 실패율 95% 상한이 약 26%라는 뜻이며 플래키 없음의 증거가 아니다.")
     (out / "armed_criterion.json").write_text(json.dumps(crit, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     passed = sum(1 for v in verdicts if v.get("passed", ss.run_passed(v)))
     print("회차 %d, 통과 %d. ARMED 기준(scenario_a): 도달 %d회, 위반 %d건, 통과 %s" % (
