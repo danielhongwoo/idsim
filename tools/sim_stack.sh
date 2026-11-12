@@ -2,7 +2,7 @@
 # idsim 스택 운영 스크립트(호스트). 생성(tools/gen_compose.sh)과 docker compose 호출을 묶는다.
 #
 # 사용법
-#   tools/sim_stack.sh up   [--stack k] [--fleet f] [--viz] [--variant standalone|embedded] [--run-dir 경로]
+#   tools/sim_stack.sh up   [--stack k] [--fleet f] [--viz] [--infra-only] [--variant standalone|embedded] [--run-dir 경로]
 #   tools/sim_stack.sh down [--stack k]
 #   tools/sim_stack.sh logs [--stack k] [docker compose logs 인자...]
 #   tools/sim_stack.sh ps   [--stack k]
@@ -16,8 +16,14 @@
 #      2단계(px4-N), 3단계(bridge). embedded는 두 단계(에이전트, px4-1). standalone은 1단계 뒤
 #      sim-base 1회성 컨테이너로 같은 GZ_PARTITION의 `gz model --list`에 이 스택의 모델(<모델>_N)이 없는지
 #      확인하고(startup.model_precheck) 같은 파티션의 gz 서버가 하나뿐인지도 본다(scene/info 제공자 1, /clock 발행자 1). bridge는 px4-N이 healthy가 된 뒤에만 시작하므로 실패한 단계 번호가 원인을 가른다.
-#   4. --viz면 viz 프로필(gz-gui)을 `up -d`로 붙인다(기다리지 않는다. healthcheck 없음).
-#   5. 실패하면 unhealthy 또는 exited 서비스 이름을 한 줄로 찍고, 에이전트 로그의 "bind error"와 px4 로그의 "bind failed"를 찾아 보고하고 종료 코드 1.
+#   4. 노드 단계: stack.json의 startup.node_stages(standalone은 ops-N 전부 한 단계)를 `up -d --wait`한다.
+#      ops-N의 healthcheck는 Mission Executor 노드가 lifecycle active인지 본다(노드가 스스로 전이한다).
+#      --infra-only면 이 단계를 건너뛴다(Executor 없이 인프라만. 스모크와 측정 스크립트가 쓴다).
+#      ros_ws/install/idsim_mission/이 없으면 아무것도 올리기 전에 안내와 함께 실패한다(tools/ros_ws.sh build).
+#      embedded 변형에는 노드 단계가 없다.
+#   5. --viz면 viz 프로필(gz-gui)을 `up -d`로 붙인다(기다리지 않는다. healthcheck 없음).
+#   6. 실패하면 unhealthy 또는 exited 서비스 이름을 한 줄로 찍고, 에이전트 로그의 "bind error"와 px4 로그의 "bind failed"를 찾아 보고하고 종료 코드 1.
+#      노드 단계가 실패하면 ops-N 로그 끝과 .State.Health.Log도 찍는다.
 #      스택은 조사할 수 있게 그대로 두며 `tools/sim_stack.sh down`으로 내린다.
 #   성공하면 실행 디렉터리의 절대 경로 한 줄을 stdout에 쓴다(안내는 stderr).
 #
@@ -43,6 +49,7 @@ set -- ${_expanded[@]+"${_expanded[@]}"}
 stack="${IDSIM_STACK_INDEX:-0}"
 fleet=""
 viz=0
+infra_only=0
 variant="standalone"
 run_dir=""
 rest=()
@@ -53,6 +60,7 @@ while [ "$#" -gt 0 ]; do
     --variant) variant="${2:?--variant 값}"; shift 2 ;;
     --run-dir) run_dir="${2:?--run-dir 값}"; shift 2 ;;
     --viz) viz=1; shift ;;
+    --infra-only) infra_only=1; shift ;;
     -h|--help) usage ;;
     *) rest+=("$1"); shift ;;
   esac
@@ -99,6 +107,20 @@ report_bind_errors() { # compose파일 stack.json
     fi
   done
   [ "$found" -eq 1 ] || say "bind 오류는 찾지 못했다. 'tools/sim_stack.sh logs --stack ${stack}'로 로그를 보라"
+}
+
+# 노드 단계 실패 진단: ops-N 로그 끝과 healthcheck 기록(어느 전이가 왜 실패했는지는 노드의 ERROR 로그에 있다)
+report_node_failure() { # compose파일 stack.json
+  local f="$1" sf="$2" svc cid
+  for svc in $(sj "$sf" services.ops); do
+    say "---- ${svc} 로그 끝(80줄)"
+    docker compose -f "$f" logs --no-color --tail 80 "$svc" >&2 2>&1 || true
+    cid="$(docker compose -f "$f" ps -a -q "$svc" 2>/dev/null || true)"
+    if [ -n "$cid" ]; then
+      say "---- ${svc} healthcheck 기록(.State.Health.Log. 시작 -> 끝, 종료 코드, 출력)"
+      docker inspect --format '{{range .State.Health.Log}}{{.Start}} -> {{.End}} exit={{.ExitCode}} {{.Output}}{{"\n"}}{{end}}' "$cid" >&2 || true
+    fi
+  done
 }
 
 # 1단계 뒤: 같은 파티션의 gz 서버에 이 스택의 모델이 이미 있는지 본다
@@ -165,7 +187,7 @@ print(" ".join(bad))' 2>/dev/null)" || bad=""
 }
 
 do_up() {
-  local existing sf f stage i n_stages
+  local existing sf f stage i n_stages n_node_stages
   existing="$(docker ps -a -q --filter "label=com.docker.compose.project=${project}")"
   if [ -n "$existing" ]; then
     say "떠 있는 ${project}를 먼저 내린다"
@@ -179,6 +201,11 @@ do_up() {
   f="${run_dir}/$(sj "$sf" run.compose_file)"
   [ "$(sj "$sf" stack.compose_project)" = "$project" ] || { say "stack.json 프로젝트가 ${project}가 아니다"; exit 1; }
   say "생성: ${f}"
+  n_node_stages="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["startup"]["node_stages"]))' "$sf")"
+  if [ "$infra_only" -eq 0 ] && [ "$n_node_stages" -gt 0 ] && [ ! -d "${repo_root}/ros_ws/install/idsim_mission" ]; then
+    say "ros_ws/install/idsim_mission/이 없다. 노드 단계를 올릴 수 없다. 먼저 tools/ros_ws.sh build를 하라(Executor 없이 인프라만 올리려면 --infra-only)"
+    exit 1
+  fi
   n_stages="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["startup"]["stages"]))' "$sf")"
   for ((i = 0; i < n_stages; i++)); do
     # shellcheck disable=SC2207  # 서비스 이름에는 공백이 없다
@@ -196,6 +223,23 @@ do_up() {
       model_precheck "$sf" || { say "스택은 그대로 두었다. 내리려면: tools/sim_stack.sh down --stack ${stack}"; exit 1; }
     fi
   done
+  if [ "$infra_only" -eq 1 ]; then
+    say "--infra-only: 노드 단계(ops-N)를 올리지 않았다"
+  else
+    for ((i = 0; i < n_node_stages; i++)); do
+      # shellcheck disable=SC2207  # 서비스 이름에는 공백이 없다
+      stage=($(sj "$sf" "startup.node_stages.${i}"))
+      say "노드 단계 $((i + 1))/${n_node_stages}: up --wait ${stage[*]}"
+      if ! docker compose -f "$f" up -d --wait --wait-timeout "$up_timeout" "${stage[@]}" >&2; then
+        say "노드 단계 $((i + 1))/${n_node_stages} 실패(${stage[*]})"
+        report_bad_services "$f"
+        report_node_failure "$f" "$sf"
+        docker compose -f "$f" ps -a >&2 || true
+        say "스택은 그대로 두었다. 내리려면: tools/sim_stack.sh down --stack ${stack}"
+        exit 1
+      fi
+    done
+  fi
   if [ "$viz" -eq 1 ]; then
     local vs
     vs="$(sj "$sf" services.profiles.viz)"

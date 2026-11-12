@@ -11,6 +11,8 @@
 #      tools/sim_stack.sh up을 부른다. sim_stack.sh가 tools/gen_compose.sh로 artifacts/runs/<실행 id>/에 compose.yaml과
 #      stack.json을 만들고, 떠 있는 idsim-<k>를 내린 뒤 세 단계(에이전트와 gazebo, px4-N, bridge)로 up --wait 하며(standalone은 1단계 뒤에
 #      모델 잔존 사전 검사와 gz 서버 유일성 검사), 실패하면 에이전트 bind error와 px4 bind failed를 보고한다. images는 스택을 올리지 않는다.
+#      --infra-only로 올리므로 Mission Executor(ops-N)는 뜨지 않는다. 스모크는 PX4, Gazebo, DDS 회귀 판정이고
+#      px4-in의 arm과 disarm이 Executor와 같은 기체에 명령을 보내는 일을 피한다.
 #   2. 판정에 쓰는 식별자(네임스페이스, system id, 모델 이름, 원점, 기대 파라미터, 서비스 이름)는 모두
 #      stack.json에서 읽는다(python3 표준 라이브러리). 이 스크립트는 식별자를 계산하지 않는다.
 #   3. 단계별 판정. embedded, px4-out, px4-in은 ros-ws 안의 check_px4.py(px4-in만 --arm), px4-out은 모델 유일성, gz 서버 유일성, pxh 판정,
@@ -141,7 +143,7 @@ check_s0() {
   s0_expect idsim/px4:local PX4_TAG "$PX4_TAG"
   s0_expect idsim/sim-base:local GZ_RELEASE "$GZ_RELEASE"
   s0_expect idsim/sim-base:local PX4_GZ_MODELS_REF "$PX4_GZ_MODELS_REF"
-  # 생성기(ros-ws의 PyYAML)와 lint 잡의 단위 테스트(LINT_PYYAML_VERSION)가 같은 PyYAML을 쓰는지
+  # 생성기(ros-ws의 PyYAML)와 lint job의 단위 테스트(LINT_PYYAML_VERSION)가 같은 PyYAML을 쓰는지
   py="$(docker run --rm --entrypoint python3 idsim/ros-ws:local -c 'import yaml; print(yaml.__version__)' 2>/dev/null || true)"
   if [ "$py" = "$LINT_PYYAML_VERSION" ]; then
     echo "ok   idsim/ros-ws:local PyYAML=$py"
@@ -184,7 +186,7 @@ pending() {
 
 # 원점 판정 인자 --expect-origin LAT LON ALT. 원점이 없으면(embedded이거나 fleet.yaml에 origin이 없음) 넘기지 않는다.
 origin_args() {
-  # world.origin 키 자체가 없으면 sj가 실패하므로 실패로 끝낸다. null만 빈 값(sj가 빈 문자열로 출력)으로 받는다.
+  # world.origin key 자체가 없으면 sj가 실패하므로 실패로 끝낸다. null만 빈 값(sj가 빈 문자열로 출력)으로 받는다.
   local o lat lon alt
   o="$(sj world.origin)" || return 1
   [ -n "$o" ] || return 0
@@ -326,7 +328,7 @@ if [ "$stage" = "images" ]; then
   check_s0 || status=1
 else
   SMOKE_UP_TIMEOUT="${SMOKE_UP_TIMEOUT:-240}"
-  if STACK_UP_TIMEOUT="$SMOKE_UP_TIMEOUT" tools/sim_stack.sh up --stack "$k" --variant "$variant" --run-dir "$run_dir" >/dev/null; then
+  if STACK_UP_TIMEOUT="$SMOKE_UP_TIMEOUT" tools/sim_stack.sh up --infra-only --stack "$k" --variant "$variant" --run-dir "$run_dir" >/dev/null; then
     mkdir -p "$out_dir"
     runner="$(sj services.runner)"
     gazebo_svc="$(sj services.gazebo)"
