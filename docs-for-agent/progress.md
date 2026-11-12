@@ -6,7 +6,7 @@
 
 | Phase | 상태 |
 | --- | --- |
-| 1a | 진행 중. 1-6단계 완료, 7단계 시작 전 |
+| 1a | 완료. 1a 완료 범위의 계약은 `docs/interface.md`에 고정되어 있다 |
 | 1b | 시작 전 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
@@ -22,7 +22,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 | 4 `idsim_common` | 완료 |
 | 5 `idsim_interfaces` | 완료. 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md` |
 | 6 이륙-호버-착륙 노드와 통합 테스트 | 완료. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0-P5 완료(P4는 PR #36. 로컬 `run_sitl.sh --repeat 10` 10/10, CI `sitl` 첫 실행 통과. P5는 PR #38). 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인했다. Executor의 feedback stamp는 tick 입력 시각이고 시나리오 A의 LOITER 유지 판정에 시계 양자 허용이 없다 |
-| 7 `docs/interface.md` | 시작 전 |
+| 7 `docs/interface.md` | 완료. PX4 인터페이스와 `idsim_interfaces` 계약, 정의별 고정 시점 표 |
 
 환경.
 
@@ -57,7 +57,11 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. 1a 7단계 `docs/interface.md`(문서 작업). ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 넣을 것은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록의 architect 7단계 행에 있고, 실측 근거가 없는 항목은 "미확인"과 보수적 동작으로 적는다.
+1. 1a 후속 정리(소유자별 작은 PR).
+   - px4-engineer: `NAV_DLL_ACT` 정의 파일의 v1.17.0 경로와 행, `failsafe.h`의 `gcs_connection_loss_failsafe_mode::Disabled` 값 확인. 확인되면 `docs/interface.md` SITL 파라미터 절의 미확인을 걷는다.
+   - sim-engineer: gz `/clock`과 `/world/<월드>/clock`이 같은 sim 시간인지 gz-sim 원문으로 확인한다. 확인되면 `docs/interface.md` 시간 기준 절의 미확인을 걷는다.
+   - ros2-engineer: 전체 취소(goal id 미지정)가 실행 중 goal의 `handle_cancel`로 와서 취소 분기를 타는지 단위 테스트를 더한다. 통과하면 `docs/interface.md` 취소 절과 미확인 목록의 표시를 지운다.
+   - devops-engineer, test-engineer(선택): `tests/smoke/check_px4.py --arm`의 /fmu/in 발행은 lint 범위 밖이고 고정 테스트가 없다. `test_px4_publishers_pinned.py`에 넣을지 정한다.
 2. CI 후속 PR. `Dockerfile.px4`의 pip 고정과 `PX4_OPTICAL_FLOW_REF` 반영, `ls | grep` 정리(px4-engineer). `Dockerfile.sim-base`의 `GZ_APT_KEY_FPR` 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 이미지 key 재료 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 key에서 뺀 것이 "같은 key는 같은 바이트"의 예외라는 점 포함). `image_keys.py`가 bake 블록의 tags와 공백까지 해시하는 것 정리(devops-engineer).
 
 ## 미해결 사항
@@ -70,12 +74,6 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - P5 완료 기준 가운데 setpoint와 `vehicle_local_position`을 Lichtblick의 같은 플롯에 놓는 것은 확인하지 않았다(U6에 따라 6단계를 막지 않는다). 연결, 토픽 목록, Plot 갱신은 확인했다.
 - PX4 버전을 올리면 "ULog의 `vehicle_command` `timestamp`가 측정기의 stamp와 같다"와 "ack 기록 순서가 처리 순서와 같다"를 다시 확인한다(px4-engineer).
 - 실행하지 않고 [미확인]으로 둔 것: `ops-N`의 goal 실행 중 stop에서 종료 사건이 구독자에게 오는지, `vehicle.id` 누락에서 unhealthy까지의 시간(추정 약 54 s, 최악 70 s). 관찰된 문제가 있을 때만 잰다(U6).
-
-1a 7단계(`docs/interface.md`)에 적을 것.
-
-- `COM_RC_IN_MODE`가 4라 QGC 수동 모드와 가상 조이스틱은 쓸 수 없다(ros2-engineer 초안, px4-engineer 확인).
-- QGC 하나는 한 번에 한 스택만 본다는 제약, 포트와 식별자 표, SIH 변형의 `PX4_HOME_*` 주의.
-- 4단계(`idsim_common`) 계약: QoS 표(reliability와 durability는 계약, depth는 계약 밖), 좌표계, timestamp 기준(`UXRCE_DDS_SYNCT=0`, `Px4Timestamp` 규칙, `timesync_status`는 SYNCT=0에서 DDS timesync 데이터가 없다), sysid 대조 규칙, 공개 /fmu/in 목록과 허용 절차(`docs/architecture.md`), "발행 차단은 실수 방지 수준이며 보안 경계가 아니다".
 
 빌드와 CI.
 
@@ -92,7 +90,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 시뮬레이션과 화면 도구.
 
-- `idsim_common/vehicle_command.hpp` 주석의 "`from_external=false`면 MAVLink로 재송출"은 소스 행(PX4 v1.17.0 `COMMAND_LONG.hpp` 89행 근처)을 주석에 적지 않았다. 6단계 실측 또는 다음 수정 때 확인한다(ros2-engineer).
+- `idsim_common/vehicle_command.hpp` 주석의 "`from_external=false`면 MAVLink로 재송출"에 소스 행(PX4 v1.17.0 `COMMAND_LONG.hpp` 82-96행, 조건은 90행)을 다음 수정 때 적는다(ros2-engineer).
 - QGC가 기체에 연결된 상태에서 `qgc.sh`의 TERM 종료 동작은 실측하지 않았다.
 - Gazebo GUI 깜빡임(VMware 3D 가속을 켠 상태). `QSG_RENDER_LOOP=basic`과 `vblank_mode=1`의 효과는 확인되지 않았다. 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
 - `ros_ws/src/idsim_sim/scripts/gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"는 표현이 부정확하다(sim-engineer).
@@ -102,12 +100,19 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 1b 전에 정할 것.
 
+- 첫 항목이 아닌 TAKEOFF의 의미: 준비 단계를 다시 돌리는지, 기준 위치, `timeout` 기준, 재arm. 1a 노드는 INVALID_MISSION으로 거부한다(px4-engineer, ros2-engineer, architect).
+- `/clock` 전달 지연의 크기를 1b 첫 실측 항목에 넣는다. 지상 취소 분기의 disarm 확인 기준(DISARMED 표본의 PX4 timestamp와 disarm 전송 stamp의 비교)을 더 직접적인 신호로 바꿀지는 그 값을 본 뒤 정한다(px4-engineer).
+- EKF 원점은 첫 GNSS fix 위치이고 스폰 지점과의 오차는 측정하지 않았다. 원점 이동 변환의 입력을 정할 때 함께 본다.
+
 - takeoff 빌더와 `goto_setpoint` 공개 검토(`idsim_common`, ros2-engineer와 px4-engineer). TargetState -> setpoint 변환 위치와 원점 이동 변환 함수.
 - 다대 원점 판정의 pose 보정 방식(`check_px4 --expect-pose-enu` 또는 `stack.json`의 기체별 기대 위경도). 지금 `--expect-origin`은 1대 기준이다(architect, test-engineer).
 - 기체별 EKF 원점은 월드 원점이 아니라 스폰 지점이다. 월드 ENU `TargetState`를 기체 NED setpoint로 바꾸는 입력과, 커스텀 월드에서 `world.origin`과 SDF `<spherical_coordinates>`의 일치를 검사하는 주체를 정한다. 월드 SDF에 `<plugin>`이 하나라도 있으면 서버 설정 파일이 무시된다.
 - bridge healthcheck는 `/clock` 1회 수신을 유지하고 표적 어댑터 판정은 별도 단계로 둔다. 커스텀 모델은 `GZ_SIM_RESOURCE_PATH`에 `/opt/idsim/sim/models`를 더해야 한다.
 
 Phase 2와 3 전에 정할 것.
+
+- Phase 2 착수 전 설계 토론(ops-service-engineer, logging-engineer, architect): `VehicleState`에서 ROS 시각이 역행할 때의 레지스트리 처리(replay 일시정지와 배속 포함), 소비자 미수신 timeout의 배수, stamp 단조성 규칙, WebSocket JSON의 중첩과 enum 표현, gRPC `StreamMissionEvents`와 ROS `MissionEvent`의 관계(ops 권고는 별도 메시지), 기록기의 구독 확인 순서.
+- Phase 3: Fleet 재시작 복구 경로. 전체 취소 뒤에는 result를 받을 handle이 없으므로 기체 상태로만 확인한다. 이탈 기체 goal의 재배분은 한 번(Fleet 정책).
 
 - replay job의 trigger(U4). `docs/architecture.md` 테스트 층 표의 리플레이 행과 `docs/roadmap.md` Phase 2 완료 기준의 "모든 push"를 그때 고친다.
 - ULog가 `compose down`에서 정상 종료되는지 확인한다. 기록량은 약 285 KiB/s, 기체당 약 1 GB/h다(logging-engineer, Phase 2 전).
