@@ -27,7 +27,7 @@ SCHEMA = 1
 # 시작해서 로컬 13회 ULog 실측 최대 편차가 0.278-0.309 m이고 D는 0.066-0.075 m였다.
 HOLD_DEV_NOTE_M = {"A_loiter": 0.4, "D_hover": 0.25}
 HOLD_DEV_COLUMNS = ("A_loiter", "D_hover")
-# 회차마다 run_sitl.sh가 sitl/rc.json에 남기는 종료 코드: pytest, ULog 교차 확인, 정지 검사(0 정상, 1 비정상), 최종
+# 회차마다 run_sitl.sh가 sitl/steps.tsv 끝에 남기는 종료 코드: pytest, ULog 교차 확인, 정지 검사(0 정상, 1 비정상), 최종
 RC_COLUMNS = ("pytest", "crosscheck", "stop_check", "final")
 ARMED_MIN_REACHED = 10                    # 부류마다 ARMED 3회 확인까지 간 실행 10회 이상
 
@@ -77,6 +77,16 @@ def _fmt(v):
     if isinstance(v, float):
         return "%.3f" % v
     return str(v)
+
+
+def parse_rcs(steps_tsv_text):
+    """steps.tsv 끝의 rc_ 줄(rc_pytest 등)을 {이름: 값}으로 읽는다."""
+    out = {}
+    for line in steps_tsv_text.splitlines():
+        k, _, v = line.partition("\t")
+        if k.startswith("rc_") and k[3:] in RC_COLUMNS:
+            out[k[3:]] = v
+    return out
 
 
 def tsv_row(verdict, wall_total_s=None, rcs=None):

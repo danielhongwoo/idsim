@@ -60,8 +60,8 @@ def cmd_repeat(a):
     with open(out / "repeat_summary.tsv", "w", encoding="utf-8") as fh:
         fh.write("\t".join(ss.tsv_header()) + "\n")
         for v, p in zip(verdicts, a.verdicts):
-            f = Path(p).with_name("rc.json")
-            rcs = json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
+            f = Path(p).with_name("steps.tsv")
+            rcs = ss.parse_rcs(f.read_text(encoding="utf-8")) if f.is_file() else None
             fh.write("\t".join(ss.tsv_row(v, rcs=rcs)) + "\n")
     crit = ss.armed_criterion(verdicts)
     cc = []

@@ -115,6 +115,11 @@ def test_ulog_crosscheck_totals():
     assert t["ulog_only_total"] == 4 and t["ros_field_mismatch_total"] == 2
 
 
+def test_parse_rcs_from_steps_tsv():
+    text = "up\t40\npytest\t89\nrc_pytest\t0\nrc_crosscheck\t2\nrc_stop_check\t0\nrc_final\t2\nrc_other\t9\n"
+    assert ss.parse_rcs(text) == {"pytest": "0", "crosscheck": "2", "stop_check": "0", "final": "2"}
+
+
 def test_tsv_row_has_final_rc_columns():
     row = dict(zip(ss.tsv_header(), ss.tsv_row(verdict(), rcs={"pytest": 0, "crosscheck": 2, "stop_check": 0, "final": 2})))
     assert (row["rc_pytest"], row["rc_crosscheck"], row["rc_stop_check"], row["rc_final"]) == ("0", "2", "0", "2")
