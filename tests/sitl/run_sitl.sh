@@ -26,7 +26,7 @@
 #           STACK_UP_TIMEOUT (sim_stack.sh up의 단계별 제한 초, 기본 240)
 #
 # 계약(.github/workflows/sitl.yml 머리 주석)
-#   종료 코드  0 전체 통과, 1 시나리오, 정지 검사, ULog 교차 확인(비OFFBOARD ARMED) 실패, 2 사용법, 선행 조건, 스택 올리기(INFRA_UP), ULog 교차 확인 입력 없음
+#   종료 코드  0 전체 통과, 1 시나리오, 정지 검사, ULog 교차 확인(비OFFBOARD ARMED) 실패, 2 사용법, 선행 조건, 스택 올리기(INFRA_UP), ULog 교차 확인 입력 없음과 판정 불가
 #   stdout     마지막 줄이 (마지막 회의) 실행 디렉터리 절대 경로 artifacts/runs/<실행 id>. 나머지는 모두 stderr
 #   요약       GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
 #   산출물     <실행 디렉터리>/sitl/: junit.xml, trace.jsonl, verdict.json, summary.md, steps.tsv, raw_status_A.jsonl,
@@ -102,6 +102,7 @@ now() { date +%s; }
 run_dir=""
 run_rc=0
 one_run() { # 회 번호
+  unhealthy_svcs=""   # 전역이므로 회마다 비운다
   local i="$1" ts run_id out_name compose steps="" t0 t1 rc fallback="" ops
   if [ -n "$attach" ]; then
     run_dir="$(cd "$attach" 2>/dev/null && pwd)" || { say "--attach 디렉터리가 없다: ${attach}"; run_rc=2; return; }
@@ -146,12 +147,12 @@ one_run() { # 회 번호
   fi
 
   mkdir -p "${run_dir}/${out_name}"
-  say "pytest: runner 안에서 tests/sitl (바깥 timeout ${pytest_timeout} s)"
+  say "pytest: runner 안에서 tests/sitl와 runner 전용 단위 테스트 둘 (바깥 timeout ${pytest_timeout} s)"
   t0="$(now)"
   # shellcheck disable=SC2016  # $1과 $@는 컨테이너 안의 bash가 푼다
   timeout --foreground -s INT -k 30 "$pytest_timeout" docker compose -f "$compose" run --rm --no-deps -T \
     -e IDSIM_SITL_OUT="$out_name" runner bash -c \
-    'cd /opt/idsim && exec python3 -m pytest tests/sitl -p no:cacheprovider -ra --junitxml="$1" "${@:2}"' _ \
+    'cd /opt/idsim && exec python3 -m pytest tests/sitl tests/support/test_sitl_constants.py tests/support/test_px4_topic_names.py -p no:cacheprovider -ra --junitxml="$1" "${@:2}"' _ \
     "/opt/idsim/${rel}/${out_name}/junit.xml" ${pytest_args[@]+"${pytest_args[@]}"} >&2
   rc=$?
   t1="$(now)"
@@ -215,7 +216,7 @@ PY
   local ulog_lines
   ulog_lines="$(python3 tests/sitl/summarize.py ulog "$run_dir" || true)"
   # 시나리오 A의 원시 표본과 ULog의 교차 확인. 종료 코드 1(ULog 기준 비OFFBOARD ARMED 표본)은 실행 실패,
-  # 2(입력 없음)는 INFRA로 따로 센다
+  # 2(입력 없음과 판정 불가)는 INFRA로 따로 센다
   python3 tests/sitl/crosscheck_a.py "$run_dir" --sitl-dir "$out_name" >&2
   local cross_rc=$?
   # steps.tsv: 단계별 초, 서비스 종료 상태(stop_exit_*), ULog 끝 경계(ulog), 그리고 아래의 rc_ 줄
@@ -232,7 +233,7 @@ PY
   [ "$stop_bad" -ne 0 ] && run_rc=1
   [ "$cross_rc" -eq 1 ] && run_rc=1
   if [ "$cross_rc" -ge 2 ]; then
-    say "ULog 교차 확인 입력이 없다(INFRA)"
+    say "ULog 교차 확인 입력이 없거나 판정 불가(INFRA)"
     [ "$run_rc" -eq 0 ] && run_rc=2
   fi
   # 회차별 종료 코드는 steps.tsv 끝에 rc_ 줄로 덧붙인다(repeat_summary.tsv의 rc_* 열이 읽는다)
