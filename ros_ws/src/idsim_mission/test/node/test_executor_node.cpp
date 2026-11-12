@@ -23,6 +23,8 @@
 //   충돌 규칙"의 rclcpp_action 허용 확인).
 // - PREPARING 중 취소의 CANCELED, 실행 중 두 번째 goal의 BUSY, 종료 때의 disarm 한 번(arm 뒤 1개,
 //   arm 전 0개).
+// - 전체 취소(goal id 미지정, async_cancel_all_goals): 실행 중 goal은 handle_cancel을 거쳐 취소
+//   분기(공중 -> Hold)로 CANCELED가 되고, 실행 중 goal이 없으면 아무 일도 일어나지 않는다.
 // 시계: 별도 thread가 /clock을 발행한다(on_activate의 2 s 대기는 파라미터가 아니다). 사건 구독은
 // action client보다 먼저, 같은 노드에서 만든다(쟁점 7 순서 규칙).
 
@@ -38,6 +40,7 @@
 #include <thread>
 #include <vector>
 
+#include "action_msgs/srv/cancel_goal.hpp"
 #include "idsim_common/contract_qos.hpp"
 #include "idsim_common/px4_io.hpp"
 #include "idsim_common/qos.hpp"
@@ -208,6 +211,9 @@ public:
   int commands() const { return commands_; }
   int disarms() const { return disarms_; }
   int offboards() const { return offboards_; }
+  int holds() const { return holds_; }
+  bool landed() const { return landed_; }
+  std::uint8_t nav_state() const { return nav_; }
   bool react_offboard{true};  // false면 Offboard 요청에 반응하지 않는다(P5에 머문다)
 
 private:
@@ -218,6 +224,10 @@ private:
     ++commands_;
     if (cmd.command == VC::VEHICLE_CMD_COMPONENT_ARM_DISARM && cmd.param1 == 0.0F) {
       ++disarms_;
+    }
+    // Hold = AUTO(param2 4) + AUTO_LOITER(param3 3). 다른 AUTO sub mode는 세지 않는다.
+    if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 4.0F && cmd.param3 == 3.0F) {
+      ++holds_;
     }
     if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 6.0F) {
       ++offboards_;
@@ -257,6 +267,7 @@ private:
   int commands_{0};
   int disarms_{0};
   int offboards_{0};
+  int holds_{0};
 };
 
 class ExecutorNodeTest : public ::testing::Test
@@ -376,7 +387,15 @@ public:
     options.goal_response_callback = [this](const GoalHandle::SharedPtr & handle) {
       handle_ = handle;
     };
-    options.feedback_callback = [this](GoalHandle::SharedPtr, const auto &) { ++feedback_; };
+    options.feedback_callback =
+      [this](GoalHandle::SharedPtr, const std::shared_ptr<const ExecuteMission::Feedback> & fb) {
+        ++feedback_;
+        last_phase_ = fb->phase;
+        last_item_ = fb->item_index;
+        if (fb->phase == ExecuteMission::Feedback::PHASE_CANCELING) {
+          ++canceling_feedback_;
+        }
+      };
     options.result_callback = [this](const GoalHandle::WrappedResult & result) {
       result_ = result;
       has_result_ = true;
@@ -389,6 +408,9 @@ public:
   GoalHandle::WrappedResult result_;
   bool has_result_{false};
   int feedback_{0};
+  std::uint8_t last_phase_{0};
+  std::uint32_t last_item_{0};
+  int canceling_feedback_{0};
 
 private:
   mutable std::mutex mutex_;
@@ -711,6 +733,125 @@ TEST_F(ShutdownDisarmTest, BeforeArmSendsNoDisarm)
 {
   // P3-P5(arm 전)의 종료는 disarm을 보내지 않는다.
   run(false, [](const FakePx4 & px4) { return px4.offboards() >= 1; }, 0, nullptr);
+}
+
+// ---- 전체 취소(goal id 미지정) ----
+
+class CancelAllTest : public ExecutorNodeTest
+{
+protected:
+  using CancelResponse = action_msgs::srv::CancelGoal::Response;
+
+  // async_cancel_all_goals를 보내고 응답이 올 때까지 spin한다. 응답이 없으면 nullptr.
+  CancelResponse::SharedPtr cancel_all(Client & client, FakePx4 * px4)
+  {
+    CancelResponse::SharedPtr response;
+    client.client()->async_cancel_all_goals(
+      [&response](const CancelResponse::SharedPtr & r) { response = r; });
+    spin_until([&] { return response != nullptr; }, std::chrono::seconds(10), px4);
+    return response;
+  }
+};
+
+TEST_F(CancelAllTest, RunningGoalIsCanceledThroughCancelBranch)
+{
+  // 공중의 LOITER 항목 중에 goal id 없이 전체 취소를 보낸다.
+  // (a) 응답의 goals_canceling에 실행 중 goal이 들어 있다. rclcpp_action 서버는 전체 취소를
+  //     goal마다 handle_cancel로 묻고 ACCEPT한 goal만 응답에 남기므로 handle_cancel이 불렸다.
+  // (b) 그 뒤 PHASE_CANCELING feedback이 온다(tick이 is_canceling을 core의 취소 분기로 넘겼다).
+  // (c) 공중 분기: Hold를 보내고 Hold 확인 뒤 CANCELED, REASON_NONE. disarm은 보내지 않고 기체는
+  //     ARMED, landed false인 AUTO_LOITER에 남는다. 종료 사건은 result와 같다.
+  auto node = make_executor(true);
+  auto test_node = std::make_shared<rclcpp::Node>("test_client");
+  Client client(test_node);
+  FakePx4 px4(test_node, *clock_);
+  executor_->add_node(node->get_node_base_interface());
+  executor_->add_node(test_node);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      return state_of(node) == State::PRIMARY_STATE_ACTIVE &&
+             client.client()->action_server_is_ready() &&
+             test_node->count_publishers("/px4_1/mission_event") >= 1;
+    },
+    std::chrono::seconds(10), &px4));
+  // LOITER를 길게 두어 취소가 LAND 항목과 겹치지 않게 한다.
+  ExecuteMission::Goal goal = standard_goal();
+  goal.mission.items[1].loiter.duration.sec = 60;
+  goal.mission.items[1].timeout.sec = 120;
+  client.send(goal);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      return client.handle_ != nullptr && client.last_item_ == 1U &&
+             client.last_phase_ == ExecuteMission::Feedback::PHASE_EXECUTING && !px4.landed();
+    },
+    std::chrono::seconds(40), &px4))
+    << "item " << client.last_item_ << " phase " << static_cast<int>(client.last_phase_);
+  ASSERT_TRUE(node->goal_active());
+  ASSERT_EQ(client.canceling_feedback_, 0);
+  ASSERT_EQ(px4.holds(), 0);
+  const int disarms_before = px4.disarms();
+
+  const CancelResponse::SharedPtr response = cancel_all(client, &px4);
+  ASSERT_NE(response, nullptr);
+  EXPECT_EQ(response->return_code, CancelResponse::ERROR_NONE);
+  ASSERT_EQ(response->goals_canceling.size(), 1U);
+  EXPECT_EQ(response->goals_canceling[0].goal_id.uuid, client.handle_->get_goal_id());
+
+  ASSERT_TRUE(spin_until(
+    [&] { return client.has_result_ && client.events().size() >= 2; }, std::chrono::seconds(20),
+    &px4));
+  EXPECT_GE(client.canceling_feedback_, 1);
+  EXPECT_EQ(client.result_.code, rclcpp_action::ResultCode::CANCELED);
+  EXPECT_EQ(client.result_.result->reason, ExecuteMission::Result::REASON_NONE);
+  EXPECT_EQ(client.result_.result->last_item_index, 1U);
+  EXPECT_GE(px4.holds(), 1);
+  EXPECT_EQ(px4.disarms() - disarms_before, 0);
+  EXPECT_TRUE(px4.armed());
+  EXPECT_FALSE(px4.landed());
+  EXPECT_EQ(px4.nav_state(), px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_AUTO_LOITER);
+  expect_events_match_result(client.events(), client.result_, MissionEvent::STATUS_CANCELED);
+  EXPECT_FALSE(node->goal_active());
+}
+
+TEST_F(CancelAllTest, WithoutRunningGoalDoesNothingAndNextGoalRuns)
+{
+  // 실행 중 goal이 없을 때의 전체 취소: 취소된 goal이 없고, 사건과 PX4 명령이 나가지 않는다.
+  // 그 뒤에 보낸 goal은 정상 경로로 SUCCEEDED가 된다.
+  auto node = make_executor(true);
+  auto test_node = std::make_shared<rclcpp::Node>("test_client");
+  Client client(test_node);
+  FakePx4 px4(test_node, *clock_);
+  executor_->add_node(node->get_node_base_interface());
+  executor_->add_node(test_node);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      return state_of(node) == State::PRIMARY_STATE_ACTIVE &&
+             client.client()->action_server_is_ready() &&
+             test_node->count_publishers("/px4_1/mission_event") >= 1;
+    },
+    std::chrono::seconds(10), &px4));
+
+  const CancelResponse::SharedPtr response = cancel_all(client, &px4);
+  ASSERT_NE(response, nullptr);
+  EXPECT_TRUE(response->goals_canceling.empty());
+  // 취소할 goal이 없으면 handle_cancel이 불리지 않고 응답은 ERROR_NONE에 빈 목록이다
+  // (rclcpp_action은 대상 goal이 하나 이상인데 모두 거절됐을 때만 ERROR_REJECTED로 바꾼다).
+  EXPECT_EQ(response->return_code, CancelResponse::ERROR_NONE);
+  spin_count(50);
+  EXPECT_FALSE(node->goal_active());
+  EXPECT_TRUE(client.events().empty());
+  EXPECT_EQ(px4.commands(), 0);
+
+  client.send(standard_goal());
+  ASSERT_TRUE(spin_until([&] { return client.has_result_; }, std::chrono::seconds(40), &px4))
+    << "events " << client.events().size() << " commands " << px4.commands();
+  spin_until([&] { return client.events().size() >= 2; }, std::chrono::seconds(2), &px4);
+  EXPECT_EQ(client.result_.code, rclcpp_action::ResultCode::SUCCEEDED);
+  EXPECT_EQ(client.result_.result->reason, ExecuteMission::Result::REASON_NONE);
+  EXPECT_EQ(client.result_.result->items_completed, 3U);
+  EXPECT_EQ(client.canceling_feedback_, 0);
+  expect_events_match_result(client.events(), client.result_, MissionEvent::STATUS_SUCCEEDED);
+  EXPECT_FALSE(node->goal_active());
 }
 
 }  // namespace
