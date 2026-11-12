@@ -48,7 +48,8 @@ px4-out, px4-in, clock은 각각 스택을 내렸다가 다시 올리고, 끝나
 
 | 명령 | 하는 일 |
 | --- | --- |
-| `tools/sim_stack.sh up` | `config/fleet.yaml`로 스택(아래 "스택과 스택 번호")을 생성하고 올린다. 실행 디렉터리 `artifacts/runs/<실행 id>/`를 출력한다. 내리기는 `tools/sim_stack.sh down`. 화면 도구는 아래 "화면으로 보기" |
+| `tools/sim_stack.sh up` | `config/fleet.yaml`로 스택(아래 "스택과 스택 번호")을 생성하고 인프라(에이전트, gazebo, px4-N, bridge)에 이어 Mission Executor(`ops-N`)까지 healthy로 올린다. 실행 디렉터리 `artifacts/runs/<실행 id>/`를 출력한다. Executor 없이 인프라만 올리려면 `--infra-only`(스모크와 측정 스크립트가 쓴다). `ros_ws/install/idsim_mission/`이 없으면 먼저 `tools/ros_ws.sh build`. 내리기는 `tools/sim_stack.sh down`. 화면 도구는 아래 "화면으로 보기" |
+| `tests/sitl/run_sitl.sh --stack k` | 통합 테스트(이륙-호버-착륙 시나리오 B, C, A, D, T). 아래 "통합 테스트" |
 | `tools/ros_ws.sh ci` | `ros_ws/src`의 ROS 2 패키지를 ros-ws 컨테이너에서 빌드하고 테스트(ament_lint 포함)와 clang-tidy를 돌린다. CI의 unit job과 같은 명령 |
 | `tools/ci/lint.sh all` | CI와 같은 lint 전체 (호스트에 linter 설치가 필요 없다) |
 | `python3 tools/ci/build_images.py --mode load [이미지]` | `docker/`나 `versions.env`를 바꾼 뒤 이미지를 다시 빌드한다. 이미지 이름을 주면 그 이미지와 베이스만 빌드한다 |
@@ -56,6 +57,21 @@ px4-out, px4-in, clock은 각각 스택을 내렸다가 다시 올리고, 끝나
 | `tests/smoke/run_smoke.sh golden` | 토픽, QoS, 파라미터를 golden 파일과 비교한다. 이미지나 PX4 설정을 바꾼 뒤의 회귀 확인. golden을 의도해서 바꿀 때는 `--update-golden` |
 | `tests/smoke/run_smoke.sh embedded` | PX4가 Gazebo를 직접 띄우는 구성. 운용 구성이 아니라 px4-out이 실패할 때 원인을 가르는 진단용이다. 단계 설명은 `docs/smoke-test.md` |
 | `python3 -m pytest tests/tools --update-golden` | compose 생성기 golden(`tests/tools`)을 의도해서 바꿨을 때 ros-ws 컨테이너 안에서 갱신한다. CI에서는 거부된다 |
+
+## 통합 테스트
+
+```
+tests/sitl/run_sitl.sh --stack 0                       # 스택을 올리고 시나리오를 돌린 뒤 내린다
+tests/sitl/run_sitl.sh --stack 0 --repeat 3            # 회마다 down 뒤 콜드 up으로 3번. 첫 실패에서 멈춘다
+tests/sitl/run_sitl.sh --attach <실행 디렉터리>         # 이미 떠 있는 스택에 붙어 pytest와 수집만 한다
+tests/sitl/run_sitl.sh --stack 0 -- -k test_b          # `--` 뒤는 pytest 인자
+```
+
+- `--stack k`는 스택 번호(0-9, 없으면 `IDSIM_STACK_INDEX`, 없으면 0). 로컬과 CI(`sitl.yml`)가 같은 명령을 쓴다.
+- 사용자가 QGC와 Gazebo GUI로 눈으로 확인할 때는 `tools/sim_stack.sh up --viz`로 스택을 올리고 출력된 실행 디렉터리를 `--attach`로 넘겨 시나리오 A 등을 돌린다. `--attach`는 스택을 올리지도 내리지도 않고, 산출물은 `<실행 디렉터리>/sitl-attach-<시각>/`에 쓴다.
+- `ros_ws/install/idsim_mission/`이 없으면 빌드하지 않고 안내와 함께 실패한다(`tools/ros_ws.sh build`).
+- 종료 코드는 0 전체 통과, 1 시나리오 실패, 2 사용법, 선행 조건, 스택 올리기 실패. 마지막 stdout 줄이 실행 디렉터리다.
+- 시나리오와 판정, 산출물은 `tests/sitl/README.md`를 본다.
 
 ## 화면으로 보기
 
