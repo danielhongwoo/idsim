@@ -1,6 +1,6 @@
 # PX4 재실측 측정 스크립트
 
-`docs-for-agent/plan-1a-6-idsim-mission/decisions.md` 넘김 목록의 px4-engineer 행 중 재실측 (2), (3), (5)와, OFFBOARD가 아닌 ARMED 표본 기록(`armed` 항목)을 돌리는 도구다. 소유는 test-engineer, 절차의 필수 승인자는 px4-engineer다.
+`docs-for-agent/plan-1a-6-idsim-mission/decisions.md`의 "재실측 결과와 기준" 절의 재실측 (2), (3), (5)와, OFFBOARD가 아닌 ARMED 표본 기록(`armed` 항목)을 돌리는 도구다. 소유는 test-engineer, 절차의 필수 승인자는 px4-engineer다.
 
 이 측정은 Executor 없이 PX4에 직접 명령을 보낸다(PX4 직접 부류). 시나리오 A(Executor 경유)의 대응이나 대체가 아니다. 통과해도 P4 머지 조건은 Executor 경유 부류의 통과가 따로 필요하다.
 
@@ -21,7 +21,7 @@ tests/sitl/measure/run_measure.sh [--stack 7] [--attempts N] [--keep] item2|item
 
 ## (3)의 대역과 판정
 
-(3)은 이륙 직후(첫 ARMED 표본 뒤)의 취소를 세 대역으로 나누어 잰다. 정본은 decisions.md 쟁점 3 M5 "필수 재실측의 두 경로"와 넘김 목록의 (3)이다. 판별 코드는 `tests/support/measure_bands.py`(순수 코드)이고 `crosscheck.py`가 ULog로 적용한다.
+(3)은 이륙 직후(첫 ARMED 표본 뒤)의 취소를 세 대역으로 나누어 잰다. 정본은 decisions.md의 "재실측 결과와 기준" 절(재실측 (3))과 쟁점 3의 "이륙 직후 취소의 두 경로"다. 판별 코드는 `tests/support/measure_bands.py`(순수 코드)이고 `crosscheck.py`가 ULog로 적용한다.
 
 실행 전에 고정한 지연값(이 호스트): spoolup 0, 0.5 s / 내부 1.074, 1.223, 1.372, 1.521 s / 경계 1.644, 1.694, 1.724 s. 지연값마다 3회, 합 27회이고 라운드 로빈 순서다. 계산식은 spoolup 0과 0.5 / 내부 T_r + {0.1, 0.3, 0.5, 0.7} x (T_lf - T_r) / 경계 T_lf - {0.10, 0.05, 0.02}이고, T_r은 `COM_SPOOLUP_TIME` 1.0 s, T_lf는 ULog의 `vehicle_land_detected` `landed` false `timestamp` - 첫 ARMED `vehicle_status` `timestamp`의 최솟값이다. 근거는 실행 `20261112-011246-k5-measure`의 13개 표본(최솟값 1.744 s, 최댓값 1.804 s)이고 image key `px4` 81678f535f7e4b05, `sim-base` cd6a22462ff15990에서 얻었다. 지연값과 T_r, T_lf의 출처는 실행 전에 `summary_item3.txt` 머리에 적힌다. 결과를 보고 지연값이나 시도를 더하지 않는다.
 

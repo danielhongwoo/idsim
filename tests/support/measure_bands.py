@@ -18,7 +18,7 @@ ULog 표본으로 첫 ARMED 시각 t_A, rampup 시작 t_ramp, maybe_landed/lande
 측정기가 처음 보낸 disarm이 처리된 시각 t_p와 그 결과 r_p를 구하고, t_p 기준으로 대역을 정한다. 입출력과 rclpy가
 없어 tests/support의 단위 테스트가 SITL 없이 검증한다. crosscheck.py가 쓴다.
 
-정본: decisions.md 쟁점 3 M5 "필수 재실측의 두 경로"와 넘김 목록 px4-engineer 행의 (3). 시간은 모두 PX4
+정본: decisions.md의 "재실측 결과와 기준" 절(재실측 (3))과 쟁점 3의 "이륙 직후 취소의 두 경로". 시간은 모두 PX4
 timestamp(us)이고 SITL에서 4 ms 단위로 양자화된다.
 
 정의
