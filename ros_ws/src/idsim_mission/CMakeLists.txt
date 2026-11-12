@@ -74,7 +74,7 @@ target_link_libraries(mission_executor_component PUBLIC
   rclcpp_components::component
   rclcpp_lifecycle::rclcpp_lifecycle)
 rclcpp_components_register_nodes(mission_executor_component "idsim_mission::MissionExecutorNode")
-install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 install(TARGETS idsim_mission_core idsim_mission_px4 mission_executor_component

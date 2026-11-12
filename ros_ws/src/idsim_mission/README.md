@@ -31,7 +31,7 @@
 
 ## 노드 껍질(P3d)
 
-실행: `ros2 launch idsim_mission vehicle_ops.launch.py namespace:=/px4_N executor_name:=<이름> params_file:=<파일>`. launch는 `component_container_isolated`(이름 `ops_container`)에 컴포넌트 하나를 load하고(`ComposableNode`, autostart 없음), `output='screen'`, 컨테이너에 `on_exit=Shutdown()`을 건다. 세 인자 모두 기본값이 없다. params 예시는 `config/ops.example.yaml`(생성기가 만드는 `/**`의 넷: `use_sim_time`, `vehicle.id`, `vehicle.ns`, `vehicle.sysid`).
+실행: `ros2 launch idsim_mission vehicle_ops.launch.py namespace:=/px4_N executor_name:=<이름> params_file:=<파일>`. launch는 `component_container_isolated`(이름 `ops_container`)에 컴포넌트 하나를 load하고(`ComposableNode`, autostart 없음), `output='screen'`, 컨테이너에 `on_exit=Shutdown()`을 건다. 세 인자 모두 기본값이 없다. params 파일은 생성기가 만든다(`/**` 아래 넷: `use_sim_time`, `vehicle.id`, `vehicle.ns`, `vehicle.sysid`).
 
 파라미터(모두 읽기 전용, 생성기는 만들지 않는다): `lifecycle.self_start`(bool, 기본 true), `command_source.system`(254), `command_source.component`(191), 타임아웃 여덟(`ready_timeout`, `offboard_signal_timeout`, `mode_confirm_timeout`, `arm_timeout`, `hold_confirm_timeout`, `link_timeout`, `land_disarm_fallback_delay`, `command_resend_period`. 초 단위 double, 기본값은 `core/config.hpp`).
 
