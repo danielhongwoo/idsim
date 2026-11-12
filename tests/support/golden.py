@@ -100,7 +100,7 @@ def write_golden(dir, topics, qos_by_topic, env):
     os.makedirs(dir, exist_ok=True)
     lines = sorted(set(topics), key=lambda s: s.encode("ascii"))
     with open(os.path.join(dir, "topics.txt"), "w", newline="\n") as f:
-        f.write("".join(l + "\n" for l in lines))
+        f.write("".join(line + "\n" for line in lines))
     for topic, qos in qos_by_topic.items():
         path = _qos_path(dir, topic)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -113,7 +113,7 @@ def write_golden(dir, topics, qos_by_topic, env):
 def read_golden(dir):
     """(topics, qos_by_topic, env)를 돌려준다. 파일이 없으면 FileNotFoundError."""
     with open(os.path.join(dir, "topics.txt")) as f:
-        topics = [l for l in f.read().splitlines() if l]
+        topics = [line for line in f.read().splitlines() if line]
     qos_by_topic = {}
     qroot = os.path.join(dir, "qos")
     for root, _, files in os.walk(qroot):
@@ -179,4 +179,4 @@ def compare_subset(expected_pairs, golden_pairs):
 
 def parse_pairs(lines):
     """topics.txt 줄 목록을 (토픽, 타입) 쌍 목록으로 바꾼다."""
-    return [tuple(l.split(None, 1)) for l in lines if l.strip()]
+    return [tuple(line.split(None, 1)) for line in lines if line.strip()]
