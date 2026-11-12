@@ -12,11 +12,3 @@ ignore = [
   # 포매터(ruff format) 도입을 정할 때 다시 결정한다. 그전까지는 리뷰에서 본다.
   "E501",
 ]
-
-[lint.per-file-ignores]
-# 아래는 남의 소유 파일의 기존 위반에 대한 임시 예외다. 소유자가 고치면 줄을 지운다(2026-11-06 보고).
-# test-engineer: tests/support/receive.py 11행 `import rclpy` 미사용
-"tests/support/receive.py" = ["F401"]
-# test-engineer: 변수 이름 `l` (golden.py 103, 116, 182행, test_golden.py 63, 64행)
-"tests/support/golden.py" = ["E741"]
-"tests/support/test_golden.py" = ["E741"]

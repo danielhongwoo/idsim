@@ -63,8 +63,8 @@ def test_normalize_topic_list():
         OUT + "battery_status px4_msgs/msg/BatteryStatus",
         OUT + "vehicle_status_v4 px4_msgs/msg/VehicleStatus",
     ]
-    assert all(l.startswith("fmu/") for l in got)
-    assert not any("px4_2" in l or "rosout" in l for l in got)
+    assert all(line.startswith("fmu/") for line in got)
+    assert not any("px4_2" in line or "rosout" in line for line in got)
 
 
 def test_normalize_sorted_bytewise_and_slash_namespace():
