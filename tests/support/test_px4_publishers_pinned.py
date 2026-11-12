@@ -332,21 +332,42 @@ def test_smoke_check_px4_publisher_is_exactly_vehicle_command():
     assert len(pubs) == 1, "publish 호출은 send_until_ack 안의 하나뿐이어야 한다"
 
 
+def _attr_stores(tree, attr):
+    return [n for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr == attr
+            and isinstance(n.ctx, ast.Store)]
+
+
 def test_smoke_check_px4_command_is_only_arm_disarm():
     t = _tree(SMOKE_PUB)
+    # (a) .command 대입은 파일 전체에서 하나이고 make_command 안에 있다(다른 함수나 모듈 수준 대입 금지)
     mk = next(n for n in t.body if isinstance(n, ast.FunctionDef) and n.name == "make_command")
-    cmds = [n for n in ast.walk(mk) if isinstance(n, ast.Assign)
-            and any(isinstance(x, ast.Attribute) and x.attr == "command" for x in n.targets)]
-    assert len(cmds) == 1
-    v = cmds[0].value
-    assert isinstance(v, ast.Attribute) and v.attr == "VEHICLE_CMD_COMPONENT_ARM_DISARM"
-    # VehicleCommand 객체는 make_command에서만 만든다
+    stores = _attr_stores(t, "command")
+    assert len(stores) == 1, "파일 전체에서 .command 대입은 하나뿐이어야 한다"
+    assert stores[0] in set(ast.walk(mk)), ".command 대입은 make_command 안에 있어야 한다"
+    assigns = [n for n in ast.walk(mk) if isinstance(n, ast.Assign) and stores[0] in n.targets]
+    assert len(assigns) == 1
+    v = assigns[0].value
+    assert isinstance(v, ast.Attribute) and v.attr == "VEHICLE_CMD_COMPONENT_ARM_DISARM" \
+        and isinstance(v.value, ast.Name) and v.value.id == "VehicleCommand"
+    # (b) VEHICLE_CMD_* 속성 참조는 파일 전체에서 ARM_DISARM(VehicleCommand)과 ack 판정용 RESULT_ACCEPTED(VehicleCommandAck)뿐이다
+    refs = sorted({(ast.unparse(n.value), n.attr) for n in ast.walk(t)
+                   if isinstance(n, ast.Attribute) and n.attr.startswith("VEHICLE_CMD_")})
+    assert refs == [("VehicleCommand", "VEHICLE_CMD_COMPONENT_ARM_DISARM"),
+                    ("VehicleCommandAck", "VEHICLE_CMD_RESULT_ACCEPTED")], refs
+    # 문자열로 우회하지 못하게 setattr/getattr/vars 호출과 __dict__ 접근을 막는다
+    assert not [n for n in ast.walk(t) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id in ("setattr", "getattr", "vars", "exec", "eval")]
+    assert not [n for n in ast.walk(t) if isinstance(n, ast.Attribute) and n.attr == "__dict__"]
+    # VehicleCommand 객체는 make_command에서만 만들고, 생성자에 인자를 주지 않는다(keyword로 command/param2를 넣는 우회 차단)
     ctors = [n for n in ast.walk(t) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
              and n.func.id == "VehicleCommand"]
-    assert len(ctors) == 1
-    # 호출부는 param1만 바꾼다: 강제 disarm용 param2를 쓰지 않는다
-    assert not any(isinstance(n, ast.Attribute) and n.attr == "param2" and isinstance(n.ctx, ast.Store)
-                   for n in ast.walk(t))
+    assert len(ctors) == 1 and ctors[0] in set(ast.walk(mk))
+    assert ctors[0].args == [] and ctors[0].keywords == [], "VehicleCommand()는 인자 없이 만든다"
+    # 호출부는 param1만 바꾼다: 강제 disarm용 param2를 쓰지 않는다(대입, keyword 인자 모두)
+    assert _attr_stores(t, "param2") == []
+    assert not [k for n in ast.walk(t) if isinstance(n, ast.Call) for k in n.keywords
+                if k.arg in ("param2", "command")]
+    assert not [n for n in ast.walk(t) if isinstance(n, ast.Constant) and n.value in ("param2", "command")]
 
 
 def test_smoke_check_px4_source_is_254_1():
