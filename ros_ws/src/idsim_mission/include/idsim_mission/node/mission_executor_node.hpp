@@ -130,10 +130,11 @@ private:
     const rclcpp_action::GoalUUID & uuid, const std::shared_ptr<const ExecuteMission::Goal> & goal);
   rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandle> & goal_handle);
   void handle_accepted(const std::shared_ptr<GoalHandle> & goal_handle);
-  // 종료 결과 하나로 사건과 result를 낸다. 호출자가 mutex를 잡고 있다.
+  // 종료 결과 하나로 사건과 result를 낸다. 사건의 stamp는 stamp(tick에서 정한 종료이면 그 tick의
+  // 입력 시각). 호출자가 mutex를 잡고 있다.
   void finish(
     const std::shared_ptr<GoalHandle> & goal_handle, EventContext context,
-    const core::Termination & term);
+    const core::Termination & term, const builtin_interfaces::msg::Time & stamp);
   // 실행 중인 goal을 ABORTED, REASON_INTERNAL로 끝낸다(종료, 오류). 호출자가 mutex를 잡고 있다.
   void abort_running_goal(const std::string & why);
   void select_ack();

@@ -1033,6 +1033,7 @@ void MissionRunner::finalize(Tick & t)
 Feedback MissionRunner::make_feedback(const Tick & t) const
 {
   Feedback f;
+  f.stamp_ns = t.input.now_ns;
   f.item_count = static_cast<std::uint32_t>(mission_.items.size());
   f.item_index = item_index_;
   f.item_type = current_item().type;

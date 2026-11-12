@@ -16,6 +16,7 @@
 //
 // - Harness는 20 Hz tick(50 ms)을 흉내 낸다. tick()은 (1) 이번 tick에 새로 들어온 표본을 Snapshot에
 //   넣고(received_tick = 이번 tick 번호) (2) step을 한 번 부르고 (3) 번호와 시각을 올린다.
+// - feedback이 있는 tick마다 그 stamp_ns가 tick 입력 시각과 같은지 단정한다.
 // - 표본의 timestamp는 합성 값이다. 기본은 "수신 시각 - 1 ms"(us)라 명령에 실린 Px4Timestamp(그
 //   tick의 시각)보다 다음 tick의 표본이 늘 뒤다. 실제 시계 관계는 재실측 (5)만 확인한다.
 // - auto_px4가 true이면 간단한 가짜 PX4가 명령에 반응한다(다음 tick의 표본에 보인다):
@@ -31,6 +32,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
@@ -256,12 +258,16 @@ public:
   // 표본을 넣지 않고 step만(표본은 테스트가 직접 넣었다).
   StepOutput step_only(bool cancel = false)
   {
-    clock.now_ns = now_ns;
+    clock.now_ns = now_ns + (port_skew ? port_skew(tick_no) : 0);
     TickInput input;
     input.tick = tick_no;
     input.now_ns = now_ns;
     input.cancel_requested = cancel || cancel_sticky;
     StepOutput out = runner_.step(input, snapshot, clock);
+    // 불변식: feedback의 stamp는 그 tick의 입력 시각이다(Px4ClockPort가 본 시각이 아니다).
+    if (out.feedback.has_value()) {
+      EXPECT_EQ(out.feedback->stamp_ns, input.now_ns) << "tick " << input.tick;
+    }
     record(out);
     ++tick_no;
     now_ns += kTickNs;
@@ -364,6 +370,9 @@ public:
   FakeClock clock;
   std::uint64_t tick_no{1};
   std::int64_t now_ns{kStartNs};
+  // Px4ClockPort가 보는 시각 - tick 입력 시각(ns). 노드에서 두 시각은 따로 읽혀 tick마다 0 또는
+  // /clock 한 양자만큼 어긋날 수 있다. tick 번호를 받아 그 tick의 값을 돌려준다. 비어 있으면 0.
+  std::function<std::int64_t(std::uint64_t)> port_skew;
   bool auto_samples{true};
   bool auto_px4{true};
   bool cancel_sticky{false};

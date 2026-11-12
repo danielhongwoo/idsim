@@ -38,10 +38,7 @@
 
 ## 진행 순서
 
-P0-P5, 재실측 (2), (3), (5), 사용자 육안 확인(QGC, Gazebo GUI)은 끝났다. 남은 순서는 아래와 같다. 기준은 대표 시나리오의 통과이고, 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮는다(`decisions.md` U6).
-
-1. Executor feedback stamp를 tick 입력 시각으로 찍고, 시나리오 A의 LOITER 유지 판정에서 `/clock` 한 양자 허용을 되돌린다.
-2. 7단계(`docs/interface.md`) 문서 작업. 새 실측을 기다리지 않는다.
+P0-P5, 재실측 (2), (3), (5), 사용자 육안 확인(QGC, Gazebo GUI), Executor feedback stamp 정리는 끝났다. 남은 것은 7단계(`docs/interface.md`) 문서 작업이고 새 실측을 기다리지 않는다. 기준은 대표 시나리오의 통과이고, 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮는다(`decisions.md` U6).
 
 ## 검토
 

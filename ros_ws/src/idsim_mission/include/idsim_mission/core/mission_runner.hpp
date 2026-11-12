@@ -54,6 +54,9 @@ struct TickInput
 
 struct Feedback
 {
+  // 이 feedback이 나타내는 tick의 ROS 시각(그 tick의 TickInput.now_ns). core가 경과 시간을 잰
+  // 시각과 같은 값이라, 노드가 발행 때 시계를 다시 읽어 찍으면 /clock 한 양자만큼 어긋날 수 있다.
+  std::int64_t stamp_ns{0};
   std::uint32_t item_index{0};
   std::uint32_t item_count{0};
   std::uint8_t item_type{0};

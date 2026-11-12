@@ -17,8 +17,10 @@
 // - goal의 Mission -> core::MissionSpec: 필드를 그대로 옮긴다(좌표와 yaw는 계약 그대로 world ENU).
 // - core::Termination -> ExecuteMission result와 종료 MissionEvent: 둘 다 같은 Termination에서
 //   core::to_result, core::to_terminal_event로 만든다(종료 결과 == 종료 사건).
-// - core::Feedback -> ExecuteMission feedback.
-// 사건의 stamp는 노드 시계의 ROS 시각이고 호출자가 넘긴다.
+// - core::Feedback -> ExecuteMission feedback. stamp는 core::Feedback.stamp_ns(그 tick의 입력
+//   시각)다.
+// 사건의 stamp는 노드 시계의 ROS 시각이고 호출자가 넘긴다. tick에서 정한 종료의 사건은 그 tick의
+// 입력 시각을 넘긴다.
 
 #ifndef IDSIM_MISSION__NODE__CONVERSION_HPP_
 #define IDSIM_MISSION__NODE__CONVERSION_HPP_
@@ -58,8 +60,10 @@ idsim_interfaces::msg::MissionEvent accepted_event_msg(const EventContext & cont
 idsim_interfaces::msg::MissionEvent terminal_event_msg(
   const EventContext & context, const core::Termination & term);
 
-idsim_interfaces::action::ExecuteMission::Feedback to_feedback_msg(
-  const core::Feedback & feedback, const builtin_interfaces::msg::Time & stamp);
+// ROS 시각(ns)을 메시지 시각으로. nanosec은 [0, 1e9)이고 음수 시각은 sec를 내린다.
+builtin_interfaces::msg::Time to_time_msg(std::int64_t ns);
+
+idsim_interfaces::action::ExecuteMission::Feedback to_feedback_msg(const core::Feedback & feedback);
 
 }  // namespace idsim_mission
 
