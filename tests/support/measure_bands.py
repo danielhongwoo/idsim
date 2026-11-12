@@ -109,7 +109,7 @@ HOLD_OBS_MAX_GAP_US = 2_000_000
 # 마지막 command ack를 구간 끝(ros_end) 뒤로 얼마나 더 찾는가(끝 직전에 보낸 명령의 ack용)
 ACK_SLACK_US = 500_000
 
-# 대응한 command와 ack 쌍의 간격 상한(px4-engineer 승인 대상). 모든 쌍이 0 <= ack.timestamp - command.timestamp
+# 대응한 command와 ack 쌍의 간격 상한(px4-engineer 승인). 모든 쌍이 0 <= ack.timestamp - command.timestamp
 # <= 이 값이어야 한다. 근거 실행은 65쌍이 8-20 ms였다. 어긋나면 순번 대응을 믿을 수 없다(ACK_PAIR).
 PAIR_MAX_GAP_US = 100_000
 

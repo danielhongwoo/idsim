@@ -36,7 +36,7 @@ ULog에서 읽는 것(`ulog_min.read_topics`가 파일을 한 번만 읽는다):
 - t_ml, t_lf: t_A 뒤 `maybe_landed`, `landed`가 false인 첫 표본.
 - t_p, r_p: 측정기가 처음 보낸 disarm(`vehicle_command` 400, param1 0, `timestamp` = 보낸 `Px4Timestamp`)에 대응하는 `vehicle_command_ack`의 `timestamp`(처리 시각)와 `result`. 대응은 `timestamp`의 크기가 아니라 ULog에 기록된 command 400과 ack 400의 파일 순서(1:1)로 한다. arm의 재전송 ack가 t_A 뒤 `timestamp`로 남거나 arm ack와 disarm ack의 `timestamp`가 같아도 섞이지 않는다. 근거는 Commander가 주기당 command 하나를 FIFO로 처리하고 ack가 처리 순서대로 기록되는 것이다([소스]. 실측은 없다).
 - first_disarm_lost: 그 disarm의 `vehicle_command`가 ULog에 없음. INCONCLUSIVE(2). 구간의 command 400과 ack 400의 수가 다르면 `ACK_COUNT`로 INCONCLUSIVE(2)이고 이 검사가 일관성 검사보다 앞선다.
-- ack를 찾는 구간은 구간 끝(`ros_end`) 뒤 0.5 s(`ACK_SLACK_US`)까지다. 다음 시도의 시작이 이보다 가까우면(`--settle-s`가 0.5 미만) 다음 시도의 arm ack가 구간에 들어와 `ACK_COUNT`로 빠진다. 쌍 간격 상한 `PAIR_MAX_GAP_US`(100 ms)는 px4-engineer 승인 대상이다(근거 실행은 65쌍이 8-20 ms).
+- ack를 찾는 구간은 구간 끝(`ros_end`) 뒤 0.5 s(`ACK_SLACK_US`)까지다. 다음 시도의 시작이 이보다 가까우면(`--settle-s`가 0.5 미만) 다음 시도의 arm ack가 구간에 들어와 `ACK_COUNT`로 빠진다. 쌍 간격 상한 `PAIR_MAX_GAP_US`(100 ms)는 px4-engineer가 승인했다(근거 실행은 65쌍이 8-20 ms).
 - ld_p: `timestamp`가 t_p 이하인 마지막 `vehicle_land_detected`.
 
 대역(t_p 기준. 계획한 지연값과 무관):
