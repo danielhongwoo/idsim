@@ -23,7 +23,7 @@
 
 세 레이어로 나눈다. 아래의 시뮬레이션 레이어(PX4 SITL x N + Gazebo)는 실제 기체를 대신하고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. 운용 서비스는 시뮬레이터를 전혀 모르도록 설계해, 나중에 PX4 SITL 컨테이너를 실기체로 바꿔도 그대로 동작하게 한다.
 
-큰 그림은 다음과 같다.
+이 절의 그림은 논리 레이어, 즉 누가 무엇을 주고받는지를 보인다. 어느 컨테이너에서 어떤 프로세스가 도는지와 프로토콜, 포트는 "Docker Compose 실행 환경 설계" 절의 그림이 보인다. 큰 그림은 다음과 같다.
 
 ```mermaid
 flowchart TB
@@ -32,48 +32,60 @@ flowchart TB
   SIM["시뮬레이션<br/>PX4 SITL x N + Gazebo"]
   EXT["외부 클라이언트<br/>웹, gRPC"]
   EXT <--> OPS
-  OPS <-->|"명령, setpoint / 상태"| BUS
+  OPS <-->|"setpoint / 상태"| BUS
   BUS <-->|"uXRCE-DDS 에이전트"| SIM
 ```
 
-- 운용 서비스는 ROS 2 버스만 보고, 아래가 시뮬레이터인지 실기체인지 모른다.
+- 운용 서비스는 ROS 2 버스만 보고, 아래가 시뮬레이터인지 실기체인지 모른다. 버스로 명령과 setpoint를 내리고 상태를 받는다.
 - 시뮬레이션 레이어는 실기체로 바꿀 수 있는 자리다. 기체 하나가 PX4 하나다.
 - 외부 클라이언트는 ROS 2를 모르고 Fleet Manager의 API로만 플릿을 본다.
 
 이 원칙은 표적 경로에도 적용한다. Mission Executor는 Gazebo 토픽을 직접 구독하지 않고 `idsim_interfaces`의 `TargetState` 계약(`/targets/<id>/state`)만 구독한다. 시뮬레이션에서는 `idsim_sim`의 표적 어댑터 노드가 ros_gz_bridge로 받은 Gazebo pose를 이 계약으로 변환해 발행하고, 실기체에서는 같은 토픽을 추적기가 채운다.
 
-세부 구성은 다음과 같다.
+운용 서비스 레이어. 큰 그림의 "운용 서비스" 상자를 펼친 것이다. 큰 그림의 "시뮬레이션" 상자 안쪽(PX4, 에이전트, Gazebo, 브리지)은 컨테이너 배치와 같은 모양이라 여기서 다시 그리지 않고 "Docker Compose 실행 환경 설계" 절의 상세 1에만 그린다.
 
 ```mermaid
 flowchart TB
-  subgraph OPS["운용 서비스 레이어 (Phase 1-3, C++ / Python ROS 2 노드)"]
-    FM["Fleet Manager (Phase 3)<br/>기체 레지스트리, 상태 집계<br/>미션 큐, 배분, gRPC/Protobuf API"]
-    ME["Mission Executor x N (Phase 1, idsim_mission)<br/>YAML 미션 -> 행동 시퀀스 상태기<br/>Offboard setpoint 발행"]
-    TC["Telemetry Collector x N (Phase 2)<br/>/fmu/out 구독 -> VehicleState 요약<br/>WebSocket 스트림"]
-    LR["Logger / Replay (Phase 2)<br/>rosbag2 (MCAP)<br/>ULog 동기화"]
-  end
-  BUS["ROS 2 (DDS) 토픽 버스 - /px4_N/fmu/out/*, /px4_N/fmu/in/*, /targets/*/state<br/>기체별 네임스페이스로 분리, px4_msgs 타입, sensor_data QoS, rmw는 CycloneDDS"]
-  AG["Micro XRCE-DDS Agent v2.4.3<br/>udp4, 기준 포트 8888 + 스택 번호 k, 인스턴스 하나로 모든 기체 수용"]
-  TA["idsim_sim 표적 어댑터 + ros_gz_bridge<br/>Gazebo pose -> TargetState, /clock"]
-  subgraph SIM["시뮬레이션 레이어 (Phase 1, Docker 컨테이너)"]
-    P0["PX4 SITL -i 1<br/>uXRCE-DDS client, 네임스페이스 /px4_1<br/>MAVLink :14550+1000k (GCS) / :14541+1000k (API)<br/>ULog 기록"]
-    PN["PX4 SITL -i 2...N<br/>UXRCE_DDS_KEY = i+1 = MAV_SYS_ID<br/>네임스페이스 /px4_i, API :14540+1000k+i<br/>Phase 3에서 추가"]
-    GZ["Gazebo Harmonic (gz sim -s, 서버 전용)<br/>x500 기체 모델 x N, 이동 표적 Actor<br/>물리/센서 플러그인"]
-  end
-  FM -->|"미션 배분 (ExecuteMission 액션)"| ME
-  TC -->|"VehicleState 집계"| FM
-  ME -->|"OffboardControlMode, TrajectorySetpoint, VehicleCommand 발행"| BUS
-  BUS -->|"/fmu/out 상태 구독"| TC
-  BUS -->|"TargetState 구독 (시뮬레이터 비의존 계약)"| ME
-  BUS --> LR
-  BUS <--> AG
-  TA --> BUS
-  GZ -->|"gz-transport"| TA
-  P0 --> AG
-  PN --> AG
-  P0 <-->|"gz 전송(모터, 센서) 직접 연결"| GZ
-  PN <--> GZ
+  FM["Fleet Manager<br/>Phase 3"]
+  ME["Mission Executor x N<br/>Phase 1"]
+  TC["Telemetry Collector x N<br/>Phase 2"]
+  LR["Logger / Replay<br/>Phase 2"]
+  BUS["ROS 2 버스<br/>기체별 토픽"]
+
+  FM -->|"미션 배분"| ME
+  TC -->|"상태 집계"| FM
+  ME -->|"setpoint, 명령"| BUS
+  BUS -->|"TargetState"| ME
+  BUS -->|"PX4 상태"| TC
+  BUS -->|"기록"| LR
 ```
+
+구성 요소가 하는 일. 큰 그림과 위 그림의 상자, 그리고 시뮬레이션 레이어의 구성 요소를 함께 적는다.
+
+| 구성 요소 | 레이어 | 하는 일 | Phase |
+| --- | --- | --- | --- |
+| Fleet Manager | 운용 서비스 | 기체 레지스트리, 상태 집계, 미션 큐와 배분(`ExecuteMission` 액션), gRPC/Protobuf API | 3 |
+| Mission Executor x N (`idsim_mission`) | 운용 서비스 | YAML 미션 -> 행동 시퀀스 상태기. Offboard setpoint 발행(`OffboardControlMode`, `TrajectorySetpoint`, `VehicleCommand`). `TargetState` 구독(시뮬레이터 비의존 계약) | 1 |
+| Telemetry Collector x N | 운용 서비스 | `/fmu/out` 구독 -> `VehicleState` 요약, WebSocket 스트림 | 2 |
+| Logger / Replay | 운용 서비스 | rosbag2 (MCAP), ULog 동기화 | 2 |
+| ROS 2 (DDS) 토픽 버스 | 버스 | `/px4_N/fmu/out/*`, `/px4_N/fmu/in/*`, `/targets/*/state`. 기체별 네임스페이스로 분리, px4_msgs 타입, sensor_data QoS, rmw는 CycloneDDS | 1 |
+| Micro XRCE-DDS Agent v2.4.3 | 버스와 시뮬레이션 사이 | udp4, 기준 포트 8888 + 스택 번호 k, 인스턴스 하나로 모든 기체 수용 | 1 |
+| `idsim_sim` 표적 어댑터 + ros_gz_bridge | 버스와 시뮬레이션 사이 | Gazebo pose -> `TargetState`, `/clock` | 1 |
+| PX4 SITL `-i 1` | 시뮬레이션 | uXRCE-DDS client, 네임스페이스 `/px4_1`, MAVLink 14550 + 1000k (GCS) / 14541 + 1000k (API), ULog 기록 | 1 |
+| PX4 SITL `-i 2...N` | 시뮬레이션 | `UXRCE_DDS_KEY` = i+1 = `MAV_SYS_ID`, 네임스페이스 `/px4_i`, API 14540 + 1000k + i | 3 |
+| Gazebo Harmonic (`gz sim -s`, 서버 전용) | 시뮬레이션 | x500 기체 모델 x N, 이동 표적 Actor, 물리/센서 플러그인 | 1 |
+
+버스 위의 이름과 쓰는 쪽, 읽는 쪽.
+
+| 버스 위의 이름 | 쓰는 쪽 | 읽는 쪽 |
+| --- | --- | --- |
+| `/px4_N/fmu/in` | Mission Executor | PX4 (에이전트 경유) |
+| `/px4_N/fmu/out` | PX4 (에이전트 경유) | Mission Executor, Telemetry Collector, 판정 노드 |
+| `/clock` | ros_gz_bridge | 모든 ROS 2 노드 |
+| `/targets/*/state` | 표적 어댑터 (1b) | Mission Executor |
+| `/px4_N/execute_mission` (action) | 판정 노드, Fleet Manager (Phase 3) | Mission Executor |
+| `/px4_N/vehicle_state` | Telemetry Collector (Phase 2) | Fleet Manager, 판정 노드 |
+| `/px4_N/mission_event` | Mission Executor | Logger, 판정 노드 |
 
 위쪽 서비스는 ROS 2 토픽만 보고 동작하고, 아래쪽 PX4는 uXRCE-DDS 에이전트 하나를 통해 모든 인스턴스가 같은 DDS 도메인에 올라온다. 기체를 실제로 움직이는 setpoint는 기체별 Mission Executor만 발행하고, Fleet Manager는 미션을 배분하고 상태를 집계할 뿐 `/fmu/in/*`에 직접 쓰지 않는다. MAVLink는 QGroundControl 확인용 곁가지이며 운용 서비스는 사용하지 않는다. PX4 <-> Gazebo 사이의 모터, 센서 교환은 ROS 2를 거치지 않는 직접 연결이다.
 
@@ -177,6 +189,176 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 
 컨테이너는 "기체 한 대 = PX4 컨테이너 한 개" 단위로 나누고, Gazebo와 에이전트는 각각 하나씩만 띄운다. 모든 컨테이너는 `network_mode: host`로 돌려 DDS 디스커버리와 UDP 포트 문제를 피한다. 브리지 네트워크에서는 DDS 디스커버리가 자주 깨진다. 같은 호스트에서 스택 두 개가 동시에 돌 수 있도록(개발자 둘, 병렬 CI job) `ROS_DOMAIN_ID`, `GZ_PARTITION`, 에이전트 포트, MAVLink 포트는 생성 인자인 스택 번호 k에서 파생해 compose 환경변수로 넘긴다. 스택 번호 k에 대해 `ROS_DOMAIN_ID` = 20 + k, 에이전트 포트 = 8888 + k, `GZ_PARTITION` = `idsim-<k>`, MAVLink 오프셋 = 1000k, foxglove 포트 = 8765 + k, lichtblick 포트 = 18080 + k. 기준값은 `fleet.yaml`이 아니라 생성 스크립트의 상수이며 `docs/interface.md`에 적는다. k는 0-9이고(MAVLink 로컬 포트 18579 + 1000k가 임시 포트 범위 아래에 있어야 한다) 생성 스크립트의 단위 테스트가 k 0-9, N 1-9 전 범위에서 포트 비충돌을 검사한다. DDS 포트 범위(7400 + 250 x 도메인부터 참가자 인덱스 50까지)와 MAVLink 포트는 이 범위에서 겹치지 않는다. DDS 설정이 인터페이스를 제한하지 않으므로 같은 호스트의 다른 ROS 2 스택과의 격리는 도메인 ID가 유일한 수단이며, 그래서 기본 도메인을 다른 프로젝트가 흔히 쓰는 0이 아닌 20으로 둔다. CI도 같은 규칙이다. `GZ_PARTITION`은 gz-transport 기본값에 기대지 않고 항상 명시한다. 에이전트에는 `ROS_DOMAIN_ID`를 주지 않는다. DDS 도메인은 PX4 client가 세션 생성 때 에이전트에 넘기므로 px4 컨테이너에 ROS 컨테이너와 같은 `ROS_DOMAIN_ID`가 들어가야 한다. 모든 compose 파일은 `name:`으로 프로젝트 이름(`idsim-<k>`. 스모크도 생성된 파일을 쓰므로 같은 규칙)을 명시한다. 명시하지 않으면 디렉터리명이 프로젝트 이름이 되어 호스트의 다른 compose 프로젝트와 충돌한다. 이미지는 빌드에 쓴 버전을 `IDSIM_BUILD_<key>` ENV로 남기고, 스모크와 테스트는 실행 전에 이 값을 `versions.env`와 대조한다.
 
+컨테이너와 프로세스 구성. "전체 아키텍처" 절의 그림이 논리 레이어를 보였다면 이 절의 그림은 배치, 즉 어느 컨테이너에서 어떤 프로세스가 돌고 무슨 프로토콜로 이어지는지를 보인다. 그림은 계층으로 나눈다. 개요가 스택 하나(스택 번호 k)의 컨테이너 묶음만 보이고, 그 아래 상세 그림 넷이 개요의 상자를 하나씩 펼친다. 모든 그림에서 화살표는 데이터가 흐르는 방향이고, 점선 화살표는 판정과 CI가 쓰지 않는 경로이며, 점선 테두리는 표시한 Phase에서 더해지는 것이다. 포트, 환경변수, 이미지 같은 세부는 그림에 넣지 않고 그림 아래 표와 서비스 표에 둔다.
+
+개요. 상자 하나가 컨테이너(compose 서비스)의 묶음이다.
+
+```mermaid
+flowchart TB
+  SIM["시뮬레이션<br/>px4-N, gazebo"]
+  LINK["ROS 2로 잇는 서비스<br/>xrce-agent, bridge"]
+  DDS(["DDS 도메인"])
+  ROS["운용과 판정<br/>ops-N, runner"]
+  VIZ["viz 프로필<br/>gz-gui, foxglove, lichtblick"]
+  HOST["호스트 도구<br/>QGroundControl, 브라우저"]
+  EXT["Fleet Manager, gateway<br/>Phase 3"]
+
+  SIM <--> LINK
+  LINK <-->|"RTPS"| DDS
+  DDS <--> ROS
+  SIM <-.-> VIZ
+  DDS -.-> VIZ
+  VIZ -.-> HOST
+  SIM <-.->|"MAVLink"| HOST
+  DDS <--> EXT
+  EXT <--> HOST
+
+  classDef later stroke-dasharray: 6 4
+  class EXT later
+```
+
+- 스택은 호스트의 `tools/sim_stack.sh`가 올리고 내린다. 이 스크립트가 `tools/gen_compose.sh`로 compose 파일을 만든 뒤 `docker compose up --wait`를 단계별로 부르며, 그림에는 넣지 않았다.
+- N이 붙은 컨테이너(`px4-N`, `ops-N`)는 `config/fleet.yaml`의 기체마다 하나씩 생기고, `xrce-agent`, `gazebo`, `bridge`는 스택에 하나씩이다. `runner`는 `tools` 프로필이라 상주하지 않는다.
+- 본 스택의 컨테이너 사이 경로는 셋이다. PX4와 에이전트 사이의 uXRCE-DDS(UDP), PX4, Gazebo, `bridge` 사이의 gz-transport, 그리고 에이전트와 ROS 2 프로세스가 함께 올라가는 DDS 도메인이다. 운용 노드와 판정 코드는 DDS 도메인만 본다.
+- "DDS 도메인"은 프로세스가 아니라 참가자들이 만나는 버스다. 에이전트는 Fast DDS(기본 설정)로, ROS 2 프로세스는 CycloneDDS로 참가한다. 멀티캐스트를 끄고 유니캐스트 피어 127.0.0.1로 디스커버리하는 것은 `config/cyclonedds.xml`을 읽는 CycloneDDS 쪽의 설정이다.
+- 모든 컨테이너는 `network_mode: host`이고 compose 프로젝트 이름은 `idsim-k`다. 같은 호스트의 다른 스택은 k에서 파생한 값으로만 갈리며 네트워크 네임스페이스로는 격리되지 않는다.
+- 그림은 `standalone` 변형이다. `embedded` 변형은 `xrce-agent`, `px4-1`, `runner`만 있고 PX4가 Gazebo 서버를 자기 컨테이너 안에서 띄운다.
+
+| k에서 파생하는 값 | 식 | 가르는 것 |
+| --- | --- | --- |
+| `ROS_DOMAIN_ID` | 20 + k | DDS 도메인 |
+| `GZ_PARTITION` | `idsim-k` | gz-transport 디스커버리 |
+| 에이전트 포트 | 8888 + k | uXRCE-DDS (UDP) |
+| MAVLink 오프셋 | 1000k | GCS 포트 14550 + 1000k, API 포트 14540 + 1000k + N |
+| foxglove 포트 | 8765 + k | WebSocket (127.0.0.1) |
+| lichtblick 포트 | 18080 + k | HTTP (127.0.0.1) |
+
+상세 1: 기체 1대의 시뮬레이션 경로. 개요의 "시뮬레이션"과 "ROS 2로 잇는 서비스" 상자를 펼친 것이다. 바깥 상자는 컨테이너, 안쪽은 그 안의 프로세스 또는 PX4 모듈이다.
+
+```mermaid
+flowchart LR
+  subgraph PXC["px4-N"]
+    UX["uxrce_dds_client 모듈"]
+    GB["gz_bridge 모듈"]
+  end
+  subgraph AGC["xrce-agent"]
+    AGP["MicroXRCEAgent"]
+  end
+  subgraph GZC["gazebo"]
+    GZP["gz sim 서버"]
+  end
+  subgraph BRC["bridge"]
+    BRP["ros_gz_bridge"]
+    TA["표적 어댑터<br/>1b"]
+  end
+  DDS1(["DDS 도메인"])
+
+  UX <-->|"uXRCE-DDS"| AGP
+  GB <-->|"gz-transport"| GZP
+  AGP <-->|"RTPS"| DDS1
+  GZP -->|"gz-transport"| BRP
+  BRP -->|"표적 pose"| TA
+  BRP -->|"/clock"| DDS1
+  TA -->|"TargetState"| DDS1
+
+  classDef later stroke-dasharray: 6 4
+  class TA later
+```
+
+| 경로 | 프로토콜 | 싣는 것 | 포트 또는 격리값 |
+| --- | --- | --- | --- |
+| `px4-N` <-> `xrce-agent` | uXRCE-DDS (UDP) | uORB 토픽 | 8888 + k |
+| `px4-N` <-> `gazebo` | gz-transport | 모터 명령, 센서 | `GZ_PARTITION` `idsim-k` |
+| `gazebo` -> `bridge` | gz-transport | clock, 표적 pose (1b) | `GZ_PARTITION` `idsim-k` |
+| `xrce-agent` <-> DDS 도메인 | RTPS (Fast DDS) | `/px4_N/fmu/in`, `/px4_N/fmu/out` | 도메인 20 + k |
+| `bridge` -> DDS 도메인 | RTPS (CycloneDDS) | `/clock`, `/targets/*/state` (1b) | 도메인 20 + k |
+
+- `px4-N`의 프로세스는 `px4 -d -i N` 하나이고 uxrce_dds_client, gz_bridge, mavlink는 그 안의 모듈이다. ULog도 이 프로세스가 기록한다.
+- `gazebo`에서는 `idsim_sim`의 `gz_server.sh`가 `gz sim -r -s`를 띄운다. 서버 하나가 월드, 기체 모델 N개, 표적 Actor(1b)를 모두 담는다.
+- `bridge`의 ros_gz_bridge는 `parameter_bridge` 프로세스이고, 표적 어댑터는 `idsim_sim`의 노드다.
+- 표적 pose가 ros_gz_bridge에서 표적 어댑터로 들어가는 방식은 1b에서 정한다. 그림의 그 화살표는 순서만 나타낸다.
+
+상세 2: 운용 노드와 판정. 개요의 "운용과 판정" 상자를 펼친 것이다. 무엇을 주고받는지는 "전체 아키텍처" 절의 운용 서비스 레이어 그림과 그 아래 표에 있고, 여기서는 어느 컨테이너의 어느 프로세스인지만 보인다.
+
+```mermaid
+flowchart LR
+  DDS2(["DDS 도메인"])
+  subgraph OPSC["ops-N"]
+    ME["Mission Executor"]
+    TC["Telemetry Collector<br/>Phase 2"]
+  end
+  subgraph RUNC["runner"]
+    RUNP["pytest, check 스크립트"]
+  end
+  LOG["Logger / Replay<br/>Phase 2"]
+
+  DDS2 <--> ME
+  DDS2 --> TC
+  DDS2 <--> RUNP
+  DDS2 --> LOG
+
+  classDef later stroke-dasharray: 6 4
+  class TC,LOG later
+```
+
+- `ops-N`의 프로세스는 `component_container_isolated` 하나이고, Mission Executor(`idsim_mission`)와 Telemetry Collector는 그 안에 올라가는 컴포넌트다.
+- `runner`는 `compose run`으로 1회 실행하는 컨테이너이고, 그 안의 pytest와 check 스크립트가 rclpy 판정 노드로 DDS 도메인에 참가해 토픽을 구독하고 goal을 보낸다.
+- Logger / Replay는 프로세스만 그렸다. 어느 compose 서비스에 둘지는 Phase 2에서 정한다.
+
+상세 3: `viz` 프로필. 개요의 "viz 프로필" 상자와 그것이 닿는 호스트 도구를 펼친 것이다. 왼쪽 둘은 본 스택의 `gazebo` 컨테이너와 DDS 도메인이다. 개요의 QGroundControl 경로(MAVLink)는 더 펼칠 것이 없어 따로 그리지 않고 아래 표에 적는다.
+
+```mermaid
+flowchart LR
+  GZ3["gazebo"]
+  DDS3(["DDS 도메인"])
+  subgraph VIZC["viz 프로필"]
+    GUI["gz-gui"]
+    FOX["foxglove"]
+    LB["lichtblick"]
+  end
+  subgraph HOSTC["호스트 프로세스"]
+    XS["X 서버"]
+    WEB["브라우저"]
+  end
+
+  GZ3 <-.->|"gz-transport"| GUI
+  GUI -.->|"X11 소켓"| XS
+  DDS3 -.->|"구독"| FOX
+  FOX -.->|"WebSocket"| WEB
+  LB -.->|"HTTP"| WEB
+```
+
+| 도구 | 이미지 또는 실행 방식 | 붙는 곳 | 포트 |
+| --- | --- | --- | --- |
+| `gz-gui` | sim-base, `gz_gui.sh`가 `gz sim -g` 실행 | `gazebo` (gz-transport), 호스트 X 서버(Xwayland) | 없음 (X11 소켓 마운트) |
+| `foxglove` | ros-ws, foxglove_bridge | DDS 도메인 (구독만, 쓰기 불가) | 127.0.0.1의 8765 + k |
+| `lichtblick` | Lichtblick 공식 이미지, 정적 페이지 서버 | 브라우저가 열어 `foxglove`에 접속 | 127.0.0.1의 18080 + k |
+| QGroundControl | 호스트 AppImage, `tools/qgc.sh --stack k` | `px4-N`의 mavlink 모듈 (MAVLink UDP) | UDP 14550 + 1000k |
+
+- 판정과 CI는 `viz` 프로필의 세 서비스와 QGroundControl을 쓰지 않고, 본 스택의 어떤 서비스도 이들에 의존하지 않는다. `foxglove`는 토픽 버스에 쓰지 못하고 `gz-gui`는 월드를 멈출 수 없다.
+- `gz-gui`와 QGroundControl은 조작이 가능한 경로다. `gz-gui`에는 WorldControl 말고 다른 GUI 플러그인이 남아 있고, QGroundControl의 MAVLink 링크는 양방향이라 arm, 모드 전환, 파라미터 쓰기를 PX4가 받는다(막힌 것은 수동 조종뿐이다).
+- QGroundControl은 컨테이너가 아니라 호스트에서 도는 프로세스이고, 한 스택의 모든 `px4-N`이 같은 GCS 포트로 보낸다.
+
+상세 4: 외부 클라이언트 경로(Phase 3). 개요의 "Fleet Manager, gateway" 상자를 펼친 것이다.
+
+```mermaid
+flowchart LR
+  DDS4(["DDS 도메인"])
+  FM["Fleet Manager"]
+  GWP["gateway"]
+  WEB4["브라우저"]
+
+  DDS4 <--> FM
+  FM <-->|"gRPC"| GWP
+  GWP <-->|"WebSocket, HTTP"| WEB4
+
+  classDef later stroke-dasharray: 6 4
+  class FM,GWP later
+```
+
+- Fleet Manager는 gRPC 서버이며 프로세스만 그렸다. 어느 compose 서비스에 둘지는 Phase 3에서 정한다.
+- `gateway`는 gRPC 클라이언트이자 WebSocket, HTTP 서버다. ROS 2를 모르고 Fleet Manager의 gRPC만 보며, 브라우저와는 WebSocket과 HTTP JSON으로 주고받는다.
+
 | 서비스 | 이미지 | 역할 | 도입 Phase |
 | --- | --- | --- | --- |
 | `gazebo` | sim-base | `PX4_GZ_STANDALONE=1` 모드의 Gazebo 서버. `gz sim -r -s`로 월드를 직접 띄운다(`simulation-gazebo` 스크립트는 첫 실행 때 모델을 내려받으므로 쓰지 않는다). PX4-gazebo-models(모델, 월드, `server.config`)는 sim-base의 `/opt/px4-gz`에 한 벌만 두고 `GZ_SIM_SERVER_CONFIG_PATH`(PX4 전용 카메라, 광류 플러그인 두 줄을 뺀 `server.idsim.config`), `GZ_SIM_RESOURCE_PATH`로 가리킨다. 월드 이름은 `config/fleet.yaml`의 `world.name`(모든 px4의 `PX4_GZ_WORLD`와 healthcheck 경로가 여기서 나온다). 헤드리스는 `gz sim -s`(서버만)로 얻는다. `HEADLESS`와 `PX4_GZ_SIM_RENDER_ENGINE`은 PX4 rcS 전용 변수라 이 서비스에는 주지 않는다. 명령은 `idsim_sim`의 wrapper 스크립트로, 서버 기동 뒤 SDF의 `<world name>`이 `world.name`과 같은지 검사하고 `world.origin`이 있으면 `/world/<월드>/set_spherical_coordinates`를 한 번 호출해 응답을 확인하며, 원점 단계가 끝나면(원점이 없어도) 준비 파일을 남긴다. 응답 `data: true`는 요청 수리를 뜻할 뿐 적용 확인이 아니므로 실제 적용은 px4 쪽 `sensor_gps` 좌표로 판정한다. px4 서비스에는 `PX4_HOME_*`를 주지 않는다(gz 경로에서 이 변수의 소비자는 `px4-rc.gzsim`의 원점 호출뿐이다. SIH 경로 `px4-rc.sihsim`도 이 변수를 읽으므로 SIH 변형을 추가하면 다시 본다) | 1a |
@@ -197,7 +379,28 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 
 생성된 compose. 스택은 `tools/sim_stack.sh`(또는 생성만 하는 `tools/gen_compose.sh`)가 `artifacts/runs/<실행 id>/compose.yaml`과 `stack.json`을 만들고 그 compose로 올린다. 실행 id의 기본값은 `<UTC 시각>-k<k>`이고 스모크는 단계 이름을 붙인다. `stack.json`의 `inputs`에는 fleet.yaml, versions.env, PX4 파라미터 파일, cyclonedds.xml의 sha256이 기록되고, 판정 스크립트는 스택 기동 뒤 저장소의 cyclonedds.xml 해시를 이 값과 대조한다. 값(도메인, 포트, 경로, uid:gid, 이미지 태그)은 모두 구체값으로 박고 보간 변수를 쓰지 않으므로 실행 디렉터리만 보면 무엇으로 돌았는지 재현된다. 식별자의 단일 출처는 `stack.json`이며 스크립트, 판정 코드, 테스트는 이를 다시 계산하지 않고 읽는다(생성기와 `tests/support/`의 로더가 같은 스키마를 공유하고, 골든 `stack.json`을 로더로 읽는 교차 테스트가 어긋남을 잡는다). 규칙 네 가지. (1) compose 파일이 저장소 밖 실행 디렉터리에 놓이므로 compose 안의 경로는 호스트 저장소 루트 기준 절대 경로이고, 바인드 마운트는 원본이 없을 때 만들지 않는 긴 형식이다. (2) 저장소는 `bridge`와 `runner`에 `/opt/idsim`으로 읽기/쓰기 하나만 마운트하고 `cyclonedds.xml` 같은 하위 파일을 따로 겹쳐 마운트하지 않는다(중첩 마운트 금지 규칙). (3) 서비스 사이 공통 환경변수는 YAML 앵커로 묶지 않고 서비스마다 풀어 쓴다. 생성기가 쓰는 PyYAML은 병합 key를 출력하지 못하고 출력 순서를 고정해야 골든이 안정되기 때문이다. (4) 변형은 `standalone`(기본)과 `embedded`(진단용. 기체 1대, `gazebo`와 `bridge` 없이 PX4가 Gazebo를 직접 띄움)이고, 호스트 Docker Engine은 healthcheck `start_interval` 때문에 25.0 이상이어야 한다.
 
-이미지 구성. 이미지는 다섯 종이다. ROS 계열 셋은 `ros-base` 위에 쌓이고(`ros-base` -> `sim-base` -> `px4`, `ros-ws`는 `ros-base`에서 바로 갈라진다), `xrce-agent`는 독립이다. 모든 Dockerfile은 `docker/` 아래에 있고 버전은 `docker/versions.env`에서만 읽는다.
+이미지 구성. 직접 빌드하는 이미지는 다섯 종이다. ROS 계열 셋은 `ros-base` 위에 쌓이고(`ros-base` -> `sim-base` -> `px4`, `ros-ws`는 `ros-base`에서 바로 갈라진다), `xrce-agent`는 독립이다. 모든 Dockerfile은 `docker/` 아래에 있고 버전은 `docker/versions.env`에서만 읽는다.
+
+직접 빌드하는 이미지 다섯의 계보는 다음과 같다. 화살표는 베이스 관계(`FROM`)다. 이미지에 들어가는 것과 이미지마다 뜨는 컨테이너는 아래 이미지 표에, 호스트 저장소의 바인드 마운트는 이 문단들 끝의 표에 있다.
+
+```mermaid
+flowchart TB
+  UB["ubuntu:24.04"]
+  RB["ros-base"]
+  SB["sim-base"]
+  PXI["px4"]
+  WS["ros-ws"]
+  XA["xrce-agent"]
+
+  UB --> RB
+  RB --> SB
+  SB --> PXI
+  RB --> WS
+  UB --> XA
+```
+
+- 빌드하지 않는 이미지는 둘이다. `lichtblick` 서비스는 digest로 고정한 Lichtblick 공식 이미지를 쓰고, `gateway` 이미지(Rust 정적 바이너리)는 Phase 3에서 더한다.
+- compose 서비스가 아닌 1회 실행 컨테이너도 같은 이미지를 쓴다. `tools/gen_compose.sh`와 `tools/ros_ws.sh`는 ros-ws로, `tools/sim_stack.sh`의 모델 사전 검사는 sim-base로 돈다.
 
 | 이미지 | 베이스 | 들어가는 것 | 뜨는 컨테이너 | 다시 빌드되는 때 |
 | --- | --- | --- | --- | --- |
@@ -215,6 +418,16 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 - `xrce-agent`를 `ros-base` 위에 올리지 않는 것은 에이전트 소스 빌드가 자체 Fast-DDS를 설치하는데 ROS가 가져오는 또 다른 Fast-DDS와 한 프로세스에서 섞일 수 있기 때문이다. ROS가 필요 없으므로 Ubuntu 베이스가 더 작기도 하다.
 - PX4 빌드가 가장 무거우므로 `px4` 이미지는 ccache 마운트와 레지스트리 캐시를 쓰고, CI는 Dockerfile과 `versions.env` 해당 줄의 해시를 이미지 key로 삼아 같은 key가 레지스트리에 있으면 빌드를 건너뛴다.
 - `px4` 빌드 단계는 PX4 서브모듈의 모델 커밋이 `versions.env`의 값과 같은지 검사해 다르면 실패한다. 두 이미지의 모델이 어긋나는 것을 빌드 시점에 막기 위해서다.
+
+바인드 마운트.
+
+| 호스트 원본 (저장소 기준) | 컨테이너 안 경로 | 받는 서비스 | 모드 |
+| --- | --- | --- | --- |
+| `ros_ws/src/idsim_sim` | `/opt/idsim/sim` | `gazebo`, `gz-gui` | 읽기 전용 |
+| `artifacts/runs/<실행 id>/px4-N` | PX4 `rootfs/N` | `px4-N` | 읽기/쓰기 |
+| 저장소 전체 | `/opt/idsim` | `bridge`, `ops-N`, `runner`, `foxglove` | 읽기/쓰기 |
+
+이 표는 compose 서비스의 저장소 마운트만 담는다. `gz-gui`는 X11 소켓과 Xauthority를 더 받고(서비스 표), 1회 실행 컨테이너의 마운트는 이 표와 다르다.
 
 `docker/versions.env`에는 PX4 태그(`PX4_TAG`), px4_msgs 커밋(`PX4_MSGS_REF`), px4_ros_com 커밋(`PX4_ROS_COM_REF`), PX4-gazebo-models 커밋(`PX4_GZ_MODELS_REF`), 에이전트 버전(`XRCE_AGENT_TAG`), Gazebo 릴리스(`GZ_RELEASE`), foxglove_bridge 판(`FOXGLOVE_BRIDGE_VERSION`), clang 도구의 major(`LLVM_MAJOR`), 베이스 이미지 digest, 레지스트리 주소를 적는다. Dockerfile은 기본값 없는 `ARG`로 받고, compose와 CI도 같은 파일을 읽는다. 다른 문서와 골든 파일도 이 파일의 key 이름을 그대로 쓴다. px4_ros_com에는 release/1.17 브랜치가 없어 release/1.16 HEAD와 같은 main 커밋으로 고정한다. `idsim_common`은 `frame_transforms`를 래핑하지 않고 좌표 변환을 직접 구현하며, px4_ros_com은 단위 테스트의 비교 기준으로만 쓴다.
 

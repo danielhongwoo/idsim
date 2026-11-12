@@ -21,7 +21,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 | 3 `config/fleet.yaml`과 `tools/gen_compose.py` | 완료 |
 | 4 `idsim_common` | 완료 |
 | 5 `idsim_interfaces` | 완료. 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md` |
-| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0-P4 완료(P4는 PR #36. 로컬 `run_sitl.sh --repeat 10` 10/10, CI `sitl` 첫 실행 통과). 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인했다. P5(viz)는 구현과 브라우저 확인(연결, 토픽 목록, Plot 갱신)을 마쳤고 PR 머지만 남았다 |
+| 6 이륙-호버-착륙 노드와 통합 테스트 | 진행 중. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0-P5 완료(P4는 PR #36. 로컬 `run_sitl.sh --repeat 10` 10/10, CI `sitl` 첫 실행 통과. P5는 PR #38). 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인했다. 남은 것은 Executor feedback stamp 정리(다음 작업 1)다 |
 | 7 `docs/interface.md` | 시작 전 |
 
 환경.
@@ -37,6 +37,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 - 문서에는 지금 유효한 것만 둔다. 이력(누가 언제 무엇을 왜 바꿨는지, 실측 run, 검토 경과)은 커밋 메시지와 PR 본문에 적는다(사용자 결정).
 - px4-engineer의 모델 선택 예외는 `CLAUDE.md` 모델 선택 규칙의 "사용자 예외"를 따른다(읽기 전용 확인과 정형 작업은 sonnet, 안전장치로 중단된 기본 모델 호출은 sonnet으로 다시 부른다).
+- 그림은 계층으로 나눈다. 개요 그림 하나가 묶음과 주요 경로만 보이고 상세 그림이 개요의 상자를 하나씩 펼치며, 상세 그림의 도입 문장에 어느 상자를 펼친 것인지 적는다. 같은 내용을 두 그림에 그리지 않는다. 그림 하나는 node 8개 이하, edge 10개 이하, subgraph 중첩 1단, node label 두 줄 이하(이름과 짧은 구절 하나), edge label은 프로토콜이나 내용의 이름 하나(15자 이하)이고, 넘으면 그림을 나눈다. 포트 식, 환경변수, 마운트 경로, 명령줄 같은 세부는 label에 넣지 않고 그림 아래 표나 문장에 둔다(사용자 결정).
 - 실험용 스택 번호는 px4 5, ros2 6, test 7, devops 8이다. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
 - 관련 owner의 승인 없이 머지하지 않는다. `idsim_mission`의 전이 표와 상태기 단위 테스트는 px4-engineer가 필수 승인자다(`file-ownership.md`).
 - 1a는 대표 시나리오(B, C, A, D, T)의 통과를 기준으로 개발한다. 경계 상황은 실측 증명 대신 보수적 기본 동작으로 덮고 계약 문서에 "미확인"으로 적는다. 새 실측은 관찰된 실패나 이상 동작의 원인을 재현할 때만 하고, 문서 분량과 실행 산출물과 기록 항목은 최소로 둔다(U6).
@@ -56,19 +57,18 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. P5 viz PR 머지(브랜치 `feat/1a-6-p5-viz`). 구현과 브라우저 확인은 끝났다. setpoint와 `vehicle_local_position`을 같은 플롯에 놓는 것만 미확인이다.
-2. Executor의 feedback stamp를 tick 입력 시각으로 찍는다(ros2-engineer). 지금은 publish 때 시각을 다시 읽어 `/clock` 한 양자(4 ms)만큼 어긋날 수 있고, 시나리오 A의 LOITER 유지 판정이 그 한 양자를 허용한다. 고치면 허용을 되돌린다(test-engineer).
-3. 1a 7단계 `docs/interface.md`(문서 작업). ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 넣을 것은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록의 architect 7단계 행에 있고, 실측 근거가 없는 항목은 "미확인"과 보수적 동작으로 적는다.
-4. CI 후속 PR. `Dockerfile.px4`의 pip 고정과 `PX4_OPTICAL_FLOW_REF` 반영, `ls | grep` 정리(px4-engineer). `Dockerfile.sim-base`의 `GZ_APT_KEY_FPR` 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 이미지 key 재료 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 key에서 뺀 것이 "같은 key는 같은 바이트"의 예외라는 점 포함). `image_keys.py`가 bake 블록의 tags와 공백까지 해시하는 것 정리(devops-engineer).
+1. Executor의 feedback stamp를 tick 입력 시각으로 찍는다(ros2-engineer). 지금은 publish 때 시각을 다시 읽어 `/clock` 한 양자(4 ms)만큼 어긋날 수 있고, 시나리오 A의 LOITER 유지 판정이 그 한 양자를 허용한다. 고치면 허용을 되돌린다(test-engineer).
+2. 1a 7단계 `docs/interface.md`(문서 작업). ros2-engineer가 `tools/to_interface.py`로 초안을 내고 architect가 확정한다. 넣을 것은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록의 architect 7단계 행에 있고, 실측 근거가 없는 항목은 "미확인"과 보수적 동작으로 적는다.
+3. CI 후속 PR. `Dockerfile.px4`의 pip 고정과 `PX4_OPTICAL_FLOW_REF` 반영, `ls | grep` 정리(px4-engineer). `Dockerfile.sim-base`의 `GZ_APT_KEY_FPR` 검증(sim-engineer). ruff 임시 예외 정리(test-engineer). 설계 문서의 이미지 key 재료 설명 갱신(architect. `UBUNTU_APT_MIRROR`를 key에서 뺀 것이 "같은 key는 같은 바이트"의 예외라는 점 포함). `image_keys.py`가 bake 블록의 tags와 공백까지 해시하는 것 정리(devops-engineer).
 
 ## 미해결 사항
 
 1a 6단계.
 
 - CI `sitl` job의 기록은 첫 1회뿐이다(PR #36: 전체 5분 43초, 이미지 pull 약 3분 20초, 스택 올리기부터 정리까지 약 2분 13초, runner Docker Engine 28.0.4). 실패 때 `artifacts/runs/`가 job artifact로 올라가는지는 아직 보지 못했다. 판정 상수의 재검토(쟁점 9)는 CI 기록이 쌓이면 한다.
-- 스모크 images 단계(`tests/smoke/run_smoke.sh`의 check_s0)가 `LLVM_MAJOR`와 `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다. `tools/ros_ws.sh`의 대조는 이미지에 있는 ENV만 돌아서 그 ENV가 없는 옛 ros-ws 이미지가 통과한다. 옛 `:local` 이미지로 `sim_stack.sh up --viz`를 하면 foxglove만 죽는다. P4 또는 P5 전에 images 단계에 넣는다(test-engineer). `ros_ws.sh`에 `versions.env`의 이름 기준 존재 검사를 둘지는 devops-engineer와 test-engineer가 정한다.
+- 스모크 images 단계(`tests/smoke/run_smoke.sh`의 check_s0)가 `LLVM_MAJOR`와 `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다. `tools/ros_ws.sh`의 대조는 이미지에 있는 ENV만 돌아서 그 ENV가 없는 옛 ros-ws 이미지가 통과한다. 옛 `:local` 이미지로 `sim_stack.sh up --viz`를 하면 foxglove만 죽는다. images 단계에 넣는다(test-engineer). `ros_ws.sh`에 `versions.env`의 이름 기준 존재 검사를 둘지는 devops-engineer와 test-engineer가 정한다.
 - foxglove_bridge의 판은 `FOXGLOVE_BRIDGE_VERSION` 접두 단정까지만 고정된다. ROS sync로 새 판이 오면 ros-ws key가 바뀌는 PR의 빌드가 실패한다(의도한 동작). 같은 판 안의 revision과 의존 패키지는 고정되지 않는다.
-- Lichtblick 공식 이미지(1.30.0. 이미지 label의 2.5.2는 베이스 Caddy의 버전)가 두 서브프로토콜을 제시하는 것만 확인했다. foxglove_bridge 3.6.0과의 브라우저 실접속은 P5에서 확인했다(서브프로토콜 `foxglove.sdk.v1` 협상, 토픽 목록, Plot 갱신).
+- P5 완료 기준 가운데 setpoint와 `vehicle_local_position`을 Lichtblick의 같은 플롯에 놓는 것은 확인하지 않았다(U6에 따라 6단계를 막지 않는다). 연결, 토픽 목록, Plot 갱신은 확인했다.
 - PX4 버전을 올리면 "ULog의 `vehicle_command` `timestamp`가 측정기의 stamp와 같다"와 "ack 기록 순서가 처리 순서와 같다"를 다시 확인한다(px4-engineer).
 - 실행하지 않고 [미확인]으로 둔 것: `ops-N`의 goal 실행 중 stop에서 종료 사건이 구독자에게 오는지, `vehicle.id` 누락에서 unhealthy까지의 시간(추정 약 54 s, 최악 70 s). 관찰된 문제가 있을 때만 잰다(U6).
 
@@ -81,7 +81,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 빌드와 CI.
 
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
-- 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 7).
+- 비결정 빌드 요소: PX4-OpticalFlow master(px4 builder, 결과물은 버려짐), empy 외 pip 패키지 미고정, ros.key와 gazebo.gpg URL 미고정(다음 작업 3의 CI 후속 PR).
 - apt 미러: 지정 미러가 막히면 콜드 빌드가 실패한다. apt `Acquire::Retries` 미적용. CI에서는 Canonical 노드의 동기화 시차로 apt 단계가 간헐적으로 실패할 수 있다(대안: apt 단계 재시도, CI 미러 변경).
 - `docker/Dockerfile.px4` 132행 주석이 없는 문서 이름 `smoke-test-phase1a.md`를 가리킨다. 주석만 고쳐도 px4 이미지 key가 바뀌므로 다음에 그 파일을 바꿀 때 `smoke-test.md`로 함께 고친다(px4-engineer).
 - `.github/workflows/build.yml`, `build-images.yml`, `tools/ci/image_keys.py`에 음차("키", "잡")가 남아 있다. 다음에 고칠 때 바꾼다.

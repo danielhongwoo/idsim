@@ -581,7 +581,7 @@ ARMED 표본 기준(쟁점 4 P6의 1회 판정)
 
 ## 담당자별 구현 지시
 
-P0-P3과 P4의 core 변경은 끝났다. 남은 것은 P4 통합의 머지와 P5다.
+P0-P5는 끝났다. 아래는 각 담당자가 맡은 범위다.
 
 ros2-engineer
 - P4, P5 검토: launch와 params의 대응, foxglove params.
