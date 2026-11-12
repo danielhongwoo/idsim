@@ -99,26 +99,30 @@ TEST(Loiter, KeepsSetpointAndEndsAfterDuration)
   EXPECT_TRUE(end.setpoint.has_value());
 }
 
-// feedback stamp는 core가 경과 시간을 잰 tick 입력 시각이다. Px4ClockPort가 입력 시각보다 /clock
-// 한 양자(SITL 4 ms) 앞서도 LOITER 시작과 LAND 시작 feedback의 stamp 차는 정확히 duration이다.
-TEST(Loiter, FeedbackStampsSpanExactDurationWhenPortClockIsAhead)
+// feedback stamp는 core가 경과 시간을 잰 tick 입력 시각이다. 노드에서 Px4ClockPort(와 예전의
+// 발행 때 다시 읽은 시각)가 입력 시각보다 앞서는 정도는 tick마다 0 또는 /clock 한 양자(SITL
+// 4 ms)로 달라진다. LOITER 시작 tick은 4 ms 앞서고 LAND 시작 tick은 0으로 두면, stamp를 port
+// 쪽 시각으로 찍는 구현은 차가 4.996 s가 되고(SITL 증상), 입력 시각으로 찍으면 정확히 5 s다.
+TEST(Loiter, FeedbackStampsSpanExactDurationWhenPortSkewVaries)
 {
   Harness h(standard_mission());
-  h.port_skew_ns = 4000000;
+  std::int64_t skew_ns = 4000000;
+  h.port_skew = [&skew_ns](std::uint64_t /*tick*/) { return skew_ns; };
   h.drive_to_loiter();
   const StepOutput loiter_start = h.outputs().back();
   ASSERT_TRUE(loiter_start.feedback.has_value());
   ASSERT_EQ(loiter_start.feedback->item_index, 1U);
+  // LOITER 시작 tick의 명령 PX4 timestamp는 port 쪽 시각이다(skew가 실제로 걸렸음을 확인한다).
+  ASSERT_TRUE(loiter_start.px4_timestamp_us.has_value());
+  EXPECT_EQ(
+    static_cast<std::int64_t>(*loiter_start.px4_timestamp_us) * 1000,
+    loiter_start.feedback->stamp_ns + 4000000);
+  skew_ns = 0;
   ASSERT_TRUE(h.run_until([&h] { return h.view().item_index == 2U; }, 400));
   const StepOutput land_start = h.outputs().back();
   ASSERT_TRUE(land_start.feedback.has_value());
   ASSERT_EQ(land_start.feedback->item_index, 2U);
   EXPECT_EQ(land_start.feedback->stamp_ns - loiter_start.feedback->stamp_ns, 5 * kNsPerSecond);
-  // 명령에 실은 PX4 timestamp는 port 쪽 시각이다(stamp와 다른 값임을 확인해 시험이 공허하지 않게).
-  ASSERT_TRUE(land_start.px4_timestamp_us.has_value());
-  EXPECT_EQ(
-    static_cast<std::int64_t>(*land_start.px4_timestamp_us) * 1000,
-    land_start.feedback->stamp_ns + h.port_skew_ns);
 }
 
 TEST(ItemTimeout, TakeoffTimerStartsAtArmConfirm)

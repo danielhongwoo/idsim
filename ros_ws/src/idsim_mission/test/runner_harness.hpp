@@ -32,6 +32,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
@@ -257,7 +258,7 @@ public:
   // 표본을 넣지 않고 step만(표본은 테스트가 직접 넣었다).
   StepOutput step_only(bool cancel = false)
   {
-    clock.now_ns = now_ns + port_skew_ns;
+    clock.now_ns = now_ns + (port_skew ? port_skew(tick_no) : 0);
     TickInput input;
     input.tick = tick_no;
     input.now_ns = now_ns;
@@ -369,9 +370,9 @@ public:
   FakeClock clock;
   std::uint64_t tick_no{1};
   std::int64_t now_ns{kStartNs};
-  // Px4ClockPort가 보는 시각 - tick 입력 시각. 노드에서 두 시각은 따로 읽혀 /clock 한 양자만큼
-  // 어긋날 수 있다.
-  std::int64_t port_skew_ns{0};
+  // Px4ClockPort가 보는 시각 - tick 입력 시각(ns). 노드에서 두 시각은 따로 읽혀 tick마다 0 또는
+  // /clock 한 양자만큼 어긋날 수 있다. tick 번호를 받아 그 tick의 값을 돌려준다. 비어 있으면 0.
+  std::function<std::int64_t(std::uint64_t)> port_skew;
   bool auto_samples{true};
   bool auto_px4{true};
   bool cancel_sticky{false};
