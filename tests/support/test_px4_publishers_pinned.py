@@ -18,6 +18,8 @@
   명령은 arm, disarm, offboard, hold, land 다섯뿐이다. tests/sitl/measure/ 밖에서 가져가지 않는다.
 - px4_raw.py: 발행자는 offboard_control_mode(context manager)와 vehicle_command(비상 정리, source 254/25)
   둘뿐이다. trajectory_setpoint는 발행하지 않는다.
+- tests/smoke/check_px4.py: tests/smoke에서 /fmu/in에 쓰는 곳은 이 파일의 --arm 경로 하나뿐이다. 발행자는 vehicle_command
+  하나이고 명령은 ARM_DISARM(arm, disarm)뿐이다. tests/smoke는 lint px4-api 범위 밖이라 이 테스트가 유일한 고정이다.
 허용 목록을 넓히는 변경은 이 테스트를 고쳐야 하므로 px4-engineer의 필수 승인 대상이 눈에 띈다.
 """
 import ast
@@ -32,6 +34,8 @@ REPO = Path(__file__).resolve().parents[2]
 SUPPORT = REPO / "tests" / "support"
 MEASURE_PUB = SUPPORT / "px4_measure_pub.py"
 RAW = SUPPORT / "px4_raw.py"
+SMOKE = REPO / "tests" / "smoke"
+SMOKE_PUB = SMOKE / "check_px4.py"
 SKIP_DIRS = {".git", ".claude", "artifacts", "build", "install", "log", "__pycache__", "node_modules", "target"}
 
 
@@ -288,3 +292,80 @@ def test_raw_first_clock_wait_is_the_only_wall_clock_wait(raw_module):
     assert e.value.category == "CLOCK_ABSENT"
     raw._clock_us = 1
     raw.wait_first_clock(0.05)
+
+
+# --- tests/smoke/check_px4.py (--arm) ---
+
+def _smoke_py():
+    files = sorted(SMOKE.glob("*.py"))
+    assert SMOKE_PUB in files
+    return files
+
+
+def test_smoke_only_check_px4_publishes_or_imports_px4_msgs():
+    # 스모크의 다른 스크립트로 새 발행자가 생기면 여기서 깨진다(필요하면 이 테스트에 명시적으로 허용을 추가한다)
+    for p in _smoke_py():
+        t = _tree(p)
+        calls = [n for n in ast.walk(t) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                 and n.func.attr in ("create_publisher", "publish", "create_client", "create_service")]
+        if p == SMOKE_PUB:
+            continue
+        assert calls == [], "%s: 발행/서비스 호출이 있다" % p.name
+        assert _px4_msgs_imports(t) == set(), "%s: px4_msgs를 가져온다" % p.name
+
+
+def test_smoke_shell_has_no_topic_pub():
+    for p in sorted(SMOKE.glob("*.sh")):
+        text = p.read_text(encoding="utf-8")
+        assert "topic pub" not in text and "topic.pub" not in text, p.name
+        assert "service call" not in text and "action send_goal" not in text, p.name
+
+
+def test_smoke_check_px4_publisher_is_exactly_vehicle_command():
+    t = _tree(SMOKE_PUB)
+    assert _publisher_classes(t) == ["VehicleCommand"]
+    assert _px4_msgs_imports(t) & {"TrajectorySetpoint", "OffboardControlMode"} == set()
+    assert not any(isinstance(n, ast.Name) and n.id in ("TrajectorySetpoint", "OffboardControlMode")
+                   for n in ast.walk(t))
+    pubs = [n for n in ast.walk(t)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "publish"]
+    assert len(pubs) == 1, "publish 호출은 send_until_ack 안의 하나뿐이어야 한다"
+
+
+def test_smoke_check_px4_command_is_only_arm_disarm():
+    t = _tree(SMOKE_PUB)
+    mk = next(n for n in t.body if isinstance(n, ast.FunctionDef) and n.name == "make_command")
+    cmds = [n for n in ast.walk(mk) if isinstance(n, ast.Assign)
+            and any(isinstance(x, ast.Attribute) and x.attr == "command" for x in n.targets)]
+    assert len(cmds) == 1
+    v = cmds[0].value
+    assert isinstance(v, ast.Attribute) and v.attr == "VEHICLE_CMD_COMPONENT_ARM_DISARM"
+    # VehicleCommand 객체는 make_command에서만 만든다
+    ctors = [n for n in ast.walk(t) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+             and n.func.id == "VehicleCommand"]
+    assert len(ctors) == 1
+    # 호출부는 param1만 바꾼다: 강제 disarm용 param2를 쓰지 않는다
+    assert not any(isinstance(n, ast.Attribute) and n.attr == "param2" and isinstance(n.ctx, ast.Store)
+                   for n in ast.walk(t))
+
+
+def test_smoke_check_px4_source_is_254_1():
+    t = _tree(SMOKE_PUB)
+    assert _int_assign(t, "SOURCE_SYSTEM") == 254
+    assert _int_assign(t, "SOURCE_COMPONENT") == 1
+
+
+def test_smoke_check_px4_publishes_only_under_arm_flag():
+    # create_publisher는 run_arm_checks 안에만 있고, run_arm_checks 호출은 모두 args.arm 가드 아래에 있다.
+    # 가드 밖으로 나오면 기본 실행이 /fmu/in에 쓴다.
+    t = _tree(SMOKE_PUB)
+    fn = next(n for n in t.body if isinstance(n, ast.FunctionDef) and n.name == "run_arm_checks")
+    inside = [c for c in ast.walk(fn) if isinstance(c, ast.Call)
+              and isinstance(c.func, ast.Attribute) and c.func.attr == "create_publisher"]
+    assert len(inside) == 1
+    calls = [c for c in ast.walk(t) if isinstance(c, ast.Call)
+             and isinstance(c.func, ast.Name) and c.func.id == "run_arm_checks"]
+    assert len(calls) == 1
+    guarded = [c for n in ast.walk(t) if isinstance(n, ast.If) and ast.unparse(n.test) == "args.arm"
+               for c in ast.walk(n) if c is calls[0]]
+    assert len(guarded) == 1, "run_arm_checks 호출이 if args.arm 아래에 있어야 한다"
