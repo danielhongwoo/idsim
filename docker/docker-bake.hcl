@@ -8,7 +8,10 @@ variable "ROS_APT_KEY_FPR" {}
 variable "LLVM_MAJOR" {}
 variable "FOXGLOVE_BRIDGE_VERSION" {}
 variable "GZ_RELEASE" {}
+variable "GZ_APT_KEY_FPR" {}
+variable "GZ_SIM_VERSION" {}
 variable "PX4_TAG" {}
+variable "PX4_OPTICAL_FLOW_REF" {}
 variable "PX4_MSGS_REF" {}
 variable "PX4_ROS_COM_REF" {}
 variable "PX4_GZ_MODELS_REF" {}
@@ -17,7 +20,7 @@ variable "XRCE_FASTCDR_REF" {}
 variable "XRCE_FASTDDS_REF" {}
 variable "REGISTRY" {}
 # 레지스트리 태그의 <key>. 이미지마다 다르다. tools/ci/image_keys.py --format env 가 계산한다
-# (Dockerfile, 이 파일의 해당 target 블록, COPY 하는 파일, 그 이미지가 ARG로 쓰는 versions.env 줄, 베이스 key의 해시).
+# (Dockerfile, 이 파일의 해당 target의 dockerfile/context/platforms/args/contexts(tags 제외), COPY 하는 파일, 그 이미지가 ARG로 쓰는 versions.env 줄, 베이스 key의 해시).
 # 로컬 기본은 local. CI(tools/ci/build_images.py)는 --set 으로 태그를 직접 넣는다.
 variable "KEY_ROS_BASE" { default = "local" }
 variable "KEY_SIM_BASE" { default = "local" }
@@ -55,6 +58,8 @@ target "sim-base" {
   args = {
     BASE_IMAGE        = "idsim-ros-base"
     GZ_RELEASE        = GZ_RELEASE
+    GZ_APT_KEY_FPR    = GZ_APT_KEY_FPR
+    GZ_SIM_VERSION    = GZ_SIM_VERSION
     PX4_GZ_MODELS_REF = PX4_GZ_MODELS_REF
   }
   tags = ["idsim/sim-base:local", "${REGISTRY}/sim-base:${KEY_SIM_BASE}"]
@@ -67,6 +72,7 @@ target "px4" {
   args = {
     BASE_IMAGE        = "idsim-sim-base"
     PX4_TAG           = PX4_TAG
+    PX4_OPTICAL_FLOW_REF = PX4_OPTICAL_FLOW_REF
     PX4_GZ_MODELS_REF = PX4_GZ_MODELS_REF
   }
   tags = ["idsim/px4:local", "${REGISTRY}/px4:${KEY_PX4}"]

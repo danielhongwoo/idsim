@@ -143,6 +143,7 @@ check_s0() {
   s0_expect idsim/px4:local PX4_TAG "$PX4_TAG"
   s0_expect idsim/sim-base:local GZ_RELEASE "$GZ_RELEASE"
   s0_expect idsim/sim-base:local PX4_GZ_MODELS_REF "$PX4_GZ_MODELS_REF"
+  s0_expect idsim/sim-base:local GZ_SIM_VERSION "$GZ_SIM_VERSION"
   # 생성기(ros-ws의 PyYAML)와 lint job의 단위 테스트(LINT_PYYAML_VERSION)가 같은 PyYAML을 쓰는지
   py="$(docker run --rm --entrypoint python3 idsim/ros-ws:local -c 'import yaml; print(yaml.__version__)' 2>/dev/null || true)"
   if [ "$py" = "$LINT_PYYAML_VERSION" ]; then
