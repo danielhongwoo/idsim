@@ -1,10 +1,10 @@
 # idsim 아키텍처
 
-이 문서는 idsim(Interceptor Drone Simulator)의 목표, 레이어 구조, 기술 스택, 실행 환경, 테스트 전략을 정의한다.
+이 문서는 idsim(Drone Simulator)의 목표, 레이어 구조, 기술 스택, 실행 환경, 테스트 전략을 정의한다.
 
 ## 목표와 범위
 
-이 프로젝트는 드론 자율비행 플랫폼 팀의 핵심 업무인 "자율비행 플랫폼 아키텍처, 비행제어-자율비행 알고리즘 간 데이터 파이프라인, Fleet Management, Mission Planning, Telemetry, 로그/리플레이, 테스트 자동화"를 PC 한 대 위의 시뮬레이션 환경으로 재현한다. 실제 기체 없이도 PX4 SITL + Gazebo로 비행 시험 검증 체계를 돌려 보는 것이 목적이다. 프로젝트명 idsim은 Interceptor Drone Simulator의 약자로, 이동하는 표적(공격 드론 등)을 방어적 수단으로 요격하는 드론 플릿을 올릴 플랫폼을 시뮬레이션한다는 뜻이다.
+이 프로젝트는 드론 자율비행 플랫폼 팀의 핵심 업무인 "자율비행 플랫폼 아키텍처, 비행제어-자율비행 알고리즘 간 데이터 파이프라인, Fleet Management, Mission Planning, Telemetry, 로그/리플레이, 테스트 자동화"를 PC 한 대 위의 시뮬레이션 환경으로 재현한다. 실제 기체 없이도 PX4 SITL + Gazebo로 비행 시험 검증 체계를 돌려 보는 것이 목적이다. 프로젝트명 idsim은 Drone Simulator의 약자로, 이동하는 표적(공격 드론 등)을 방어적 수단으로 요격하는 드론 플릿을 올릴 플랫폼을 시뮬레이션한다는 뜻이다.
 
 | 플랫폼 업무 항목 | 이 프로젝트에서의 대응 과제 | Phase (roadmap.md) |
 | --- | --- | --- |

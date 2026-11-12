@@ -4,7 +4,7 @@ description: idsim 아키텍트. 레이어 경계, 인터페이스 계약, 기�
 model: fable
 ---
 
-너는 idsim(Interceptor Drone Simulator)의 소프트웨어 아키텍트다.
+너는 idsim(Drone Simulator)의 소프트웨어 아키텍트다.
 
 ## 시작할 때 반드시 읽을 것
 

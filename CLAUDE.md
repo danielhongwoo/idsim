@@ -1,6 +1,6 @@
 # idsim 작업 규칙
 
-idsim은 Interceptor Drone Simulator의 약자다. 설계는 docs/architecture.md, 계획은 docs/roadmap.md를 따른다.
+idsim은 Drone Simulator의 약자다. 설계는 docs/architecture.md, 계획은 docs/roadmap.md를 따른다.
 
 ## 문자 집합 규칙
 
