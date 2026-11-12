@@ -1,7 +1,7 @@
 """ros2 topic info -v 원문 저장과 판정. rclpy 없이 ros2 CLI만 쓴다.
 
 사용 예(저장소 루트, ros-ws 컨테이너의 /opt/idsim에서):
-  python3 -m tests.support.topic_info --regex '/fmu/out/vehicle_status(_v[0-9]+)?$' \
+  python3 -m tests.support.topic_info --regex '<ns>/.*/vehicle_status(_v[0-9]+)?$' \
       --expect-publishers 1 --expect-type px4_msgs/msg/VehicleStatus --save DIR
 종료 코드: 0 판정 통과, 1 판정 실패, 2 시간 안에 토픽을 찾지 못함.
 """

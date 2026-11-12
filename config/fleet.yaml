@@ -1,10 +1,10 @@
 # idsim 기체 레지스트리(단일 출처). 담당: devops-engineer, 접점 검토 px4-engineer, sim-engineer, ros2-engineer.
 #
 # 사람이 고르는 값만 적는다. tools/gen_compose.py(호스트에서는 tools/gen_compose.sh)가 이 파일에서
-# artifacts/runs/<실행 id>/{compose.yaml, stack.json}을 만든다. 실행 시점의 식별자와 포트는 stack.json을 본다.
+# artifacts/runs/<실행 id>/{compose.yaml, stack.json, params/ops-N.yaml}을 만든다. 실행 시점의 식별자와 포트는 stack.json을 본다.
 #
 # 적을 수 없는 것(생성기가 거부한다)
-#   - 파생값: 포트, 네임스페이스, MAV_SYS_ID, UXRCE_DDS_KEY, 모델 이름, 서비스 이름. 모르는 키는 모두 실패다.
+#   - 파생값: 포트, 네임스페이스, MAV_SYS_ID, UXRCE_DDS_KEY, 모델 이름, 서비스 이름. 모르는 key는 모두 실패다.
 #   - 스택 번호 k(0-9): 생성 인자 --stack, 없으면 IDSIM_STACK_INDEX, 없으면 0.
 #   - px4_params의 식별 파라미터: MAV_SYS_ID, UXRCE_DDS_KEY, UXRCE_DDS_DOM_ID, UXRCE_DDS_AG_IP, SYS_AUTOSTART.
 

@@ -8,16 +8,19 @@ import os
 import pytest
 
 from tests.support import golden
+from tests.support.px4_topic import fmu_dir
+
+IN, OUT = fmu_dir("in"), fmu_dir("out")   # 표본 문자열의 상대 토픽 접두
 
 TOPIC_LIST = """\
 /parameter_events [rcl_interfaces/msg/ParameterEvent]
-/px4_1/fmu/in/offboard_control_mode [px4_msgs/msg/OffboardControlMode]
-/px4_1/fmu/out/vehicle_status_v4 [px4_msgs/msg/VehicleStatus]
-/px4_1/fmu/out/battery_status [px4_msgs/msg/BatteryStatus]
-/px4_1/fmu/out/Zeta [px4_msgs/msg/Zeta]
-/px4_2/fmu/out/vehicle_status_v4 [px4_msgs/msg/VehicleStatus]
+/px4_1/@IN@offboard_control_mode [px4_msgs/msg/OffboardControlMode]
+/px4_1/@OUT@vehicle_status_v4 [px4_msgs/msg/VehicleStatus]
+/px4_1/@OUT@battery_status [px4_msgs/msg/BatteryStatus]
+/px4_1/@OUT@Zeta [px4_msgs/msg/Zeta]
+/px4_2/@OUT@vehicle_status_v4 [px4_msgs/msg/VehicleStatus]
 /rosout [rcl_interfaces/msg/Log]
-"""
+""".replace("@IN@", IN).replace("@OUT@", OUT)
 
 INFO_V = """\
 Type: px4_msgs/msg/VehicleStatus
@@ -55,10 +58,10 @@ QoS profile:
 def test_normalize_topic_list():
     got = golden.normalize_topic_list(TOPIC_LIST, "px4_1")
     assert got == [
-        "fmu/in/offboard_control_mode px4_msgs/msg/OffboardControlMode",
-        "fmu/out/Zeta px4_msgs/msg/Zeta",
-        "fmu/out/battery_status px4_msgs/msg/BatteryStatus",
-        "fmu/out/vehicle_status_v4 px4_msgs/msg/VehicleStatus",
+        IN + "offboard_control_mode px4_msgs/msg/OffboardControlMode",
+        OUT + "Zeta px4_msgs/msg/Zeta",
+        OUT + "battery_status px4_msgs/msg/BatteryStatus",
+        OUT + "vehicle_status_v4 px4_msgs/msg/VehicleStatus",
     ]
     assert all(l.startswith("fmu/") for l in got)
     assert not any("px4_2" in l or "rosout" in l for l in got)
@@ -68,14 +71,14 @@ def test_normalize_sorted_bytewise_and_slash_namespace():
     got = golden.normalize_topic_list(TOPIC_LIST, "/px4_1/")
     assert got == sorted(got, key=lambda s: s.encode())
     # 대문자는 소문자보다 앞선다(LC_ALL=C)
-    assert got.index("fmu/out/Zeta px4_msgs/msg/Zeta") < got.index(
-        "fmu/out/battery_status px4_msgs/msg/BatteryStatus")
-    assert got[0].startswith("fmu/in/")
+    assert got.index(OUT + "Zeta px4_msgs/msg/Zeta") < got.index(
+        OUT + "battery_status px4_msgs/msg/BatteryStatus")
+    assert got[0].startswith(IN)
 
 
 def test_normalize_empty_namespace():
-    raw = "/fmu/out/a_v1 [px4_msgs/msg/A]\n/other [x/msg/X]\n"
-    assert golden.normalize_topic_list(raw, "") == ["fmu/out/a_v1 px4_msgs/msg/A"]
+    raw = "/" + OUT + "a_v1 [px4_msgs/msg/A]\n/other [x/msg/X]\n"
+    assert golden.normalize_topic_list(raw, "") == [OUT + "a_v1 px4_msgs/msg/A"]
 
 
 def test_normalize_qos():
@@ -97,7 +100,7 @@ def test_normalize_qos_unknown_depth_and_no_publisher():
 
 def test_golden_roundtrip(tmp_path):
     topics = golden.normalize_topic_list(TOPIC_LIST, "px4_1")
-    qos = {"fmu/out/vehicle_status_v4": golden.normalize_qos(INFO_V)}
+    qos = {OUT + "vehicle_status_v4": golden.normalize_qos(INFO_V)}
     env = {"PX4_TAG": "v1.17.0", "PX4_MSGS_REF": "abc", "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
            "XRCE_AGENT_TAG": "v2.4.3"}
     d = str(tmp_path / "g")
@@ -119,12 +122,12 @@ def test_golden_dir(tmp_path):
 
 
 def test_compare_subset():
-    gold = [("fmu/out/vehicle_status_v4", "px4_msgs/msg/VehicleStatus"),
-            ("fmu/out/battery_status", "px4_msgs/msg/BatteryStatus")]
-    ok = [("fmu/out/battery_status", "px4_msgs/msg/BatteryStatus")]
+    gold = [(OUT + "vehicle_status_v4", "px4_msgs/msg/VehicleStatus"),
+            (OUT + "battery_status", "px4_msgs/msg/BatteryStatus")]
+    ok = [(OUT + "battery_status", "px4_msgs/msg/BatteryStatus")]
     assert golden.compare_subset(ok, gold) == ([], {})
-    exp = [("fmu/out/vehicle_status_v3", "px4_msgs/msg/VehicleStatus"),
-           ("fmu/out/nothing", "px4_msgs/msg/N")]
+    exp = [(OUT + "vehicle_status_v3", "px4_msgs/msg/VehicleStatus"),
+           (OUT + "nothing", "px4_msgs/msg/N")]
     missing, cand = golden.compare_subset(exp, gold)
     assert missing == sorted(exp)
     assert cand[exp[0]] == [gold[0]]
@@ -152,9 +155,9 @@ def _raw(tmp_path):
 def test_normalize_cli(tmp_path, capsys):
     raw, out = _raw(tmp_path), str(tmp_path / "g")
     assert normalize.main(["--raw", raw, "--ns", "px4_1", "--out", out]) == 0
-    assert "fmu/in/offboard_control_mode" in capsys.readouterr().err
+    assert IN + "offboard_control_mode" in capsys.readouterr().err
     topics, qos, env = golden.read_golden(out)
-    assert len(topics) == 4 and list(qos) == ["fmu/out/vehicle_status_v4"]
+    assert len(topics) == 4 and list(qos) == [OUT + "vehicle_status_v4"]
     assert list(env) == list(golden.ENV_KEYS)
     # 이미 있으면 실패
     assert normalize.main(["--raw", raw, "--ns", "px4_1", "--out", out]) == 1
@@ -162,7 +165,7 @@ def test_normalize_cli(tmp_path, capsys):
     # check: 같으면 0, 다르면 1과 diff
     assert normalize.main(["--raw", raw, "--ns", "px4_1", "--out", out, "--check"]) == 0
     with open(os.path.join(out, "topics.txt"), "a") as f:
-        f.write("fmu/out/extra_v1 px4_msgs/msg/Extra\n")
+        f.write(OUT + "extra_v1 px4_msgs/msg/Extra\n")
     capsys.readouterr()
     assert normalize.main(["--raw", raw, "--ns", "px4_1", "--out", out, "--check"]) == 1
     assert "extra_v1" in capsys.readouterr().out

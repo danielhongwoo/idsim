@@ -1,0 +1,149 @@
+# sitl: 이륙-호버-착륙 통합 테스트(시나리오 B, C, A, D, T). 실제 단계는 호스트 wrapper tests/sitl/run_sitl.sh 한 곳에
+# 있고 로컬에서도 같은 명령을 쓴다. 이 workflow는 시나리오를 모른다(decisions.md 쟁점 1, 11).
+#
+# trigger(사용자 결정 U2): PR 머리 커밋마다(draft와 문서만 바뀐 PR 제외), main push, 수동 실행.
+#   같은 PR의 옛 실행은 취소한다. 자동 재시도는 없다(다시 돌릴 때는 re-run 또는 workflow_dispatch).
+#   3대 시나리오는 이 job에 넣지 않는다(Phase 3의 nightly 전용).
+# 문서만 바뀐 PR을 workflow 수준 paths로 거르지 않는 이유: 필수 검사로 걸었을 때 대기 상태로 남는다.
+#   그래서 앞에 changes job(git diff로 코드 경로 변경 여부를 output으로 낸다. 외부 action 없음)을 두고
+#   sitl job이 그 output을 보는 if로 건너뛴다. main push와 수동 실행은 건너뛰지 않는다.
+#
+# 이미지: build workflow가 main에서 GHCR에 올린 key를 로그인 없이 받는다(tools/ci/build_images.py --mode pull).
+#   key가 없으면(이미지를 바꾸는 PR) 이 job은 실패한다. 이미지 PR을 먼저 main에 합쳐 build가 key를 올리게 한다.
+#
+# tests/sitl/run_sitl.sh 계약(test-engineer 소유. 이 workflow가 기대하는 것)
+#   호출     tests/sitl/run_sitl.sh --stack 0
+#   종료 코드  0 전체 통과, 0이 아니면 실패(이 workflow는 값을 구분하지 않는다)
+#   stdout   마지막 줄이 실행 디렉터리 절대 경로(artifacts/runs/<실행 id>). 나머지는 stderr
+#   요약     환경변수 GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
+#   산출물   artifacts/runs/<실행 id>/ 아래. 실패하면 이 디렉터리 전체를 올린다.
+#            compose.yaml, stack.json, params/, px4-N/log/*.ulg, ros_log/, 서비스별 로그,
+#            sitl/ (junit.xml, trace.jsonl, verdict.json, summary.md, steps.tsv, 원시 표본과 ULog 교차 확인 결과,
+#            logs/<서비스>.log. 전체 목록은 tests/sitl/README.md)
+#            성공하면 sitl/junit.xml, sitl/trace.jsonl, sitl/summary.md만 올린다.
+#   소유     artifacts/runs/ 아래 파일은 모두 호스트 사용자 소유다.
+name: sitl
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  # PR: 같은 ref면 옛 실행 취소. main과 수동 실행: 실행마다 group이 달라 대기 중 실행도 취소되지 않는다.
+  group: sitl-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    name: changes
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          # PR은 merge commit(부모 둘)을 받는다. 첫째 부모(base 끝)와 비교하려면 깊이 2가 필요하다.
+          fetch-depth: 2
+      - name: code paths changed
+        id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          # 코드 경로: ros_ws, docker, config, tools, tests와 이 workflow. 이 밖(docs, docs-for-agent, README 등)만 바뀌면 건너뛴다.
+          pattern='^(ros_ws|docker|config|tools|tests)/|^\.github/workflows/sitl\.yml$'
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "${EVENT_NAME}: 경로와 무관하게 돈다"
+            exit 0
+          fi
+          if ! git rev-parse --verify --quiet HEAD^2 > /dev/null; then
+            # merge commit이 아니면 비교 기준이 없다. 건너뛰지 않는 쪽이 안전하다.
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "merge commit이 아니라 비교하지 못했다. 돈다"
+            exit 0
+          fi
+          git diff --name-only HEAD^1 HEAD | tee /tmp/changed.txt
+          if grep -Eq "$pattern" /tmp/changed.txt; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "코드 경로가 바뀌었다. 돈다"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "코드 경로가 바뀌지 않았다. sitl을 건너뛴다"
+          fi
+
+  sitl:
+    name: sitl
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: docker version
+        run: |
+          # start_interval(ops-N와 bridge의 healthcheck)은 Docker Engine 25 이상이다. 실제 runner의 판을 남긴다.
+          docker version
+          docker compose version
+          {
+            echo "| 단계 | 초 |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: pull images
+        run: |
+          t0=$(date +%s)
+          tools/ci/build_images.py --mode pull
+          t1=$(date +%s)
+          echo "| pull images | $((t1 - t0)) |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: build ros_ws
+        run: |
+          t0=$(date +%s)
+          tools/ros_ws.sh build
+          t1=$(date +%s)
+          echo "| build ros_ws | $((t1 - t0)) |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: tests/sitl/run_sitl.sh
+        run: |
+          t0=$(date +%s)
+          tests/sitl/run_sitl.sh --stack 0
+          t1=$(date +%s)
+          echo "| run_sitl.sh (전체) | $((t1 - t0)) |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: upload run records (failure)
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: sitl-run-failure
+          path: |
+            artifacts/runs/
+            ros_ws/log/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: upload run records (success)
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: sitl-run
+          path: |
+            artifacts/runs/*/sitl/junit.xml
+            artifacts/runs/*/sitl/trace.jsonl
+            artifacts/runs/*/sitl/summary.md
+          if-no-files-found: warn
+          retention-days: 7

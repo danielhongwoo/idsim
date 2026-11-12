@@ -17,7 +17,7 @@
 tests/sitl/measure/measure.py(라이브)와 단위 테스트(tests/support/test_measure_judge.py)가
 같은 함수를 쓴다. 시간은 모두 마이크로초 정수이고 sim 시간 축이다.
 
-기준의 정본은 docs-for-agent/plan-1a-6-idsim-mission/decisions.md의 "넘김 목록" px4-engineer 행이다.
+기준의 정본은 docs-for-agent/plan-1a-6-idsim-mission/decisions.md의 "재실측 결과와 기준" 절이다.
 이 모듈의 상수는 그 문장을 옮긴 것이다. 기준을 바꾸려면 정본을 먼저 고친다(통과시키려고 느슨하게
 바꾸지 않는다).
 
@@ -549,7 +549,7 @@ def _sampling_problem(f, p):
 def judge_attempt(item, f):
     """시도 하나를 판정한다. f는 측정 사실의 dict. item은 "2a", "2b", "3", "5", "armed".
 
-    통과 기준(정본: decisions.md 넘김 목록의 px4-engineer 행)
+    통과 기준(정본: decisions.md의 "재실측 결과와 기준" 절)
       공통(3, 5, armed): OFFBOARD가 아닌 ARMED 표본이 0개(첫 Hold 전송 전까지). (2a)는 기록만 한다.
       3은 취소 시점에 landed가 true였어야 한다(landed 표본이 없으면 None이라 INCONCLUSIVE). false면 창을 놓친 회지만 창과 무관한 기준(위 3, 5의 기준과
           Hold 종료의 60 s 관찰)은 전부 적용하고, 위반이 있으면 FAIL, 관찰 표본이 모자라면 INCONCLUSIVE,

@@ -5,7 +5,7 @@
 ## 원칙
 
 - 한 단계에서 한 변수만 바꾼다. 앞 단계가 실패하면 뒤 단계는 보지 않는다.
-- px4-out, px4-in, golden, clock은 운영 스택과 같은 구성으로 올린다(standalone은 bridge 포함). 변수 분리는 스모크 단계가 아니라 기동 단계가 맡는다: `startup.stages`는 에이전트와 gazebo, px4-N, bridge의 세 단계이고 `up --wait`가 어느 단계에서 실패했는지로 원인을 가른다. bridge는 px4-N이 healthy가 된 뒤에만 시작되므로 px4 실패와 bridge 실패는 섞이지 않는다.
+- px4-out, px4-in, golden, clock은 운영 스택과 같은 구성으로 올린다(standalone은 bridge 포함). 변수 분리는 스모크 단계가 아니라 기동 단계가 맡는다: `startup.stages`는 에이전트와 gazebo, px4-N, bridge의 세 단계이고 `up --wait`가 어느 단계에서 실패했는지로 원인을 가른다. bridge는 px4-N이 healthy가 된 뒤에만 시작되므로 px4 실패와 bridge 실패는 섞이지 않는다. 스모크는 `tools/sim_stack.sh up --infra-only`로 올리므로 노드 단계의 운용 노드(`ops-N`)는 뜨지 않는다. 스모크는 PX4, Gazebo, DDS의 회귀 판정이고, px4-in의 arm과 disarm이 Executor와 같은 기체에 명령을 보내지 않게 한다.
 - ROS 2 CLI는 항상 `--no-daemon`으로 실행한다. 데몬 캐시로 오판하지 않기 위함이다.
 - 토픽 수신 판정은 "벽시계 T초 안에 1회 이상 수신, timestamp 필드가 0이 아님"으로 정의하고 주기에 묶지 않는다. 상태 전이는 에지가 아니라 "최신 상태가 N회 연속 유지"로 판정한다.
 - echo와 판정 노드의 QoS는 `sensor_data` 프로필 하나로 통일한다. `reliable`로 echo해 수신 0을 확인하는 반증 실험은 진단 절차로만 쓴다.
@@ -64,7 +64,7 @@ compose 프로젝트 이름. 모든 compose 파일은 `name:`을 명시한다(�
 
 이미지의 빌드 버전 ENV. 각 Dockerfile은 자기가 받은 버전 ARG를 `IDSIM_BUILD_<key>` ENV로 남긴다. px4는 `IDSIM_BUILD_PX4_TAG`, ros-ws는 `IDSIM_BUILD_PX4_MSGS_REF`와 `IDSIM_BUILD_PX4_ROS_COM_REF`, xrce-agent는 `IDSIM_BUILD_XRCE_AGENT_TAG`, sim-base는 `IDSIM_BUILD_GZ_RELEASE`와 `IDSIM_BUILD_PX4_GZ_MODELS_REF`. `run_smoke.sh`는 images 전에 각 컨테이너의 이 값을 `versions.env`와 대조해 하나라도 다르면 실패한다. `versions.env`만 올리고 이미지를 다시 빌드하지 않은 채 옛 이미지의 측정값이 새 태그의 골든으로 저장되는 것을 막기 위해서다.
 
-원시(비추적): `artifacts/runs/<실행 id>/smoke/`(같은 디렉터리에 생성된 `compose.yaml`, `stack.json`, `px4-N/log/`의 ULog가 있다. 실행 id는 `--run-id`, 없으면 `--run-dir`의 basename, 둘 다 없으면 `<UTC YYYYmmdd-HHMMSS>-k<k>`이고 스모크는 `<UTC>-k<k>-<단계>`). `hz` 측정값은 골든이 아니라 여기와 `docs/interface.md`의 참고 범위값에만 적고, 측정 조건(태그, 속도 배수, 벽시계 여부)을 병기한다. CI에서는 이 디렉터리를 job artifact로 올린다.
+원시(비추적): `artifacts/runs/<실행 id>/smoke/`(같은 디렉터리에 생성된 `compose.yaml`, `stack.json`, `px4-N/log/`의 ULog가 있다. 실행 id는 `--run-dir`의 마지막 요소이고, `--run-dir`가 없으면 `<UTC YYYYmmdd-HHMMSS>-k<k>`이고 스모크는 `<UTC>-k<k>-<단계>`). `hz` 측정값은 골든이 아니라 여기와 `docs/interface.md`의 참고 범위값에만 적고, 측정 조건(태그, 속도 배수, 벽시계 여부)을 병기한다. CI에서는 이 디렉터리를 job artifact로 올린다.
 
 사람이 읽는 요약(토픽 표, QoS, 파라미터, 주기 참고값)은 `tools/to_interface.py`가 골든과 원시 산출물에서 만들어 `docs/interface.md` 초안으로 넘긴다.
 

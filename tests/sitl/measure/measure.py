@@ -19,8 +19,7 @@
 ros-ws runner 컨테이너 안에서 돈다(rclpy, px4_msgs 필요). 호스트에서는 run_measure.sh를 쓴다.
 Executor 노드 없이 PX4에 직접 명령을 보낸다(측정 전용 발행자 tests/support/px4_measure_pub.py).
 정리 분기의 선택과 종료는 tests/support/measure_judge.py의 CleanupModel이 decisions.md M3, M5, M6의
-규칙 일부를 흉내 낸다. 판정 기준과 정본 문장은 measure_judge.py 머리와 decisions.md의 "넘김 목록"
-px4-engineer 행이다.
+규칙 일부를 흉내 낸다. 판정 기준과 정본 문장은 measure_judge.py 머리와 decisions.md의 "재실측 결과와 기준" 절이다.
 
   measure.py --item item2|item3|item5|armed [--attempts N] [--out-dir DIR]
 
@@ -952,7 +951,7 @@ def main(argv=None):
                      % (args.attempts, mj.upper95_text(args.attempts)))
         fh.write("- 이 요약의 결과 절은 measure.py 단독 판정이다. crosscheck.py 뒤의 최종 판정은 이 파일 끝의 "
                  "'최종 판정' 절과 final_summary.json에 있다.\n")
-        fh.write("- 판정 코드: tests/support/measure_judge.py. 정본: decisions.md 넘김 목록의 px4-engineer 행.\n")
+        fh.write("- 판정 코드: tests/support/measure_judge.py. 정본: decisions.md의 재실측 결과와 기준 절.\n")
         fh.write("- 이 측정은 Executor 없이 PX4에 직접 명령을 보낸다. 정리 모델은 measure_judge.CleanupModel.\n")
 
     rclpy.init()

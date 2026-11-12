@@ -4,7 +4,7 @@
     "git_commit": "0000000000000000000000000000000000000000",
     "git_dirty": false,
     "script": "tools/gen_compose.py",
-    "version": 2
+    "version": 3
   },
   "images": {
     "lichtblick": null,
@@ -38,6 +38,7 @@
     "compose_file": "compose.yaml",
     "host_dir": "/work/idsim/artifacts/runs/20261109-090000-k0",
     "id": "20261109-090000-k0",
+    "params_dir": "params",
     "ros_log_dir": "ros_log"
   },
   "schema": 1,
@@ -48,6 +49,11 @@
     "gazebo": "gazebo",
     "gz_gui": "gz-gui",
     "lichtblick": null,
+    "ops": [
+      "ops-1",
+      "ops-2",
+      "ops-3"
+    ],
     "profiles": {
       "tools": [
         "runner"
@@ -86,6 +92,13 @@
   },
   "startup": {
     "model_precheck": true,
+    "node_stages": [
+      [
+        "ops-1",
+        "ops-2",
+        "ops-3"
+      ]
+    ],
     "stages": [
       [
         "xrce-agent",
@@ -116,6 +129,7 @@
         "UXRCE_DDS_DOM_ID": "20",
         "UXRCE_DDS_KEY": "2"
       },
+      "executor_node": "/px4_1/mission_executor",
       "expected_params": {
         "COM_DISARM_PRFLT": "-1.0",
         "COM_OBL_RC_ACT": "4",
@@ -136,6 +150,7 @@
         "gcs_remote": 14550
       },
       "ns": "/px4_1",
+      "params_file": "params/ops-1.yaml",
       "pose": {
         "x": 0.0,
         "y": 0.0,
@@ -148,7 +163,8 @@
       "sim_model": "gz_x500",
       "sysid": 2,
       "ulog_dir": "px4-1/log",
-      "uxrce_key": 2
+      "uxrce_key": 2,
+      "vehicle_id": "px4_1"
     },
     {
       "airframe": "4001_gz_x500",
@@ -159,6 +175,7 @@
         "UXRCE_DDS_DOM_ID": "20",
         "UXRCE_DDS_KEY": "3"
       },
+      "executor_node": "/px4_2/mission_executor",
       "expected_params": {
         "COM_DISARM_PRFLT": "-1.0",
         "COM_OBL_RC_ACT": "4",
@@ -180,6 +197,7 @@
         "gcs_remote": 14550
       },
       "ns": "/px4_2",
+      "params_file": "params/ops-2.yaml",
       "pose": {
         "x": 0.0,
         "y": 4.0,
@@ -192,7 +210,8 @@
       "sim_model": "gz_x500",
       "sysid": 3,
       "ulog_dir": "px4-2/log",
-      "uxrce_key": 3
+      "uxrce_key": 3,
+      "vehicle_id": "px4_2"
     },
     {
       "airframe": "4001_gz_x500",
@@ -203,6 +222,7 @@
         "UXRCE_DDS_DOM_ID": "20",
         "UXRCE_DDS_KEY": "4"
       },
+      "executor_node": "/px4_3/mission_executor",
       "expected_params": {
         "COM_DISARM_PRFLT": "-1.0",
         "COM_OBL_RC_ACT": "4",
@@ -223,6 +243,7 @@
         "gcs_remote": 14550
       },
       "ns": "/px4_3",
+      "params_file": "params/ops-3.yaml",
       "pose": {
         "x": 0.0,
         "y": 8.0,
@@ -235,7 +256,8 @@
       "sim_model": "gz_x500",
       "sysid": 4,
       "ulog_dir": "px4-3/log",
-      "uxrce_key": 4
+      "uxrce_key": 4,
+      "vehicle_id": "px4_3"
     }
   ],
   "world": {

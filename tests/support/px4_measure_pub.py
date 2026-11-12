@@ -15,7 +15,7 @@
 """측정 전용 PX4 직접 발행자. 시나리오와 판정 코드는 이 모듈을 가져가지 않는다.
 
 PX4에 vehicle_command(source 254/1)와 offboard_control_mode, trajectory_setpoint를 직접 보낸다.
-decisions.md 쟁점 5는 테스트 쪽 발행을 px4_raw 한 모듈의 offboard_control_mode와
+decisions.md 쟁점 8은 테스트 쪽 발행을 px4_raw 한 모듈의 offboard_control_mode와
 vehicle_command(source 254/25)로 제한하고 테스트가 trajectory_setpoint를 발행하지 않는다고 정한다.
 재실측은 Executor 없이 PX4의 반응을 보는 일이라 그 제한 밖의 발행이 필요해서 이 모듈로 분리했다.
 그래서 생성자가 measure_only=True를 키워드로 요구한다(실수로 쓰지 못하게). 시나리오용 발행자는

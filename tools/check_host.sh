@@ -61,7 +61,7 @@ if ! command -v docker > /dev/null 2>&1; then
 elif timeout 15 docker info > /dev/null 2>&1; then
   ok "docker 데몬 접근 가능"
   docker_ok=1
-  # 생성 compose의 bridge healthcheck가 start_interval을 쓴다. Docker 문서상 Engine 25.0(API 1.44)부터 지원.
+  # 생성 compose의 bridge와 ops-N healthcheck가 start_interval을 쓴다. Docker 문서상 Engine 25.0(API 1.44)부터 지원.
   # 하한은 문서 근거이며 실측은 29.1.3(Compose 2.40.3)뿐이다. 그 아래에서는 healthcheck가 거부되거나 무시될 수 있다.
   sv="$(docker version --format '{{.Server.Version}}' 2> /dev/null || true)"
   sv_major="${sv%%.*}"

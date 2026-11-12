@@ -145,12 +145,13 @@ UBUNTU_APT_MIRROR=http://archive.ubuntu.com/ubuntu python3 tools/ci/build_images
 
 CI(`build-images.yml`)는 runner가 미국에 있어 위 방식으로 우분투 기본 미러를 쓴다. `tools/check_host.sh`의 미러 검사도 같은 값을 읽는다.
 
-스택 올리기와 내리기. 저장소 루트에서 실행한다. `up` 한 번이 생성, 떠 있던 같은 스택 내리기, 두 단계 `up --wait`(gazebo까지 올린 뒤 이 스택의 모델이 Gazebo에 남아 있지 않은지 확인하고 나머지를 올린다)를 모두 한다. 실패하면 에이전트의 `bind error`와 px4의 `bind failed`를 찾아 알려 준다.
+스택 올리기와 내리기. 저장소 루트에서 실행한다. `up` 한 번이 생성, 떠 있던 같은 스택 내리기, 인프라 세 단계 `up --wait`(에이전트와 gazebo, px4-N, bridge. 1단계 뒤 이 스택의 모델이 Gazebo에 남아 있지 않은지 확인한다), 노드 단계(Mission Executor `ops-N`이 lifecycle active가 될 때까지)를 모두 한다. `ros_ws/install/idsim_mission/`이 없으면 아무것도 올리기 전에 실패하므로 먼저 `tools/ros_ws.sh build`를 한다. 실패하면 에이전트의 `bind error`와 px4의 `bind failed`를 찾아 알려 준다.
 
 ```
 tools/sim_stack.sh up                 # 스택 0. 실행 디렉터리 경로를 출력한다
 tools/sim_stack.sh up --stack 1       # 스택 1을 동시에
 tools/sim_stack.sh up --viz           # Gazebo GUI까지
+tools/sim_stack.sh up --infra-only    # Executor(ops-N) 없이 인프라만(스모크와 측정 스크립트가 쓴다)
 tools/sim_stack.sh ps
 tools/sim_stack.sh logs px4-1
 tools/sim_stack.sh down               # docker compose -p idsim-0 down
@@ -168,6 +169,18 @@ tests/smoke/run_smoke.sh --update-golden golden   # 골든이 없을 때 처음 
 ```
 
 실행 결과는 `artifacts/runs/<실행 id>/`에 남는다(`compose.yaml`, `stack.json`, 판정과 로그 `smoke/`, ULog `px4-N/log/`). 모든 파일이 호스트 사용자 소유다.
+
+스모크는 `--infra-only`로 스택을 올리므로 Executor는 뜨지 않는다.
+
+통합 테스트. 저장소 루트에서 실행하며 스택 올리기와 내리기는 wrapper가 `tools/sim_stack.sh`로 한다.
+
+```
+tests/sitl/run_sitl.sh --stack 0                 # 시나리오 B, C, A, D, T
+tests/sitl/run_sitl.sh --stack 0 --repeat 3      # 회마다 down 뒤 콜드 up. 첫 실패에서 멈춘다
+tests/sitl/run_sitl.sh --attach <실행 디렉터리>   # 떠 있는 스택에 붙어 pytest와 수집만 한다
+```
+
+`--attach`는 사용자가 `tools/sim_stack.sh up --viz`로 스택을 올리고 QGC와 Gazebo GUI로 눈으로 확인할 때 쓴다(스택을 올리지도 내리지도 않는다). 산출물은 `<실행 디렉터리>/sitl/`(attach는 `sitl-attach-<시각>/`)에 남고 실패한 CI 실행은 이 디렉터리 전체를 아티팩트로 올린다. 옵션과 판정은 `tests/sitl/README.md`를 본다.
 
 ## 시각 도구
 

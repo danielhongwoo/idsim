@@ -24,7 +24,7 @@
 #   MEASURE_ARGS    measure.py에 그대로 넘길 인자(예: "--observe-s 20 --delays 0,0.1")
 #
 # 하는 일
-#   1. tools/sim_stack.sh up으로 스택을 올린다(떠 있는 idsim-<k>는 먼저 내려진다).
+#   1. tools/sim_stack.sh up --infra-only로 스택을 올린다(Executor 없이 인프라만. 떠 있는 idsim-<k>는 먼저 내려진다).
 #   2. item마다 runner 안에서 tests/sitl/measure/measure.py를 돌린다. 시도마다 한 줄이 쌓인다.
 #   3. 스택을 compose stop -t 15로 멈추고(ULog가 닫히는지 보려고 서비스별 종료 코드를 stop_exit.txt에
 #      남긴다) 호스트에서 crosscheck.py로 ULog의 vehicle_status와 교차 확인한다.
@@ -103,10 +103,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 주의: 이 스크립트는 tools/sim_stack.sh up으로 스택을 올린다. P4 뒤에는 up이 Executor(ops-N)도
-# 띄우므로 Executor의 setpoint가 측정기의 직접 발행과 섞인다. P4 뒤에는 sim_stack.sh up --infra-only로
-# 바꿔야 한다(--infra-only는 P4의 devops 작업에서 생긴다).
-if ! STACK_UP_TIMEOUT="${STACK_UP_TIMEOUT:-240}" tools/sim_stack.sh up --stack "$k" --run-dir "$run_dir" >/dev/null; then
+# 주의: --infra-only로 올린다. 그냥 up은 Executor(ops-N)도 띄워 Executor의 setpoint가 측정기의 직접 발행과
+# 섞이므로 측정은 Executor 없이 PX4에 직접 명령을 보내는 이 구성에서만 한다(PX4 직접 부류).
+if ! STACK_UP_TIMEOUT="${STACK_UP_TIMEOUT:-240}" tools/sim_stack.sh up --stack "$k" --run-dir "$run_dir" --infra-only >/dev/null; then
   echo "스택 올리기 실패(INFRA_UP). 로그는 tools/sim_stack.sh logs --stack ${k}" >&2
   exit 2
 fi
