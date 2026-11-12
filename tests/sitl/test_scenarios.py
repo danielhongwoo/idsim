@@ -97,11 +97,12 @@ def test_b_invalid_mission(session):
     s.mission.wait_result(s.waiter, run, 30.0, "B result")
     check_goal(s, run, terminal_status=sj.STATUS_ABORTED, reason=sj.REASON_INVALID_MISSION, feedback_zero=True)
 
-    def not_armed():
-        sw.raise_if(sj.never_armed_findings(s.raw.status, t0, s.raw.now_us()))
+    def not_armed(floor=0):
+        # 폴링 중에는 구간이 비어 있을 수 있으므로 표본 수 하한을 보지 않고, 끝에서 한 번 하한과 함께 본다
+        sw.raise_if(sj.never_armed_findings(s.raw.status, t0, s.raw.now_us(), min_samples=floor))
 
     s.waiter.hold_for(sj.DISARMED_HOLD_S, "B disarmed 유지", check=not_armed)
-    not_armed()
+    not_armed(sj.MIN_STATUS_SAMPLES)
 
 
 @pytest.mark.scenario("C")
@@ -117,11 +118,12 @@ def test_c_vehicle_id_mismatch(session):
     check_goal(s, run, terminal_status=sj.STATUS_ABORTED, reason=sj.REASON_VEHICLE_ID_MISMATCH,
                vehicle_id=s.vehicle_id, feedback_zero=True)
 
-    def not_armed():
-        sw.raise_if(sj.never_armed_findings(s.raw.status, t0, s.raw.now_us()))
+    def not_armed(floor=0):
+        # 폴링 중에는 구간이 비어 있을 수 있으므로 표본 수 하한을 보지 않고, 끝에서 한 번 하한과 함께 본다
+        sw.raise_if(sj.never_armed_findings(s.raw.status, t0, s.raw.now_us(), min_samples=floor))
 
     s.waiter.hold_for(sj.DISARMED_HOLD_S, "C disarmed 유지", check=not_armed)
-    not_armed()
+    not_armed(sj.MIN_STATUS_SAMPLES)
 
 
 def _record_armed_a(s, t_goal, run):
