@@ -16,14 +16,17 @@ xrce-agent는 베이스 target이 없어 독립이다.
 bake 정규화 규칙. 근거: key는 "같은 key면 같은 이미지"를 뜻해야 하므로 이미지 바이트에 영향을 주는
 입력만 해시하고, 레지스트리 태그 같은 이름 붙이기와 표기 차이는 뺀다.
   - 대상: dockerfile, context, platforms, args, contexts. 부모(inherits) 값에 자식 값을 덮어 합친다.
+    스칼라와 목록은 자식이 덮고, args와 contexts는 bake처럼 항목별로 합친다.
+  - fail-closed: 알려진 속성(inherits, tags, 위 다섯) 밖의 속성, 보간(${...})이나 이스케이프가 든 값,
+    문자열이 아닌 스칼라(context = VAR 같은 것), 중복 속성과 중복 항목은 말없이 버리지 않고 SystemExit로 멈춘다.
   - tags는 뺀다. 이미지 이름이지 내용이 아니다 (REGISTRY, KEY_* 변수도 tags에만 쓰인다).
   - 공백, 주석, 항목 순서는 뺀다. args와 contexts는 이름순으로 "이름=식" 한 줄씩 쓴다.
   - args에서 KEY_EXCLUDED_ARGS의 이름은 뺀다.
   - args의 식은 변수 이름 그대로 해시한다. 변수의 값은 6번(versions.env)이 따로 넣는다.
 
 key에 들어가지 않는 것: UBUNTU_APT_MIRROR(KEY_EXCLUDED_ARGS).
-key에 들어가지 않는 것(빌드 시점 외부 상태): apt 저장소의 패키지 버전, pip 인덱스, 브랜치 이름으로
-받는 소스. 이것들이 바뀌어도 key는 그대로이며, 같은 key의 이미지는 레지스트리에 한 번만 올라간다.
+key에 들어가지 않는 것(빌드 시점 외부 상태): apt 저장소의 패키지 버전, pip 인덱스, 태그가 가리키는
+커밋. 이것들이 바뀌어도 key는 그대로이며, 같은 key의 이미지는 레지스트리에 한 번만 올라간다.
 
 사용법
   tools/ci/image_keys.py                  # "<이미지> <key>" 다섯 줄 (빌드 순서)
@@ -43,7 +46,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 
-SCHEME = "idsim-image-key-v1"
+SCHEME = "idsim-image-key-v2"
 KEY_LEN = 16
 
 # Dockerfile이 ARG로 선언해도 key에 넣지 않는 versions.env 이름. apt 미러다. ubuntu.sources가 이미지에 남아 바이트가 달라지나 런타임이 apt를 쓰지 않아 같은 이미지로 본다.
@@ -63,7 +66,6 @@ PREFERRED_ORDER = ["ros-base", "xrce-agent", "ros-ws", "sim-base", "px4"]
 class Image:
     name: str
     dockerfile: str
-    block_text: str
     # 정규화한 bake 빌드 입력 (부모 값에 자식 값을 덮어 쓴 결과)
     bake_material: list[str] = field(default_factory=list)
     inherits: list[str] = field(default_factory=list)
@@ -135,52 +137,171 @@ def parse_bake_blocks(text: str) -> dict[str, str]:
 BAKE_SCALAR_ATTRS = ("dockerfile", "context")
 BAKE_LIST_ATTRS = ("platforms",)
 BAKE_MAP_ATTRS = ("args", "contexts")
+# 알려진 속성은 이것뿐이다. 이 밖의 속성(target, labels, secret, ...)은 이미지 바이트를 바꿀 수 있으므로
+# 말없이 버리지 않고 멈춘다 (fail-closed).
+BAKE_IGNORED_ATTRS = ("tags",)
+BAKE_INHERITS_ATTR = "inherits"
+BAKE_KNOWN_ATTRS = (
+    BAKE_SCALAR_ATTRS + BAKE_LIST_ATTRS + BAKE_MAP_ATTRS + BAKE_IGNORED_ATTRS + (BAKE_INHERITS_ATTR,)
+)
+
+_IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
+# 보간(${...}, %{...})과 이스케이프가 없는 문자열 리터럴
+_PLAIN_STR = r'"(?:[^"\\$%]|\$(?!\{)|%(?!\{))*"'
 
 
 def _strip_comments(body: str) -> str:
     out = []
     for line in body.splitlines():
         in_str = False
-        for i, c in enumerate(line):
+        i = 0
+        while i < len(line):
+            c = line[i]
+            if in_str and c == "\\":
+                i += 2
+                continue
             if c == '"':
                 in_str = not in_str
             elif not in_str and (c == "#" or line.startswith("//", i)):
                 line = line[:i]
                 break
+            i += 1
         out.append(line)
     return "\n".join(out)
 
 
-def parse_bake_attrs(block: str) -> dict[str, object]:
-    """target 블록 하나에서 빌드 입력 속성을 뽑아 공백을 걷어낸 값으로 돌려준다.
+def _scan_expr(s: str, i: int, comma_ends: bool, where: str) -> tuple[str, int]:
+    """s[i:]에서 식 하나를 읽는다. 괄호 바깥의 줄바꿈(comma_ends면 쉼표도)에서 끝난다."""
+    start = i
+    depth = 0
+    in_str = False
+    while i < len(s):
+        c = s[i]
+        if in_str:
+            if c == "\\":
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c in "[{(":
+            depth += 1
+        elif c in "]})":
+            depth -= 1
+            if depth < 0:
+                raise SystemExit(f"{where}: 괄호가 맞지 않는다: {s[start:i + 1].strip()}")
+        elif depth == 0 and (c == "\n" or (comma_ends and c == ",")):
+            break
+        i += 1
+    if in_str or depth:
+        raise SystemExit(f"{where}: 문자열이나 괄호가 닫히지 않는다: {s[start:].strip()[:60]}")
+    return s[start:i].strip(), i
 
-    스칼라는 문자열, 목록은 문자열 리스트, 맵은 이름 -> 식(공백 제거) 딕셔너리다.
+
+def _parse_plain_str(expr: str, where: str) -> str:
+    if not re.fullmatch(_PLAIN_STR, expr):
+        raise SystemExit(
+            f"{where}: 해석할 수 없는 값이다 (보간, 이스케이프, 문자열이 아닌 식은 지원하지 않는다): {expr}")
+    return expr[1:-1]
+
+
+def _parse_str_list(expr: str, where: str) -> list[str]:
+    if not (expr.startswith("[") and expr.endswith("]")):
+        raise SystemExit(f"{where}: 문자열 목록([...])이어야 한다: {expr}")
+    inner = expr[1:-1]
+    items = re.findall(_PLAIN_STR, inner)
+    rest = re.sub(_PLAIN_STR, "", inner)
+    if re.sub(r"[\s,]", "", rest):
+        raise SystemExit(f"{where}: 목록에 해석할 수 없는 값이 있다: {expr}")
+    return [it[1:-1] for it in items]
+
+
+def _parse_map(expr: str, where: str) -> dict[str, str]:
+    """맵을 이름 -> 식으로 돌려준다. 식은 변수 이름이거나 따옴표 붙은 단순 문자열이다."""
+    if not (expr.startswith("{") and expr.endswith("}")):
+        raise SystemExit(f"{where}: 맵({{...}})이어야 한다: {expr}")
+    inner = expr[1:-1]
+    entries: dict[str, str] = {}
+    i = 0
+    while True:
+        m = re.compile(r"[\s,]*").match(inner, i)
+        i = m.end()  # type: ignore[union-attr]
+        if i >= len(inner):
+            break
+        km = re.compile(rf"({_IDENT}(?:[-.][A-Za-z0-9_]+)*|{_PLAIN_STR})\s*=(?!=)\s*").match(inner, i)
+        if not km:
+            raise SystemExit(f"{where}: 맵 항목을 읽을 수 없다: {inner[i:].strip()[:60]}")
+        key = km.group(1)
+        if key.startswith('"'):
+            key = key[1:-1]
+        value, i = _scan_expr(inner, km.end(), True, f"{where}.{key}")
+        if not (re.fullmatch(_IDENT, value) or re.fullmatch(_PLAIN_STR, value)):
+            raise SystemExit(
+                f"{where}.{key}: 해석할 수 없는 값이다 (변수 이름이나 단순 문자열만 지원한다): {value}")
+        if key in entries:
+            raise SystemExit(f"{where}: 항목 {key}가 중복이다")
+        entries[key] = value
+    return entries
+
+
+def parse_bake_attrs(block: str, name: str = "?") -> dict[str, object]:
+    """target 블록 하나의 속성을 읽어 돌려준다. 모르는 것은 말없이 버리지 않고 SystemExit로 멈춘다.
+
+    스칼라는 문자열, 목록은 문자열 리스트, 맵은 이름 -> 식 딕셔너리다. tags는 구조만 확인하고 버린다.
     """
+    where0 = f"{BAKE_FILE}: target {name}"
     body = _strip_comments(block[block.index("{") + 1:block.rindex("}")])
     attrs: dict[str, object] = {}
-    for a in BAKE_SCALAR_ATTRS:
-        m = re.search(rf'^\s*{a}\s*=\s*"([^"]*)"', body, re.M)
-        if m:
-            attrs[a] = m.group(1)
-    for a in BAKE_LIST_ATTRS:
-        m = re.search(rf"^\s*{a}\s*=\s*\[([^\]]*)\]", body, re.M)
-        if m:
-            attrs[a] = re.findall(r'"([^"]*)"', m.group(1))
-    for a in BAKE_MAP_ATTRS:
-        m = re.search(rf"^\s*{a}\s*=\s*\{{([^}}]*)\}}", body, re.M)
-        if m:
-            entries: dict[str, str] = {}
-            for em in re.finditer(r'^\s*("?)([A-Za-z0-9_.-]+)\1\s*=\s*(.+?)\s*$', m.group(1), re.M):
-                entries[em.group(2)] = re.sub(r"\s+", "", em.group(3))
-            attrs[a] = entries
+    i = 0
+    while True:
+        m = re.compile(r"\s*").match(body, i)
+        i = m.end()  # type: ignore[union-attr]
+        if i >= len(body):
+            break
+        am = re.compile(r"([A-Za-z_][A-Za-z0-9_-]*)\s*=(?!=)").match(body, i)
+        if not am:
+            raise SystemExit(f"{where0}: 속성을 읽을 수 없다: {body[i:].strip().splitlines()[0][:60]}")
+        attr = am.group(1)
+        where = f"{where0}.{attr}"
+        if attr not in BAKE_KNOWN_ATTRS:
+            raise SystemExit(
+                f"{where}: 지원하지 않는 속성이다. image_keys.py가 key 재료로 다루지 못하면 key가 "
+                f"이미지 바이트와 어긋날 수 있다. 지원이 필요하면 image_keys.py에 추가한다")
+        if attr in attrs:
+            raise SystemExit(f"{where}: 속성이 중복이다")
+        expr, i = _scan_expr(body, am.end(), False, where)
+        if attr in BAKE_SCALAR_ATTRS:
+            attrs[attr] = _parse_plain_str(expr, where)
+        elif attr in BAKE_LIST_ATTRS or attr == BAKE_INHERITS_ATTR:
+            attrs[attr] = _parse_str_list(expr, where)
+        elif attr in BAKE_MAP_ATTRS:
+            attrs[attr] = _parse_map(expr, where)
+        # tags는 _scan_expr가 구조를 확인했으므로 버린다
     return attrs
 
 
-def bake_material(blocks: dict[str, str], name: str, parents: list[str]) -> list[str]:
+def resolve_attrs(blocks: dict[str, str], name: str, _stack: tuple[str, ...] = ()) -> dict[str, object]:
+    """상속을 bake처럼 합친다. 부모를 inherits 순서대로 합친 뒤 자신을 덮고, 맵은 항목별로 합친다."""
+    if name in _stack:
+        raise SystemExit(f"{BAKE_FILE}: 상속이 순환한다: {' -> '.join(_stack + (name,))}")
+    if name not in blocks:
+        raise SystemExit(f"{BAKE_FILE}: target {name} 블록이 없다 ({' -> '.join(_stack)}에서 상속)")
+    own = parse_bake_attrs(blocks[name], name)
     merged: dict[str, object] = {}
-    for blk in [blocks[p] for p in parents] + [blocks[name]]:
-        for k, v in parse_bake_attrs(blk).items():
-            merged[k] = v
+    layers = [resolve_attrs(blocks, p, _stack + (name,)) for p in own.get(BAKE_INHERITS_ATTR, [])]  # type: ignore[union-attr]
+    layers.append({k: v for k, v in own.items() if k != BAKE_INHERITS_ATTR})
+    for layer in layers:
+        for k, v in layer.items():
+            if k in BAKE_MAP_ATTRS:
+                merged[k] = {**merged.get(k, {}), **v}  # type: ignore[dict-item,union-attr]
+            else:
+                merged[k] = v
+    return merged
+
+
+def bake_material(blocks: dict[str, str], name: str) -> list[str]:
+    merged = resolve_attrs(blocks, name)
     out: list[str] = []
     for a in BAKE_SCALAR_ATTRS:
         if a in merged:
@@ -200,25 +321,21 @@ def load_images() -> dict[str, Image]:
     with open(BAKE_FILE, encoding="utf-8") as f:
         blocks = parse_bake_blocks(f.read())
     images: dict[str, Image] = {}
-    for name, block in blocks.items():
+    for name in blocks:
         if name.startswith("_"):
             continue
-        m = re.search(r'^\s*dockerfile\s*=\s*"([^"]+)"', block, re.M)
-        if not m:
+        merged = resolve_attrs(blocks, name)
+        if "dockerfile" not in merged:
             raise SystemExit(f"{BAKE_FILE}: target {name}에 dockerfile이 없다")
-        img = Image(name=name, dockerfile=m.group(1), block_text=block)
-        m = re.search(r"^\s*inherits\s*=\s*\[([^\]]*)\]", block, re.M)
-        if m:
-            img.inherits = re.findall(r'"([^"]+)"', m.group(1))
-        for ctx, base in re.findall(r'"([^"]+)"\s*=\s*"target:([^"]+)"', block):
-            img.base_contexts[ctx] = base
+        img = Image(name=name, dockerfile=str(merged["dockerfile"]))
+        img.inherits = parse_bake_attrs(blocks[name], name).get(BAKE_INHERITS_ATTR, [])  # type: ignore[assignment]
+        for ctx, expr in merged.get("contexts", {}).items():  # type: ignore[union-attr]
+            m = re.fullmatch(r'"target:([^"]+)"', expr)
+            if m:
+                img.base_contexts[ctx] = m.group(1)
+        img.bake_material = bake_material(blocks, name)
         images[name] = img
     for img in images.values():
-        for parent in img.inherits:
-            if parent not in blocks:
-                raise SystemExit(f"{img.name}: 상속 대상 {parent} 블록이 없다")
-            img.block_text = blocks[parent] + "\n" + img.block_text
-        img.bake_material = bake_material(blocks, img.name, img.inherits)
         if img.base and img.base not in images:
             raise SystemExit(f"{img.name}: 베이스 target {img.base}가 bake 파일에 없다")
     return images
