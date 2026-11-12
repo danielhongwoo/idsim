@@ -72,6 +72,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 빌드와 CI.
 
+- `sitl.yml`은 GHCR에서 이미지 key로 pull하는데, PR에서는 새 key가 아직 없고 main push에서는 `build`의 publish와 동시에 돌아 이미지 key가 바뀌는 PR은 PR과 머지 직후 main 양쪽에서 pull 단계가 실패한다. 지금은 로컬 `tests/sitl/run_sitl.sh`로 대신하고 publish 뒤 main에서 `sitl`을 다시 돌린다. 대안: `sitl`을 build 완료의 `workflow_run`으로 묶기, key가 없으면 실패 원인을 명시해 보고하기(조용한 skip은 쓰지 않는다). devops-engineer와 architect가 정한다.
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
 - 비결정 빌드 요소: ros.key와 gazebo.gpg는 URL이 고정되어 있지 않다. 받은 key의 지문은 `ROS_APT_KEY_FPR`, `GZ_APT_KEY_FPR`와 대조한다. apt 저장소 상태, pip 인덱스, 대조하지 않는 apt 패키지 판은 이미지 key에 들어가지 않는다(`docs/architecture.md` 이미지 key 문단).
 - apt 미러: 지정 미러가 막히면 콜드 빌드가 실패한다. apt `Acquire::Retries` 미적용. CI에서는 Canonical 노드의 동기화 시차로 apt 단계가 간헐적으로 실패할 수 있다(대안: apt 단계 재시도, CI 미러 변경).
