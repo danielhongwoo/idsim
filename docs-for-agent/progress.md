@@ -72,7 +72,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - `px4-api` 검사는 C++과 `.py`만 본다. params와 remap yaml이 생기는 P4에서 범위를 넓힌다.
 - PX4 timestamp와 `/clock`이 같은 축이라는 것의 회귀 판정은 P4의 SITL fixture 사전조건(`/clock` 정렬)과 시나리오 T가 생길 때까지 없다. 스모크 clock 단계에는 넣지 않는다(`decisions.md` 쟁점 9).
 - `artifacts/`를 CI job 아티팩트로 올리는 것은 `sitl` job을 만드는 P4에서 확인한다.
-- 다음 (3) 실행부터 T_lf를 같은 image key와 TAKEOFF 높이의 앞선 기록 전부(재실측 (3)의 관측 포함)의 최솟값으로 둘지 정한다(architect 제안, px4-engineer 확인).
+- 측정 스크립트가 T_lf를 조건이 같은 앞선 기록 전부(재실측 (3)의 관측 포함)의 최솟값으로 구하고 ULog의 PX4 파라미터(`MPC_THR_HOVER`, `COM_SPOOLUP_TIME`)를 근거 실행과 비교하도록 고친다(test-engineer, `decisions.md` 넘김 목록 (3) 정의). 다음 (3) 실행 전에 한다. 파라미터 목록은 px4-engineer가 승인한다.
 - 거부된 disarm의 ack와 logged message의 시각 차이는 실측이 1회뿐이다. 판정 검사로 올릴지는 표본이 쌓인 뒤 정한다(architect, px4-engineer).
 - PX4 버전을 올리면 "ULog의 `vehicle_command` `timestamp`가 측정기의 stamp와 같다"와 "ack 기록 순서가 처리 순서와 같다"를 다시 확인한다(px4-engineer).
 
