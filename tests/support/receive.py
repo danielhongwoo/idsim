@@ -8,7 +8,6 @@ import re
 import threading
 import time
 
-import rclpy
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.qos import qos_profile_sensor_data
 
