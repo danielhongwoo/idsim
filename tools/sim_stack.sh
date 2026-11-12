@@ -21,7 +21,7 @@
 #      --infra-only면 이 단계를 건너뛴다(Executor 없이 인프라만. 스모크와 측정 스크립트가 쓴다).
 #      ros_ws/install/idsim_mission/이 없으면 아무것도 올리기 전에 안내와 함께 실패한다(tools/ros_ws.sh build).
 #      embedded 변형에는 노드 단계가 없다.
-#   5. --viz면 viz 프로필(gz-gui)을 `up -d`로 붙인다(기다리지 않는다. healthcheck 없음).
+#   5. --viz면 viz 프로필(gz-gui, foxglove, lichtblick)을 `up -d`로 붙인다(기다리지 않는다. healthcheck 없음).
 #   6. 실패하면 unhealthy 또는 exited 서비스 이름을 한 줄로 찍고, 에이전트 로그의 "bind error"와 px4 로그의 "bind failed"를 찾아 보고하고 종료 코드 1.
 #      노드 단계가 실패하면 ops-N 로그 끝과 .State.Health.Log도 찍는다.
 #      스택은 조사할 수 있게 그대로 두며 `tools/sim_stack.sh down`으로 내린다.
@@ -250,6 +250,12 @@ do_up() {
       [ -n "${XAUTHORITY:-}" ] || say "경고: XAUTHORITY가 비어 있다. gz-gui가 안내와 함께 끝난다"
       # shellcheck disable=SC2086
       docker compose -f "$f" --profile viz up -d $vs >&2
+      local lp fp
+      lp="$(sj "$sf" stack.lichtblick_port)"
+      fp="$(sj "$sf" stack.foxglove_port)"
+      if [ -n "$lp" ] && [ -n "$fp" ]; then
+        say "Lichtblick: http://127.0.0.1:${lp}/?ds=foxglove-websocket&ds.url=ws://127.0.0.1:${fp}"
+      fi
     fi
   fi
   say "준비됨: ${project} (stack.json: ${sf})"

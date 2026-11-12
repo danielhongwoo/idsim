@@ -39,7 +39,7 @@ import xml.etree.ElementTree as ET
 
 # ---------------------------------------------------------------- 기준값(생성기 상수)
 SCHEMA = 1
-GENERATOR_VERSION = 3
+GENERATOR_VERSION = 4
 GENERATOR_SCRIPT = "tools/gen_compose.py"
 
 STACK_MIN, STACK_MAX = 0, 9
@@ -60,6 +60,10 @@ DDS_UNICAST_OFFSET = 11  # 참가자 i의 유니캐스트 데이터 포트 = PB 
 PARTICIPANT_INDEX_LIMIT = 64
 GZ_IP = "127.0.0.1"
 VIZ_BIND = "127.0.0.1"
+# foxglove_bridge 읽기 전용 설정. capabilities에서 clientPublish, services, parameters를 뺀다.
+# 아무것과도 맞지 않는 정규식으로 클라이언트 발행, 서비스, 파라미터 허용 목록을 비운다.
+FOXGLOVE_CAPABILITIES = "[connectionGraph]"
+FOXGLOVE_DENY_ALL = "['^$$']"  # compose 보간에서 $$는 리터럴 $
 RMW = "rmw_cyclonedds_cpp"
 
 # ops-N(기체별 Mission Executor 컨테이너). 노드 이름의 출처는 이 상수 하나다. launch 파일과 노드 소스는
@@ -454,7 +458,7 @@ def build(fleet_norm, ctx):
     """정규화된 fleet(validate_fleet 결과)와 생성 인자 ctx에서 (compose dict, stack dict, 경고 목록).
 
     ctx key: k, variant, uid, gid, run_id, host_repo_root, host_run_dir, images{xrce-agent, sim-base, px4,
-    ros-ws}, generated_at, git_commit, git_dirty, inputs{fleet, px4_params_file, versions_env, cyclonedds_xml: {path, sha256}},
+    ros-ws}, lichtblick_image, generated_at, git_commit, git_dirty, inputs{fleet, px4_params_file, versions_env, cyclonedds_xml: {path, sha256}},
     params_env{이름: 값}, participant_index_max.
     """
     warnings = []
@@ -723,9 +727,36 @@ def build(fleet_norm, ctx):
             "depends_on": _healthy("gazebo"),
         })
 
+        # foxglove: 읽기 전용 WebSocket(127.0.0.1:8765+k). 기체 토픽만 내보낸다(/clock은 250 Hz라 뺀다).
+        # best_effort_qos_topic_whitelist는 쓰지 않는다(PX4 토픽 구독이 BEST_EFFORT로 맺어지는지는 P5에서 확인).
+        fox = ros_ws_service("foxglove")
+        wl = "[" + ", ".join(f"'^/{v['vehicle_id']}/.*'" for v in vehicle_out) + "]"
+        fox.update({
+            "command": ["ros2", "run", "foxglove_bridge", "foxglove_bridge", "--ros-args",
+                        "-p", f"address:={VIZ_BIND}",
+                        "-p", f"port:={FOXGLOVE_PORT_BASE + k}",
+                        "-p", f"capabilities:={FOXGLOVE_CAPABILITIES}",
+                        "-p", f"topic_whitelist:={wl}",
+                        "-p", f"client_topic_whitelist:={FOXGLOVE_DENY_ALL}",
+                        "-p", f"service_whitelist:={FOXGLOVE_DENY_ALL}",
+                        "-p", f"param_whitelist:={FOXGLOVE_DENY_ALL}",
+                        "-p", "use_sim_time:=true",
+                        "-p", "remote_access:=false",
+                        "-p", "sysinfo:=false"],
+            "profiles": ["viz"],
+            "init": True,
+            "depends_on": _healthy("bridge"),
+        })
+        services["foxglove"] = fox
+        # lichtblick: 정적 파일 서버. 이미지 기본 명령은 모든 인터페이스에 열므로 덮는다. root(entrypoint가 이미지 안 파일을 고쳐 쓴다)
+        services["lichtblick"] = dict(_base(ctx["lichtblick_image"]), **{
+            "profiles": ["viz"],
+            "command": ["caddy", "file-server", "--listen", f"{VIZ_BIND}:{LICHTBLICK_PORT_BASE + k}"],
+        })
+
     compose = {"name": project, "services": services}
 
-    profiles = {"tools": ["runner"], "viz": ["gz-gui"] if standalone else []}
+    profiles = {"tools": ["runner"], "viz": ["gz-gui", "foxglove", "lichtblick"] if standalone else []}
     dlo, dhi, _ = dds_ports(k, pmax)
     stack = {
         "schema": SCHEMA,
@@ -761,7 +792,8 @@ def build(fleet_norm, ctx):
             "speed_factor": None,
         },
         "images": {"xrce_agent": images["xrce-agent"], "sim_base": images["sim-base"],
-                   "px4": images["px4"], "ros_ws": images["ros-ws"], "lichtblick": None},
+                   "px4": images["px4"], "ros_ws": images["ros-ws"],
+                   "lichtblick": ctx["lichtblick_image"] if standalone else None},
         "services": {
             "agent": "xrce-agent",
             "gazebo": "gazebo" if standalone else None,
@@ -770,8 +802,8 @@ def build(fleet_norm, ctx):
             "ops": ops_services,
             "runner": "runner",
             "gz_gui": "gz-gui" if standalone else None,
-            "foxglove": None,
-            "lichtblick": None,
+            "foxglove": "foxglove" if standalone else None,
+            "lichtblick": "lichtblick" if standalone else None,
             "profiles": profiles,
         },
         "startup": {
@@ -816,7 +848,7 @@ def render_files(compose, stack):
 def render_dirs(compose, stack):
     """실행 디렉터리에 빈 채로 만드는 디렉터리. px4 rootfs는 실행마다 새로 만들고, ros_log는 서비스별 하위를 호스트 사용자 소유로 만든다."""
     dirs = [v["rootfs_dir"] for v in stack["vehicles"]]
-    logs = ["bridge"] + [f"ops-{v['id']}" for v in stack["vehicles"]] + ["runner"]
+    logs = ["bridge"] + [f"ops-{v['id']}" for v in stack["vehicles"]] + ["foxglove", "runner"]
     dirs += [f"ros_log/{name}" for name in logs if name in compose["services"]]
     return dirs
 
@@ -1049,6 +1081,17 @@ def _repo_rel(path, repo_root):
     return full, rel
 
 
+def parse_versions_value(text, name):
+    """versions.env에서 NAME=값 한 줄의 값. 없거나 공백이 있으면 FleetError."""
+    for line in text.splitlines():
+        key, sep, val = line.partition("=")
+        if sep and key == name:
+            if not val or any(c.isspace() for c in val) or "$" in val:
+                raise FleetError(f"{VERSIONS_ENV_REL}: {name} 값이 잘못됐다: {val!r}")
+            return val
+    raise FleetError(f"{VERSIONS_ENV_REL}에 {name}이 없다")
+
+
 def resolve_images(image_tag, registry, overrides):
     prefix = registry.rstrip("/") if registry else "idsim"
     images = {n: f"{prefix}/{n}:{image_tag}" for n in IMAGE_NAMES}
@@ -1077,6 +1120,7 @@ def generate(args, environ=os.environ):
     params_env = parse_params_env(_read(params_abs), params_rel)
     versions_abs = os.path.join(repo_root, VERSIONS_ENV_REL)
     pmax = parse_participant_max(_read(os.path.join(repo_root, CYCLONEDDS_REL)))
+    lichtblick_image = parse_versions_value(_read(versions_abs), "LICHTBLICK_IMAGE")
 
     now = datetime.datetime.now(datetime.timezone.utc)
     generated_at = args.generated_at or now.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1111,6 +1155,7 @@ def generate(args, environ=os.environ):
         },
         "params_env": params_env,
         "participant_index_max": pmax,
+        "lichtblick_image": lichtblick_image,
     }
     compose, stack, more = build(fleet_norm, ctx)
     warnings.extend(more)
