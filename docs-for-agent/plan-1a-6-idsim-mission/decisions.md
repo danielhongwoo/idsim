@@ -30,7 +30,7 @@
 | 9. 시나리오 | B, C, A, D, T 순서. 다섯 모두 1a 필수(U1). `[LAND]` 한 항목 미션 지원 | 없음 |
 | 10. timeout | px4 값 채택. 벽시계 guard는 `CLOCK_STALLED`와 `CLOCK_SLOW`로 분류. 시각 역행은 `CLOCK_BACKWARD`. 테스트 프로세스의 첫 `/clock`만 벽시계 15 s 유예 | 없음 |
 | 11. CI `sitl` | `sitl.yml`, timeout 30분, 재시도 없음. PR 머리 커밋마다와 main push(U2) | 없음 |
-| 12. viz | foxglove_bridge는 단독 선행 이미지 PR. 화이트리스트는 네임스페이스 접두. Lichtblick 1.30.0 digest. recorder는 1a에 두지 않는다 | 없음 |
+| 12. viz | foxglove_bridge는 단독 선행 이미지 PR. 화이트리스트는 `^/px4_N/.*`. Lichtblick 1.30.0 digest. recorder는 1a에 두지 않는다 | 없음 |
 | 13. PR 분할 | P0-P5 여섯 개. README.md | - |
 
 ## 계약과 golden (먼저 읽을 것)
@@ -93,7 +93,7 @@
 
 결정: 생성기와 `stack.json`
 - params 파일은 `artifacts/runs/<id>/params/ops-N.yaml`. key는 `/**`이고 내용은 `use_sim_time: true`, `vehicle.id`, `vehicle.ns`, `vehicle.sysid`뿐이다. 튜닝 값(timeout, 주기), `command_source.*`, `lifecycle.self_start`는 생성하지 않고 노드 선언 기본값에 둔다. [실측] P3a: `/**`의 값은 컨테이너 노드에 적용되고 선언하지 않은 key는 LoadNode 오류 없이 무시된다. 패키지 config yaml을 둘째 params 파일로 두지 않는다. 노드는 `vehicle.*`에 기본값을 두지 않아 누락이면 configure가 실패한다.
-- `stack.json`(schema 1 유지, key 추가만): `vehicles[].vehicle_id`, `vehicles[].params_file`(실행 디렉터리 기준 상대 경로), `vehicles[].executor_node`(노드 FQN. healthcheck와 진단용), `run.params_dir`, `startup.node_stages`, `services.ops`. `GENERATOR_VERSION`은 P4에서 3, P5에서 4.
+- `stack.json`(schema 1 유지, key 추가만): `vehicles[].vehicle_id`, `vehicles[].params_file`(실행 디렉터리 기준 상대 경로), `vehicles[].executor_node`(노드 FQN. healthcheck와 진단용), `run.params_dir`, `startup.node_stages`, `services.ops`. `GENERATOR_VERSION`은 4다(P4에서 3, P5의 `foxglove`와 `lichtblick` 서비스 추가로 4).
 - `vehicle_id`와 `px4_ns`는 별도 key로 둔다. 지금은 값이 같고 생성기의 불변식 검사가 `vehicle_id == ns[1:]`과 토큰 하나임을 단정한다. `px4_ns`는 PX4 환경변수에 넣는 값이고 `vehicle_id`는 계약 식별자라서 의미가 다르다.
 - `ops-N` 서비스: ros-ws 이미지, 호스트 uid:gid, `ROS_LOG_DIR=<run>/ros_log/ops-N`, `depends_on`은 `bridge`와 `px4-N`(healthy), `restart: no`, `stop_grace_period: 10s`(`sim_stack.sh`와 `run_smoke.sh`의 `down --timeout 10`이 서비스 값보다 우선하므로 하나로 맞춘다), `init: true`, `stop_signal: SIGINT`.
   - `stop_signal`을 SIGINT로 두는 이유([실측] P3a, 각 1-2회): `init: true` 구성에서 SIGTERM이면 0.4-0.5 s에 끝나지만 launch가 바로 죽어 정리 로그가 없다. SIGINT면 `init` 유무와 무관하게 1.7 s에 launch가 자식에게 신호를 넘기고 정리 로그를 남기며 끝난다. Executor의 on_shutdown(실행 중인 goal을 ABORTED로 끝내고 종료 사건을 낸다)이 돌 기회가 SIGINT 쪽에만 있다고 본다([미확인]. goal 실행 중 stop에서 종료 사건이 구독자에게 오는지는 재지 않는다). `init` 없이 PID 1인 launch가 SIGTERM을 무시해 15.5 s 뒤 SIGKILL되는 것은 `init: true`를 두는 이유다. launch는 신호를 받으면 자식에게 SIGINT, 5 s 뒤 SIGTERM, 다시 5 s 뒤 SIGKILL을 보낸다([소스]. 유예 10 s 안에 끝나는지의 해석에 쓴다).
@@ -528,11 +528,11 @@ GHCR 패키지 다섯이 Public인지의 화면 확인을 사용자에게 요청
 결정
 - ros-ws 이미지에 `ros-${ROS_DISTRO}-foxglove-bridge`가 들어 있다(P1). 이미지 변경을 단독 선행 PR로 둔 이유: 다른 변경과 같은 PR에 섞으면 그 PR의 unit과 sitl이 GHCR에서 새 key를 찾지 못해 ros-base부터 다시 빌드한다.
 - 버전: `versions.env`에 `FOXGLOVE_BRIDGE_VERSION=3.6.0`. apt로 설치한 뒤 `dpkg-query` 결과가 upstream 버전 접두와 같은지 빌드에서 단정한다. 정확한 pin은 쓰지 않는다(ROS apt 저장소는 최신 빌드 하나만 남긴다).
-- `foxglove` 서비스(`viz` 프로필, ros-ws, 저장소 마운트): `address` 127.0.0.1, `port` 8765 + k, `capabilities` [connectionGraph], `topic_whitelist`는 기체마다 `^/px4_N/`(생성기에 /fmu 문자열을 쓰지 않는다), `client_topic_whitelist`, `service_whitelist`, `param_whitelist`는 아무것과도 맞지 않는 정규식(`^$`), `use_sim_time` true, `remote_access` false, `sysinfo` false. `/clock`은 화이트리스트에 넣지 않는다(250 Hz).
+- `foxglove` 서비스(`viz` 프로필, ros-ws, 저장소 마운트): `address` 127.0.0.1, `port` 8765 + k, `capabilities` [connectionGraph], `topic_whitelist`는 기체마다 `^/px4_N/.*`(bridge가 전체 일치로 거르므로 접두 정규식 `^/px4_N/`은 아무것도 맞지 않는다. 생성기에 /fmu 문자열을 쓰지 않는다), `client_topic_whitelist`, `service_whitelist`, `param_whitelist`는 아무것과도 맞지 않는 정규식(compose에서는 `['^$$']`), `use_sim_time` true, `remote_access` false, `sysinfo` false. `/clock`은 화이트리스트에 넣지 않는다(250 Hz).
 - `lichtblick` 서비스: `versions.env`의 `LICHTBLICK_IMAGE=ghcr.io/lichtblick-suite/lichtblick:1.30.0@sha256:285adff96f24c80b511cf159e97e5395a6b154126c70c62d1199456009de07cc`(linux/amd64 manifest digest, 조회 2026-11-11). command를 `caddy file-server --listen 127.0.0.1:<18080 + k>`로 덮는다(이미지 기본은 `:8080`으로 모든 인터페이스에 연다). root로 둔다(entrypoint가 이미지 안의 `index.html`을 고쳐 쓰고 호스트에 쓰는 마운트가 없다). healthcheck 없음.
 - 기본 layout 파일은 1a에 넣지 않는다(layout에 버전 접미사가 붙은 토픽 경로가 들어간다). `sim_stack.sh up --viz`가 접속 URL을 출력한다.
 - Lichtblick 이미지의 label에 보이는 2.5.2는 베이스 Caddy의 버전이다([실측]). Lichtblick은 1.30.0이다.
-- viz 서비스는 P5(별도 PR)다. 완료 조건은 브라우저 실접속(P5의 수동 확인): Lichtblick 1.30.0이 foxglove_bridge 3.6.0에 붙는지, clientPublish를 뺀 상태에서 연결이 유지되는지, PX4 토픽에 대한 bridge의 구독이 BEST_EFFORT인지(`ros2 topic info -v`. RELIABLE로 붙으면 수신이 없으므로 `best_effort_qos_topic_whitelist`에 넣고 lint 예외로 기록), setpoint와 `vehicle_local_position`이 같은 플롯에 놓이는지. 붙지 않으면 서브프로토콜을 기준으로 앞 버전을 고르고 architect에게 알린다.
+- viz 서비스는 P5(별도 PR)다. 브라우저 실접속 결과. 확인된 것: foxglove_bridge 3.6.0의 WebSocket 서브프로토콜은 `foxglove.sdk.v1`이고 Lichtblick 1.30.0이 그것을 제시해 협상된다(앞 버전으로 내리지 않는다). 연결과 `/px4_1` 토픽 목록, Plot 패널에서 `vehicle_local_position_v1.z` 갱신. bridge의 PX4 토픽 구독은 BEST_EFFORT(클라이언트가 구독할 때만 생긴다)라 `best_effort_qos_topic_whitelist`와 lint 예외는 필요 없다. clientPublish가 없어 클라이언트 발행은 거부된다(읽기 전용). 미확인: setpoint와 `vehicle_local_position`이 같은 플롯에 놓이는지. 3D 패널은 GPU(WebGL)가 없는 VM 브라우저에서 뜨지 않으므로 확인 대상이 아니다.
 - 1a에는 recorder 서비스를 두지 않는다. 실패 산출물은 ULog, compose logs, ros_log, 판정 trace, junit이다. 이것은 architecture.md의 "실패 시 MCAP 기록물과 ULog를 업로드"의 1a 예외다. MCAP 업로드는 Phase 2부터다.
 
 근거(recorder): 기록 정책(구독 QoS override, 대상 토픽, hidden 토픽, SIGINT 종료)은 Phase 2 logging-engineer의 설계 몫이고 아직 없다. regex 기록에는 오프셋 메타데이터와 미션 경계가 없어 Phase 2 replay 입력으로 다시 쓸 수 없다(logging). 판정 실행에 PX4 토픽 구독을 더한다(판정 probe도 참가자이지만 recorder만큼 구독을 더하지는 않는다).

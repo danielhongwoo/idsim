@@ -255,3 +255,65 @@ services:
     depends_on:
       gazebo:
         condition: service_healthy
+  foxglove:
+    image: idsim/ros-ws:local
+    network_mode: host
+    restart: 'no'
+    user: 1000:1000
+    environment:
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      CYCLONEDDS_URI: file:///opt/idsim/config/cyclonedds.xml
+      ROS_DOMAIN_ID: '23'
+      PYTHONDONTWRITEBYTECODE: '1'
+      HOME: /tmp
+      ROS_LOG_DIR: /opt/idsim/artifacts/runs/20261109-090000-k3/ros_log/foxglove
+    volumes:
+      - type: bind
+        source: /work/idsim
+        target: /opt/idsim
+        read_only: false
+        bind:
+          create_host_path: false
+    command:
+      - ros2
+      - run
+      - foxglove_bridge
+      - foxglove_bridge
+      - --ros-args
+      - -p
+      - address:=127.0.0.1
+      - -p
+      - port:=8768
+      - -p
+      - capabilities:=[connectionGraph]
+      - -p
+      - topic_whitelist:=['^/px4_1/.*']
+      - -p
+      - client_topic_whitelist:=['^$$']
+      - -p
+      - service_whitelist:=['^$$']
+      - -p
+      - param_whitelist:=['^$$']
+      - -p
+      - use_sim_time:=true
+      - -p
+      - remote_access:=false
+      - -p
+      - sysinfo:=false
+    profiles:
+      - viz
+    init: true
+    depends_on:
+      bridge:
+        condition: service_healthy
+  lichtblick:
+    image: ghcr.io/lichtblick-suite/lichtblick:1.30.0@sha256:1111111111111111111111111111111111111111111111111111111111111111
+    network_mode: host
+    restart: 'no'
+    profiles:
+      - viz
+    command:
+      - caddy
+      - file-server
+      - --listen
+      - 127.0.0.1:18083

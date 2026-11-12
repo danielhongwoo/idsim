@@ -33,6 +33,7 @@ GOLDEN_CASES = {
     "embedded": (0, "embedded"),
 }
 HOST_REPO = "/work/idsim"
+LICHTBLICK_IMAGE = "ghcr.io/lichtblick-suite/lichtblick:1.30.0@sha256:" + "1" * 64
 FIXED = {
     "uid": 1000,
     "gid": 1000,
@@ -117,6 +118,7 @@ def make_ctx(k=0, variant="standalone", run_id=None, fleet_path="config/fleet.ya
         },
         "params_env": PARAMS_ENV,
         "participant_index_max": PMAX,
+        "lichtblick_image": LICHTBLICK_IMAGE,
     }
 
 
@@ -324,7 +326,7 @@ def test_properties(kw):
 def test_standalone_services_and_healthchecks():
     compose, stack, _ = gen()
     s = compose["services"]
-    assert list(s) == ["xrce-agent", "gazebo", "px4-1", "bridge", "ops-1", "runner", "gz-gui"]
+    assert list(s) == ["xrce-agent", "gazebo", "px4-1", "bridge", "ops-1", "runner", "gz-gui", "foxglove", "lichtblick"]
     hc = s["gazebo"]["healthcheck"]["test"][1]
     assert hc == ('gz service -i --service /world/default/scene/info | grep -q "Service providers"'
                   " && test -f /tmp/idsim/ready")
@@ -351,6 +353,33 @@ def test_standalone_services_and_healthchecks():
     assert stack["startup"]["stages"] == [["xrce-agent", "gazebo"], ["px4-1"], ["bridge"]]
     assert stack["startup"]["node_stages"] == [["ops-1"]]
     assert s["runner"]["depends_on"] == {"ops-1": {"condition": "service_healthy"}}
+
+
+def test_viz_foxglove_and_lichtblick():
+    compose, stack, _ = gen(f=three_vehicles(), k=2)
+    s = compose["services"]
+    fox, lb = s["foxglove"], s["lichtblick"]
+    for svc in (fox, lb):
+        assert svc["profiles"] == ["viz"] and "healthcheck" not in svc and svc["network_mode"] == "host"
+    cmd = fox["command"]
+    assert cmd[:4] == ["ros2", "run", "foxglove_bridge", "foxglove_bridge"]
+    params = {a.partition(":=")[0]: a.partition(":=")[2] for a in cmd if ":=" in a}
+    assert params["address"] == "127.0.0.1" and params["port"] == "8767"
+    assert params["capabilities"] == "[connectionGraph]"
+    assert params["topic_whitelist"] == "['^/px4_1/.*', '^/px4_2/.*', '^/px4_3/.*']"
+    for key in ("client_topic_whitelist", "service_whitelist", "param_whitelist"):
+        assert params[key] == "['^$$']"
+    assert params["use_sim_time"] == "true" and "best_effort_qos_topic_whitelist" not in params
+    assert fox["init"] is True and fox["user"] == "1000:1000"
+    assert fox["depends_on"] == {"bridge": {"condition": "service_healthy"}}
+    assert lb["image"] == LICHTBLICK_IMAGE and "user" not in lb and "depends_on" not in lb
+    assert lb["command"] == ["caddy", "file-server", "--listen", "127.0.0.1:18082"]
+    assert stack["services"]["foxglove"] == "foxglove" and stack["services"]["lichtblick"] == "lichtblick"
+    assert stack["images"]["lichtblick"] == LICHTBLICK_IMAGE
+    assert stack["services"]["profiles"]["viz"] == ["gz-gui", "foxglove", "lichtblick"]
+    # 본 스택 서비스는 viz 서비스에 의존하지 않는다
+    assert not {"foxglove", "lichtblick"} & {d for n, x in s.items() if n not in ("foxglove", "lichtblick", "gz-gui")
+                                             for d in x.get("depends_on", {})}
 
 
 def test_origin_absent_gives_no_env_and_null():
@@ -524,7 +553,7 @@ def test_ops_service_details():
     compose, stack, _ = gen(f=three_vehicles(), k=2)
     s = compose["services"]
     assert list(s) == ["xrce-agent", "gazebo", "px4-1", "px4-2", "px4-3", "bridge", "ops-1", "ops-2", "ops-3",
-                       "runner", "gz-gui"]
+                       "runner", "gz-gui", "foxglove", "lichtblick"]
     ops = s["ops-2"]
     assert ops["command"] == ["ros2", "launch", "idsim_mission", "vehicle_ops.launch.py", "namespace:=/px4_2",
                               "executor_name:=mission_executor",
@@ -541,13 +570,13 @@ def test_ops_service_details():
         assert v["vehicle_id"] == v["ns"][1:] == v["px4_ns"]
         assert v["params_file"] == f"params/ops-{v['id']}.yaml"
     assert stack["run"]["params_dir"] == "params"
-    assert stack["generator"]["version"] == 3
+    assert stack["generator"]["version"] == 4
 
 
 def test_render_dirs():
     compose, stack, _ = gen(f=three_vehicles())
     assert gc.render_dirs(compose, stack) == ["px4-1", "px4-2", "px4-3", "ros_log/bridge", "ros_log/ops-1",
-                                              "ros_log/ops-2", "ros_log/ops-3", "ros_log/runner"]
+                                              "ros_log/ops-2", "ros_log/ops-3", "ros_log/foxglove", "ros_log/runner"]
     compose, stack, _ = gen(variant="embedded")
     assert gc.render_dirs(compose, stack) == ["px4-1", "ros_log/runner"]
 
@@ -778,7 +807,7 @@ def test_cli_writes_params_and_log_dirs(tmp_path):
     assert rc == 0
     assert sorted(os.listdir(out)) == ["compose.yaml", "params", "px4-1", "ros_log", "stack.json"]
     assert os.listdir(out / "params") == ["ops-1.yaml"]
-    assert sorted(os.listdir(out / "ros_log")) == ["bridge", "ops-1", "runner"]
+    assert sorted(os.listdir(out / "ros_log")) == ["bridge", "foxglove", "ops-1", "runner"]
     assert _read(str(out / "params" / "ops-1.yaml")) == gc.render_ops_params(_stack_of(out)["vehicles"][0])
 
 

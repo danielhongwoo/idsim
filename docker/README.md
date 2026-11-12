@@ -53,7 +53,7 @@ compose 파일은 손으로 쓰지 않는다. `tools/gen_compose.py`가 `config/
 ```
 xrce-agent --> gazebo --> px4-1..N --> bridge      (본 스택, up --wait 대상)
  (에이전트)    (시뮬레이터)  (기체)       (/clock)
-                  +--> gz-gui (viz 프로필)       runner (tools 프로필, 판정 명령용)
+                  +--> gz-gui, foxglove, lichtblick (viz 프로필)   runner (tools 프로필, 판정 명령용)
 ```
 
 화살표는 시작 순서다. 앞 컨테이너가 healthy가 되어야 다음 컨테이너가 뜬다. `fleet.yaml`의 `px4.start: sequential`이면 `px4-(N+1)`이 `px4-N`을 기다린다.
@@ -66,11 +66,13 @@ xrce-agent --> gazebo --> px4-1..N --> bridge      (본 스택, up --wait 대상
 | `bridge` | ros-ws | Gazebo의 시뮬레이션 시계를 ROS 2 `/clock` 토픽으로 넘긴다 | `/clock` 수신(30초 간격, 시작 구간은 5초) | 호스트 uid:gid |
 | `runner` | ros-ws | 상주하지 않는다. 스크립트가 `compose run`으로 판정 명령을 실행할 때 쓴다. 프로필 `tools` | 없음 | 호스트 uid:gid |
 | `gz-gui` | sim-base | Gazebo GUI 클라이언트. 프로필 `viz`. 아래 "시각 도구" 절 | 없음 | 호스트 uid:gid |
+| `foxglove` | ros-ws | foxglove_bridge. 기체 토픽(`/px4_N/...`)을 읽기 전용 WebSocket으로 내보낸다. 프로필 `viz`. 아래 "시각 도구" 절 | 없음 | 호스트 uid:gid |
+| `lichtblick` | 공식 Lichtblick 이미지(`LICHTBLICK_IMAGE`) | 브라우저 뷰어를 정적 파일로 서빙한다. 프로필 `viz` | 없음 | root |
 
 변형은 둘이다(`--variant`).
 
 - `standalone`(기본): 위 표 전부.
-- `embedded`: 진단용(스모크 embedded). 기체 1대, `gazebo`, `bridge`, `gz-gui` 없이 PX4가 Gazebo를 컨테이너 안에서 직접 띄운다(`HEADLESS=1`). 원점은 적용하지 않는다.
+- `embedded`: 진단용(스모크 embedded). 기체 1대, `gazebo`, `bridge`, `gz-gui`, `foxglove`, `lichtblick` 없이 PX4가 Gazebo를 컨테이너 안에서 직접 띄운다(`HEADLESS=1`). 원점은 적용하지 않는다.
 
 호스트에 쓰는 서비스는 호스트 사용자의 uid:gid로 돌고 `HOME`은 컨테이너 안 `/tmp`, ROS 로그는 `artifacts/runs/<실행 id>/ros_log/<서비스>/`다. 그래서 `artifacts/runs/`에는 root 소유 파일이 생기지 않는다. 바인드 마운트는 중첩하지 않는다(중첩하면 마운트 지점이 root 소유로 생긴다).
 
@@ -223,6 +225,22 @@ docker compose -p idsim-0 stop gz-gui   # GUI만 끈다. 서버는 계속 돈다
 - 기체가 보이지 않으면 대개 거리 때문이다(기본 카메라는 원점 근처를 본다). Entity Tree에서 `x500_1`을 오른쪽 클릭해 Move To를 한 뒤 Follow를 건다. Move To 없이 Follow만 걸면 따라가지 않는 경우가 있다.
 - 종료는 `docker compose -p idsim-<k> stop gz-gui`다. GUI만 끝나고 서버는 계속 돈다.
 - 창이 뜨지 않거나 경고를 보려면 `docker compose -f <compose.yaml> --profile viz run --rm --no-deps gz-gui /opt/idsim/sim/scripts/gz_gui.sh -v 4`로 플러그인 로드 줄과 Qt 메시지를 확인한다. WorldStats의 "Binding loop detected" 한 줄은 gz 자체 경고라 무시한다.
+
+### Foxglove와 Lichtblick (viz 프로필)
+
+`foxglove`(ros-ws의 foxglove_bridge)와 `lichtblick`(Foxglove 호환 오픈소스 뷰어의 공식 이미지, `versions.env`의 `LICHTBLICK_IMAGE`)이 같은 프로필에 든다. Offboard 진입 디버깅용으로 setpoint와 `vehicle_local_position`을 같은 플롯에 놓고 본다.
+
+```
+tools/sim_stack.sh up --viz --stack 1
+# 출력 예: Lichtblick: http://127.0.0.1:18081/?ds=foxglove-websocket&ds.url=ws://127.0.0.1:8766
+```
+
+- 두 서비스 모두 127.0.0.1에만 연다. foxglove_bridge는 포트 8765 + k, Lichtblick은 18080 + k다.
+- foxglove_bridge는 읽기 전용이다. `capabilities`는 `connectionGraph`뿐이고(clientPublish, services, parameters 없음) client 토픽, service, 파라미터 허용 목록은 아무것과도 맞지 않는 정규식이다. 토픽 허용 목록은 기체마다 `^/px4_N/.*`이며 `/clock`은 250 Hz라 넣지 않는다.
+- 브라우저에서 Lichtblick이 열리면 자동으로 WebSocket에 연결된다. 연결되지 않으면 "Open connection"에서 Foxglove WebSocket을 고르고 `ws://127.0.0.1:<8765 + k>`를 입력한다.
+- 기체 토픽은 `/px4_N/fmu/in/...`, `/px4_N/fmu/out/...`이다. 플롯에 setpoint(`/px4_N/fmu/in/trajectory_setpoint`)와 `/px4_N/fmu/out/vehicle_local_position_v1`을 함께 놓는다(토픽 이름의 버전 접미사는 스택에서 `ros2 topic list`로 본다).
+- GPU(WebGL)가 없는 VM의 브라우저에서는 Lichtblick 기본 레이아웃의 3D 패널이 "Error creating WebGL context"로 뜨지 않는다. 그 패널을 지우고 Plot 패널로 `/px4_<N>/fmu/out/vehicle_local_position_v1.z`와 `/px4_<N>/fmu/in/trajectory_setpoint.position[2]`를 본다. 3D 패널이 필요하면 브라우저의 소프트웨어 WebGL을 켠다(Chrome `chrome://flags`의 "Override software rendering list", Firefox `about:config`의 `webgl.force-enabled`).
+- 끄기는 `docker compose -p idsim-<k> stop foxglove lichtblick`. 서버와 기체는 계속 돈다.
 
 ## 버전을 올릴 때
 

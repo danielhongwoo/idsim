@@ -4,10 +4,10 @@
     "git_commit": "0000000000000000000000000000000000000000",
     "git_dirty": false,
     "script": "tools/gen_compose.py",
-    "version": 3
+    "version": 4
   },
   "images": {
-    "lichtblick": null,
+    "lichtblick": "ghcr.io/lichtblick-suite/lichtblick:1.30.0@sha256:1111111111111111111111111111111111111111111111111111111111111111",
     "px4": "idsim/px4:local",
     "ros_ws": "idsim/ros-ws:local",
     "sim_base": "idsim/sim-base:local",
@@ -45,10 +45,10 @@
   "services": {
     "agent": "xrce-agent",
     "bridge": "bridge",
-    "foxglove": null,
+    "foxglove": "foxglove",
     "gazebo": "gazebo",
     "gz_gui": "gz-gui",
-    "lichtblick": null,
+    "lichtblick": "lichtblick",
     "ops": [
       "ops-1"
     ],
@@ -57,7 +57,9 @@
         "runner"
       ],
       "viz": [
-        "gz-gui"
+        "gz-gui",
+        "foxglove",
+        "lichtblick"
       ]
     },
     "px4": [
