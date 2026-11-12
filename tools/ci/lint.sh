@@ -95,11 +95,11 @@ check_ruff() {
   fi
 }
 
-# 파일별 임시 예외. 소유자가 고치면 줄을 지운다. 규칙 자체는 .hadolint.yaml에서 켜져 있다.
+# 파일별 임시 예외. 현재 없다. 필요하면 "경로) echo "규칙 ..." ;;" 줄을 *) 앞에 추가하고, 소유자가 고치면 지운다.
+# 규칙 자체는 .hadolint.yaml에서 켜져 있다.
 hadolint_file_ignores() {
   case "$1" in
-    # px4-engineer 소유. DL3013 pip 버전 미고정(비결정 빌드 요소), SC2010 ls | grep. 2026-11-06 보고, 수정 대기
-    docker/Dockerfile.px4) echo "DL3013 SC2010" ;;
+    *) ;;
   esac
 }
 
