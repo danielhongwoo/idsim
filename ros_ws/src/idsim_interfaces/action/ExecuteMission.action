@@ -12,8 +12,8 @@
 # 분기를 오가도 정리는 정해진 상한 안에 끝난다. 상한에 닿으면 지상에서는 disarm을 한 번 더 보내고
 # ABORTED(REASON_DISARM_FAILED), 공중에서는 Land 명령을 보내고 ABORTED(REASON_MODE_SWITCH_FAILED)다.
 # CANCELED로 끝난 기체는 Hold(ARMED, landed false)이거나 지상 disarm이다. Hold로 끝난 기체는 지면 근처이거나 땅에 닿아
-# 있어도 스스로 내려앉거나 disarm되지 않는다. (이 문장은 이륙 단계와 0.5 m 호버에서 관찰한 범위이고 1a 고정
-# 전까지 잠정이다.)
+# 있어도 스스로 내려앉거나 disarm되지 않는다. 관찰한 범위는 이륙 ramp 중과 0.5 m 호버에서 60 s까지이고
+# 그 밖은 미확인이다. 소비자는 다음 goal 전에 기체 상태로 확인한다.
 # 이 goal이 아직 아무것도 보내지 않았어도 같은 분기를 쓴다. 다만 기체 상태를 받지 못한 채이면 바로 CANCELED이고
 # 그때는 위 상태를 보장하지 않는다.
 string vehicle_id      # 받는 쪽이 자기 vehicle_id와 다르면 VEHICLE_ID_MISMATCH로 중단한다
@@ -40,7 +40,7 @@ uint8 REASON_PRECONDITION_FAILED = 12 # 항목을 시작할 때 그 항목의 �
 uint8 REASON_DISARM_FAILED = 13
 # setpoint 항목 실행 중이거나 그 앞의 arm 확인 중(ARMED를 처음 관측한 뒤)에 Executor가 보내지 않은 disarm이 지상에서
 # failsafe 없이 관측됐다. 끝난 뒤 기체는 지상에 disarm 상태다. 원인은 판정하지 않는다(외부 명령뿐 아니라 PX4 자체의
-# disarm과 kill을 포함한다).
+# disarm과 kill을 포함한다). EXTERNAL은 Executor가 보내지 않았다는 뜻이고 외부 주체가 있었다는 판정이 아니다.
 uint8 REASON_EXTERNAL_DISARM = 14
 uint8 REASON_INTERNAL = 255           # 끝난 뒤 기체 상태를 보장하지 않는다(지상에 arm 상태로 남았을 수 있다)
 
@@ -58,7 +58,7 @@ uint8 PHASE_EXECUTING = 2
 uint8 PHASE_WAITING_MODE = 3   # 모드 명령 항목에서 모드 전이 확인 대기
 uint8 PHASE_CANCELING = 4      # 취소 요청 뒤 정리 중
 
-builtin_interfaces/Time stamp
+builtin_interfaces/Time stamp  # 그 feedback을 만든 tick의 입력 시각(ROS 시각). 경과 시간을 잰 시각과 같다
 uint32 item_index              # 0부터
 uint32 item_count
 uint8 item_type                # MissionItem.TYPE_*
