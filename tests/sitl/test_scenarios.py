@@ -199,6 +199,9 @@ def test_a_normal_flight(session):
     land_recv = fb_land.recv_us
     findings += sj.altitude_hold_findings(raw.pos, loiter_recv, land_recv, z0 - TAKEOFF_M)
     findings += sj.flight_window_findings(raw.status, fb_take.stamp_us, fb_land.stamp_us)
+    # ULog 교차 확인(crosscheck_a.py)이 비행 구간의 끝으로 쓴다
+    armed.update(land_start_recv_us=fb_land.recv_us, land_start_stamp_us=fb_land.stamp_us)
+    (s.out_dir / "armed_a.json").write_text(json.dumps(armed, indent=1, sort_keys=True) + "\n", encoding="ascii")
     s.trace.event("scenario_a_findings", findings=[list(f) for f in findings], held_s=held)
     sw.raise_if(findings)
 

@@ -30,7 +30,7 @@
 #   stdout     마지막 줄이 (마지막 회의) 실행 디렉터리 절대 경로 artifacts/runs/<실행 id>. 나머지는 모두 stderr
 #   요약       GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
 #   산출물     <실행 디렉터리>/sitl/: junit.xml, trace.jsonl, verdict.json, summary.md, steps.tsv, raw_status_A.jsonl,
-#              armed_a.json, ulog_check.txt, ps_before_stop.jsonl, stop_exit.txt, logs/<서비스>.log,
+#              armed_a.json, crosscheck_a.json, ulog_check.txt, ps_before_stop.jsonl, stop_exit.txt, logs/<서비스>.log,
 #              health_<서비스>.txt. 실행 디렉터리 안에는 compose.yaml, stack.json, params/, px4-N/log/*.ulg, ros_log/
 #              --repeat이면 artifacts/sitl_repeat/<시각>-k<k>/ 에 repeat_summary.tsv, armed_criterion.json
 #   소유       artifacts/runs/ 아래 파일은 모두 호스트 사용자 소유다(컨테이너를 호스트 uid:gid로 돌린다)
@@ -190,6 +190,8 @@ PY
   fi
 
   python3 tests/sitl/summarize.py ulog "$run_dir" --sitl-dir "$out_name" || true
+  # 시나리오 A의 원시 표본과 ULog의 교차 확인. 기록만 하고 통과 여부에는 쓰지 않는다(절차는 px4-engineer 승인 대기)
+  python3 tests/sitl/crosscheck_a.py "$run_dir" --sitl-dir "$out_name" >&2 || true
   printf '%s\n' "$steps" | tr ',' '\n' | tr '=' '\t' >"${run_dir}/${out_name}/steps.tsv"
   python3 tests/sitl/summarize.py run "$run_dir" --sitl-dir "$out_name" --steps "$steps" \
     --fallback "NO_VERDICT:pytest가 verdict.json을 남기지 못했다(종료 코드 ${pytest_rc})"
