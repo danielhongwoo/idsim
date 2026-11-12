@@ -184,6 +184,21 @@ PY
     docker compose -f "$compose" stop -t 15 >/dev/null 2>&1 || true
   fi
   local want_health=0
+  # stop 전 상태에서 unhealthy였던 서비스(stop 뒤의 Health는 믿지 않는다)
+  unhealthy_svcs="$(python3 - "${run_dir}/${out_name}/ps_before_stop.jsonl" <<'PY' 2>/dev/null || true
+import json, sys
+bad = []
+for line in open(sys.argv[1], encoding="utf-8"):
+    line = line.strip()
+    if not line:
+        continue
+    item = json.loads(line)
+    for d in item if isinstance(item, list) else [item]:
+        if d.get("Health") == "unhealthy":
+            bad.append(d.get("Service"))
+print(" ".join(bad))
+PY
+)"
   { [ "$pytest_rc" -ne 0 ] || [ "$stop_bad" -ne 0 ]; } && want_health=1
   collect "$compose" "$run_dir" "$out_name" "$want_health"
   t1="$(now)"
@@ -229,8 +244,9 @@ PY
 # 서비스 종료 상태(전역 stop_lines, steps.tsv에 들어간다)와 서비스 로그를 모은다. healthcheck 기록(health_<서비스>.txt)은
 # want_health가 1(실패한 회)이거나 그 서비스가 unhealthy일 때만 남긴다.
 stop_lines=""
+unhealthy_svcs=""
 collect() { # compose run_dir out_name want_health
-  local compose="$1" dir="$2" out="$3" want="$4" svc cid out_dir state
+  local compose="$1" dir="$2" out="$3" want="$4" svc cid out_dir
   out_dir="${dir}/${out}"
   mkdir -p "${out_dir}/logs"
   [ -f "$compose" ] || return 0
@@ -241,8 +257,7 @@ collect() { # compose run_dir out_name want_health
     docker compose -f "$compose" logs --no-color --timestamps "$svc" >"${out_dir}/logs/${svc}.log" 2>&1 || true
     cid="$(docker compose -f "$compose" ps -a -q "$svc" 2>/dev/null || true)"
     [ -n "$cid" ] || continue
-    state="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$cid" 2>/dev/null || true)"
-    if [ "$want" = "1" ] || [ "$state" = "unhealthy" ]; then
+    if [ "$want" = "1" ] || [[ " ${unhealthy_svcs} " == *" ${svc} "* ]]; then
       docker inspect --format '{{range .State.Health.Log}}{{.Start}} -> {{.End}} exit={{.ExitCode}} {{.Output}}{{"\n"}}{{end}}' "$cid" \
         >"${out_dir}/health_${svc}.txt" 2>&1 || true
     fi
