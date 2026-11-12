@@ -393,8 +393,10 @@ void MissionExecutorNode::handle_accepted(const std::shared_ptr<GoalHandle> & go
 {
   const std::lock_guard<std::mutex> lock(mutex_);
   const std::shared_ptr<const ExecuteMission::Goal> goal = goal_handle->get_goal();
+  // 접수 사건, 즉시 종료의 사건, runner의 시작 시각이 같은 한 번 읽은 시각이다.
+  const rclcpp::Time accepted_at = get_clock()->now();
   EventContext context;
-  context.stamp = stamp_now();
+  context.stamp = accepted_at;
   context.vehicle_id = vehicle_id_;
   context.mission_id = goal->mission.mission_id;
   context.goal_id = goal_handle->get_goal_id();
@@ -421,11 +423,11 @@ void MissionExecutorNode::handle_accepted(const std::shared_ptr<GoalHandle> & go
     screened = term;
   }
   if (screened.has_value()) {
-    finish(goal_handle, context, *screened);
+    finish(goal_handle, context, *screened, accepted_at);
     return;
   }
-  runner_ = std::make_unique<core::MissionRunner>(
-    std::move(spec), config_, get_clock()->now().nanoseconds());
+  runner_ =
+    std::make_unique<core::MissionRunner>(std::move(spec), config_, accepted_at.nanoseconds());
   goal_ = goal_handle;
   goal_context_ = context;
   ticks_since_feedback_ = 0;
@@ -435,9 +437,9 @@ void MissionExecutorNode::handle_accepted(const std::shared_ptr<GoalHandle> & go
 
 void MissionExecutorNode::finish(
   const std::shared_ptr<GoalHandle> & goal_handle, EventContext context,
-  const core::Termination & term)
+  const core::Termination & term, const builtin_interfaces::msg::Time & stamp)
 {
-  context.stamp = stamp_now();
+  context.stamp = stamp;
   if (pubs_.event != nullptr) {
     pubs_.event->publish(terminal_event_msg(context, term));
   }
@@ -487,7 +489,7 @@ void MissionExecutorNode::abort_running_goal(const std::string & why)
     }
   }
   if (goal_->is_active()) {
-    finish(goal_, goal_context_, term);
+    finish(goal_, goal_context_, term, stamp_now());
   }
   runner_.reset();
   goal_.reset();
@@ -513,6 +515,8 @@ void MissionExecutorNode::on_tick()
   }
   const idsim_common::VehicleCommandBuilder & builder = *builder_;
   select_ack();
+  // 이 tick의 시각은 여기서 한 번만 읽는다. core가 경과 시간을 재는 시각이고 feedback과 종료
+  // 사건의 stamp도 이 값이다(발행 때 다시 읽으면 /clock 한 양자만큼 어긋날 수 있다).
   core::TickInput input;
   input.tick = tick;
   input.now_ns = get_clock()->now().nanoseconds();
@@ -536,14 +540,14 @@ void MissionExecutorNode::on_tick()
       phase != last_feedback_phase_ || out.feedback->item_index != last_feedback_item_;
     if (changed || ++ticks_since_feedback_ >= kFeedbackEveryTicks) {
       goal_->publish_feedback(
-        std::make_shared<ExecuteMission::Feedback>(to_feedback_msg(*out.feedback, stamp_now())));
+        std::make_shared<ExecuteMission::Feedback>(to_feedback_msg(*out.feedback)));
       ticks_since_feedback_ = 0;
       last_feedback_phase_ = phase;
       last_feedback_item_ = out.feedback->item_index;
     }
   }
   if (out.termination.has_value()) {
-    finish(goal_, goal_context_, *out.termination);
+    finish(goal_, goal_context_, *out.termination, to_time_msg(input.now_ns));
     runner_.reset();
     goal_.reset();
   }

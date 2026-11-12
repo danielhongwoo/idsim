@@ -47,7 +47,7 @@ tick 순서: `begin_tick` -> `select_ack` -> `step` -> `to_px4_messages(out, bui
 
 구독 QoS와 ack: PX4 토픽의 QoS는 `idsim_common::px4::px4_out_qos()`(BEST_EFFORT, VOLATILE, KEEP_LAST 5)로 고정이고 바꾸지 않는다(idsim_common이 qos_overrides도 끈다. PX4 writer가 BEST_EFFORT라 RELIABLE로는 붙지 않는다). ack는 PX4 쪽 큐가 4라 한 tick에 여럿 올 수 있으므로, 노드는 command 묶음(DO_SET_MODE, ARM_DISARM, NAV_LAND)별로 최신 ack 하나를 두고 tick마다 대기 중인 명령의 묶음 것만 Snapshot에 넣는다. 다른 묶음의 ack가 대기 중인 명령의 거부를 덮지 않는다. 같은 묶음 안에서 한 tick에 둘이 오면 나중 것이 남는다(거부가 ACCEPTED에 덮이면 타임아웃이 잡는다. 안전 방향).
 
-feedback: phase나 항목이 바뀐 tick에는 바로, 그 밖에는 10 tick(0.5 s, 2 Hz)마다 낸다(`kFeedbackEveryTicks`).
+feedback: phase나 항목이 바뀐 tick에는 바로, 그 밖에는 10 tick(0.5 s, 2 Hz)마다 낸다(`kFeedbackEveryTicks`). stamp는 `Feedback.stamp_ns`, 곧 그 tick의 `TickInput.now_ns`다. 노드는 tick 시각을 tick 머리에서 한 번만 읽고, core가 경과 시간을 재는 시각과 stamp가 같은 값이 된다(발행 때 다시 읽으면 `/clock` 한 양자만큼 어긋날 수 있다). `Px4ClockPort`의 `Px4Timestamp`는 따로 읽는 값이라 이 시각과 다를 수 있다.
 
 ## 구현 규칙
 
@@ -55,7 +55,7 @@ action 서버(P3d)
 - `handle_goal`은 항상 `ACCEPT_AND_EXECUTE`다. 거절(REJECT)은 쓰지 않는다. 받을 수 없는 goal은 받아들인 뒤 즉시 ABORTED로 끝낸다.
 - `handle_accepted`는 접수 사건을 낸 뒤 `screen_goal`(core)로 즉시 판정한다. 순서는 VEHICLE_ID_MISMATCH -> INVALID_MISSION -> BUSY다. 이 셋은 feedback 0건이다. PX4 상태에 달린 판정(수신, 식별 대조, EKF gate)은 즉시 하지 않고 PREPARING에서 `ready_timeout` 안에 기다린다(M1. NOT_READY 앞에 PHASE_PREPARING feedback이 나갈 수 있다).
 - `handle_cancel`은 항상 받아들인다. 다음 tick부터 `TickInput.cancel_requested`를 true로 넘기고 분기는 core가 고른다.
-- 종료는 `Termination` 하나로 정하고 action result(`to_result`)와 종료 사건(`to_terminal_event`)을 둘 다 그 객체에서 만든다. 사건의 `stamp`는 노드 시계의 ROS 시각이다.
+- 종료는 `Termination` 하나로 정하고 action result(`to_result`)와 종료 사건(`to_terminal_event`)을 둘 다 그 객체에서 만든다. 사건의 `stamp`는 노드 시계의 ROS 시각이다. tick에서 정한 종료의 사건은 그 tick의 입력 시각을, `handle_accepted`의 접수 사건과 즉시 종료 사건은 그 callback에서 한 번 읽은 시각(runner의 시작 시각과 같은 값)을, 실행 중 goal의 강제 종료(on_shutdown, on_error, pre-shutdown)는 종료할 때 읽은 시각을 쓴다.
 - 이름 상수(`Mission::ACTION_NAME`, `MissionEvent::TOPIC_NAME`)는 상대 이름으로 쓰고 namespace 범위 static 초기화식에 쓰지 않는다.
 
 상태기(core)

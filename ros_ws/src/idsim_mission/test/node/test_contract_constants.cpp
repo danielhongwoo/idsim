@@ -17,7 +17,8 @@
 //   kAllReasons의 길이도 단정한다.
 // - item_type, yaw_mode, FeedbackPhase, event_status와 메시지 상수.
 // - core의 enu_to_ned_yaw, wrap_pi와 idsim_common/frames의 같은 함수.
-// - 변환(conversion.hpp): 종료 결과 하나에서 만든 result와 사건이 같은 값.
+// - 변환(conversion.hpp): 종료 결과 하나에서 만든 result와 사건이 같은 값. feedback stamp는
+//   core::Feedback.stamp_ns 그대로.
 
 #include <gtest/gtest.h>
 
@@ -25,11 +26,13 @@
 #include <string>
 #include <vector>
 
+#include "builtin_interfaces/msg/time.hpp"
 #include "idsim_common/frames.hpp"
 #include "idsim_interfaces/action/execute_mission.hpp"
 #include "idsim_interfaces/msg/mission_event.hpp"
 #include "idsim_interfaces/msg/mission_item.hpp"
 #include "idsim_interfaces/msg/yaw_setpoint.hpp"
+#include "idsim_mission/core/config.hpp"
 #include "idsim_mission/core/rules.hpp"
 #include "idsim_mission/core/termination.hpp"
 #include "idsim_mission/core/types.hpp"
@@ -129,6 +132,34 @@ TEST(Conversion, ResultEqualsTerminalEvent)
   EXPECT_EQ(accepted.reason, Result::REASON_NONE);
   EXPECT_EQ(accepted.items_completed, 0U);
   EXPECT_TRUE(accepted.detail.empty());
+}
+
+TEST(Conversion, FeedbackStampIsCoreStamp)
+{
+  core::Feedback feedback;
+  feedback.stamp_ns = 12345678901LL;
+  feedback.item_index = 1;
+  feedback.item_count = 3;
+  feedback.phase = core::FeedbackPhase::kExecuting;
+  const Feedback msg = to_feedback_msg(feedback);
+  EXPECT_EQ(msg.stamp.sec, 12);
+  EXPECT_EQ(msg.stamp.nanosec, 345678901U);
+  EXPECT_EQ(msg.item_index, 1U);
+  EXPECT_EQ(msg.item_count, 3U);
+  EXPECT_EQ(msg.phase, Feedback::PHASE_EXECUTING);
+}
+
+TEST(Conversion, TimeMsgKeepsNanosecInRange)
+{
+  const builtin_interfaces::msg::Time zero = to_time_msg(0);
+  EXPECT_EQ(zero.sec, 0);
+  EXPECT_EQ(zero.nanosec, 0U);
+  const builtin_interfaces::msg::Time whole = to_time_msg(5 * core::kNsPerSecond);
+  EXPECT_EQ(whole.sec, 5);
+  EXPECT_EQ(whole.nanosec, 0U);
+  const builtin_interfaces::msg::Time negative = to_time_msg(-1);
+  EXPECT_EQ(negative.sec, -1);
+  EXPECT_EQ(negative.nanosec, 999999999U);
 }
 
 TEST(Conversion, MissionFieldsAreCopied)

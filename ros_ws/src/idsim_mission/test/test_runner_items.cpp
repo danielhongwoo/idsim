@@ -99,6 +99,28 @@ TEST(Loiter, KeepsSetpointAndEndsAfterDuration)
   EXPECT_TRUE(end.setpoint.has_value());
 }
 
+// feedback stamp는 core가 경과 시간을 잰 tick 입력 시각이다. Px4ClockPort가 입력 시각보다 /clock
+// 한 양자(SITL 4 ms) 앞서도 LOITER 시작과 LAND 시작 feedback의 stamp 차는 정확히 duration이다.
+TEST(Loiter, FeedbackStampsSpanExactDurationWhenPortClockIsAhead)
+{
+  Harness h(standard_mission());
+  h.port_skew_ns = 4000000;
+  h.drive_to_loiter();
+  const StepOutput loiter_start = h.outputs().back();
+  ASSERT_TRUE(loiter_start.feedback.has_value());
+  ASSERT_EQ(loiter_start.feedback->item_index, 1U);
+  ASSERT_TRUE(h.run_until([&h] { return h.view().item_index == 2U; }, 400));
+  const StepOutput land_start = h.outputs().back();
+  ASSERT_TRUE(land_start.feedback.has_value());
+  ASSERT_EQ(land_start.feedback->item_index, 2U);
+  EXPECT_EQ(land_start.feedback->stamp_ns - loiter_start.feedback->stamp_ns, 5 * kNsPerSecond);
+  // 명령에 실은 PX4 timestamp는 port 쪽 시각이다(stamp와 다른 값임을 확인해 시험이 공허하지 않게).
+  ASSERT_TRUE(land_start.px4_timestamp_us.has_value());
+  EXPECT_EQ(
+    static_cast<std::int64_t>(*land_start.px4_timestamp_us) * 1000,
+    land_start.feedback->stamp_ns + h.port_skew_ns);
+}
+
 TEST(ItemTimeout, TakeoffTimerStartsAtArmConfirm)
 {
   // TAKEOFF의 timeout(20 s)은 P6의 ARMED 확인 tick부터 흐른다.

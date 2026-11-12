@@ -17,6 +17,8 @@
 #include <cstdint>
 #include <string>
 
+#include "idsim_mission/core/config.hpp"
+
 namespace idsim_mission
 {
 
@@ -124,11 +126,24 @@ idsim_interfaces::msg::MissionEvent terminal_event_msg(
   return event;
 }
 
-idsim_interfaces::action::ExecuteMission::Feedback to_feedback_msg(
-  const core::Feedback & feedback, const builtin_interfaces::msg::Time & stamp)
+builtin_interfaces::msg::Time to_time_msg(std::int64_t ns)
+{
+  std::int64_t sec = ns / core::kNsPerSecond;
+  std::int64_t rem = ns % core::kNsPerSecond;
+  if (rem < 0) {
+    sec -= 1;
+    rem += core::kNsPerSecond;
+  }
+  builtin_interfaces::msg::Time msg;
+  msg.sec = static_cast<std::int32_t>(sec);
+  msg.nanosec = static_cast<std::uint32_t>(rem);
+  return msg;
+}
+
+idsim_interfaces::action::ExecuteMission::Feedback to_feedback_msg(const core::Feedback & feedback)
 {
   idsim_interfaces::action::ExecuteMission::Feedback msg;
-  msg.stamp = stamp;
+  msg.stamp = to_time_msg(feedback.stamp_ns);
   msg.item_index = feedback.item_index;
   msg.item_count = feedback.item_count;
   msg.item_type = feedback.item_type;
