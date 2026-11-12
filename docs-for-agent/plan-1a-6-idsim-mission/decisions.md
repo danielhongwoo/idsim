@@ -171,7 +171,7 @@ M5(지상 disarm 실패)
   - [실측] G(처음부터 지상 setpoint로 arm, 2회): 상승은 최대 0.05 m, `landed`는 계속 true, disarm부터 DISARMED까지 4-12 ms. K(목표점을 유지한 채 disarm, 1회): disarm이 거부되고 4.2 m 올라갔다. H(목표점으로 arm한 뒤 1.5 s와 2.5 s에 지상 setpoint로 바꿈, 2회): 바꾸는 순간 이미 `landed`가 false였고(높이 0.07 m 이하) disarm은 TEMPORARILY_REJECTED였다. 지상 setpoint로 상승은 0.2 m 이하로 막혔지만 `landed`는 6 s 동안 돌아오지 않았다. 정리는 Hold가 아니라 NAV_LAND로 했다(3.4-3.5 s 뒤 disarm). 위 문장의 "공중 분기로 넘어가 지상 setpoint를 유지한 채 Hold"는 실측이 없다.
   - 필수 재실측의 두 경로(구현은 위 문장대로이고 재실측 결과로 바뀔 수 있다): (가) 지상 setpoint 발행 중에 보낸 Hold. X2a의 Hold는 TAKEOFF 목표점 발행 중이었다. [실측] 재실측 (2) 3회가 모두 Hold를 0.03 s 안에 관측했고 60 s 동안 M3의 상태로 머물렀다. (나) TAKEOFF 목표점 발행 중이고 `landed`가 아직 true인 구간에서 지상 setpoint로 바꾸고 disarm. G는 처음부터 지상 setpoint였고 H는 바꿀 때 이미 landed false였다. (나)가 "이륙 직후 취소"의 정상 경로다.
     - (나)의 구간은 둘로 나뉜다. spoolup 대역은 첫 ARMED 뒤 `COM_SPOOLUP_TIME`(1.0 s. 이 프로젝트는 바꾸지 않는다)까지다. [소스] 이 동안 위치 제어기는 setpoint를 쓰지 않고 추력을 0으로 둔다(`MulticopterPositionControl.cpp` 499, 512-519행, `Takeoff.cpp` 63-70행). 이 동안 지상 setpoint는 추력에 효과가 없고 disarm만으로 끝난다. 지상 setpoint가 들어가면 이륙 의도가 꺼져(`MulticopterPositionControl.cpp` 466-472행) spoolup이 끝나도 rampup에 들어가지 않으므로(`Takeoff.cpp` 72-80행), disarm이 늦거나 유실되어도 `landed`는 true로 남고 재전송으로 끝난다. [실측] 첫 ARMED 뒤 0.012 s의 3회와 arm 전송 뒤 0-0.2 s의 10회(재실측 (5))가 모두 분기 전환 없이 지상 DISARMED로 끝났다.
-    - rampup 대역은 그 뒤 `landed`가 false가 될 때까지다(첫 ARMED 뒤 약 1.0-1.75 s. [실측] rampup 시작은 1.000-1.024 s, 13회). [소스] rampup은 한 번 들어가면 되돌아가지 않고(`Takeoff.cpp` 72-96행), 이 동안 ramp 속도 상한이 위치 오차의 응답보다 큰 하강 속도를 강제하므로(`Takeoff.cpp` 112-133행, `MulticopterPositionControl.cpp` 542-545행) 지상 setpoint로 바꿔도 `landed`가 false가 되기 전까지 추력은 TAKEOFF 목표점일 때와 같다([추정] 이 기체의 파라미터로 상한이 하강 0.5 m/s 아래로 풀리는 것은 첫 ARMED 뒤 약 2.1 s다). 그래서 이 대역의 결과는 첫 disarm이 PX4에서 처리된 시각이 `landed`와 `maybe_landed`가 false가 된 시각보다 앞서는지로 정해진다. 강제가 아닌 disarm은 둘 중 하나만 참이어도 받아들여지고(`Commander.cpp` 644-662행) 보낸 뒤 4-20 ms에 처리되므로([실측] G, 재실측 (3), (5)) 첫 disarm이 이 대역에서 처리되면 지상 DISARMED로 끝난다고 본다. 첫 disarm이 유실되어 재전송이 `landed` false 뒤에 처리되면 경계와 같다. 실측은 없다(재실측 (3)의 rampup 내부 대역).
+    - rampup 대역은 그 뒤 `landed`가 false가 될 때까지다(첫 ARMED 뒤 약 1.0-1.75 s. [실측] rampup 시작은 1.000-1.024 s, 13회). [소스] rampup은 한 번 들어가면 되돌아가지 않고(`Takeoff.cpp` 72-96행), 이 동안 ramp 속도 상한이 위치 오차의 응답보다 큰 하강 속도를 강제하므로(`Takeoff.cpp` 112-133행, `MulticopterPositionControl.cpp` 542-545행) 지상 setpoint로 바꿔도 `landed`가 false가 되기 전까지 추력은 TAKEOFF 목표점일 때와 같다([추정] 이 기체의 파라미터로 상한이 하강 0.5 m/s 아래로 풀리는 것은 첫 ARMED 뒤 약 2.1 s다). 그래서 이 대역의 결과는 첫 disarm이 PX4에서 처리된 시각이 `landed`와 `maybe_landed`가 false가 된 시각보다 앞서는지로 정해진다. 강제가 아닌 disarm은 둘 중 하나만 참이어도 받아들여지고(`Commander.cpp` 644-662행) 보낸 뒤 20 ms 안에 처리되므로([실측] 재실측 (3), (5)의 ULog에서 disarm의 `vehicle_command_ack` `timestamp` - 명령 `timestamp`가 0-20 ms, 중앙 12 ms, 39회. 모두 ACCEPTED라 거부된 disarm의 처리 시간은 이 값에 없다) 첫 disarm이 이 대역에서 처리되면 지상 DISARMED로 끝난다고 본다. 첫 disarm이 유실되어 재전송이 `landed` false 뒤에 처리되면 경계와 같다. 실측은 없다(재실측 (3)의 rampup 내부 대역).
     - 경계: `landed`는 추력이 `maybe_landed`의 문턱을 넘는 순간 true에서 false로 지연 없이 바뀐다([소스] `MulticopterLandDetector.cpp` 262, 293-296행. hysteresis는 false에서 true 쪽에만 있다. 316-319행. [실측] `landed`와 `maybe_landed`가 13회 모두 같은 표본에서 false가 됐다). false가 된 뒤에는 위치만 담은 setpoint나 Hold로는 true로 돌아오지 않는다([소스] `ground_contact`에는 하강 속도 setpoint가 필요하다. 228-236행. [실측] 재실측 (2)의 60 s 3회). 그래서 경계에서 disarm이 거부되면 공중 분기의 Hold로 끝나고, 기체는 지면에 닿은 채 ARMED, AUTO_LOITER, `landed` false로 머문다(M3의 상태). 실측은 없다(재실측 (3)의 경계 대역).
   - 기각: 발행을 멈춘 뒤 disarm. 마지막 setpoint의 timestamp + 1 s 동안 이륙 의도가 남고(466-467행), 그 뒤에는 offboard 손실 Land가 걸려 상태가 하나 더 생긴다. 기각: TAKEOFF 목표점 유지(실측 K).
   - 0.5 m는 `src/px4/` 어댑터의 상수이고 노드 파라미터로 만들지 않는다. core는 이 값을 직접 적지 않는다(넘기는 방법은 ros2-engineer와 px4-engineer가 snapshot 경계에서 정한다).
@@ -368,7 +368,7 @@ source 값 표(1a 4단계 넘김 (1))
 | --- | --- | --- |
 | `idsim_mission` Executor | 254 | 191 |
 | SITL 통합 테스트 fixture | 254 | 25 |
-| 스모크 `check_px4.py` | 254 | 1 |
+| 스모크 `check_px4.py`, 측정 전용 `px4_measure_pub.py` | 254 | 1 |
 
 - 규칙: source_system은 어떤 기체 sysid와도 같지 않다(빌더가 거부한다. 쟁점 5). 255와 component 190은 쓰지 않는다. Executor의 값은 노드 선언 기본값이다(역할 상수라 생성하지 않는다).
 
@@ -432,10 +432,11 @@ px4-engineer 쪽 조건: core는 px4_msgs를 include하지 않는다(`idsim_miss
 ## 쟁점 8. 테스트의 /fmu/in 쓰기
 
 결정
-- Python으로 한다. `tests/support/px4_raw.py` 한 모듈만 PX4 토픽의 발행자를 만든다. 허용은 둘이다: `offboard_control_mode`(시나리오 T. context manager로만 만들고 끝나면 destroy), `vehicle_command`(비상 정리 전용. source가 (254, 25)가 아니면 생성 거부. 기대 sysid의 `vehicle_status`를 받아 대조한 뒤에만 발행한다). 테스트는 `trajectory_setpoint`를 발행하지 않는다.
+- Python으로 한다. PX4 토픽의 발행자를 만드는 모듈은 둘이다. `tests/support/px4_raw.py`(통합 테스트. 허용은 아래 둘)와 `tests/support/px4_measure_pub.py`(측정 전용. `tests/sitl/measure/` 밖에서 가져가지 않으며 pytest가 검사한다. 발행자는 `vehicle_command`(source 254/1), `offboard_control_mode`, `trajectory_setpoint` 셋이고 명령은 arm, disarm, offboard, hold, land 다섯 종류다. 발행 주기는 호출하는 측정 loop가 책임진다. Executor가 있는 스택에서는 쓰지 않는다). 두 모듈의 변경과 발행자, 명령 목록의 확장은 px4-engineer가 필수 승인한다. 통합 테스트는 `trajectory_setpoint`를 발행하지 않는다.
+- `px4_raw.py`의 허용은 둘이다: `offboard_control_mode`(시나리오 T. context manager로만 만들고 끝나면 destroy), `vehicle_command`(비상 정리 전용. source가 (254, 25)가 아니면 생성 거부. 기대 sysid의 `vehicle_status`를 받아 대조한 뒤에만 발행한다).
 - timestamp는 `Px4Timestamp`와 같은 변환(ROS 시각 ns / 1000)을 쓰고 그 변환을 단위 테스트로 고정한다.
 - Python 쪽 PX4 토픽 이름(1a 4단계 넘김): `tests/support`에 `px4_topic(ns, direction, base, msg_cls)` 한 함수. 접미사는 `getattr(msg_cls, "MESSAGE_VERSION", 0)`에서 만든다. golden `topics.txt`와 양방향 일치 pytest를 둔다. 통합 테스트 코드에 버전 접미사가 붙은 이름이나 /fmu 문자열을 쓰지 않는다. 스모크의 정규식은 그대로 둔다.
-- `px4-api` lint는 지금 `tests/`를 보지 않는다. P4에서 `tests/sitl/`과 `tests/support/`를 대상에 넣고 예외를 `tests/support/px4_raw.py`와 `px4_topic`이 든 파일로만 둔다(`px4_raw.py`의 변경은 px4-engineer가 필수 승인자다).
+- `px4-api` lint는 지금 `tests/`를 보지 않는다. P4에서 `tests/sitl/`과 `tests/support/`를 대상에 넣고 예외를 `tests/support/px4_raw.py`, `tests/support/px4_measure_pub.py`, `px4_topic`이 든 파일로만 둔다(예외는 파일 이름으로 적는다. `px4_measure_pub.py`가 토픽 이름을 `px4_raw.py`에서 얻어 문자열 검사에 걸리지 않는다는 것에 기대지 않는다).
 - Executor에 테스트 전용 파라미터나 우회 경로를 두지 않는다.
 
 근거: 묵은 timestamp 판정은 `Px4Timestamp`를 우회해야만 만들 수 있어 C++ 노드로 가도 `idsim_common` 밖의 우회가 필요하다. 그러면 별도 실행 파일과 빌드 대상만 늘고 얻는 것이 없다. 스모크 px4-in이 이미 Python으로 `vehicle_command`를 발행하는 선례가 있다. 발행 허용 목록은 "실수 방지 수준이며 보안 경계가 아니다"(roadmap 4번).
