@@ -18,8 +18,10 @@
 튜플이다. 함수는 (분류, 설명) 목록을 돌려주고 비어 있으면 통과다. 예외를 올리지 않는다(올리는 것은
 sitl_wait.raise_if). 판정 기준을 느슨하게 바꾸려면 근거와 함께 architect에게 올린다(decisions.md 쟁점 9).
 
-기준 상수(허용 오차, N)는 decisions.md 쟁점 9가 정한 값이다. 이 파일에서 새로 정한 것은 아래 표시한 둘이다.
-  HOVER_HOLD_TOL_M(0.5 m)와 DISARMED_HOLD_S(5 s). 둘 다 실측 분포가 아니라 판단이므로 첫 CI 기록 뒤 다시 본다.
+기준 상수(허용 오차, N)는 decisions.md 쟁점 9가 정한 값이다. 이 파일에서 새로 정한 것은 아래 표시한 셋이다.
+  HOVER_HOLD_TOL_M(0.5 m), HOVER_HOLD_S(5 s), DISARMED_HOLD_S(5 s). 값의 근거와 다시 보는 조건은 decisions.md
+  쟁점 9에 있다(HOVER_HOLD_S는 Land로 내려가면 약 1.1 s에 0.5 m를 넘고 5 s 안에 3 m 넘게 내려간다는 ULog 실측).
+  유지 구간의 최대 편차는 통과한 회에도 기록되고 note 임계값(sitl_summary.HOLD_DEV_NOTE_M)을 넘으면 note가 붙는다.
 """
 from dataclasses import dataclass
 
@@ -52,7 +54,7 @@ CLOCK_ALIGN_MAX_S = 0.5
 CLOCK_ALIGN_MIN_SAMPLES = 5
 HOVER_HOLD_TOL_M = 0.5           # 새로 정한 값. D의 "일정 시간 고도 유지"의 허용 하강량
 HOVER_HOLD_S = 5.0               # 새로 정한 값. D의 유지 시간(ROS 시각)
-DISARMED_HOLD_S = 5.0            # 새로 정한 값. B의 "일정 ROS 시간 동안 disarmed 유지"
+DISARMED_HOLD_S = 5.0            # 새로 정한 값. B와 C의 "일정 ROS 시간 동안 disarmed 유지"
 
 
 @dataclass(frozen=True)

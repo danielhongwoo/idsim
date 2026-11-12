@@ -124,14 +124,89 @@ def test_crosscheck_missing_inputs_is_two(tmp_path):
 
 def test_hold_deviation_is_recorded_and_noted(tmp_path):
     v = verdict()
-    v["hold_deviation_m"] = {"A_loiter": 0.1, "D_hover": 0.31}
+    v["hold_deviation_m"] = {"A_loiter": 0.309, "D_hover": 0.31}
     assert ss.hold_notes(v) == ["D_hover 유지 구간 최대 편차 0.310 m > 0.25 m (판정 상수 0.5 m 재검토 근거)"]
+    v["hold_deviation_m"]["A_loiter"] = 0.41
+    assert [n.split()[0] for n in ss.hold_notes(v)] == ["A_loiter", "D_hover"]
+    v["hold_deviation_m"] = {"A_loiter": 0.309, "D_hover": 0.31}
     row = dict(zip(ss.tsv_header(), ss.tsv_row(v)))
-    assert row["hold_dev_A_loiter_m"] == "0.100" and row["hold_dev_D_hover_m"] == "0.310"
-    assert "note: D_hover" in ss.summary_md(v)
+    assert row["hold_dev_A_loiter_m"] == "0.309" and row["hold_dev_D_hover_m"] == "0.310"
+    assert "note: D_hover" in ss.summary_md(v) and "note: A_loiter" not in ss.summary_md(v)
     v["passed"] = True
     write_verdict(tmp_path / "r", v)
     out = tmp_path / "g"
     assert summarize.main(["repeat", "--out", str(out), str(tmp_path / "r" / "sitl" / "verdict.json")]) == 0
     crit = json.loads((out / "armed_criterion.json").read_text(encoding="utf-8"))
     assert crit["hold_deviation_notes"][0][1].startswith("D_hover")
+
+
+def test_unknown_hold_item_fails():
+    import pytest
+    v = verdict()
+    v["hold_deviation_m"] = {"X_other": 0.1}
+    with pytest.raises(KeyError):
+        ss.hold_notes(v)
+
+
+def cc(status=0, ros=30, ulog=40, armed=3, missing=0, bad=0):
+    return {"status": status, "ros_samples": ros, "ulog_samples_in_range": ulog, "ulog_armed_samples": armed,
+            "ros_missing_in_ulog": missing, "ulog_armed_non_offboard": bad, "ulog_flight_armed_non_offboard": 0}
+
+
+def test_passed_with_ulog_counts_only_nonvacuous_zero_status_runs(tmp_path):
+    t = ss.ulog_crosscheck_totals([cc(), cc(status=2, ulog=0), cc(ros=0), None, cc(status=1, bad=1)])
+    assert t["n_checked"] == 1 and t["ulog_violation_total"] == 1
+    runs = []
+    for i in range(10):
+        v = verdict(run_id="r%d" % i)
+        v["passed"] = True
+        write_verdict(tmp_path / ("r%d" % i), v)
+        (tmp_path / ("r%d" % i) / "sitl" / "crosscheck_a.json").write_text(
+            json.dumps(cc(status=2, ulog=0) if i == 9 else cc()), encoding="utf-8")
+        runs.append(str(tmp_path / ("r%d" % i) / "sitl" / "verdict.json"))
+    out = tmp_path / "g"
+    summarize.main(["repeat", "--out", str(out)] + runs)
+    crit = json.loads((out / "armed_criterion.json").read_text(encoding="utf-8"))
+    assert crit["passed"] is True and crit["passed_with_ulog"] is False      # 한 회가 vacuous면 ULog 포함 통과가 아니다
+    (tmp_path / "r9" / "sitl" / "crosscheck_a.json").write_text(json.dumps(cc()), encoding="utf-8")
+    summarize.main(["repeat", "--out", str(out)] + runs)
+    assert json.loads((out / "armed_criterion.json").read_text(encoding="utf-8"))["passed_with_ulog"] is True
+    (tmp_path / "r9" / "sitl" / "crosscheck_a.json").write_text(json.dumps(cc(status=1, bad=1)), encoding="utf-8")
+    summarize.main(["repeat", "--out", str(out)] + runs)
+    assert json.loads((out / "armed_criterion.json").read_text(encoding="utf-8"))["passed_with_ulog"] is False
+
+
+def test_vacuous_reason_cases():
+    cc_mod = _crosscheck_module()
+    base = {"ulog_samples_in_range": 5, "ulog_armed_samples": 3, "ros_missing_in_ulog": 0, "ros_samples": 5}
+    assert cc_mod.vacuous_reason(base) is None
+    assert "표본이 없다" in cc_mod.vacuous_reason(dict(base, ulog_samples_in_range=0))
+    assert "ARMED" in cc_mod.vacuous_reason(dict(base, ulog_armed_samples=0))
+    assert "확인된 것이 없다" in cc_mod.vacuous_reason(dict(base, ros_missing_in_ulog=5))
+    assert cc_mod.vacuous_reason(dict(base, ros_samples=0)) is not None      # ROS 표본 0개도 비어 있다
+
+
+def test_build_row_without_land_start_checks_up_to_what_exists():
+    cc_mod = _crosscheck_module()
+    raw = [{"recv_ros_us": 10}, {"recv_ros_us": 1_000_000}]
+    row, kept = cc_mod.build_row({"window_us": [0, 100]}, raw)
+    assert "land_send" not in row["facts"] and kept == [raw[0]]
+    row, kept = cc_mod.build_row({"window_us": [0, 100], "land_start_recv_us": 20, "land_start_stamp_us": 20}, raw)
+    assert row["facts"]["land_send"] == [20, 20]
+    assert cc_mod.build_row({}, raw)[0] is None
+
+
+def test_decide_zero_one_two():
+    cm = _crosscheck_module()
+    ok = {"ulog_samples_in_range": 40, "ulog_armed_samples": 3, "ros_missing_in_ulog": 0, "ros_samples": 30,
+          "ulog_armed_non_offboard": 0, "ulog_flight_armed_non_offboard": 0, "ulog_only": 0, "ros_field_mismatch": []}
+    assert cm.decide(ok, True) == (0, [])
+    assert cm.decide(dict(ok, ulog_armed_non_offboard=1), True)[0] == 1
+    assert cm.decide(dict(ok, ulog_flight_armed_non_offboard=2), True)[0] == 1
+    for empty in (dict(ok, ulog_samples_in_range=0), dict(ok, ulog_armed_samples=0),
+                  dict(ok, ros_missing_in_ulog=30)):
+        status, notes = cm.decide(empty, True)
+        assert status == 2 and "대조가 비어 있다" in notes[0]
+    assert cm.decide(dict(ok, ulog_armed_samples=0, ulog_armed_non_offboard=1), True)[0] == 1   # 위반이 앞선다
+    status, notes = cm.decide(dict(ok, ulog_only=2), False)
+    assert status == 0 and any("LAND" in n for n in notes) and any("ULog에만" in n for n in notes)

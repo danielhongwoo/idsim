@@ -23,7 +23,8 @@
 사용법: tests/sitl/crosscheck_a.py <실행 디렉터리> [--sitl-dir sitl]
 결과: <실행 디렉터리>/<sitl-dir>/crosscheck_a.json.
 종료 코드: 0 통과, 1 ULog 기준 OFFBOARD가 아닌 ARMED 표본이 위반 구간(ulog_armed_non_offboard)이나 비행 구간
-(ulog_flight_armed_non_offboard)에 있음(실행 실패), 2 판정 불가(입력 없음. run_sitl.sh가 INFRA로 따로 분류).
+(ulog_flight_armed_non_offboard)에 있음(실행 실패), 2 판정 불가(입력 없음, 대조가 비어 있음: ULog 구간 표본 0개, ULog ARMED 표본 0개, ROS 표본이 ULog에서 하나도
+확인되지 않음, 파싱 중 예외. run_sitl.sh가 INFRA로 따로 분류).
 ros_missing_in_ulog, ros_field_mismatch, ulog_only는 기록만 하고 판정에서 뺀다. ulog_only가 0이 아니면 notes에 적는다.
 """
 import argparse
@@ -40,18 +41,49 @@ WINDOW_SLACK_US = 500_000
 
 
 def build_row(armed_a, raw_status):
-    """armed_a.json과 raw_status_A.jsonl로 check_row가 읽는 행을 만든다. 입력이 모자라면 (None, 이유)."""
-    if not armed_a.get("takeoff_start_seen"):
-        return None, "TAKEOFF 시작 feedback을 보지 못했다"
-    if "land_start_recv_us" not in armed_a:
-        return None, "LAND 시작 feedback을 보지 못했다"
+    """armed_a.json과 raw_status_A.jsonl로 check_row가 읽는 행을 만든다. 입력이 모자라면 (None, 이유).
+
+    LAND 시작 feedback이 없으면(A가 앞에서 실패) 있는 이정표까지, 곧 위반 구간(goal 전송부터 TAKEOFF 시작 뒤
+    0.5 s, TAKEOFF 시작을 못 봤으면 기록 시점)만 대조하고 비행 구간은 보지 않는다."""
+    if "window_us" not in armed_a:
+        return None, "armed_a.json에 window_us가 없다"
     lo, end_ts = armed_a["window_us"]
-    land_recv, land_ts = armed_a["land_start_recv_us"], armed_a["land_start_stamp_us"]
-    row = {"item": "A", "attempt": 1, "verdict": "PASS", "facts": {
-        "armed_window_ros_us": [lo, end_ts + WINDOW_SLACK_US], "arm_send": [lo, lo],
-        "land_send": [land_recv, land_ts]}}
-    raw = [r for r in raw_status if r["recv_ros_us"] <= land_recv]
+    facts = {"armed_window_ros_us": [lo, end_ts + WINDOW_SLACK_US], "arm_send": [lo, lo]}
+    raw = [r for r in raw_status if r["recv_ros_us"] <= end_ts + WINDOW_SLACK_US]
+    if "land_start_recv_us" in armed_a:
+        land_recv, land_ts = armed_a["land_start_recv_us"], armed_a["land_start_stamp_us"]
+        facts["land_send"] = [land_recv, land_ts]
+        raw = [r for r in raw_status if r["recv_ros_us"] <= land_recv]
+    row = {"item": "A", "attempt": 1, "verdict": "PASS", "facts": facts}
     return row, raw
+
+
+def vacuous_reason(res):
+    """대조가 비어 있어 통과로 볼 수 없는 경우의 사유(없으면 None). measure_check.row_status와 같은 처리다:
+    ULog 구간 표본 0개, ULog에 ARMED 표본 0개, ROS 표본이 하나도 ULog에서 확인되지 않음."""
+    if res["ulog_samples_in_range"] == 0:
+        return "ULog 구간에 vehicle_status 표본이 없다"
+    if res["ulog_armed_samples"] == 0:
+        return "ULog 구간에 ARMED 표본이 없다(대조할 ARMED 구간이 없다)"
+    if res["ros_missing_in_ulog"] == res["ros_samples"]:
+        return "ROS 표본 %d개 중 ULog에서 확인된 것이 없다" % res["ros_samples"]
+    return None
+
+
+def decide(res, has_land):
+    """check_row 결과에서 (종료 코드, notes). 0 통과, 1 ULog 기준 위반, 2 대조가 비어 있음(INFRA).
+    위반이 보이면 1이 앞선다. 대조가 비어 있으면 통과가 아니다(vacuous PASS 방지)."""
+    bad = res["ulog_armed_non_offboard"] + res["ulog_flight_armed_non_offboard"]
+    empty = vacuous_reason(res)
+    status = 1 if bad else (2 if empty else 0)
+    notes = ["대조가 비어 있다: " + empty] if empty else []
+    if not has_land:
+        notes.append("LAND 시작 feedback이 없어 위반 구간까지만 대조했다(비행 구간은 보지 않았다)")
+    if res["ulog_only"]:
+        notes.append("ULog에만 있는 표본 %d개(ROS가 받지 못한 표본). 판정에는 쓰지 않는다" % res["ulog_only"])
+    if res["ros_missing_in_ulog"] or res["ros_field_mismatch"]:
+        notes.append("ROS 표본과 ULog의 불일치가 있다(기록만 한다)")
+    return status, notes
 
 
 def _main(argv=None):
@@ -84,13 +116,7 @@ def _main(argv=None):
     topics = ulog_min.read_topics(str(path), {"vehicle_status": 0})
     by_ts = {int(r["timestamp"]): r for r in topics["vehicle_status"]}
     res = mc.check_row(row, raw, by_ts, sorted(by_ts), ulog_min.read_logged(str(path)))
-    bad = res["ulog_armed_non_offboard"] + res["ulog_flight_armed_non_offboard"]
-    status = 1 if bad else 0
-    notes = []
-    if res["ulog_only"]:
-        notes.append("ULog에만 있는 표본 %d개(ROS가 받지 못한 표본). 판정에는 쓰지 않는다" % res["ulog_only"])
-    if res["ros_missing_in_ulog"] or res["ros_field_mismatch"]:
-        notes.append("ROS 표본과 ULog의 불일치가 있다(기록만 한다)")
+    status, notes = decide(res, "land_start_recv_us" in armed_a)
     res = dict(res, status=status, notes=notes, ulog=str(path.relative_to(run)))
     (out / "crosscheck_a.json").write_text(json.dumps(res, indent=1, sort_keys=True, default=str) + "\n", encoding="utf-8")
     print("crosscheck A: ROS %d개 중 ULog에 없음 %d, 필드 불일치 %d, ULog에만 있는 표본 %d, ULog 기준 비OFFBOARD ARMED %d(비행 구간 %d), 종료 코드 %d%s"

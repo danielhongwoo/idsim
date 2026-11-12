@@ -22,7 +22,10 @@ from tests.support import measure_judge as mj
 
 SCENARIOS = ("B", "C", "A", "D", "T")     # 실행 순서(decisions.md 쟁점 9)
 SCHEMA = 1
-HOLD_DEV_NOTE_M = 0.25                    # 유지 구간 최대 편차가 이 값을 넘으면 note(판정 상수 0.5 m 재검토 근거)
+# 유지 구간 최대 편차가 이 값을 넘으면 note(판정 상수 0.5 m 재검토 근거). 항목마다 따로 둔다(architect 결정):
+# D는 허용(0.5 m)의 절반 0.25 m, A는 도달 허용 0.3 m + 수렴 과도 0.1 m = 0.4 m. A의 LOITER는 도달 허용에 들자마자
+# 시작해서 로컬 13회 ULog 실측 최대 편차가 0.278-0.309 m이고 D는 0.066-0.075 m였다.
+HOLD_DEV_NOTE_M = {"A_loiter": 0.4, "D_hover": 0.25}
 HOLD_DEV_COLUMNS = ("A_loiter", "D_hover")
 ARMED_MIN_REACHED = 10                    # 부류마다 ARMED 3회 확인까지 간 실행 10회 이상
 
@@ -91,10 +94,14 @@ def tsv_row(verdict, wall_total_s=None):
 
 
 def hold_notes(verdict):
-    """유지 구간 최대 편차가 HOLD_DEV_NOTE_M(0.25 m)를 넘은 항목의 note 목록."""
-    return ["%s 유지 구간 최대 편차 %.3f m > %.2f m (판정 상수 0.5 m 재검토 근거)" % (n, v, HOLD_DEV_NOTE_M)
-            for n, v in sorted((verdict.get("hold_deviation_m") or {}).items())
-            if v is not None and v > HOLD_DEV_NOTE_M]
+    """유지 구간 최대 편차가 항목별 임계값(HOLD_DEV_NOTE_M)을 넘은 항목의 note 목록. 알 수 없는 키는 실패한다."""
+    out = []
+    for n, v in sorted((verdict.get("hold_deviation_m") or {}).items()):
+        if n not in HOLD_DEV_NOTE_M:
+            raise KeyError("알 수 없는 유지 구간 항목 %r(알려진 항목: %s)" % (n, sorted(HOLD_DEV_NOTE_M)))
+        if v is not None and v > HOLD_DEV_NOTE_M[n]:
+            out.append("%s 유지 구간 최대 편차 %.3f m > %.2f m (판정 상수 0.5 m 재검토 근거)" % (n, v, HOLD_DEV_NOTE_M[n]))
+    return out
 
 
 def armed_rows(verdicts):
@@ -122,10 +129,14 @@ def armed_criterion(verdicts, min_reached=ARMED_MIN_REACHED):
 
 def ulog_crosscheck_totals(results):
     """회차별 crosscheck_a.json 목록(없으면 None)의 합산. 위반은 ULog 기준 OFFBOARD가 아닌 ARMED 표본 수다.
-    ROS 유실(ulog_only)과 불일치는 판정에서 빼고 합만 적는다."""
+
+    n_checked는 status 0이고 대조 표본이 있는 회(ROS 표본과 ULog 구간 표본이 모두 1개 이상)만 센다. 대조가
+    비었거나(vacuous) 예외로 끝난 회는 세지 않는다. ROS 유실(ulog_only)과 불일치는 판정에서 빼고 합만 적는다."""
     done = [r for r in results if r and "ulog_armed_non_offboard" in r]
+    checked = [r for r in done if r.get("status") == 0 and r.get("ros_samples", 0) > 0
+               and r.get("ulog_samples_in_range", 0) > 0]
     return {
-        "n_runs": len(results), "n_checked": len(done),
+        "n_runs": len(results), "n_checked": len(checked),
         "ulog_violation_total": sum(r["ulog_armed_non_offboard"] + r["ulog_flight_armed_non_offboard"] for r in done),
         "ulog_only_total": sum(r.get("ulog_only", 0) for r in done),
         "ros_missing_in_ulog_total": sum(r.get("ros_missing_in_ulog", 0) for r in done),
