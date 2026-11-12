@@ -1,5 +1,6 @@
 """stack.py 단위 테스트. 예시 JSON은 스키마 초안(ros2-engineer, 2026-11-09)의 6.1, 6.2절 그대로다."""
 import json
+from pathlib import Path
 
 import pytest
 
@@ -475,3 +476,69 @@ def test_empty_vehicles_rejected():
         d["vehicles"] = []
     with pytest.raises(stk.StackError, match="vehicles"):
         stk.loads(_mutate(K0_STANDALONE, clear))
+
+
+# --- 생성기 판 3의 노드 단계 key. 생성기 골든(실제 생성기 출력)으로 읽는다 ---
+
+GOLDEN_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "gen_compose"
+
+
+def _golden(name):
+    return stk.load(GOLDEN_DIR / name / "stack.json")
+
+
+def test_node_keys_standalone_golden():
+    s = _golden("1대-k0")
+    v = s.vehicles[0]
+    assert s.generator_version >= 3
+    assert v.vehicle_id == "px4_1"
+    assert v.executor_node == "/px4_1/mission_executor"
+    assert v.params_file == "params/ops-1.yaml"
+    assert s.ops_services == ["ops-1"]
+    assert s.node_stages == [["ops-1"]]
+    assert s.params_dir == s.dir / "params"
+    assert s.params_path(v) == s.dir / "params" / "ops-1.yaml"
+    assert s.vehicle_by_vehicle_id("px4_1") is v
+    assert s.images["ros_ws"]
+    assert s.git_commit == s.raw["generator"]["git_commit"]
+
+
+def test_node_keys_three_vehicles_golden():
+    s = _golden("3대-k0")
+    assert [v.vehicle_id for v in s.vehicles] == ["px4_1", "px4_2", "px4_3"]
+    assert s.ops_services == ["ops-1", "ops-2", "ops-3"]
+    assert [s.params_path(v).name for v in s.vehicles] == ["ops-1.yaml", "ops-2.yaml", "ops-3.yaml"]
+    with pytest.raises(stk.StackLookupError):
+        s.vehicle_by_vehicle_id("px4_9")
+
+
+def test_node_keys_embedded_golden_is_empty():
+    s = _golden("embedded")
+    v = s.vehicles[0]
+    assert v.vehicle_id == "px4_1"
+    assert v.executor_node is None and v.params_file is None
+    assert s.ops_services == [] and s.node_stages == []
+    assert s.params_dir is None and s.params_path(v) is None
+
+
+def test_node_keys_required_from_generator_v3():
+    d = json.loads((GOLDEN_DIR / "1대-k0" / "stack.json").read_text(encoding="utf-8"))
+    for drop in (lambda x: x["vehicles"][0].pop("vehicle_id"),
+                 lambda x: x["vehicles"][0].pop("executor_node"),
+                 lambda x: x["vehicles"][0].pop("params_file"),
+                 lambda x: x["run"].pop("params_dir"),
+                 lambda x: x["startup"].pop("node_stages"),
+                 lambda x: x["services"].pop("ops")):
+        e = json.loads(json.dumps(d))
+        drop(e)
+        with pytest.raises(stk.StackError, match="필수 필드 누락"):
+            stk.loads(json.dumps(e), "x/stack.json")
+
+
+def test_node_keys_absent_in_old_generator_fail_on_access(tmp_path):
+    s = stk.load(_write(tmp_path, K0_STANDALONE))
+    assert s.generator_version == 1
+    assert s.vehicles[0].vehicle_id is None
+    for attr in ("ops_services", "node_stages", "params_dir"):
+        with pytest.raises(stk.StackError, match="노드 단계 key가 없다"):
+            getattr(s, attr)

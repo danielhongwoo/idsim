@@ -21,6 +21,9 @@ from pathlib import Path
 
 ENV_VAR = "IDSIM_STACK_FILE"
 SUPPORTED_SCHEMAS = frozenset({1})
+# 생성기 판 3부터 stack.json에 노드 단계 key(vehicle_id, params_file, executor_node, run.params_dir,
+# startup.node_stages, services.ops)가 있다. 판 3 이상이면 필수로 검사하고, 그보다 낮은 판은 읽기만 한다.
+NODE_KEYS_MIN_GENERATOR_VERSION = 3
 
 
 class StackError(Exception):
@@ -84,6 +87,14 @@ _VEHICLE_SPEC = {
 
 _ORIGIN_SPEC = {"lat": (int, float), "lon": (int, float), "alt": (int, float)}
 
+# 생성기 판 3 이상에서 추가로 검사하는 key(Executor 노드 단계). embedded 변형에는 노드가 없어 null/빈 목록이다.
+_V3_SPEC = {
+    "run": {"params_dir": _NSTR},
+    "startup": {"node_stages": (list,)},
+    "services": {"ops": (list,)},
+}
+_V3_VEHICLE_SPEC = {"vehicle_id": _STR, "params_file": _NSTR, "executor_node": _NSTR}
+
 
 def _type_ok(value, types):
     if isinstance(value, bool):
@@ -126,6 +137,15 @@ def _validate(data):
                     raise StackError(f"vehicles[{i}].{name}.{k}: 값은 문자열이어야 한다")
     if not data["vehicles"]:
         raise StackError("vehicles가 비어 있다")
+    if data["generator"]["version"] >= NODE_KEYS_MIN_GENERATOR_VERSION:
+        _check(data, _V3_SPEC, "")
+        for i, v in enumerate(data["vehicles"]):
+            _check(v, _V3_VEHICLE_SPEC, f"vehicles[{i}]")
+        for i, st in enumerate(data["startup"]["node_stages"]):
+            if not isinstance(st, list) or not all(isinstance(x, str) for x in st):
+                raise StackError(f"startup.node_stages[{i}]: 문자열 배열이어야 한다")
+        if not all(isinstance(x, str) for x in data["services"]["ops"]):
+            raise StackError("services.ops: 문자열 배열이어야 한다")
     if not all(isinstance(s, str) for s in data["services"]["px4"]):
         raise StackError("services.px4: 문자열 배열이어야 한다")
 
@@ -149,6 +169,10 @@ class Vehicle:
     expected_params: dict
     derived_params: dict
     raw: dict
+    # 생성기 판 3 이상에서만 값이 있다(그보다 낮은 판은 None). executor_node와 params_file은 embedded에서 None이다
+    vehicle_id: str = None   # 계약 식별자("px4_1"). action 이름 /<vehicle_id>/execute_mission
+    params_file: str = None  # 실행 디렉터리 기준 상대 경로(params/ops-N.yaml)
+    executor_node: str = None  # Executor 노드 FQN("/px4_1/mission_executor")
 
 
 @dataclass(frozen=True)
@@ -227,6 +251,64 @@ class Stack:
     def startup_stages(self):
         return self.raw["startup"]["stages"]
 
+    # 생성기 판 3 이상의 key. 낮은 판이면 StackError(이 stack.json에는 노드 단계가 없다)
+    def _need_node_keys(self):
+        if self.generator_version < NODE_KEYS_MIN_GENERATOR_VERSION:
+            raise StackError(
+                f"{self.path}: 생성기 판 {self.generator_version}에는 노드 단계 key가 없다"
+                f"(필요: {NODE_KEYS_MIN_GENERATOR_VERSION} 이상)")
+
+    @property
+    def generator_version(self):
+        return self.raw["generator"]["version"]
+
+    @property
+    def git_commit(self):
+        """생성 시점의 commit. 알 수 없으면 None."""
+        return self.raw["generator"]["git_commit"]
+
+    @property
+    def git_dirty(self):
+        """생성 시점의 작업 트리 변경 여부. 알 수 없으면 None."""
+        return self.raw["generator"]["git_dirty"]
+
+    @property
+    def images(self):
+        """이미지 참조(sim_base, px4, ros_ws, xrce_agent, lichtblick). 파일에 적힌 값 그대로."""
+        return self.raw["images"]
+
+    @property
+    def node_stages(self):
+        """노드 단계(서비스 이름 목록의 목록). embedded는 빈 목록."""
+        self._need_node_keys()
+        return self.raw["startup"]["node_stages"]
+
+    @property
+    def ops_services(self):
+        """Executor 서비스 이름(ops-N) 목록. embedded는 빈 목록."""
+        self._need_node_keys()
+        return self.raw["services"]["ops"]
+
+    @property
+    def params_dir(self):
+        """params 디렉터리의 절대 경로. embedded는 None."""
+        self._need_node_keys()
+        rel = self.raw["run"]["params_dir"]
+        return None if rel is None else self.resolve(rel)
+
+    def params_path(self, vehicle):
+        """기체의 Executor params 파일 절대 경로. embedded는 None."""
+        self._need_node_keys()
+        return None if vehicle.params_file is None else self.resolve(vehicle.params_file)
+
+    def vehicle_by_vehicle_id(self, vehicle_id):
+        """계약 식별자("px4_1")로 기체를 찾는다."""
+        for v in self.vehicles:
+            if v.vehicle_id == vehicle_id:
+                return v
+        raise StackLookupError(
+            f"vehicle_id {vehicle_id!r}이 없다: {[v.vehicle_id for v in self.vehicles]}")
+
     # 기체 조회
     def vehicle_by_id(self, vid):
         for v in self.vehicles:
@@ -282,7 +364,8 @@ def _vehicle(d):
         service=d["service"], pose=dict(d["pose"]), mavlink=dict(d["mavlink"]),
         rootfs_dir=d["rootfs_dir"], ulog_dir=d["ulog_dir"], host_rootfs_dir=d["host_rootfs_dir"],
         expected_params=dict(d["expected_params"]), derived_params=dict(d["derived_params"]),
-        raw=d)
+        raw=d, vehicle_id=d.get("vehicle_id"), params_file=d.get("params_file"),
+        executor_node=d.get("executor_node"))
 
 
 def loads(text, path="<string>"):
