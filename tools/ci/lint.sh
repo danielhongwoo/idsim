@@ -228,12 +228,27 @@ check_px4_api() {
   # /fmu 토픽 이름과 idsim_common 내부 이름은 idsim_common 안에서만 쓴다(1a 4단계 쟁점 2, git 이력).
   # 다른 패키지가 문자열을 직접 쓰면 공개 API의 발행 허용 목록을 우회한다. 실수 방지 수준이며 보안 경계가 아니다.
   # 대상은 ros_ws/src 아래 idsim_common 밖의 C++ 파일, .py 파일(launch 포함), yaml 파일(params, remap)과
-  # 생성기 golden의 params 파일이다. tests/sitl/, tests/support/는 test-engineer의 예외 목록이 정해진 뒤 연결한다(decisions 쟁점 8).
-  local files=() f
+  # 생성기 golden의 params 파일, tests/sitl/과 tests/support/ 아래의 .py, yaml 파일이다(decisions 쟁점 8).
+  # tests/ 쪽 예외는 파일 이름으로만 둔다: tests/support/px4_raw.py, tests/support의 측정 전용 발행 모듈(이름은 아래 measure_pub),
+  # 이름에 px4_topic이 든 파일(px4_topic.py, test_px4_topic_names.py). 토픽 이름을 다른 모듈에서 얻어 검사에 안 걸린다는 사실에는 기대지 않는다.
+  # 예외 파일이 사라지면 목록이 낡은 것이므로 실패시킨다.
+  # 측정 전용 모듈 이름을 한 덩어리 문자열로 쓰면 "측정 모듈은 measure/ 밖에서 가져가지 않는다"는 pytest의 문자열 검사가 이 파일을 걸므로 둘로 나눠 적는다
+  local measure_pub="px4_measure" files=() f exc_raw=0 exc_pub=0 exc_topic=0
   while IFS= read -r f; do
-    case "$f" in ros_ws/src/idsim_common/*) ;; *) files+=("$f") ;; esac
+    case "$f" in
+      ros_ws/src/idsim_common/*) ;;
+      tests/support/px4_raw.py) exc_raw=1 ;;
+      "tests/support/${measure_pub}_pub.py") exc_pub=1 ;;
+      tests/sitl/*px4_topic*|tests/support/*px4_topic*) exc_topic=1 ;;
+      *) files+=("$f") ;;
+    esac
   done < <(list_files 'ros_ws/src/*.py' 'ros_ws/src/*.yaml' 'ros_ws/src/*.yml' 'tests/fixtures/gen_compose/*/params/*.yaml' \
+    'tests/sitl/*.py' 'tests/sitl/*.yaml' 'tests/sitl/*.yml' 'tests/support/*.py' 'tests/support/*.yaml' 'tests/support/*.yml' \
     "${cpp_specs[@]/#/ros_ws/src/}")
+  if [ $((exc_raw + exc_pub + exc_topic)) -ne 3 ]; then
+    result px4-api FAIL "예외 파일이 없다(px4_raw.py=${exc_raw}, measure_pub=${exc_pub}, px4_topic 파일=${exc_topic}). lint.sh의 예외 목록을 고친다"
+    return 1
+  fi
   if [ "${#files[@]}" -eq 0 ]; then result px4-api PASS-NO-TARGETS "(0 files)"; return 0; fi
   local out rc=0
   out="$(grep -nF -e 'fmu/in/' -e 'fmu/out/' -e 'detail::topic_name' -e 'idsim_common::px4::detail' \
