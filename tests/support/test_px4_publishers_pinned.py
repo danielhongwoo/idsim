@@ -278,3 +278,13 @@ def test_emergency_command_constants_are_land_and_plain_disarm():
                 if fn.name == "disarm":      # 강제 disarm(param2)을 넣지 않는다: 인자는 command와 param1 하나
                     assert len(n.args) == 2
     assert consts == {"VEHICLE_CMD_NAV_LAND", "VEHICLE_CMD_COMPONENT_ARM_DISARM"}
+
+
+def test_raw_first_clock_wait_is_the_only_wall_clock_wait(raw_module):
+    # 통합 테스트의 벽시계 대기는 첫 /clock 유예 하나뿐이다(decisions.md 쟁점 10)
+    raw = raw_module.Px4Raw("px4_1", 2)
+    with pytest.raises(raw_module.sw.SitlFailure) as e:
+        raw.wait_first_clock(0.05)
+    assert e.value.category == "CLOCK_ABSENT"
+    raw._clock_us = 1
+    raw.wait_first_clock(0.05)

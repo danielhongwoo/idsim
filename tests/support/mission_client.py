@@ -24,8 +24,6 @@ from tests.support import sitl_judge as sj
 from tests.support import sitl_wait as sw
 
 EVENT_DEPTH = 200
-ACTION_NAME = "execute_mission"   # ExecuteMission.ACTION_NAME. 네임스페이스는 /<vehicle_id>
-EVENT_TOPIC = "mission_event"     # MissionEvent.TOPIC_NAME
 
 
 def stamp_us(t):
@@ -92,21 +90,24 @@ class GoalRun:
 class MissionClient:
     """node 하나에서 mission_event 구독을 먼저, action client를 그다음에 만든다."""
 
-    def __init__(self, node, vehicle_id, now_us, event_cls=None, action_cls=None,
+    def __init__(self, node, vehicle_id, now_us, event_cls=None, action_cls=None, mission_cls=None,
                  subscribe=_default_subscribe, make_client=_default_client):
-        if event_cls is None or action_cls is None:
+        """토픽과 action 이름은 생성 코드의 상수(MissionEvent.TOPIC_NAME, Mission.ACTION_NAME)에서 읽는다.
+        네임스페이스는 /<vehicle_id>다."""
+        if event_cls is None or action_cls is None or mission_cls is None:
             from idsim_interfaces.action import ExecuteMission
-            from idsim_interfaces.msg import MissionEvent
+            from idsim_interfaces.msg import Mission, MissionEvent
             event_cls = event_cls or MissionEvent
             action_cls = action_cls or ExecuteMission
+            mission_cls = mission_cls or Mission
         self.node = node
         self.vehicle_id = vehicle_id
         self._now_us = now_us
         self.events = []
         self.feedbacks = []
         self.runs = []
-        self.event_topic = "/%s/%s" % (vehicle_id, EVENT_TOPIC)
-        self.action_name = "/%s/%s" % (vehicle_id, ACTION_NAME)
+        self.event_topic = "/%s/%s" % (vehicle_id, event_cls.TOPIC_NAME)
+        self.action_name = "/%s/%s" % (vehicle_id, mission_cls.ACTION_NAME)
         # 순서가 계약이다. 이 두 줄의 순서를 바꾸지 않는다(위 모듈 설명).
         self.event_sub = subscribe(node, event_cls, self.event_topic, self._on_event)
         self.client = make_client(node, action_cls, self.action_name)
@@ -120,10 +121,8 @@ class MissionClient:
     # --- gate ---
 
     def event_publisher_count(self):
-        sub = self.event_sub
-        if hasattr(sub, "get_publisher_count"):
-            return sub.get_publisher_count()
-        return self.node.count_publishers(self.event_topic)
+        """자기 mission_event 구독의 get_publisher_count()(graph 조회가 아니다. decisions.md 쟁점 7)."""
+        return self.event_sub.get_publisher_count()
 
     def server_ready(self):
         return self.client.server_is_ready()

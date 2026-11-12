@@ -26,8 +26,11 @@ from tests.support import sitl_wait as sw
 
 
 class FakeNode:
-    def count_publishers(self, topic):
-        return 1
+    pass
+
+
+EVENT = NS(TOPIC_NAME="mission_event")
+MISSION = NS(ACTION_NAME="execute_mission")
 
 
 def make(calls):
@@ -41,7 +44,7 @@ def make(calls):
         calls.append(("client", n, name))
         return NS(server_is_ready=lambda: True)
 
-    return node, mc.MissionClient(node, "px4_1", lambda: 123, event_cls=object, action_cls=object,
+    return node, mc.MissionClient(node, "px4_1", lambda: 123, event_cls=EVENT, action_cls=object, mission_cls=MISSION,
                                   subscribe=subscribe, make_client=client)
 
 
@@ -54,15 +57,6 @@ def test_subscription_is_created_before_client_on_the_same_node():
     assert calls[1][2] == "/px4_1/execute_mission"
     assert c.event_publisher_count() == 2
     assert c.server_ready()
-
-
-def test_event_publisher_count_falls_back_to_graph_query():
-    node = FakeNode()
-    c = mc.MissionClient(node, "px4_1", lambda: 0, event_cls=object, action_cls=object,
-                         subscribe=lambda n, cls, t, cb: object(),
-                         make_client=lambda n, cls, name: NS(server_is_ready=lambda: False))
-    assert c.event_publisher_count() == 1
-    assert not c.server_ready()
 
 
 def test_event_and_feedback_conversion():
@@ -109,7 +103,7 @@ def test_send_goal_records_run_and_result(monkeypatch):
                     reason=0, items_completed=3, last_item_index=2, detail=""))))
     client = NS(server_is_ready=lambda: True,
                 send_goal_async=lambda goal, feedback_callback: Fut(handle))
-    c = mc.MissionClient(FakeNode(), "px4_1", lambda: 50, event_cls=object, action_cls=object,
+    c = mc.MissionClient(FakeNode(), "px4_1", lambda: 50, event_cls=EVENT, action_cls=object, mission_cls=MISSION,
                          subscribe=lambda *a: object(), make_client=lambda *a: client)
     monkeypatch.setattr(c, "build_goal", lambda vid, mid, items: object())
     run = c.send_goal(StepWaiter(), "px4_1", "m1", [{}, {}, {}])
@@ -120,7 +114,7 @@ def test_send_goal_records_run_and_result(monkeypatch):
 def test_rejected_goal_has_no_result_future(monkeypatch):
     handle = NS(accepted=False)
     client = NS(server_is_ready=lambda: True, send_goal_async=lambda goal, feedback_callback: Fut(handle))
-    c = mc.MissionClient(FakeNode(), "px4_1", lambda: 0, event_cls=object, action_cls=object,
+    c = mc.MissionClient(FakeNode(), "px4_1", lambda: 0, event_cls=EVENT, action_cls=object, mission_cls=MISSION,
                          subscribe=lambda *a: object(), make_client=lambda *a: client)
     monkeypatch.setattr(c, "build_goal", lambda *a: object())
     run = c.send_goal(StepWaiter(), "px4_1", "m", [])

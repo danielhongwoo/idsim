@@ -97,6 +97,7 @@ class Px4Raw:
         self.sysid = int(sysid)
         self.with_flags = bool(with_flags)
         self.node = Node(node_name, parameter_overrides=[Parameter("use_sim_time", value=True)])
+        self.subs = {}            # 이름 -> 구독 객체(clock, status, landed, pos, ack, flags)
         self.status_sysids = {}   # vehicle_status.system_id -> 표본 수
         self.flags = []       # sitl_judge.FlagSample (with_flags일 때만)
         self.status = []      # StatusSample (수신 순서)
@@ -113,10 +114,20 @@ class Px4Raw:
 
     # --- 시작과 종료 ---------------------------------------------------
 
-    def start(self, timeout_s=60.0):
-        """토픽을 찾아 구독을 만들고 spin을 시작한다. 못 찾으면 RuntimeError(NO_PUBLISHER)."""
+    def start(self, timeout_s=60.0, waiter=None, clock_wall_grace_s=15.0):
+        """토픽을 찾아 구독을 만들고 spin을 시작한다. 못 찾으면 NO_PUBLISHER.
+
+        waiter가 없으면(측정 스크립트) 토픽 탐색을 벽시계 timeout_s로 기다린다(옛 동작 그대로).
+        waiter가 있으면(통합 테스트) 구독을 만들자마자 spin을 시작하고, 벽시계를 쓰는 곳은 첫 /clock을 기다리는
+        유예(clock_wall_grace_s) 하나뿐이다. 그 뒤 토픽 탐색은 ROS 시각 timeout_s로 기다린다.
+        """
         n = self.node
-        self._keep.append(n.create_subscription(Clock, "/clock", self._on_clock, _qos_clock()))
+        self.subs["clock"] = n.create_subscription(Clock, "/clock", self._on_clock, _qos_clock())
+        self._keep.append(self.subs["clock"])
+        if waiter is not None:
+            self._spin = SpinThread(n)
+            self._spin.__enter__()
+            self.wait_first_clock(clock_wall_grace_s)
         found = {}
         specs = [("status", "vehicle_status", VehicleStatus),
                  ("landed", "vehicle_land_detected", VehicleLandDetected),
@@ -126,22 +137,43 @@ class Px4Raw:
             specs.append(("flags", "failsafe_flags", FailsafeFlags))
         for key, base, cls in specs:
             name = px4_topic(self.ns_abs, "out", base, cls)
-            hit = wait_for_topic(n, "^%s$" % re.escape(name), timeout_s)
-            if hit is None:
+            if waiter is None:
+                hit = wait_for_topic(n, "^%s$" % re.escape(name), timeout_s)
+                ok = hit is not None
+            else:
+                ok = waiter.wait_or_timeout(
+                    lambda name=name: any(t == name for t, _ in n.get_topic_names_and_types()), timeout_s,
+                    "토픽 " + name)
+            if not ok:
                 raise sw.SitlFailure(sw.NO_PUBLISHER, "%s 토픽을 %s s 안에 찾지 못함" % (name, timeout_s))
-            found[key] = hit[0]
+            found[key] = name
         self.topics = found
         qos = _qos_keep_all()
-        self._keep.append(n.create_subscription(VehicleStatus, found["status"], self._on_status, qos))
-        self._keep.append(n.create_subscription(VehicleLandDetected, found["landed"],
-                                                self._on_landed, qos))
-        self._keep.append(n.create_subscription(VehicleLocalPosition, found["pos"],
-                                                self._on_pos, qos))
-        self._keep.append(n.create_subscription(VehicleCommandAck, found["ack"], self._on_ack, qos))
+        for key, cls, cb in (("status", VehicleStatus, self._on_status),
+                             ("landed", VehicleLandDetected, self._on_landed),
+                             ("pos", VehicleLocalPosition, self._on_pos),
+                             ("ack", VehicleCommandAck, self._on_ack)):
+            self.subs[key] = n.create_subscription(cls, found[key], cb, qos)
+            self._keep.append(self.subs[key])
         if self.with_flags:
-            self._keep.append(n.create_subscription(FailsafeFlags, found["flags"], self._on_flags, qos))
-        self._spin = SpinThread(n)
-        self._spin.__enter__()
+            self.subs["flags"] = n.create_subscription(FailsafeFlags, found["flags"], self._on_flags, qos)
+            self._keep.append(self.subs["flags"])
+        if self._spin is None:
+            self._spin = SpinThread(n)
+            self._spin.__enter__()
+
+    def wait_first_clock(self, grace_s):
+        """프로세스 시작 직후 /clock 구독이 맺어질 때까지의 유예(벽시계). 통합 테스트에서 벽시계를 쓰는 유일한 대기다.
+        (decisions.md 쟁점 10, architecture.md 시간 절 (4))"""
+        t0 = time.monotonic()
+        while self._clock_us <= 0:
+            if time.monotonic() - t0 > grace_s:
+                raise sw.SitlFailure(sw.CLOCK_ABSENT, "/clock을 벽시계 %.0f s 안에 받지 못했다" % grace_s)
+            time.sleep(0.05)
+
+    def publisher_counts(self):
+        """구독 객체마다 get_publisher_count()(graph 조회가 아니라 구독 자신의 matched 수)."""
+        return {k: v.get_publisher_count() for k, v in self.subs.items()}
 
     def close(self):
         if self._spin is not None:

@@ -30,7 +30,7 @@ from tests.support.px4_raw import EmergencyCommand, Px4Raw
 from tests.support.sitl_trace import Trace
 
 US = 1_000_000
-CLOCK_DISCOVERY_WALL_S = 15.0    # 프로세스 시작 직후 /clock 구독이 맺어질 때까지만 쓰는 벽시계 유예
+CLOCK_DISCOVERY_WALL_S = 15.0    # 프로세스 시작 직후 첫 /clock 수신까지만 쓰는 벽시계 유예(Px4Raw.start가 쓴다)
 GATE_SERVER_S = 30.0
 GATE_STATUS_S = 20.0
 GROUND_WAIT_S = 20.0
@@ -77,7 +77,7 @@ class SitlSession:
 
     def start(self):
         """토픽을 찾고 구독을 만들어 spin을 시작한다. gate()가 이어서 준비 상태를 검증한다."""
-        self.raw.start()
+        self.raw.start(waiter=self.waiter, clock_wall_grace_s=CLOCK_DISCOVERY_WALL_S)
         self._spin.__enter__()
         self._started = True
 
@@ -93,27 +93,19 @@ class SitlSession:
             if self._rclpy.ok():
                 self._rclpy.shutdown()
 
-    def _wait_first_clock(self):
-        # 프로세스 시작 직후 /clock 구독이 맺어지기 전의 유예. 이 한 번만 벽시계로 기다린다(판정 시간이 아니다).
-        t0 = time.monotonic()
-        while self.raw.clock_us() <= 0:
-            if time.monotonic() - t0 > CLOCK_DISCOVERY_WALL_S:
-                raise sw.SitlFailure(sw.CLOCK_ABSENT, "/clock을 벽시계 %.0f s 안에 받지 못했다" % CLOCK_DISCOVERY_WALL_S)
-            time.sleep(0.05)
-
     def gate(self):
         """goal 전 gate(decisions.md 쟁점 7)와 /clock 정렬(쟁점 9). 어긋나면 SitlFailure."""
         w = self.waiter
         w0 = time.monotonic()
         s0 = self.raw.clock_us()
-        self._wait_first_clock()
         w.now()
-        # 1. 맺어짐: 사건 발행자, PX4 토픽의 발행자. 사건 수신의 근거는 아니다(순서 규칙이 받친다)
+        # 1. 맺어짐: 사건 발행자, PX4 토픽의 발행자(각 구독 객체의 get_publisher_count(). graph 조회가 아니다).
+        #    사건 수신의 근거는 아니다(순서 규칙이 받친다)
         self._need(lambda: self.mission.event_publisher_count() >= 1, 20.0, "mission_event 발행자",
                    sw.NO_PUBLISHER)
-        for key, topic in sorted(self.raw.topics.items()):
-            self._need(lambda t=topic: self.raw.node.count_publishers(t) >= 1, 20.0, "PX4 토픽 발행자 " + key,
-                       sw.NO_PUBLISHER)
+        for key in sorted(self.raw.subs):
+            self._need(lambda k=key: self.raw.subs[k].get_publisher_count() >= 1, 20.0,
+                       "구독 %s의 발행자" % key, sw.NO_PUBLISHER)
         # 2. action server
         mcl.require_server(w, self.mission, GATE_SERVER_S)
         # 3. 기대 sysid의 vehicle_status 표본, 다른 sysid의 표본이 없다
