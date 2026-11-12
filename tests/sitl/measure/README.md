@@ -17,7 +17,7 @@ tests/sitl/measure/run_measure.sh [--stack 7] [--attempts N] [--keep] item2|item
 - `--keep`을 주면 끝나도 스택을 내리지 않는다. `measure.py`는 마지막 시도 뒤 기체를 DISARMED, `landed` true로 되돌리고(`--keep`이어도) 그 결과를 요약에 적는다. 되돌리지 못하면 Hold armed로 남아 있을 수 있다.
 - 같은 실행 id의 `measure/`에 기록이 있으면 스택을 올리기 전에 거부한다.
 - 추가 인자: `MEASURE_ARGS="--observe-s 60 --hold-observe-s 60 --delays 0,0.05,0.1,0.15,0.2 --takeoff-alt 5 --tail-s 3 --settle-s 3"`. `--delays`((5) 전용)는 0-0.2 s 범위만, `--tail-s`는 0보다 커야 한다. `--item3-delays`((3) 전용)는 고정 목록(아래) 아홉 개를 모두 포함해야 하고(순서는 자유) 부분 목록과 중복을 거부한다. 다른 값은 코드의 고정 목록을 고쳐야 한다.
-- 이 스크립트는 `tools/sim_stack.sh up`으로 스택을 올린다. P4 뒤에는 `up`이 Executor도 띄워 setpoint가 섞이므로 `sim_stack.sh up --infra-only`로 바꿔야 한다.
+- 이 스크립트는 `tools/sim_stack.sh up --infra-only`로 스택을 올린다. 그냥 `up`은 Executor(`ops-N`)도 띄워 setpoint가 측정기의 직접 발행과 섞인다.
 
 ## (3)의 대역과 판정
 
