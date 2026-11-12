@@ -113,3 +113,10 @@ def test_ulog_crosscheck_totals():
     t = ss.ulog_crosscheck_totals([r, None, dict(r, ulog_flight_armed_non_offboard=0)])
     assert t["n_runs"] == 3 and t["n_checked"] == 2 and t["ulog_violation_total"] == 1
     assert t["ulog_only_total"] == 4 and t["ros_field_mismatch_total"] == 2
+
+
+def test_tsv_row_has_final_rc_columns():
+    row = dict(zip(ss.tsv_header(), ss.tsv_row(verdict(), rcs={"pytest": 0, "crosscheck": 2, "stop_check": 0, "final": 2})))
+    assert (row["rc_pytest"], row["rc_crosscheck"], row["rc_stop_check"], row["rc_final"]) == ("0", "2", "0", "2")
+    row = dict(zip(ss.tsv_header(), ss.tsv_row(verdict())))
+    assert row["rc_final"] == "-"

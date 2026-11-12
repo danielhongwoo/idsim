@@ -11,6 +11,7 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 - 스택은 호스트 wrapper가 `tools/sim_stack.sh`로 올리고 내린다. pytest는 `runner`(ros-ws) 컨테이너 안에서 돌고 fixture는 이미 뜬 스택에 붙어 준비 상태를 검증만 한다. 검증이 실패하면 skip이 아니라 오류다.
 - `ros_ws/install/idsim_mission/`이 없으면 빌드하지 않고 안내와 함께 실패한다(`tools/ros_ws.sh build`).
 - `--repeat N`은 회마다 down 뒤 콜드 up이다. 첫 실패에서 멈추고 재시도하지 않는다. "로컬 3회 연속 통과"는 같은 commit, 같은 이미지 key에서 `--repeat 3`이 세 회 모두 통과하는 것이다. 실패하면 0부터 다시 센다. `artifacts/sitl_repeat/<시각>-k<k>/`에 `repeat_summary.tsv`(실행 id, commit과 dirty, 이미지 key, 시나리오별 verdict, 시나리오 A 이정표별 ROS 시각 소요, RTF, 벽시계 소요, ARMED 표본 수)와 `armed_criterion.json`이 남는다.
+- `-- -k test_b`처럼 일부 시나리오만 고르면 나머지가 빠지므로 `verdict.json`의 통과 조건(다섯 시나리오 모두 passed)에 걸려 종료 코드 1로 끝난다. 디버깅 용도로만 쓴다.
 - `--attach DIR`은 올리지도 내리지도 않고 pytest와 수집만 한다(QGC와 Gazebo GUI 육안 확인, 디버깅). 산출물은 `DIR/sitl-attach-<시각>/`에 쓴다.
 - 종료 코드: 0 전체 통과, 1 시나리오나 정지 검사 실패(ULog 교차 확인 실패 포함), 2 사용법, 선행 조건, 스택 올리기(`INFRA_UP`) 실패, ULog 교차 확인의 입력 없음과 판정 불가. ULog 교차 확인 실패는 1, 입력 없음과 판정 불가(파싱 중 예외 포함)는 2다. stdout 마지막 줄은 실행 디렉터리다. 환경변수 `SITL_PYTEST_TIMEOUT`(기본 900 s)이 pytest 전체의 벽시계 상한이다.
 - 이 디렉터리의 테스트는 lint job의 pytest(`tests/support`, `tests/tools`)가 수집하지 않는다.
@@ -37,7 +38,7 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 `artifacts/runs/<실행 id>/` 아래. 실패하면 이 디렉터리 전체를, 성공하면 `sitl/junit.xml`, `sitl/trace.jsonl`, `sitl/summary.md`를 CI가 올린다.
 
 - `compose.yaml`, `stack.json`, `params/`, `px4-N/log/*.ulg`, `ros_log/`
-- `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록), `summary.md`, `steps.tsv`(단계별 벽시계 초), `raw_status_A.jsonl`, `armed_a.json`, `ulog_check.txt`(ULog가 메시지 경계에서 끝나는지), `ps_before_stop.jsonl`(stop 전 서비스 상태), `stop_exit.txt`(stop 뒤 서비스 종료 코드), `logs/<서비스>.log`, `health_<서비스>.txt`, `crosscheck_a.json`
+- `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록), `summary.md`, `steps.tsv`(단계별 벽시계 초), `raw_status_A.jsonl`, `armed_a.json`, `ulog_check.txt`(ULog가 메시지 경계에서 끝나는지), `ps_before_stop.jsonl`(stop 전 서비스 상태), `stop_exit.txt`(stop 뒤 서비스 종료 코드), `logs/<서비스>.log`, `health_<서비스>.txt`, `crosscheck_a.json`, `rc.json`(회차별 종료 코드), `graph/`(pytest가 실패한 회의 `ros2 node list`, `ros2 topic list -t`, 시나리오가 쓰는 토픽의 `ros2 topic info -v`)
 
 유지 구간(A의 LOITER, D의 취소 뒤 유지)의 기준 고도로부터의 최대 편차는 통과한 회에도 `trace.jsonl`(`hold_deviation`), `verdict.json`(`hold_deviation_m`), `repeat_summary.tsv`(`hold_dev_*_m`)에 남는다. 항목별 임계값(A의 LOITER 0.4 m, D의 유지 0.25 m)을 넘으면 `summary.md`와 `armed_criterion.json`의 `hold_deviation_notes`에 note가 붙는다(판정 상수 0.5 m 재검토의 근거. 임계값은 `tests/support/sitl_summary.py`의 `HOLD_DEV_NOTE_M`).
 

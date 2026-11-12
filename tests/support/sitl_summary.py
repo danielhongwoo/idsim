@@ -27,6 +27,8 @@ SCHEMA = 1
 # 시작해서 로컬 13회 ULog 실측 최대 편차가 0.278-0.309 m이고 D는 0.066-0.075 m였다.
 HOLD_DEV_NOTE_M = {"A_loiter": 0.4, "D_hover": 0.25}
 HOLD_DEV_COLUMNS = ("A_loiter", "D_hover")
+# 회차마다 run_sitl.sh가 sitl/rc.json에 남기는 종료 코드: pytest, ULog 교차 확인, 정지 검사(0 정상, 1 비정상), 최종
+RC_COLUMNS = ("pytest", "crosscheck", "stop_check", "final")
 ARMED_MIN_REACHED = 10                    # 부류마다 ARMED 3회 확인까지 간 실행 10회 이상
 
 
@@ -65,6 +67,7 @@ def tsv_header():
     cols += ["A_%s_s" % m for _, m in MILESTONE_COLUMNS]
     cols += ["rtf", "sim_s", "wall_s", "armed_a_samples", "armed_a_non_offboard", "armed_a_armed3"]
     cols += ["hold_dev_%s_m" % n for n in HOLD_DEV_COLUMNS]
+    cols += ["rc_" + n for n in RC_COLUMNS]
     return cols
 
 
@@ -76,7 +79,7 @@ def _fmt(v):
     return str(v)
 
 
-def tsv_row(verdict, wall_total_s=None):
+def tsv_row(verdict, wall_total_s=None, rcs=None):
     """회차 요약 한 줄. 이정표는 시나리오 A의 goal 전송을 0으로 한 ROS 시각 소요(초)다."""
     images = verdict.get("images", {})
     ms = {s["id"]: s for s in verdict.get("scenarios", [])}.get("A", {}).get("milestones", {})
@@ -90,6 +93,7 @@ def tsv_row(verdict, wall_total_s=None):
               armed.get("armed_samples"), armed.get("armed_non_offboard"), armed.get("armed3_reached")]
     dev = verdict.get("hold_deviation_m") or {}
     cells += [dev.get(n) for n in HOLD_DEV_COLUMNS]
+    cells += [(rcs or {}).get(n) for n in RC_COLUMNS]
     return [_fmt(c) for c in cells]
 
 

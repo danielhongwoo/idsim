@@ -30,7 +30,7 @@
 #   stdout     마지막 줄이 (마지막 회의) 실행 디렉터리 절대 경로 artifacts/runs/<실행 id>. 나머지는 모두 stderr
 #   요약       GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
 #   산출물     <실행 디렉터리>/sitl/: junit.xml, trace.jsonl, verdict.json, summary.md, steps.tsv, raw_status_A.jsonl,
-#              armed_a.json, crosscheck_a.json, ulog_check.txt, ps_before_stop.jsonl, stop_exit.txt, logs/<서비스>.log,
+#              armed_a.json, crosscheck_a.json, rc.json(회차별 종료 코드), graph/(실패한 회의 노드, 토픽, QoS), ulog_check.txt, ps_before_stop.jsonl, stop_exit.txt, logs/<서비스>.log,
 #              health_<서비스>.txt. 실행 디렉터리 안에는 compose.yaml, stack.json, params/, px4-N/log/*.ulg, ros_log/
 #              --repeat이면 artifacts/sitl_repeat/<시각>-k<k>/ 에 repeat_summary.tsv, armed_criterion.json
 #   소유       artifacts/runs/ 아래 파일은 모두 호스트 사용자 소유다(컨테이너를 호스트 uid:gid로 돌린다)
@@ -148,7 +148,7 @@ one_run() { # 회 번호
   say "pytest: runner 안에서 tests/sitl (바깥 timeout ${pytest_timeout} s)"
   t0="$(now)"
   # shellcheck disable=SC2016  # $1과 $@는 컨테이너 안의 bash가 푼다
-  timeout --foreground "$pytest_timeout" docker compose -f "$compose" run --rm --no-deps -T \
+  timeout --foreground -s INT -k 30 "$pytest_timeout" docker compose -f "$compose" run --rm --no-deps -T \
     -e IDSIM_SITL_OUT="$out_name" runner bash -c \
     'cd /opt/idsim && exec python3 -m pytest tests/sitl -p no:cacheprovider -ra --junitxml="$1" "${@:2}"' _ \
     "/opt/idsim/${rel}/${out_name}/junit.xml" ${pytest_args[@]+"${pytest_args[@]}"} >&2
@@ -156,10 +156,12 @@ one_run() { # 회 번호
   t1="$(now)"
   steps="${steps:+${steps},}pytest=$((t1 - t0))"
   local pytest_rc="$rc"
-  [ "$rc" -eq 124 ] && say "pytest가 바깥 timeout ${pytest_timeout} s에 걸렸다(wrapper가 끊었다)"
+  [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ] && say "pytest가 바깥 timeout ${pytest_timeout} s에 걸렸다(wrapper가 INT로 끊었다. 30 s 안에 안 끝나면 KILL)"
+  # 실패 회의 graph snapshot(stop 전, 스택이 떠 있을 때): 노드, 토픽, 시나리오가 쓰는 토픽의 발행자/구독자 QoS
+  [ "$pytest_rc" -ne 0 ] && graph_snapshot "$compose" "${run_dir}/${out_name}"
 
   # stop 전에 서비스 상태를 기록하고 running이 아닌 ops-N이 있으면 실패로 센다(정리 뒤에는 exit code 1이 정상이다)
-  local stop_bad=0
+  local stop_bad=0 cross_rc=0
   docker compose -f "$compose" ps -a --format json >"${run_dir}/${out_name}/ps_before_stop.jsonl" 2>/dev/null || true
   # shellcheck disable=SC2207  # 서비스 이름에는 공백이 없다
   ops=($(python3 - "${run_dir}/stack.json" <<'PY'
@@ -209,7 +211,26 @@ PY
     say "ULog 교차 확인 입력이 없다(INFRA)"
     [ "$run_rc" -eq 0 ] && run_rc=2
   fi
+  printf '{"pytest": %s, "crosscheck": %s, "stop_check": %s, "final": %s}\n' "$pytest_rc" "$cross_rc" "$stop_bad" "$run_rc" \
+    >"${run_dir}/${out_name}/rc.json"
   say "회 ${i}: pytest 종료 코드 ${pytest_rc}, ULog 교차 확인 ${cross_rc}, 정지 전 ops 상태 $([ "$stop_bad" -eq 0 ] && echo 정상 || echo 비정상), 결과 $([ "$run_rc" -eq 0 ] && echo 통과 || echo 실패)"
+}
+
+# 실패한 회의 graph snapshot. runner 안에서 ros2 CLI로 노드 목록, 토픽 목록과 시나리오가 쓰는 토픽의 발행자/구독자 QoS
+# (ros2 topic info -v)를 sitl/graph/ 아래에 남긴다. 이미 실패한 회의 진단용이라 실패해도 넘어간다.
+graph_snapshot() { # compose out_dir
+  local compose="$1" out_dir="$2/graph"
+  mkdir -p "$out_dir"
+  say "실패한 회: graph snapshot을 ${out_dir#"${repo_root}"/}에 남긴다"
+  # shellcheck disable=SC2016  # 컨테이너 안의 bash가 푼다
+  timeout 150 docker compose -f "$compose" run --rm --no-deps -T runner bash -c '
+    out="$1"; cd /opt/idsim
+    ros2 node list --no-daemon > "$out/nodes.txt" 2>&1
+    ros2 topic list -t --no-daemon > "$out/topics.txt" 2>&1
+    pat="^/clock$|/mission_event$|/execute_mission/_action/|/fmu/out/(vehicle_status|vehicle_land_detected|vehicle_local_position|vehicle_command_ack|failsafe_flags)|/fmu/in/(vehicle_command|offboard_control_mode)"
+    for t in $(awk "{print \$1}" "$out/topics.txt" | grep -E "$pat"); do
+      ros2 topic info -v --no-daemon "$t" > "$out/info$(echo "$t" | tr / _).txt" 2>&1
+    done' _ "/opt/idsim/${2#"${repo_root}"/}/graph" >/dev/null 2>&1 || say "graph snapshot이 끝나지 않았다(무시)"
 }
 
 # 서비스 종료 코드와 로그, healthcheck 기록을 모은다
