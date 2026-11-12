@@ -239,6 +239,7 @@ tools/sim_stack.sh up --viz --stack 1
 - foxglove_bridge는 읽기 전용이다. `capabilities`는 `connectionGraph`뿐이고(clientPublish, services, parameters 없음) client 토픽, service, 파라미터 허용 목록은 아무것과도 맞지 않는 정규식이다. 토픽 허용 목록은 기체마다 `^/px4_N/.*`이며 `/clock`은 250 Hz라 넣지 않는다.
 - 브라우저에서 Lichtblick이 열리면 자동으로 WebSocket에 연결된다. 연결되지 않으면 "Open connection"에서 Foxglove WebSocket을 고르고 `ws://127.0.0.1:<8765 + k>`를 입력한다.
 - 기체 토픽은 `/px4_N/fmu/in/...`, `/px4_N/fmu/out/...`이다. 플롯에 setpoint(`/px4_N/fmu/in/trajectory_setpoint`)와 `/px4_N/fmu/out/vehicle_local_position_v1`을 함께 놓는다(토픽 이름의 버전 접미사는 스택에서 `ros2 topic list`로 본다).
+- GPU(WebGL)가 없는 VM의 브라우저에서는 Lichtblick 기본 레이아웃의 3D 패널이 "Error creating WebGL context"로 뜨지 않는다. 그 패널을 지우고 Plot 패널로 `/px4_<N>/fmu/out/vehicle_local_position_v1.z`와 `/px4_<N>/fmu/in/trajectory_setpoint.position[2]`를 본다. 3D 패널이 필요하면 브라우저의 소프트웨어 WebGL을 켠다(Chrome `chrome://flags`의 "Override software rendering list", Firefox `about:config`의 `webgl.force-enabled`).
 - 끄기는 `docker compose -p idsim-<k> stop foxglove lichtblick`. 서버와 기체는 계속 돈다.
 
 ## 버전을 올릴 때
