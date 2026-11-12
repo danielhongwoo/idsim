@@ -68,7 +68,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - CI `sitl` job은 아직 한 번도 돌지 않았다. 첫 실행에서 단계별 시간, 판정 구간 RTF, probe 시간, runner의 Docker 판(`start_interval`은 Engine 25 이상), 실패 때 `artifacts/runs/`가 job artifact로 올라가는지를 기록한다(쟁점 11). 1a 실행당 10-13분과 판정 구간 ROS 시각 90-110 s는 아직 추정이다.
 - `ops-N` 정지와 실패 탐지의 측정 기록이 없다: stop 검증 10회(goal 실행 중 stop에서 종료 사건 ABORTED, REASON_INTERNAL이 구독자에게 오는지, on_shutdown이 SIGINT 뒤에 도는지는 실측이 없다), `vehicle.id` 누락에서 unhealthy까지의 시간(예상 약 54 s, 최악 70 s). 값이 `decisions.md` 쟁점 2와 다르면 architect에게 올린다.
 - 시나리오 A의 ULog 교차 확인은 실행마다 돌고 `--repeat`의 `armed_criterion.json`이 `passed_with_ulog`를 적지만, 부류별 10회 기준을 여러 `--repeat` 묶음과 PX4 직접 명령 부류의 ULog까지 합산해 판정하는 자동화는 없다(test-engineer). 지금은 사람이 묶음별 결과를 합친다.
-- 유지 구간 상수(`HOVER_HOLD_TOL_M` 0.5 m, `HOVER_HOLD_S` 5 s, `DISARMED_HOLD_S` 5 s)는 실측 분포 없이 정한 값이다. 다시 보는 조건은 `decisions.md` 쟁점 9에 있다.
+- 유지 구간 상수(`HOVER_HOLD_TOL_M` 0.5 m, `HOVER_HOLD_S` 5 s, `DISARMED_HOLD_S` 5 s)는 로컬 13회 ULog 실측으로 유지했고 CI 기록은 아직 없다. 다시 보는 조건은 `decisions.md` 쟁점 9에 있다. note 임계값을 구간별(A 0.4 m, D 0.25 m)로 나누는 `tests/support/sitl_summary.py`, 그 테스트, `tests/sitl/README.md`의 수정이 남아 있다(test-engineer).
 - 감시 표의 행 순위는 필수 재실측 (4) 전까지 잠정이다. 필수 재실측 여덟 항목은 `plan-1a-6-idsim-mission/decisions.md` 넘김 목록에 있다.
 - 스모크 images 단계(`tests/smoke/run_smoke.sh`의 check_s0)가 `LLVM_MAJOR`와 `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다. `tools/ros_ws.sh`의 대조는 이미지에 있는 ENV만 돌아서 그 ENV가 없는 옛 ros-ws 이미지가 통과한다. 옛 `:local` 이미지로 `sim_stack.sh up --viz`를 하면 foxglove만 죽는다. P4 또는 P5 전에 images 단계에 넣는다(test-engineer). `ros_ws.sh`에 `versions.env`의 이름 기준 존재 검사를 둘지는 devops-engineer와 test-engineer가 정한다.
 - foxglove_bridge의 판은 `FOXGLOVE_BRIDGE_VERSION` 접두 단정까지만 고정된다. ROS sync로 새 판이 오면 ros-ws key가 바뀌는 PR의 빌드가 실패한다(의도한 동작). 같은 판 안의 revision과 의존 패키지는 고정되지 않는다.
