@@ -884,7 +884,10 @@ def main(argv=None):
         fh.write("- 정리 총 소요 9 s 미만(상한 12 s에 여유 3 s). 넘으면 상한을 올리지 않고 architect에게 올린다.\n")
         fh.write("- 계획한 시도 수 %d (기준의 최소 %d). 실패한 시도를 빼지 않고 재시도하지 않는다.\n"
                  % (args.attempts, MIN_ATTEMPTS[item]))
-        fh.write("- 3회 시도의 실패율 95%% 상한은 약 100%%(3/n)다. 통과는 실패 없음의 증거가 아니다.\n")
+        fh.write("- %d회 중 0건은 실패율의 95%% 상한이 %s라는 뜻이다. 통과는 실패 없음의 증거가 아니다.\n"
+                 % (args.attempts, mj.upper95_text(args.attempts)))
+        fh.write("- 이 요약의 결과 절은 measure.py 단독 판정이다. crosscheck.py 뒤의 최종 판정은 이 파일 끝의 "
+                 "'최종 판정' 절과 final_summary.json에 있다.\n")
         fh.write("- 판정 코드: tests/support/measure_judge.py. 정본: decisions.md 넘김 목록의 px4-engineer 행.\n")
         fh.write("- 이 측정은 Executor 없이 PX4에 직접 명령을 보낸다. 정리 모델은 measure_judge.CleanupModel.\n")
 
@@ -999,11 +1002,11 @@ def main(argv=None):
             rs = [r for r in rows_all if r["item"] == sub]
             j = mj.judge_run(rs, MIN_ATTEMPTS[item])
             fh.write("%s: 시도 %d(유효 %d), PASS %d, 기준과 다른 관측(exit 1) %d, 제외(자극 불성립) %d, 그 밖 %d, "
-                     "유효 시도 수 충분 %s, 전부 PASS %s, 실패율 95%% 상한 약 %s\n" % (
+                     "유효 시도 수 충분 %s, 전부 PASS %s, 무실패일 때 실패율 95%% 상한 %s\n" % (
                          sub, j["n"], j["n_valid"], j["n_pass"], j["n_fail"], j["n_excluded"], j["n_other"],
                          j["enough"],
-                         j["all_pass"], "-" if j["upper95_fail_rate"] is None
-                         else "%.0f%%" % (100 * min(1.0, j["upper95_fail_rate"]))))
+                         j["all_pass"], "-" if not j["n_valid"]
+                         else mj.upper95_text(j["n_valid"])))
             for r in rs:
                 if r["verdict"] != "PASS":
                     fh.write("  시도 %d %s: %s\n" % (r["attempt"], r["verdict"], "; ".join(r["reasons"])))

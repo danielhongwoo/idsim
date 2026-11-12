@@ -676,6 +676,16 @@ def judge_attempt(item, f):
     raise ValueError("알 수 없는 item: %r" % item)
 
 
+def fail_upper95(n):
+    """n회 모두 통과(실패 0건)일 때 실패율의 정확한 95% 상한: 1 - 0.05^(1/n)."""
+    return 1.0 - 0.05 ** (1.0 / n)
+
+
+def upper95_text(n):
+    """무실패 n회의 실패율 95% 상한 문장 조각. 예: n=10이면 '약 26%(3/n 근사로는 30%)'."""
+    return "약 %.0f%%(3/n 근사로는 %.0f%%)" % (100 * fail_upper95(n), 100 * min(1.0, 3.0 / n))
+
+
 def judge_run(item_rows, min_attempts, armed_reached_min=None):
     """한 항목의 시도 행 모음을 요약한다. 실패한 시도를 빼지 않는다.
 
@@ -684,7 +694,8 @@ def judge_run(item_rows, min_attempts, armed_reached_min=None):
     INCONCLUSIVE, COND_NOT_REACHED, HOLD_END, PRECONDITION 등은 유효 시도가 아니고, EXCLUDED_VERDICTS
     (WINDOW_MISSED, ARM_NOT_ACCEPTED)는 유효 시도도 not-pass도 아닌 제외된 회(n_excluded)다.
     돌려주는 dict: n, n_valid, n_pass, n_fail(exit 1 verdict), n_excluded, n_other, enough(n_valid >=
-      min_attempts), all_pass(제외된 회를 뺀 모든 시도가 PASS), upper95_fail_rate(3/n_valid), armed3_reached
+      min_attempts), all_pass(제외된 회를 뺀 모든 시도가 PASS), upper95_fail_rate(무실패일 때 정확한 95% 상한
+      1 - 0.05^(1/n_valid)), upper95_fail_rate_approx(3/n_valid 근사), armed3_reached
     """
     n = len(item_rows)
     n_valid = sum(1 for r in item_rows if r["verdict"] in VALID_VERDICTS)
@@ -696,7 +707,8 @@ def judge_run(item_rows, min_attempts, armed_reached_min=None):
         "n": n, "n_valid": n_valid, "n_pass": n_pass, "n_fail": n_fail, "n_excluded": n_excl,
         "n_other": n - n_pass - n_fail - n_excl,
         "enough": n_valid >= min_attempts, "all_pass": n - n_excl > 0 and n_pass == n - n_excl,
-        "upper95_fail_rate": (3.0 / n_valid) if n_valid else None,
+        "upper95_fail_rate": fail_upper95(n_valid) if n_valid else None,
+        "upper95_fail_rate_approx": (3.0 / n_valid) if n_valid else None,
         "armed3_reached": reached,
     }
     if armed_reached_min is not None:

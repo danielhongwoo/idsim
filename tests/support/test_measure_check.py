@@ -530,3 +530,31 @@ def test_rows_schema_problems_flag_old_records():
     old = {"item": "5", "attempt": 1, "class": "px4_direct", "args": {}}
     p = mc.rows_schema_problems([good, old])
     assert len(p) == 1 and "inconclusive_kind" in p[0]
+
+
+def _final_rows():
+    rows = [{"item": "5", "attempt": i, "verdict": "INCONCLUSIVE" if i <= 2 else "PASS",
+             "injection": {"delay_s_nominal": 0.1}} for i in range(1, 11)]
+    finals = {("5", i): "PASS" for i in range(1, 11)}
+    return rows, finals
+
+
+def test_final_section_shows_final_verdict_and_changed_rows():
+    rows, finals = _final_rows()
+    summ = mc.final_summary(rows, finals)
+    text = "\n".join(mc.final_section(rows, finals, summ))
+    assert mc.FINAL_SECTION_MARKER in text
+    assert "유효 10, PASS 10(최소 10)" in text and "유효 시도 수 충분 True" in text
+    assert "약 26%(3/n 근사로는 30%)" in text
+    assert "5 시도 1: INCONCLUSIVE -> PASS" in text and "5 시도 2: INCONCLUSIVE -> PASS" in text
+    rows2 = [dict(r, verdict="PASS") for r in rows]
+    assert "다른 행: 없음" in "\n".join(mc.final_section(rows2, finals, mc.final_summary(rows2, finals)))
+
+
+def test_append_final_section_is_idempotent():
+    rows, finals = _final_rows()
+    lines = mc.final_section(rows, finals, mc.final_summary(rows, finals))
+    once = mc.append_final_section("# 요약\n본문", lines)
+    twice = mc.append_final_section(once, lines)
+    assert once == twice and once.count(mc.FINAL_SECTION_MARKER) == 1
+    assert once.startswith("# 요약\n본문\n")

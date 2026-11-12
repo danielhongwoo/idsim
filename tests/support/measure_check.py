@@ -352,3 +352,45 @@ def run_status(rows, min_attempts, meta_ok=True, crit=None):
     if crit is not None and crit["violated_any_class"]:
         fail = True
     return 1 if fail else status
+
+
+FINAL_SECTION_MARKER = "## 최종 판정 (crosscheck 뒤)"
+
+
+def final_section(rows, finals, summary):
+    """crosscheck 뒤 summary_<item>.txt에 덧붙일 최종 판정 절의 줄 목록.
+
+    rows: 그 item 파일의 measure 행. finals: {(item, attempt): 최종 verdict}. summary: final_summary 결과.
+    measure.py 단독 판정(행의 verdict)과 최종 판정이 다른 행을 따로 적는다."""
+    lines = [FINAL_SECTION_MARKER,
+             "아래가 최종 판정이다. 위 '결과' 절은 crosscheck 전 measure.py 단독 판정이다(final_summary.json과 같은 값)."]
+    subs = sorted({r["item"] for r in rows})
+    for sub in subs:
+        d = summary[sub]
+        if d["n_valid"] and d["n_exit1"] == 0:
+            bound = ", 무실패일 때 실패율 95%% 상한 %s" % mj.upper95_text(d["n_valid"])
+        else:
+            bound = ""
+        lines.append("%s: 시도 %d, 유효 %d, PASS %d(최소 %d), 제외(자극 불성립) %d, PASS가 아닌 행 %d, "
+                     "기준과 다른 관측 %d, 유효 시도 수 충분 %s, verdict별 %s%s" % (
+                         sub, d["n"], d["n_valid"], d["n_pass"], d["min"], d["n_excluded"], d["n_not_pass"],
+                         d["n_exit1"], d["enough"], dict(sorted(d["by_verdict"].items())), bound))
+        if d["by_delay"]:
+            lines.append("  지연값별: %s" % dict(sorted(d["by_delay"].items())))
+    diff = [r for r in rows if finals.get((r["item"], r["attempt"]), r["verdict"]) != r["verdict"]]
+    if diff:
+        lines.append("measure.py 단독 판정과 다른 행:")
+        for r in sorted(diff, key=lambda r: (r["item"], r["attempt"])):
+            lines.append("  %s 시도 %d: %s -> %s" % (
+                r["item"], r["attempt"], r["verdict"], finals[(r["item"], r["attempt"])]))
+    else:
+        lines.append("measure.py 단독 판정과 다른 행: 없음")
+    return lines
+
+
+def append_final_section(text, lines):
+    """요약 본문에 최종 판정 절을 덧붙인다. 이미 있는 절은 떼고 새로 붙인다(--force 재실행에서 중복 방지)."""
+    i = text.find("\n" + FINAL_SECTION_MARKER)
+    if i >= 0:
+        text = text[:i]
+    return text.rstrip("\n") + "\n\n" + "\n".join(lines) + "\n"

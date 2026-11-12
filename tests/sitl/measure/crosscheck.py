@@ -23,7 +23,7 @@
 --items는 요청한 item 목록이다(run_measure.sh가 넘긴다). item마다 행(measure_<item>.jsonl)과 완료 기록
 (done_<item>.json)이 없으면 종료 코드 2다(measure.py가 기록을 만들기 전에 죽은 item도 드러난다). 생략하면
 있는 파일로 목록을 정한다. 이 스크립트가 만드는 파일(crosscheck_<item>.json, armed_criterion.json,
-final_summary.json)이 이미 있으면 --force 없이는 덮어쓰지 않고 거부한다(종료 코드 2).
+final_summary.json, 최종 판정 절이 붙은 summary_<item>.txt)이 이미 있으면 --force 없이는 덮어쓰지 않고 거부한다(종료 코드 2).
 
 시도마다(armed_window_ros_us가 있는 행). 대조 로직은 tests/support/measure_check.py(단위 테스트)다.
   - ROS 표본이 ULog에 같은 timestamp로 있고 arming_state, nav_state, failsafe,
@@ -39,6 +39,7 @@ final_summary.json)이 이미 있으면 --force 없이는 덮어쓰지 않고 �
     수 이상인가(final_summary.json). INCONCLUSIVE는 유효 시도가 아니다.
   - 각 ULog 안의 '[commander] Armed by external command' 줄 총수를 출력한다.
 결과: crosscheck_<항목>.json, armed_criterion.json(부류별), final_summary.json, 끝에 요약 줄.
+summary_<item>.txt가 있으면 끝에 '최종 판정' 절을 덧붙인다(crosscheck 뒤 최종 verdict 기준).
 
 종료 코드: 0 PX4 직접 부류의 통과(ULog 표본이 실제로 대조됨), 1 위반 또는 불일치 또는 대조가 비어 있음
 (어느 부류든 ARMED 위반, 최종 판정 FAIL과 M3_CONTRADICTED 포함), 2 입력 부족 또는 ULog를 못 읽음 또는
@@ -89,6 +90,10 @@ def main(argv=None):
     outputs = [mdir / ("crosscheck_%s.json" % it) for it in requested]
     outputs += [mdir / "armed_criterion.json", mdir / "final_summary.json"]
     existing = [str(o) for o in outputs if o.exists()]
+    for it in requested:       # 최종 판정 절이 이미 붙은 요약도 덮어쓰기와 같다
+        sp = mdir / ("summary_%s.txt" % it)
+        if sp.exists() and mc.FINAL_SECTION_MARKER in sp.read_text():
+            existing.append(str(sp))
     if existing and not args.force:
         print("이미 있는 산출 파일을 덮어쓰지 않는다(--force로 허용): %s" % existing, file=sys.stderr)
         return 2
@@ -103,6 +108,7 @@ def main(argv=None):
     all_rows = []
     finals = {}
     rows_by_item = {}
+    rows_by_name = {}
     done_items = set()
     for mf in files:
         item = os.path.basename(mf)[len("measure_"):-len(".jsonl")]
@@ -115,6 +121,7 @@ def main(argv=None):
             return 2
         all_rows.extend(rows)
         rows_by_item[item] = len(rows)
+        rows_by_name[item] = rows
         if (mdir / ("done_%s.json" % item)).exists():
             done_items.add(item)
         raw = load_jsonl(str(mdir / ("raw_%s.jsonl" % item)))
@@ -195,6 +202,11 @@ def main(argv=None):
             ", (가) 미도달 %d회, (나) M3_CONTRADICTED %d회" % (d["case_ga"], d["case_na"])
             if "case_ga" in d else "",
             ", 지연값별 %s" % json.dumps(d["by_delay"], sort_keys=True) if d["by_delay"] else ""))
+    for it, item_rows in rows_by_name.items():
+        sp = mdir / ("summary_%s.txt" % it)
+        if sp.exists():       # measure.py가 만든 요약이 있으면 최종 판정 절을 덧붙인다
+            sp.write_text(mc.append_final_section(
+                sp.read_text(), mc.final_section(item_rows, finals, summary)))
     crit["note"] = ("이 통과는 PX4 직접 명령 부류(px4_direct)의 통과다. P4 머지 조건은 Executor 경유 부류"
                     "(scenario_a)의 통과가 따로 필요하다. armed_non_offboard 합산은 ROS 기록과 ULog 기록의 합이고 "
                     "2a 행은 n_reached에서 빠지고 violation_total에는 남는다.")

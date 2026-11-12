@@ -636,7 +636,16 @@ def test_judge_run_counts_failed_and_other_attempts():
     r = mj.judge_run(rows, 10)
     assert r["n"] == 10 and r["n_pass"] == 8 and r["n_fail"] == 1 and r["n_other"] == 1
     assert r["n_valid"] == 9 and not r["enough"] and not r["all_pass"]     # PRECONDITION은 유효 시도가 아니다
-    assert r["upper95_fail_rate"] == pytest.approx(3 / 9)
+    assert r["upper95_fail_rate"] == pytest.approx(1 - 0.05 ** (1 / 9))
+    assert r["upper95_fail_rate_approx"] == pytest.approx(3 / 9)
+
+
+def test_fail_upper95_exact_and_text():
+    assert mj.fail_upper95(10) == pytest.approx(0.2589, abs=1e-4)
+    assert mj.fail_upper95(3) == pytest.approx(0.6316, abs=1e-4)
+    assert mj.upper95_text(10) == "약 26%(3/n 근사로는 30%)"
+    assert mj.upper95_text(3) == "약 63%(3/n 근사로는 100%)"
+    assert "%%" not in mj.upper95_text(3)
 
 
 def test_judge_run_not_enough_attempts():
