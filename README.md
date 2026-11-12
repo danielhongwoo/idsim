@@ -1,6 +1,6 @@
 # idsim
 
-idsim은 Interceptor Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy 위에서 드론 여러 대의 운용 서비스(Fleet, Mission, Telemetry, Replay)를 컨테이너로 돌리는 시뮬레이션 플랫폼이다. 지원 호스트는 x86_64 Linux뿐이다.
+idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy 위에서 드론 여러 대의 운용 서비스(Fleet, Mission, Telemetry, Replay)를 컨테이너로 돌리는 시뮬레이션 플랫폼이다. 지원 호스트는 x86_64 Linux뿐이다.
 
 계획과 단계는 `docs/roadmap.md`, 설계는 `docs/architecture.md`에 있다.
 
