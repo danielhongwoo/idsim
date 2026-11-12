@@ -227,6 +227,7 @@ def fake_raw(sysids):
     raw.status_sysids = sysids
     raw.last_status_sysid_ok.return_value = set(sysids) == {2}
     raw.now_us.return_value = 1234
+    raw.node.create_publisher.return_value.get_subscription_count.return_value = 1
     return raw
 
 
@@ -251,3 +252,29 @@ def test_emergency_command_checks_sysid_before_publishing(raw_module):
     c.land()
     c.disarm()
     assert len(c.sent) == 2
+
+
+def test_emergency_command_waits_for_a_subscriber(raw_module):
+    raw = fake_raw({2: 5})
+    raw.node.create_publisher.return_value.get_subscription_count.return_value = 0
+    c = raw_module.EmergencyCommand(raw, 254, 25)
+    with pytest.raises(raw_module.sw.SitlFailure) as e:
+        c.land()
+    assert e.value.category == "NO_PUBLISHER" and c.sent == []
+    raw.node.create_publisher.return_value.get_subscription_count.return_value = 1
+    c.land()
+    assert len(c.sent) == 1
+
+
+def test_emergency_command_constants_are_land_and_plain_disarm():
+    cls = _find_class(_tree(RAW), "EmergencyCommand")
+    consts = set()
+    for fn in (n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in ("land", "disarm")):
+        for n in ast.walk(fn):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "_cmd":
+                first = n.args[0]
+                assert isinstance(first, ast.Attribute)
+                consts.add(first.attr)
+                if fn.name == "disarm":      # 강제 disarm(param2)을 넣지 않는다: 인자는 command와 param1 하나
+                    assert len(n.args) == 2
+    assert consts == {"VEHICLE_CMD_NAV_LAND", "VEHICLE_CMD_COMPONENT_ARM_DISARM"}

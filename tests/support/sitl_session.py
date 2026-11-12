@@ -35,6 +35,7 @@ GATE_SERVER_S = 30.0
 GATE_STATUS_S = 20.0
 GROUND_WAIT_S = 20.0
 EMERGENCY_WAIT_S = 90.0
+EMERGENCY_LAND_S = 15.0       # Land 재전송을 이어 가는 상한(AUTO_LAND 또는 DISARMED가 보일 때까지)
 
 
 class SitlSession:
@@ -177,16 +178,33 @@ class SitlSession:
     # --- 정리 ---
 
     def emergency_cleanup(self):
-        """시나리오가 공중에 armed로 남겼으면 Land(source 254/25)를 보내고, 내려오면 disarm한다. 최선 노력이다."""
+        """시나리오가 공중에 armed로 남겼으면 Land(source 254/25)를 보낸다. 최선 노력이다.
+
+        Land는 AUTO_LAND 또는 DISARMED가 관측될 때까지 0.5 s(ROS 시각) 주기로 다시 보낸다(채널이 BEST_EFFORT라
+        유실될 수 있다). 내려온 뒤에도 armed면 강제가 아닌 disarm을 보낸다. 강제 disarm(param2 21196)은 쓰지 않는다:
+        공중에서는 거부되고 Land 뒤 지상에서만 의미가 있다.
+        """
         raw = self.raw
         st, ld = raw.last_status(), raw.last_landed()
         if st is None or not st.arming_state == 2 or (ld is not None and ld.landed):
             return
         cmd = None
         try:
-            cmd = EmergencyCommand(raw, 254, 25)
+            cmd = EmergencyCommand(raw, 254, 25, waiter=self.waiter)
             self.trace.event("emergency_land")
-            cmd.land()
+            last = [None]
+
+            def changed():
+                s = raw.last_status()
+                if s.arming_state != 2 or s.nav_state == 18:
+                    return True
+                now = raw.now_us()
+                if last[0] is None or now - last[0] >= 500_000:
+                    cmd.land()
+                    last[0] = now
+                return False
+
+            self.waiter.wait_until(changed, EMERGENCY_LAND_S, "비상 Land 뒤 AUTO_LAND 또는 DISARMED")
             ok = self.waiter.wait_or_timeout(lambda: raw.last_status().arming_state != 2, EMERGENCY_WAIT_S,
                                              "비상 Land 뒤 DISARMED")
             if not ok:

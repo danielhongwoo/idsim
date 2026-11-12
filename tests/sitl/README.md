@@ -41,11 +41,15 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 
 ## 시나리오 A의 ARMED 표본 기록
 
-`vehicle_status` 원시 표본을 KEEP_ALL 구독의 별도 기록기(`px4_raw.Px4Raw`)로 받는다. 판정 probe의 tick 모델과 무관하다. `raw_status_A.jsonl`의 표본마다 `timestamp`, `arming_state`, `nav_state`, `failsafe`, `nav_state_user_intention`, 수신 ROS 시각이 있다. goal 전송부터 TAKEOFF 시작(feedback `PHASE_EXECUTING`의 stamp)까지 ARMED 표본 수와 OFFBOARD가 아닌 ARMED 표본 수를 PX4 `timestamp` 축으로 세어 `armed_a.json`과 `verdict.json`에 적는다. OFFBOARD가 아닌 ARMED 표본이 한 건이라도 나오면 시나리오 A는 실패하고 architect에게 올린다. 부류별 기준(ARMED 3회 확인까지 간 실행 10회 이상에서 0개)의 판정은 `measure_judge.judge_armed_criterion`이고 `--repeat 10`의 `armed_criterion.json`에 나온다. ROS 기록만의 판정이며 10회 중 0건은 실패율 95% 상한이 약 26%라는 뜻이다.
+`vehicle_status` 원시 표본을 KEEP_ALL 구독의 별도 기록기(`px4_raw.Px4Raw`)로 받는다. 판정 probe의 tick 모델과 무관하다. `raw_status_A.jsonl`의 표본마다 `timestamp`, `arming_state`, `nav_state`, `failsafe`, `nav_state_user_intention`, 수신 ROS 시각이 있다. goal 전송부터 TAKEOFF 시작(feedback `PHASE_EXECUTING`의 stamp)까지 ARMED 표본 수와 OFFBOARD가 아닌 ARMED 표본 수를 PX4 `timestamp` 축으로 세어 `armed_a.json`과 `verdict.json`에 적는다. OFFBOARD가 아닌 ARMED 표본이 한 건이라도 나오면 시나리오 A는 실패하고 architect에게 올린다. 부류별 기준(ARMED 3회 확인까지 간 실행 10회 이상에서 0개)의 판정은 `measure_judge.judge_armed_criterion`이고 `--repeat 10`의 `armed_criterion.json`에 나온다. 10회 중 0건은 실패율 95% 상한이 약 26%라는 뜻이다.
 
 ### ULog 교차 확인
 
-값의 정본은 PX4이므로 실행이 끝나면 `crosscheck_a.py <실행 디렉터리>`가 `raw_status_A.jsonl`을 ULog의 `vehicle_status`와 대조한다(`measure_check.check_row` 재사용). ROS 표본이 ULog에 있는지, 필드가 같은지, ULog에만 있는 표본(ROS 유실)이 있는지, ULog 기준으로 OFFBOARD가 아닌 ARMED 표본이 위반 구간과 비행 구간(LAND 시작 feedback까지)에 있는지를 본다. 결과는 `sitl/crosscheck_a.json`이다. `run_sitl.sh`는 이 결과를 기록만 하고 실행의 통과 여부에는 쓰지 않는다. 절차의 승인은 px4-engineer가 한다.
+값의 정본은 PX4이므로 실행이 끝나면 `crosscheck_a.py <실행 디렉터리>`가 `raw_status_A.jsonl`을 ULog의 `vehicle_status`와 대조한다(`measure_check.check_row` 재사용). 위반 구간은 goal 전송부터 TAKEOFF 시작 feedback의 stamp 뒤 0.5 s까지이고 비행 구간은 그 뒤 LAND 시작 feedback까지다. 결과는 `sitl/crosscheck_a.json`이다.
+
+- 판정: ULog 기준 OFFBOARD가 아닌 ARMED 표본이 위반 구간(`ulog_armed_non_offboard`)이나 비행 구간(`ulog_flight_armed_non_offboard`)에 있으면 종료 코드 1이고 `run_sitl.sh`가 그 실행을 실패로 센다. 입력이 없으면(ULog나 원시 표본 없음) 종료 코드 2이고 INFRA로 따로 센다.
+- 기록만 하는 것: `ros_missing_in_ulog`, `ros_field_mismatch`, `ulog_only`. `ulog_only`가 0이 아니면 `notes`에 적는다.
+- `--repeat`의 `armed_criterion.json`은 `passed`(ROS 기록만)와 `passed_with_ulog`(모든 회의 교차 확인이 끝났고 ULog 기준 위반이 0건)를 둘 다 적고 `ulog_crosscheck`에 합계를 둔다.
 
 ## 측정 스크립트
 

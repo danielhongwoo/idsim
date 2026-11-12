@@ -108,6 +108,19 @@ def armed_criterion(verdicts, min_reached=ARMED_MIN_REACHED):
     return crit["classes"].get(mj.CLASS_EXECUTOR) | {"violated_any_class": crit["violated_any_class"]}
 
 
+def ulog_crosscheck_totals(results):
+    """회차별 crosscheck_a.json 목록(없으면 None)의 합산. 위반은 ULog 기준 OFFBOARD가 아닌 ARMED 표본 수다.
+    ROS 유실(ulog_only)과 불일치는 판정에서 빼고 합만 적는다."""
+    done = [r for r in results if r and "ulog_armed_non_offboard" in r]
+    return {
+        "n_runs": len(results), "n_checked": len(done),
+        "ulog_violation_total": sum(r["ulog_armed_non_offboard"] + r["ulog_flight_armed_non_offboard"] for r in done),
+        "ulog_only_total": sum(r.get("ulog_only", 0) for r in done),
+        "ros_missing_in_ulog_total": sum(r.get("ros_missing_in_ulog", 0) for r in done),
+        "ros_field_mismatch_total": sum(len(r.get("ros_field_mismatch", [])) for r in done),
+    }
+
+
 def summary_md(verdict, step_seconds=None):
     """실행 하나의 summary.md. step_seconds: [(단계, 초)] 호스트 단계별 시간."""
     lines = ["# sitl 실행 요약", "",

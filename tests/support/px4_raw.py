@@ -289,15 +289,24 @@ class EmergencyCommand:
     발행 전에 기록기가 받은 vehicle_status가 기대 sysid뿐인지 대조한다(아니면 RuntimeError).
     정상 경로(Executor)와 측정기(source 254/1)가 아닌 사람이 읽는 source로 남기려는 것이다.
     명령은 land와 disarm 둘뿐이다.
+
+    채널이 BEST_EFFORT, VOLATILE이라 구독자가 맺어지기 전에 보낸 명령은 유실된다. 그래서 첫 발행 전에
+    get_subscription_count() >= 1을 기다리고(waiter가 있으면 ROS 시각 timeout_s, 없으면 즉시 확인),
+    못 받으면 NO_PUBLISHER로 실패한다. 재전송은 호출하는 쪽(sitl_session.emergency_cleanup)의 몫이다.
+    disarm은 강제(param2 21196) 없이 보낸다. 그래서 공중에서는 PX4가 거부하고, Land 뒤 지상에서만 의미가 있다.
+    강제 disarm은 넣지 않는다.
     """
 
-    def __init__(self, raw, source_system, source_component, timeout_s=10.0):
+    def __init__(self, raw, source_system, source_component, timeout_s=10.0, waiter=None):
         if (int(source_system), int(source_component)) != EMERGENCY_SOURCE:
             raise ValueError("비상 정리 발행자의 source는 %r이어야 한다(받은 값: %r)"
                              % (EMERGENCY_SOURCE, (source_system, source_component)))
         self._raw = raw
         name = px4_topic(raw.ns_abs, "in", "vehicle_command", VehicleCommand)
         self._pub = raw.node.create_publisher(VehicleCommand, name, _qos_in())
+        self._timeout = timeout_s
+        self._waiter = waiter
+        self._matched = False
         self.sent = []
 
     def close(self):
@@ -305,8 +314,22 @@ class EmergencyCommand:
             self._raw.node.destroy_publisher(self._pub)
             self._pub = None
 
+    def _wait_matched(self):
+        if self._matched:
+            return
+        if self._waiter is not None:
+            try:
+                self._waiter.wait_until(lambda: self._pub.get_subscription_count() >= 1, self._timeout,
+                                        "vehicle_command 구독자")
+            except sw.SitlFailure as e:
+                raise sw.SitlFailure(sw.NO_PUBLISHER, "vehicle_command 구독자가 없다(%s)" % e.message) from e
+        elif self._pub.get_subscription_count() < 1:
+            raise sw.SitlFailure(sw.NO_PUBLISHER, "vehicle_command 구독자가 없다")
+        self._matched = True
+
     def _cmd(self, command, *params):
         raw = self._raw
+        self._wait_matched()
         if not raw.last_status_sysid_ok():
             raise RuntimeError("기대 sysid %d의 vehicle_status만 받았는지 대조에 실패했다(받은 sysid: %r)"
                                % (raw.sysid, raw.status_sysids))

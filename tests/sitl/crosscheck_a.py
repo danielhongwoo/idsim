@@ -21,8 +21,10 @@
   - 위반 구간: goal 전송부터 TAKEOFF 시작 feedback의 stamp 뒤 0.5 s까지(늦게 도착하는 표본을 덮는다)
   - 비행 구간: 그 뒤 LAND 시작 feedback까지(TAKEOFF와 LOITER 동안 OFFBOARD여야 한다)
 사용법: tests/sitl/crosscheck_a.py <실행 디렉터리> [--sitl-dir sitl]
-결과: <실행 디렉터리>/<sitl-dir>/crosscheck_a.json. 종료 코드 0 일치, 1 대조 이상(기준과 다른 관측), 2 판정 불가(입력 없음).
-이 절차는 px4-engineer 승인 대상이다. run_sitl.sh는 이 결과를 기록만 하고 실행의 통과 여부에는 쓰지 않는다.
+결과: <실행 디렉터리>/<sitl-dir>/crosscheck_a.json.
+종료 코드: 0 통과, 1 ULog 기준 OFFBOARD가 아닌 ARMED 표본이 위반 구간(ulog_armed_non_offboard)이나 비행 구간
+(ulog_flight_armed_non_offboard)에 있음(실행 실패), 2 판정 불가(입력 없음. run_sitl.sh가 INFRA로 따로 분류).
+ros_missing_in_ulog, ros_field_mismatch, ulog_only는 기록만 하고 판정에서 뺀다. ulog_only가 0이 아니면 notes에 적는다.
 """
 import argparse
 import json
@@ -82,12 +84,19 @@ def main(argv=None):
     topics = ulog_min.read_topics(str(path), {"vehicle_status": 0})
     by_ts = {int(r["timestamp"]): r for r in topics["vehicle_status"]}
     res = mc.check_row(row, raw, by_ts, sorted(by_ts), ulog_min.read_logged(str(path)))
-    status = mc.row_status(res)
-    res = dict(res, status=status, ulog=str(path.relative_to(run)))
+    bad = res["ulog_armed_non_offboard"] + res["ulog_flight_armed_non_offboard"]
+    status = 1 if bad else 0
+    notes = []
+    if res["ulog_only"]:
+        notes.append("ULog에만 있는 표본 %d개(ROS가 받지 못한 표본). 판정에는 쓰지 않는다" % res["ulog_only"])
+    if res["ros_missing_in_ulog"] or res["ros_field_mismatch"]:
+        notes.append("ROS 표본과 ULog의 불일치가 있다(기록만 한다)")
+    res = dict(res, status=status, notes=notes, ulog=str(path.relative_to(run)))
     (out / "crosscheck_a.json").write_text(json.dumps(res, indent=1, sort_keys=True, default=str) + "\n", encoding="utf-8")
-    print("crosscheck A: ROS %d개 중 ULog에 없음 %d, 필드 불일치 %d, ULog에만 있는 표본 %d, ULog 기준 비OFFBOARD ARMED %d(비행 구간 %d), 종료 코드 %d"
+    print("crosscheck A: ROS %d개 중 ULog에 없음 %d, 필드 불일치 %d, ULog에만 있는 표본 %d, ULog 기준 비OFFBOARD ARMED %d(비행 구간 %d), 종료 코드 %d%s"
           % (res["ros_samples"], res["ros_missing_in_ulog"], len(res["ros_field_mismatch"]), res["ulog_only"],
-             res["ulog_armed_non_offboard"], res["ulog_flight_armed_non_offboard"], status), file=sys.stderr)
+             res["ulog_armed_non_offboard"], res["ulog_flight_armed_non_offboard"], status,
+             " " + "; ".join(notes) if notes else ""), file=sys.stderr)
     return status
 
 

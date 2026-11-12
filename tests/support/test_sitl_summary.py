@@ -104,3 +104,11 @@ def test_ulog_tail_check():
     assert cut["ok"] and cut["truncated"] and cut["messages"] == 1
     assert ss.ulog_tail_check(_ulog(10, extra=b"\x01\x02"))["truncated"]
     assert not ss.ulog_tail_check(b"nope")["ok"]
+
+
+def test_ulog_crosscheck_totals():
+    r = {"ulog_armed_non_offboard": 0, "ulog_flight_armed_non_offboard": 1, "ulog_only": 2,
+         "ros_missing_in_ulog": 0, "ros_field_mismatch": [1]}
+    t = ss.ulog_crosscheck_totals([r, None, dict(r, ulog_flight_armed_non_offboard=0)])
+    assert t["n_runs"] == 3 and t["n_checked"] == 2 and t["ulog_violation_total"] == 1
+    assert t["ulog_only_total"] == 4 and t["ros_field_mismatch_total"] == 2

@@ -62,13 +62,22 @@ def cmd_repeat(a):
         for v in verdicts:
             fh.write("\t".join(ss.tsv_row(v)) + "\n")
     crit = ss.armed_criterion(verdicts)
+    cc = []
+    for p in a.verdicts:
+        f = Path(p).with_name("crosscheck_a.json")
+        cc.append(json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None)
+    crit["ulog_crosscheck"] = ss.ulog_crosscheck_totals(cc)
+    crit["passed_with_ulog"] = bool(crit["passed"] and crit["ulog_crosscheck"]["n_checked"] == len(verdicts)
+                                    and crit["ulog_crosscheck"]["ulog_violation_total"] == 0)
     crit["note"] = ("ROS 기록만의 판정이다. Executor 경유(scenario_a) 부류의 ARMED 3회 확인까지 간 실행이 10회 이상이고 "
-                    "OFFBOARD가 아닌 ARMED 표본이 0개여야 통과다. ULog 교차 확인(crosscheck_a.py)이 따로 필요하다. "
+                    "OFFBOARD가 아닌 ARMED 표본이 0개여야 통과다. passed는 ROS 기록만의 판정이고 passed_with_ulog는 모든 회의 ULog 교차 확인(crosscheck_a.py)에서 "
+                    "ULog 기준 위반이 0건인 것까지 본다. "
                     "10회 중 0건은 실패율 95% 상한이 약 26%라는 뜻이며 플래키 없음의 증거가 아니다.")
     (out / "armed_criterion.json").write_text(json.dumps(crit, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     passed = sum(1 for v in verdicts if v.get("passed", ss.run_passed(v)))
-    print("회차 %d, 통과 %d. ARMED 기준(scenario_a): 도달 %d회, 위반 %d건, 통과 %s" % (
-        len(verdicts), passed, crit["n_reached"], crit["violation_total"], crit["passed"]))
+    print("회차 %d, 통과 %d. ARMED 기준(scenario_a): 도달 %d회, 위반 %d건, 통과 %s, ULog 교차 확인 %d회 위반 %d건, ULog 포함 통과 %s" % (
+        len(verdicts), passed, crit["n_reached"], crit["violation_total"], crit["passed"],
+        crit["ulog_crosscheck"]["n_checked"], crit["ulog_crosscheck"]["ulog_violation_total"], crit["passed_with_ulog"]))
     return 0
 
 

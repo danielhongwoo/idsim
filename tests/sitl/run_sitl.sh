@@ -26,7 +26,7 @@
 #           STACK_UP_TIMEOUT (sim_stack.sh up의 단계별 제한 초, 기본 240)
 #
 # 계약(.github/workflows/sitl.yml 머리 주석)
-#   종료 코드  0 전체 통과, 1 시나리오나 정지 검사 실패, 2 사용법, 선행 조건, 스택 올리기(INFRA_UP) 실패
+#   종료 코드  0 전체 통과, 1 시나리오, 정지 검사, ULog 교차 확인(비OFFBOARD ARMED) 실패, 2 사용법, 선행 조건, 스택 올리기(INFRA_UP), ULog 교차 확인 입력 없음
 #   stdout     마지막 줄이 (마지막 회의) 실행 디렉터리 절대 경로 artifacts/runs/<실행 id>. 나머지는 모두 stderr
 #   요약       GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
 #   산출물     <실행 디렉터리>/sitl/: junit.xml, trace.jsonl, verdict.json, summary.md, steps.tsv, raw_status_A.jsonl,
@@ -190,8 +190,10 @@ PY
   fi
 
   python3 tests/sitl/summarize.py ulog "$run_dir" --sitl-dir "$out_name" || true
-  # 시나리오 A의 원시 표본과 ULog의 교차 확인. 기록만 하고 통과 여부에는 쓰지 않는다(절차는 px4-engineer 승인 대기)
-  python3 tests/sitl/crosscheck_a.py "$run_dir" --sitl-dir "$out_name" >&2 || true
+  # 시나리오 A의 원시 표본과 ULog의 교차 확인. 종료 코드 1(ULog 기준 비OFFBOARD ARMED 표본)은 실행 실패,
+  # 2(입력 없음)는 INFRA로 따로 센다
+  python3 tests/sitl/crosscheck_a.py "$run_dir" --sitl-dir "$out_name" >&2
+  local cross_rc=$?
   printf '%s\n' "$steps" | tr ',' '\n' | tr '=' '\t' >"${run_dir}/${out_name}/steps.tsv"
   python3 tests/sitl/summarize.py run "$run_dir" --sitl-dir "$out_name" --steps "$steps" \
     --fallback "NO_VERDICT:pytest가 verdict.json을 남기지 못했다(종료 코드 ${pytest_rc})"
@@ -202,7 +204,12 @@ PY
   [ "$pytest_rc" -ne 0 ] && run_rc=1
   [ "$summary_rc" -ne 0 ] && run_rc=1
   [ "$stop_bad" -ne 0 ] && run_rc=1
-  say "회 ${i}: pytest 종료 코드 ${pytest_rc}, 정지 전 ops 상태 $([ "$stop_bad" -eq 0 ] && echo 정상 || echo 비정상), 결과 $([ "$run_rc" -eq 0 ] && echo 통과 || echo 실패)"
+  [ "$cross_rc" -eq 1 ] && run_rc=1
+  if [ "$cross_rc" -ge 2 ]; then
+    say "ULog 교차 확인 입력이 없다(INFRA)"
+    [ "$run_rc" -eq 0 ] && run_rc=2
+  fi
+  say "회 ${i}: pytest 종료 코드 ${pytest_rc}, ULog 교차 확인 ${cross_rc}, 정지 전 ops 상태 $([ "$stop_bad" -eq 0 ] && echo 정상 || echo 비정상), 결과 $([ "$run_rc" -eq 0 ] && echo 통과 || echo 실패)"
 }
 
 # 서비스 종료 코드와 로그, healthcheck 기록을 모은다
