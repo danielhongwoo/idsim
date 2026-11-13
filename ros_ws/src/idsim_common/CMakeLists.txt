@@ -23,6 +23,7 @@ add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 find_package(ament_cmake REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(idsim_interfaces REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -33,9 +34,11 @@ find_package(rosidl_runtime_cpp REQUIRED)
 add_library(${PROJECT_NAME} SHARED
   src/contract_qos.cpp
   src/frames.cpp
+  src/geo.cpp
   src/px4_setpoint.cpp
   src/px4_timestamp.cpp
   src/qos.cpp
+  src/target.cpp
   src/vehicle.cpp
   src/vehicle_command.cpp
   src/vehicle_params.cpp)
@@ -44,6 +47,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
 target_link_libraries(${PROJECT_NAME} PUBLIC
   Eigen3::Eigen
+  ${idsim_interfaces_TARGETS}
   ${px4_msgs_TARGETS}
   ${rcl_interfaces_TARGETS}
   rclcpp::rclcpp
@@ -59,7 +63,7 @@ install(TARGETS ${PROJECT_NAME}
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(
-  eigen3_cmake_module Eigen3 px4_msgs rcl_interfaces rclcpp rclcpp_lifecycle rmw rosidl_runtime_cpp)
+  eigen3_cmake_module Eigen3 idsim_interfaces px4_msgs rcl_interfaces rclcpp rclcpp_lifecycle rmw rosidl_runtime_cpp)
 
 if(BUILD_TESTING)
   # ---- ament 린터: xmllint, lint_cmake, cpplint, copyright만. uncrustify, cppcheck는 쓰지 않는다 ----
@@ -144,6 +148,13 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_contract_qos test/test_contract_qos.cpp)
   target_link_libraries(test_contract_qos ${PROJECT_NAME})
+
+  # 기준값은 test/geo_reference/의 두 도구로 뽑아 테스트 파일에 고정했다. 두 도구는 빌드하지 않는다.
+  ament_add_gtest(test_geo test/test_geo.cpp)
+  target_link_libraries(test_geo ${PROJECT_NAME})
+
+  ament_add_gtest(test_target test/test_target.cpp)
+  target_link_libraries(test_target ${PROJECT_NAME})
 
   # 예외: 이 테스트만 노드를 만든다(options의 QoS 덮어쓰기는 노드 파라미터 경로라서). 통신은 없다.
   ament_add_gtest(test_px4_io_node test/test_px4_io_node.cpp TIMEOUT 60)

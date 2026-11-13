@@ -14,6 +14,11 @@
 
 // idsim 계약 토픽(idsim_interfaces)의 QoS. PX4 토픽의 QoS는 qos.hpp에 있다.
 //
+// 상태 토픽(VehicleState, TargetState): 발행 RELIABLE, VOLATILE, 구독 BEST_EFFORT, VOLATILE.
+// 둘 다 KEEP_LAST 5, liveliness Automatic(history와 depth는 구현 값이고 계약이 아니다).
+// 구독이 BEST_EFFORT인 것은 라이브 발행자(RELIABLE)와 rosbag2 재생 발행자 어느 쪽과도 맞게 하려는
+// 것이다. 결정: docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 3, 14.
+//
 // 사건 토픽(MissionEvent): RELIABLE, VOLATILE, KEEP_LAST 10, liveliness Automatic.
 // VOLATILE인 이유: TRANSIENT_LOCAL이면 지난 실행의 사건이 새 구독자에게 현재 사건으로 보인다
 // (1a 5단계 결정, 6단계 쟁점 7에서 유지). 그래서 TRANSIENT_LOCAL 구독은 이 발행과 맞지 않는다.
@@ -27,6 +32,13 @@
 
 namespace idsim_common
 {
+
+// 상태 발행용. RELIABLE, VOLATILE, KEEP_LAST 5, liveliness Automatic.
+// Python 쪽 발행자는 이 함수를 쓰지 못하므로 같은 값을 직접 적는다.
+rclcpp::QoS state_pub_qos();
+
+// 상태 구독용. BEST_EFFORT, VOLATILE, KEEP_LAST 5, liveliness Automatic.
+rclcpp::QoS state_sub_qos();
 
 // 사건 발행용. RELIABLE, VOLATILE, KEEP_LAST 10, liveliness Automatic.
 rclcpp::QoS event_pub_qos();
