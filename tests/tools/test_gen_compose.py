@@ -910,7 +910,7 @@ def test_world_sdf_has_origin_name_and_keeps_comments():
     assert got == {"surface_model": "EARTH_WGS84", "world_frame_orientation": "ENU", "latitude_deg": "37.5665",
                    "longitude_deg": "126.978", "elevation": "38", "heading_deg": "0"}
     assert [c.tag for c in world if c.tag in ("plugin", "actor", "include")] == []
-    assert "주석은 생성 결과에 그대로 남는다" in text and "생성기 골든 전용 월드 템플릿" in text
+    assert "주석은 생성 결과에 그대로 남는다" in text and "생성기 golden 전용 월드 템플릿" in text
     assert text.isascii() is False  # 한글 주석이 그대로 남는다(문자 집합 규칙은 한글과 아스키)
     assert any(line.startswith('  <world name="idsim_world">') for line in text.splitlines())  # wrapper는 줄 단위로 읽는다
     assert 'name="fixture_placeholder"' not in text
@@ -1086,7 +1086,7 @@ def test_origin_missing_fails_with_reason():
 
 
 def test_real_template_and_fleet_generate_and_assert():
-    """실제 템플릿과 config/fleet.yaml이 검증, 생성, 출력 단정까지 통과한다(골든이 아닌 단위 테스트)."""
+    """실제 템플릿과 config/fleet.yaml이 검증, 생성, 출력 단정까지 통과한다(golden이 아닌 단위 테스트)."""
     norm, _ = gc.validate_fleet(gc.load_yaml(_read(os.path.join(REPO, "config/fleet.yaml"))))
     assert norm["world"]["template"] == REAL_TEMPLATE
     text = gc.build_world_sdf(norm, _read(os.path.join(REPO, REAL_TEMPLATE)))

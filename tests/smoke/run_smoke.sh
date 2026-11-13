@@ -133,10 +133,13 @@ s0_run() { # 설명 이미지 bash명령
 # 센서 높이 대조: sim-base 안에서 sdformat으로 읽은 x500 모델의 GNSS 센서(base_link) 높이와 생성기 상수가 같은지.
 # 두 출처(생성기의 AIRFRAME_SENSOR_Z_M, 모델 SDF)가 PX4_GZ_MODELS_REF를 올릴 때 어긋나는 것을 잡는다.
 check_sensor_z() {
-  local af="4001_gz_x500" model want got
-  model="${af#*_gz_}"
-  want="$(python3 tools/gen_compose.py --print-sensor-z "$af" 2>/dev/null || true)"
-  got="$(docker run --rm -i --network none --entrypoint python3 idsim/sim-base:local - "$model" 2>/dev/null <<'PY' | tail -n 1 || true
+  local af model want got log airframes
+  airframes="$(python3 tools/gen_compose.py --print-airframes)" || { echo "FAIL gen_compose.py --print-airframes" >&2; s0_fail=1; return 0; }
+  for af in $airframes; do
+    model="${af#*_gz_}"
+    log="${out_dir}/s0_sensor_z_${af}.txt"
+    want="$(python3 tools/gen_compose.py --print-sensor-z "$af" 2>>"$log" || true)"
+    got="$(docker run --rm -i --network none --entrypoint python3 idsim/sim-base:local - "$model" 2>>"$log" <<'PY' | tail -n 1 || true
 import sys
 import sdformat14 as sdf
 cfg = sdf.ParserConfig()
@@ -147,12 +150,14 @@ sensor = root.model().link_by_name("base_link").sensor_by_name("navsat_sensor")
 print("%.6f" % sensor.semantic_pose().resolve("__model__").pos().z())
 PY
 )"
-  if [ -n "$want" ] && [ -n "$got" ] && python3 -c 'import sys; sys.exit(0 if abs(float(sys.argv[1]) - float(sys.argv[2])) < 1e-6 else 1)' "$want" "$got"; then
-    echo "ok   ${af} GNSS 센서 높이: 모델 SDF ${got} m == gen_compose.py --print-sensor-z ${want} m"
-  else
-    echo "FAIL ${af} GNSS 센서 높이: 모델 SDF '${got}' != gen_compose.py --print-sensor-z '${want}' (AIRFRAME_SENSOR_Z_M을 고치라)" >&2
-    s0_fail=1
-  fi
+    if [ -n "$want" ] && [ -n "$got" ] && python3 -c 'import sys; sys.exit(0 if abs(float(sys.argv[1]) - float(sys.argv[2])) < 1e-6 else 1)' "$want" "$got"; then
+      echo "ok   ${af} GNSS 센서 높이: 모델 SDF ${got} m == gen_compose.py --print-sensor-z ${want} m"
+    else
+      echo "FAIL ${af} GNSS 센서 높이: 모델 SDF '${got}' != gen_compose.py --print-sensor-z '${want}' (AIRFRAME_SENSOR_Z_M을 고치라). 오류 출력: ${log}" >&2
+      sed 's/^/  | /' "$log" >&2 || true
+      s0_fail=1
+    fi
+  done
 }
 check_s0() {
   local gz_major img py
@@ -211,12 +216,16 @@ pending() {
 }
 
 # 원점 판정 인자 --expect-origin LAT LON ALT. 기대값은 stack.json의 vehicles.0.expect_gps다(생성기가 world.origin과
-# 스폰 pose와 센서 높이로 계산한 기체 1의 GNSS 센서 위치. 이 스크립트는 계산하지 않는다). embedded는 null이라 넘기지 않는다.
+# 스폰 pose와 센서 높이로 계산한 기체 1의 GNSS 센서 위치. 이 스크립트는 계산하지 않는다). embedded는 null이라 이 함수를 부르지 않고, standalone에서 null이면 실패한다.
 origin_args() {
   # vehicles.0.expect_gps key 자체가 없으면 sj가 실패하므로 실패로 끝낸다. null만 빈 값(sj가 빈 문자열로 출력)으로 받는다.
   local o lat lon alt
   o="$(sj vehicles.0.expect_gps)" || return 1
-  [ -n "$o" ] || return 0
+  if [ -z "$o" ]; then
+    # px4-out은 standalone만 부른다. 여기서 null이면 원점 판정이 조용히 빠지므로 실패한다(embedded는 이 함수를 부르지 않는다).
+    echo "FAIL standalone인데 stack.json vehicles.0.expect_gps가 null이다(원점 판정을 할 수 없다)" >&2
+    return 1
+  fi
   lat="$(sj vehicles.0.expect_gps.lat)" || return 1
   lon="$(sj vehicles.0.expect_gps.lon)" || return 1
   alt="$(sj vehicles.0.expect_gps.alt)" || return 1
@@ -305,7 +314,7 @@ run_checks() {
         && topic_info "--regex '^/${px4_ns}/fmu/out/vehicle_status(_v[0-9]+)?\$' --expect-publishers 1 --expect-type px4_msgs/msg/VehicleStatus --save ${out_rel}/embedded_topic_info" ;;
     px4-out)
       local origin
-      origin="$(origin_args)"
+      origin="$(origin_args)" || return 1
       # shellcheck disable=SC2086  # origin은 공백으로 나뉜 인자 넷이다
       check_model_unique && check_single_gz_server && check_px4 $origin && check_pxh && check_px4_log ;;
     px4-in)

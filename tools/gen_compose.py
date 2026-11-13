@@ -22,6 +22,7 @@ ros-ws 컨테이너 안에서 실행한다(PyYAML 6.0.1). 호스트 진입점은
                  [--generated-at 2026-11-09T09:00:00Z] [--git-commit SHA] [--git-dirty true|false]
   gen_compose.py --print-gcs-port k     # QGC가 들을 GCS 포트(14550 + 1000k)만 출력
   gen_compose.py --print-agent-port k   # 에이전트 UDP 포트(8888 + k)만 출력
+  gen_compose.py --print-airframes          # 센서 높이가 등록된 airframe 목록(스모크 S0가 돈다)
   gen_compose.py --print-sensor-z AIRFRAME  # airframe의 GNSS 센서 높이(m)만 출력(스모크 S0가 모델 SDF와 대조한다)
 종료 코드: 0 성공, 1 검증 실패(stderr에 이유), 2 인자 오류.
 """
@@ -325,7 +326,7 @@ def validate_fleet(fleet):
 
     # targets
     if fleet["targets"] != []:
-        errors.append("targets: 빈 목록이어야 한다(표적 스키마는 B6에서 더한다)")
+        errors.append("targets: 빈 목록이어야 한다(표적 스키마는 아직 없다)")
 
     # px4
     px4 = fleet["px4"]
@@ -487,7 +488,7 @@ def parse_world_template(text, where="world.template"):
 def build_world_sdf(fleet_norm, template_text):
     """템플릿에 <world name>과 <spherical_coordinates>(world.origin, heading 0, ENU)를 넣은 월드 SDF 본문.
 
-    표적 Actor는 B6에서 더한다. 출력을 다시 파싱해 구성 보장을 단정한다(어기면 FleetError, 생성기 버그):
+    표적 Actor 생성은 아직 없다. 출력을 다시 파싱해 구성 보장을 단정한다(어기면 FleetError, 생성기 버그):
     spherical_coordinates 정확히 하나, 월드 직속 plugin 0, actor 이름 집합 = 표적 id 집합, dynamic_pose 없음.
     """
     world = fleet_norm["world"]
@@ -1371,6 +1372,8 @@ def parse_args(argv):
     p.add_argument("--print-agent-port", metavar="K", help="스택 K의 에이전트 UDP 포트만 출력하고 끝낸다(PyYAML 불필요)")
     p.add_argument("--print-sensor-z", metavar="AIRFRAME",
                    help="airframe의 GNSS 센서 높이(m)만 출력하고 끝낸다(PyYAML 불필요)")
+    p.add_argument("--print-airframes", action="store_true",
+                   help="센서 높이가 등록된 airframe 목록을 한 줄에 하나씩 출력하고 끝낸다(PyYAML 불필요)")
     p.add_argument("--repo-root", default=default_repo, help="저장소 경로(이 프로세스가 읽는 쪽, 기본: 스크립트 위)")
     p.add_argument("--fleet", default="config/fleet.yaml", help="저장소 기준 fleet 파일")
     p.add_argument("--stack", help="스택 번호 k 0-9 (없으면 IDSIM_STACK_INDEX, 없으면 0)")
@@ -1402,6 +1405,9 @@ def main(argv=None):
             return 0
         if args.print_agent_port is not None:
             print(agent_port(stack_index(args.print_agent_port, {})))
+            return 0
+        if args.print_airframes:
+            print("\n".join(AIRFRAME_SENSOR_Z_M))
             return 0
         if args.print_sensor_z is not None:
             if args.print_sensor_z not in AIRFRAME_SENSOR_Z_M:

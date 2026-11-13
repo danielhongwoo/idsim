@@ -206,7 +206,7 @@ do_up() {
   if [ -n "$world_rel" ]; then
     world_file="${run_dir}/${world_rel}"
     [ -f "$world_file" ] || { say "생성된 월드 파일이 없다: ${world_file}"; exit 1; }
-    n_sc="$(grep -c '<spherical_coordinates' "$world_file" || true)"
+    n_sc="$(grep -o '<spherical_coordinates' "$world_file" | wc -l || true)"
     [ "$n_sc" = "1" ] || { say "월드 파일의 <spherical_coordinates>가 정확히 하나가 아니다(${n_sc}개): ${world_file}"; exit 1; }
   fi
   n_node_stages="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["startup"]["node_stages"]))' "$sf")"

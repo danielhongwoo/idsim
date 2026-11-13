@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <sdf version="1.9">
   <!--
-    생성기 골든 전용 월드 템플릿. 실제 템플릿(ros_ws/src/idsim_sim/worlds/idsim_base.sdf)을
-    고쳐도 골든이 바뀌지 않게 따로 둔다. 이 파일은 Gazebo로 열지 않는다.
+    생성기 golden 전용 월드 템플릿. 실제 템플릿(ros_ws/src/idsim_sim/worlds/idsim_base.sdf)을
+    고쳐도 golden이 바뀌지 않게 따로 둔다. 이 파일은 Gazebo로 열지 않는다.
   -->
   <world name="fixture_placeholder">
     <physics type="ode">

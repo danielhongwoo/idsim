@@ -20,7 +20,7 @@
     },
     "fleet": {
       "path": "tests/fixtures/gen_compose/1\ub300-k3/fleet.yaml",
-      "sha256": "90a78e70aa36dd8e8d787bd85130e528640fda1dbda756714347121b2e76eeb6"
+      "sha256": "6ccc4dba08782a6e91189ccb695ab013ea21570030fe19f9cd34dff1556972fb"
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",
@@ -32,7 +32,7 @@
     },
     "world_template": {
       "path": "tests/fixtures/gen_compose/world_template.sdf",
-      "sha256": "acae64a8352a4d5106b3151ee77be17b82f3dd28e6f5707ab188c99da817e7a2"
+      "sha256": "01cd9377d7bec0c14f6cbd195773630a8f46deba75737f38519643f30d7e9d52"
     }
   },
   "px4": {
