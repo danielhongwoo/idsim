@@ -416,7 +416,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 
 ## 1a 고정 계약 영향
 
-모두 `docs/interface.md`의 1a 고정 절이고 `idsim_interfaces`의 필드와 상수는 바뀌지 않는다(golden과 type hash 무변경. 정의 주석만 바뀐다). `docs/architecture.md`의 변경 절차("고정 뒤에는 새 요구가 있어야 한다. 변경 절차를 따른다")가 적용된다. 새 요구는 1b 범위(U3의 공중 종료, 로드맵 1b의 RTL과 공중 시작과 표적 추종, U7, U8)다. 반영은 B13(계약 고정 문서)에서 한 PR로 하고, PR 본문에 아래 목록과 근거를 적으며 architect 승인과 reviewer 검토를 받는다. 1a에서 받던 미션(첫 항목 TAKEOFF와 마지막 LAND, `[LAND]`)에 대한 동작은 아래 예외 하나 말고는 어느 항목에서도 바뀌지 않는다. 예외: W가 쟁점 11의 기준을 넘으면 취소 지상 분기의 DISARMED 확인 기준이 ack timestamp 기준으로 바뀌고((k)), 이 기준은 1a에서 받던 TAKEOFF 미션의 취소에도 적용된다. 끝난 결과(CANCELED, 지상 DISARMED)는 같고 확인 시점이 늦어질 수 있다. 이 예외는 B13 PR 본문에 적는다.
+모두 `docs/interface.md`의 1a 고정 절이고 `idsim_interfaces`의 필드와 상수는 바뀌지 않는다(golden과 type hash 무변경. 정의 주석만 바뀐다). `docs/architecture.md`의 변경 절차("고정 뒤에는 새 요구가 있어야 한다. 변경 절차를 따른다")가 적용된다. 새 요구는 1b 범위(U3의 공중 종료, 로드맵 1b의 RTL과 공중 시작과 표적 추종, U7, U8)다. 반영은 B13(계약 고정 문서)에서 한 PR로 하고((r)과 (k)의 앞부분인 bridge 문장은 사실 갱신이라 B3 PR에서 한다. "문서 반영 목록"의 B3 묶음), PR 본문에 아래 목록과 근거를 적으며 architect 승인과 reviewer 검토를 받는다. 1a에서 받던 미션(첫 항목 TAKEOFF와 마지막 LAND, `[LAND]`)에 대한 동작은 아래 예외 하나 말고는 어느 항목에서도 바뀌지 않는다. 예외: W가 쟁점 11의 기준을 넘으면 취소 지상 분기의 DISARMED 확인 기준이 ack timestamp 기준으로 바뀌고((k)), 이 기준은 1a에서 받던 TAKEOFF 미션의 취소에도 적용된다. 끝난 결과(CANCELED, 지상 DISARMED)는 같고 확인 시점이 늦어질 수 있다. 이 예외는 B13 PR 본문에 적는다.
 
 | 번호 | 대상 문장 | 바꾸는 이유 | 성격 |
 | --- | --- | --- | --- |
@@ -470,7 +470,7 @@ U6의 산출물 최소 원칙을 1b에도 쓴다. 결과는 PR 본문과, 상수
 
 ## 문서 반영 목록
 
-B1은 설계와 계획(`docs/architecture.md`, `docs/roadmap.md`)이라 구현 전에 고친다. B3 몫은 지금 실행되는 절차나 구현된 동작을 설명하는 문장이라 B3 PR에서 그 구현과 함께 고친다(먼저 고치면 문서와 main의 코드가 어긋난다). B13은 1b 완료 기준을 만족한 뒤 고친다.
+B1은 설계와 계획 문서(`docs/architecture.md`, `docs/roadmap.md`)의 1b 설계 문장이고, 지금의 동작과 다른 것에는 Phase 한정어("1b", "1b부터")를 달아 구현 전에 고친다. B3 몫은 한정어 없이 지금 실행되는 절차나 구현된 동작을 설명하는 문장(`docs/smoke-test.md`, 서비스 표의 현재 동작, `docs/interface.md`의 사실 문장)이라 B3 PR에서 그 구현과 함께 고친다(먼저 고치면 문서와 main의 코드가 어긋난다). B13은 1b 완료 기준을 만족한 뒤 고친다.
 
 B1(architect)
 - `docs/architecture.md` "목표와 범위"의 "다루지 않는 것" 문단(U10). 초안:
