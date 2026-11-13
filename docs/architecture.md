@@ -93,7 +93,7 @@ flowchart TB
 
 ## 기체 식별과 설정의 단일 출처
 
-기체 한 대는 compose 서비스 이름, PX4 인스턴스 번호, `MAV_SYS_ID`와 `UXRCE_DDS_KEY`, ROS 네임스페이스, Gazebo 모델 이름, MAVLink API 포트라는 여러 식별자를 동시에 가진다. 이것을 손으로 맞추지 않고, 스택 하나는 그 스택을 만든 fleet 파일 하나에서 파생한다. 1b부터 개발 스택은 `config/fleet.yaml`을 쓰고, SITL 통합 테스트는 시나리오 기하가 개발용 설정에 끌려가지 않도록 전용 `tests/sitl/fleet.yaml`을 쓴다. 어느 파일로 만든 스택인지는 `stack.json`의 `inputs`에 남는다. 아래에서 `config/fleet.yaml`의 형식이라고 적은 것은 모든 fleet 파일에 같다.
+기체 한 대는 compose 서비스 이름, PX4 인스턴스 번호, `MAV_SYS_ID`와 `UXRCE_DDS_KEY`, ROS 네임스페이스, Gazebo 모델 이름, MAVLink API 포트라는 여러 식별자를 동시에 가진다. 이것을 손으로 맞추지 않고, 스택 하나는 그 스택을 만든 fleet 파일 하나에서 파생한다. 개발 스택은 `config/fleet.yaml`을 쓰고, 1b부터 SITL 통합 테스트는 시나리오 기하가 개발용 설정에 끌려가지 않도록 전용 `tests/sitl/fleet.yaml`을 쓴다. 어느 파일로 만든 스택인지는 `stack.json`의 `inputs`에 남는다. 아래에서 `config/fleet.yaml`의 형식이라고 적은 것은 모든 fleet 파일에 같다.
 
 - 기체 번호 N은 1부터 시작한다. 단일 기체 Phase에서도 N=1이며, PX4 인스턴스 0의 "네임스페이스 없음" 특수 케이스는 어디서도 쓰지 않는다. `PX4_UXRCE_DDS_NS=px4_N`으로 네임스페이스를 항상 명시한다.
 - 파생 규칙: PX4 인스턴스 = N, `MAV_SYS_ID` = `UXRCE_DDS_KEY` = N+1, 네임스페이스 = `/px4_N`, Gazebo 모델 이름 = `<모델>_N`(모델은 airframe의 시뮬레이터 모델 이름에서 `gz_`를 뗀 것. 1a는 `x500_N`), MAVLink API 포트 = 14540 + 1000k + N(k는 스택 번호), compose 서비스 = `px4-N`.
