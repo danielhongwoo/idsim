@@ -17,7 +17,9 @@
 // test_runner 실행 파일의 모든 상태기 테스트가 끝난 뒤 Environment::TearDown에서 단정한다.
 // (1) 관측한 칸 집합 == "covered" 부류 (2) "impossible" 칸은 관측되지 않았다 (3) 목록에 없는 칸은
 // 관측되지 않았다 (4) untagged 기록 0. Event 이름 집합 == 목록의 사건 집합과 파일 형식은 보통
-// 테스트로 본다. --gtest_filter 등으로 일부만 돌리면 (1)-(4)를 건너뛰고 그 사실을 출력한다.
+// 테스트로 본다. 일부만 돌면(--gtest_filter, sharding, DISABLED_, GTEST_SKIP) 대조 대신 실패한다.
+// 개발자가 일부만 돌릴 때는 환경변수 IDSIM_TRANSITION_PARTIAL_OK=1을 주면 대조를 건너뛰고 그 사실을
+// 출력한다.
 // 환경변수 IDSIM_TRANSITION_CELLS_DUMP에 경로를 주면 관측한 칸을 같은 형식(class는 covered)으로 그
 // 경로에 쓴다(칸 목록의 diff를 만들 때 쓴다).
 //
@@ -176,7 +178,10 @@ TEST(TransitionCells, RecorderIsOnInThisExecutable)
 }
 
 // 기록기를 켜고 끈 두 실행의 tick별 출력이 같다(계측이 동작을 바꾸지 않는다). 시나리오는 정상
-// 경로, 공중 취소(Hold), 지상 취소(arm 뒤 disarm), Px4Timestamp 실패다.
+// 경로, 공중 취소(Hold), 지상 취소(arm 뒤 disarm), Px4Timestamp 실패, ITEM_TIMEOUT 정리의 Land
+// 경로, 감시 표로 끝나는 setpoint 항목(행끼리 겹침, 완료와 겹침), LAND 항목의 이탈과 [LAND]
+// 미션이다.
+// 겹침 시나리오는 기록에 겹침 칸이 실제로 생겼는지도 본다(조건 선계산과 matched가 닿는 경로).
 void expect_same_outputs(const Harness & on, const Harness & off)
 {
   ASSERT_EQ(on.outputs().size(), off.outputs().size());
@@ -218,7 +223,44 @@ enum class Scenario
   kCancelAir,
   kCancelGround,
   kStampFailure,
+  kItemTimeoutLandPath,
+  kMonitorRowsOverlap,
+  kMonitorWithCompletion,
+  kLandLeftMode,
+  kLandOnly,
 };
+
+bool expects_overlap(Scenario scenario)
+{
+  return scenario == Scenario::kMonitorRowsOverlap || scenario == Scenario::kMonitorWithCompletion;
+}
+
+// 시나리오가 의도한 경로로 끝났는지 보는 종료 reason.
+Reason expected_reason(Scenario scenario)
+{
+  switch (scenario) {
+    case Scenario::kSuccess:
+    case Scenario::kCancelAir:
+    case Scenario::kCancelGround:
+    case Scenario::kLandOnly:
+      return Reason::kNone;
+    case Scenario::kStampFailure:
+      return Reason::kInternal;
+    case Scenario::kItemTimeoutLandPath:
+      return Reason::kItemTimeout;
+    case Scenario::kMonitorRowsOverlap:
+      return Reason::kFailsafe;
+    case Scenario::kMonitorWithCompletion:
+    case Scenario::kLandLeftMode:
+      return Reason::kExternalModeChange;
+  }
+  return Reason::kInternal;
+}
+
+MissionSpec mission_for(Scenario scenario)
+{
+  return scenario == Scenario::kLandOnly ? land_only_mission() : standard_mission();
+}
 
 void run_scenario(Harness & h, Scenario scenario)
 {
@@ -242,6 +284,48 @@ void run_scenario(Harness & h, Scenario scenario)
       h.drive_to_takeoff();
       h.clock.fail = true;
       break;
+    case Scenario::kItemTimeoutLandPath:
+      // TAKEOFF가 고도에 닿지 않아 ITEM_TIMEOUT, Hold가 확인되지 않아 Land 경로, AUTO_LAND 관측.
+      h.drive_to_takeoff();
+      h.auto_px4 = false;
+      h.world.landed = false;
+      h.world.z = -2.0;
+      h.run_until([&h] { return h.view().branch == Branch::kAirLand; }, 500);
+      h.world.nav = NavMode::kLand;
+      break;
+    case Scenario::kMonitorRowsOverlap:
+      // LOITER 중 공중 DISARMED이고 OFFBOARD 아님, failsafe: 순위 4와 6이 함께 맞는다.
+      h.drive_to_loiter();
+      h.auto_px4 = false;
+      h.world.arming = Arming::kDisarmed;
+      h.world.nav = NavMode::kHold;
+      h.world.failsafe = true;
+      break;
+    case Scenario::kMonitorWithCompletion:
+      // TAKEOFF 목표 고도에 닿은 tick에 외부 모드 변경: 순위 7이 TAKEOFF_REACHED를 이긴다.
+      h.drive_to_takeoff();
+      h.auto_px4 = false;
+      h.world.landed = false;
+      h.world.z = h.view().setpoint.z;
+      h.world.nav = NavMode::kHold;
+      h.world.intention = NavMode::kHold;
+      break;
+    case Scenario::kLandLeftMode:
+      // AUTO_LAND 확인 뒤 ARMED인 채 Hold로 이탈.
+      h.drive_to_land();
+      h.run_until([&h] { return h.view().land_confirmed; }, 10);
+      h.auto_px4 = false;
+      h.world.nav = NavMode::kHold;
+      break;
+    case Scenario::kLandOnly:
+      // 공중 ARMED에서 [LAND] 미션: NAV_LAND, AUTO_LAND 확인, 착지 뒤 DISARMED.
+      h.world.arming = Arming::kArmed;
+      h.world.landed = false;
+      h.world.z = -5.0;
+      h.run_until([&h] { return h.view().land_confirmed; }, 400);
+      h.world.landed = true;
+      h.world.arming = Arming::kDisarmed;
+      break;
   }
   h.run_until([&h] { return h.runner().done(); }, 600);
   h.tick();
@@ -251,20 +335,30 @@ TEST(TransitionObserver, RecorderDoesNotChangeOutputs)
 {
   for (const Scenario scenario :
        {Scenario::kSuccess, Scenario::kCancelAir, Scenario::kCancelGround,
-        Scenario::kStampFailure}) {
+        Scenario::kStampFailure, Scenario::kItemTimeoutLandPath, Scenario::kMonitorRowsOverlap,
+        Scenario::kMonitorWithCompletion, Scenario::kLandLeftMode, Scenario::kLandOnly}) {
     SCOPED_TRACE(static_cast<int>(scenario));
     TransitionRecorder * const saved = active_transition_recorder();
     TransitionRecorder local;
     active_transition_recorder() = &local;
-    Harness on(standard_mission());
+    Harness on(mission_for(scenario));
     run_scenario(on, scenario);
     active_transition_recorder() = nullptr;
-    Harness off(standard_mission());
+    Harness off(mission_for(scenario));
     run_scenario(off, scenario);
     active_transition_recorder() = saved;
     EXPECT_TRUE(on.runner().done());
+    EXPECT_EQ(termination_or_empty(on).reason, expected_reason(scenario))
+      << termination_or_empty(on).detail;
     EXPECT_FALSE(local.cells.empty());
     EXPECT_TRUE(local.untagged.empty());
+    if (expects_overlap(scenario)) {
+      bool overlap = false;
+      for (const auto & [cell, test_name] : local.cells) {
+        overlap = overlap || cell.also_true != "-";
+      }
+      EXPECT_TRUE(overlap) << "scenario did not produce an overlap cell";
+    }
     expect_same_outputs(on, off);
   }
 }
@@ -279,11 +373,17 @@ public:
     active_transition_recorder() = nullptr;
     dump_observed();
     const ::testing::UnitTest & unit = *::testing::UnitTest::GetInstance();
-    if (unit.test_to_run_count() != unit.total_test_count()) {
-      std::cout << "[transition coverage] skipped: " << unit.test_to_run_count() << " of "
-                << unit.total_test_count()
-                << " tests selected (--gtest_filter or similar); the cell comparison needs all"
-                << std::endl;
+    const std::string partial = partial_run_reason(unit);
+    if (!partial.empty()) {
+      const char * const ok = std::getenv("IDSIM_TRANSITION_PARTIAL_OK");
+      if (ok != nullptr && std::string(ok) == "1") {
+        std::cout << "[transition coverage] skipped (IDSIM_TRANSITION_PARTIAL_OK=1): " << partial
+                  << std::endl;
+        return;
+      }
+      ADD_FAILURE() << "[transition coverage] partial run: " << partial
+                    << "; the cell comparison needs every test to run. For a developer run of"
+                    << " a subset, set IDSIM_TRANSITION_PARTIAL_OK=1";
       return;
     }
     const CellList list = load_cells();
@@ -337,6 +437,28 @@ public:
   }
 
 private:
+  // 모든 테스트가 끝까지 돌지 않았으면 그 이유. 다 돌았으면 빈 문자열.
+  static std::string partial_run_reason(const ::testing::UnitTest & unit)
+  {
+    std::string reason;
+    const auto append = [&reason](const std::string & part) {
+      reason += (reason.empty() ? "" : "; ") + part;
+    };
+    if (unit.disabled_test_count() > 0) {
+      append(std::to_string(unit.disabled_test_count()) + " DISABLED_ test(s)");
+    }
+    const int not_selected =
+      unit.total_test_count() - unit.test_to_run_count() - unit.disabled_test_count();
+    if (not_selected > 0) {
+      append(
+        std::to_string(not_selected) + " test(s) not selected (--gtest_filter or sharding)");
+    }
+    if (unit.skipped_test_count() > 0) {
+      append(std::to_string(unit.skipped_test_count()) + " test(s) skipped by GTEST_SKIP");
+    }
+    return reason;
+  }
+
   void dump_observed() const
   {
     const char * const path = std::getenv("IDSIM_TRANSITION_CELLS_DUMP");

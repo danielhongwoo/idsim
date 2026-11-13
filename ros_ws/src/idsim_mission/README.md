@@ -140,7 +140,7 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 | `runner_harness.hpp` | tick 열 헬퍼(20 Hz 흉내, 합성 timestamp, 가짜 PX4 반응, `feed`로 표본 열 주입, 종료 불변식: 정확히 1건, result == 종료 사건, 종료 뒤 빈 출력). 만드는 runner에 전이 기록기를 넘긴다 |
 | `transition_recorder.hpp` | 전이 기록기(관측한 칸과 그 칸을 처음 낸 테스트, untagged 기록) |
 | `transition_cells.tsv` | 1a 전이 칸 목록(covered, impossible과 이유, uncovered, 겹침 칸) |
-| `test_transition_coverage.cpp` | 칸 목록 파일 형식, `Event` 이름 집합 == 목록의 사건 집합, 기록기를 켜고 끈 두 실행의 출력이 같음, `Environment::TearDown`의 대조(관측 == covered, impossible 미관측, 목록 밖 칸 미관측, untagged 0. 일부만 돌리면 건너뛴다). `IDSIM_TRANSITION_CELLS_DUMP=<경로>`이면 관측한 칸을 같은 형식으로 쓴다 |
+| `test_transition_coverage.cpp` | 칸 목록 파일 형식, `Event` 이름 집합 == 목록의 사건 집합, 기록기를 켜고 끈 두 실행의 출력이 같음(시나리오 아홉: 정상, 공중과 지상 취소, Px4Timestamp 실패, ITEM_TIMEOUT 정리의 Land 경로, 감시 표 행끼리 겹침, 감시 표와 완료 겹침, LAND 이탈, `[LAND]` 미션), `Environment::TearDown`의 대조(관측 == covered, impossible 미관측, 목록 밖 칸 미관측, untagged 0). 일부만 돌면(`--gtest_filter`, sharding, `DISABLED_`, `GTEST_SKIP`) 실패한다. 개발자가 일부만 돌릴 때는 `IDSIM_TRANSITION_PARTIAL_OK=1 ./test_runner --gtest_filter=...`로 대조를 건너뛴다. `IDSIM_TRANSITION_CELLS_DUMP=<경로>`이면 관측한 칸을 같은 형식으로 쓴다 |
 | `test_mission_validation.cpp` | 검증 규칙, 1a 제한, `TYPE_*` 분류 전수, `screen_goal` 순서 |
 | `test_termination.cpp` | status와 reason 전수 대응표, reason 값, 종료 결과 == 종료 사건 |
 | `test_monitor_table.cpp` | 감시 표 순위마다 한 건, 같은 tick 동률 24쌍, 순위 5의 가지, 행 수와 parametrize 수, 감시 표로 끝낼 때의 disarm 술어(8행 전수 x 입력 16조합) |
