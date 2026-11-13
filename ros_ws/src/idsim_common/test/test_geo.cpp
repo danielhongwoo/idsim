@@ -28,6 +28,10 @@
 // stack.json의 vehicles[].expect_gps는 기준값으로 쓰지 않는다. 그 값은 스모크용 기대값이라 국소
 // 근사와 센서 높이를 포함한다. 기준은 위 두 라이브러리의 원값뿐이다.
 //
+// 기준값 갱신 절차: PX4 태그나 gz-math 판을 올리면 test/geo_reference의 두 도구
+//   (gz_local2.py, px4_map_projection.cpp)를 새 판으로 다시 돌려 이 파일의 기준값과
+//   위 판 표기를 갱신한다.
+//
 // 허용 오차
 // - gz 위경도 1e-11 도(약 1e-6 m), 고도와 world ENU 1e-6 m. 식과 연산 순서를 원문대로 옮겼으므로
 //   차이는 double 반올림(ECEF 크기 6.4e6 m에서 1e-9 m 수준)뿐이다.
@@ -52,6 +56,7 @@ namespace
 {
 
 constexpr double kDegTol = 1e-11;
+// z(고도 차)는 double 산술이라 float 반올림이 없으므로 PX4 쪽 z에도 같은 1e-6 m를 쓴다.
 constexpr double kMeterTol = 1e-6;
 
 struct Lla
@@ -402,6 +407,7 @@ TEST(Geo, ChainWorldEnuToLocalNed)
                                          << ") ref " << c.ref.lat << " " << c.ref.lon;
     EXPECT_NEAR(ned.x(), c.expected_ned.x, float_tol(c.expected_ned.x)) << at;
     EXPECT_NEAR(ned.y(), c.expected_ned.y, float_tol(c.expected_ned.y)) << at;
+    // z는 double 고도 차라 float ulp 허용이 필요 없다(kMeterTol 주석).
     EXPECT_NEAR(ned.z(), c.expected_ned.z, kMeterTol) << at;
   }
 }

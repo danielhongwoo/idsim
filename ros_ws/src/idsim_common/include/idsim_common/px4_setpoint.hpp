@@ -22,7 +22,10 @@
 //   NaN("제어하지 않음"). velocity는 속도 feedforward 인자가 없으면 NaN, 있으면 그 값(NED, m/s).
 //   yaw는 항상 유한값으로 보낸다(NaN yaw의 Offboard 동작은 확인하지 않았다).
 // - 속도 feedforward(1b TRACK_ENTITY, plan-1b-mission-target decisions.md 쟁점 8, 14): PX4 위치
-//   제어는 position과 함께 온 유한한 velocity를 feedforward로 더한다(PositionControl.cpp). 그래도
+//   제어는 position과 함께 온 유한한 velocity를 feedforward로 더한다(mc_pos_control/
+//   PositionControl/PositionControl.cpp _positionControl 125-137행). _inputValid(222-247행)는
+//   vx, vy가 둘 다 유한이거나 둘 다 NaN이어야 한다고 요구한다. 세 성분을 한 번에 검사하는
+//   이유 중 하나다. 그래도
 //   offboard_control_mode는 position만 true 그대로다. 속도 크기는 자르지 않는다(한계는 PX4 위치
 //   제어가 적용한다). 언제 싣는가(표본이 신선하고 velocity_valid)는 상태기가 정한다.
 // timestamp는 Px4Timestamp 인자로만 받는다(sim 시간 us).

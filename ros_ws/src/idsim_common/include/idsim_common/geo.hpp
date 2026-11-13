@@ -72,6 +72,8 @@ Geodetic world_enu_to_geodetic(const WorldOrigin & origin, const Eigen::Vector3d
 Eigen::Vector3d geodetic_to_world_enu(const WorldOrigin & origin, const Geodetic & point);
 
 // PX4 MapProjection::project와 같은 식(x 북, y 동). z = -(alt - ref_alt).
+// ref_alt == 0을 무효 신호로 쓰지 않고 그대로 계산한다. 기준 유효 술어(decisions.md 쟁점 4)는
+// 호출하는 px4 어댑터가 먼저 거쳐야 한다.
 Eigen::Vector3d geodetic_to_local_ned(const LocalReference & ref, const Geodetic & point);
 
 // PX4 MapProjection::reproject와 같은 식. alt = ref_alt - z.

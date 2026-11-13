@@ -25,6 +25,8 @@
         PositionTransform((e, n, u), LOCAL2, SPHERICAL). 출력: F <lat_deg> <lon_deg> <alt_m>
     I <origin_lat_deg> <origin_lon_deg> <origin_alt_m> <lat_deg> <lon_deg> <alt_m>
         PositionTransform((lat, lon, alt), SPHERICAL, LOCAL2). 출력: I <e> <n> <u>
+기대 판(7.7.0)과 다르면 실패한다. PX4 태그나 gz-math 판을 올리면 이 도구와 px4_map_projection.cpp를
+다시 돌려 test_geo.cpp의 기준값을 갱신한다.
 heading은 0이다(생성기가 월드 SDF에 heading 0으로 쓴다). 값은 repr(왕복 가능한 double)로 쓴다.
 """
 
@@ -33,6 +35,8 @@ import sys
 
 from gz.math7 import Angle, SphericalCoordinates, Vector3d
 
+EXPECTED_GZ_MATH = '7.7.0'
+
 
 def make(lat_deg, lon_deg, alt_m):
     return SphericalCoordinates(
@@ -40,7 +44,16 @@ def make(lat_deg, lon_deg, alt_m):
         Angle(math.radians(lon_deg)), alt_m, Angle(0.0))
 
 
+def check_version():
+    import gz.math7 as m
+    ver = getattr(m, '__version__', None)
+    print('gz.math7 version:', ver, file=sys.stderr)
+    if ver != EXPECTED_GZ_MATH:
+        raise SystemExit('gz-math %s expected, got %s' % (EXPECTED_GZ_MATH, ver))
+
+
 def main():
+    check_version()
     for line in sys.stdin:
         f = line.split()
         if not f:
