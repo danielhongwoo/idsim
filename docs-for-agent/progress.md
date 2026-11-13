@@ -7,7 +7,7 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 1a 완료 범위의 계약은 `docs/interface.md`에 고정되어 있다 |
-| 1b | 시작 전 |
+| 1b | 착수 전 설계 확정. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B0(reviewer 검토) 대기 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
@@ -38,7 +38,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - 문서에는 지금 유효한 것만 둔다. 이력(누가 언제 무엇을 왜 바꿨는지, 실측 run, 검토 경과)은 커밋 메시지와 PR 본문에 적는다(사용자 결정).
 - px4-engineer의 모델 선택 예외는 `CLAUDE.md` 모델 선택 규칙의 "사용자 예외"를 따른다(읽기 전용 확인과 정형 작업은 sonnet, 안전장치로 중단된 기본 모델 호출은 sonnet으로 다시 부른다).
 - 그림은 계층으로 나눈다. 개요 그림 하나가 묶음과 주요 경로만 보이고 상세 그림이 개요의 상자를 하나씩 펼치며, 상세 그림의 도입 문장에 어느 상자를 펼친 것인지 적는다. 같은 내용을 두 그림에 그리지 않는다. 그림 하나는 node 8개 이하, edge 10개 이하, subgraph 중첩 1단, node label 두 줄 이하(이름과 짧은 구절 하나), edge label은 프로토콜이나 내용의 이름 하나(15자 이하)이고, 넘으면 그림을 나눈다. 포트 식, 환경변수, 마운트 경로, 명령줄 같은 세부는 label에 넣지 않고 그림 아래 표나 문장에 둔다(사용자 결정).
-- 실험용 스택 번호는 px4 5, ros2 6, test 7, devops 8이다. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
+- 실험용 스택 번호는 px4 5, ros2 6, test 7, devops 8, sim 9이다. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
 - 관련 owner의 승인 없이 머지하지 않는다. `idsim_mission`의 전이 표와 상태기 단위 테스트는 px4-engineer가 필수 승인자다(`file-ownership.md`).
 - 1a는 대표 시나리오(B, C, A, D, T)의 통과를 기준으로 개발한다. 경계 상황은 실측 증명 대신 보수적 기본 동작으로 덮고 계약 문서에 "미확인"으로 적는다. 새 실측은 관찰된 실패나 이상 동작의 원인을 재현할 때만 하고, 문서 분량과 실행 산출물과 기록 항목은 최소로 둔다(U6).
 
@@ -50,6 +50,16 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - U4: replay job의 trigger는 replay job을 만드는 Phase 2에서 정한다.
 - U5: P4는 core 변경을 먼저 머지한다. `decisions.md`의 P4 머지 조건(필수 재실측 (2), (3), (5)와 두 부류의 ARMED 표본 기준)은 `tools/sim_stack.sh up`이 Executor를 띄우게 되는 P4 생성기와 통합 PR에 적용한다.
 - U6: 1a는 대표 시나리오(B, C, A, D, T)의 통과(로컬 3회 연속, CI `sitl`, 육안 확인)를 기준으로 한다. 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮고, 새 실측은 관찰된 문제의 재현용으로만 하며, 재실측 (1), (4), (6), (7), (8)은 하지 않는다. 산출물은 최소로 둔다.
+- U7: 1b 범위에서 반복 이륙(첫 항목이 아닌 TAKEOFF)은 뺀다. Executor는 1b에서도 거부한다.
+- U8: `COM_LOW_BAT_ACT`를 계약 SITL 파라미터 표에 넣어 2(Land)로 고정한다.
+- U9: `RTL_RETURN_ALT`는 미션 고도에 맞춰 정한다(1b는 순항 5 m에 10 m).
+- U10: 표적은 "스크립트 궤적을 따르는 점 표적"이다. 표적 생산자는 교체 가능하며 Gazebo 기반 생산자는 확장 항목이다. `docs/architecture.md` 범위 문구를 이에 맞춘다.
+- U11: CI `sitl` 목표 15분. 1b 비행 시나리오를 모두 PR CI에 두고, 넘으면 U15 순서로 줄인다.
+- U12: Gazebo 정답 pose(`/sim/`)를 SITL MCAP 기록물에 넣는다(Phase 2부터 효과).
+- U13: roadmap 1b 목표(YAML 미션 하나로 이륙 -> 순회 -> 표적 접근 -> 복귀, 착륙)를 그대로 덮는 합친 미션 시나리오(F4)를 둔다. F1-F3은 경계 상황 검증용으로 남긴다. CI 15분을 넘을 때의 조정은 U15를 따른다.
+- U14: 1b waypoint 판정 반경은 1 m를 유지한다. 시험 미션의 `acceptance_radius_m`은 `1 m - b` 이하로 둔다.
+- U15: CI `sitl`이 15분을 넘으면 겹치는 비행 구간 -> waypoint 수 -> Hold 시간 순으로 줄인다. F2의 공중 종료와 F3의 공중 시작은 빼지 않는다.
+- U16: `docs-for-agent/file-ownership.md`의 소유자는 architect다.
 - 저장소 라이선스는 Apache-2.0이다. 새 소스와 CMake 파일에 머리말을 넣고 `ament_copyright`와 cpplint `legal/copyright` 검사를 켠 채로 둔다.
 - 이미지 빌드의 apt 미러 기본값은 kr 미러(`docker/versions.env`의 `UBUNTU_APT_MIRROR`)이고 CI는 우분투 기본 미러를 쓴다.
 - ros-ws 이미지에 clang-tidy와 clang-format을 그대로 둔다. 별도 도구 이미지로 빼지 않는다.
@@ -57,7 +67,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. 1b 착수 전 설계 토론. 의제는 미해결 사항의 "1b 전에 정할 것"이다(첫 항목이 아닌 TAKEOFF, `/clock` 전달 지연 실측, 원점 변환, takeoff 빌더 공개 등).
+1. 1b 계획 B0: reviewer가 `plan-1b-mission-target/decisions.md`와 README를 검토한다. 통과하면 README의 진행 순서대로 B1-B13을 시작한다.
 
 ## 미해결 사항
 
@@ -91,17 +101,6 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - `qgc.sh`의 sha256 불일치 시 종료 코드 1 경로는 실행으로 확인하지 않았다.
 - 실측하지 않은 것: `GZ_IP=127.0.0.1`을 뺐을 때의 gz-transport 디스커버리, GPS 잡음의 출처, bridge healthcheck의 `ROS_LOG_DIR=/tmp/hc`가 run 디렉터리에 로그를 남기지 않는지, 에이전트의 Fast DDS 멀티캐스트가 같은 LAN의 다른 호스트와 섞이는지, MAVLink bind에 실패한 PX4의 동작, passwd에 없는 uid 1001로 지금 스택이 도는지.
 - 이 호스트의 포트 5900과 8090은 다른 프로젝트가 쓴다. VNC를 도입하면 피한다.
-
-1b 전에 정할 것.
-
-- 첫 항목이 아닌 TAKEOFF의 의미: 준비 단계를 다시 돌리는지, 기준 위치, `timeout` 기준, 재arm. 1a 노드는 INVALID_MISSION으로 거부한다(px4-engineer, ros2-engineer, architect).
-- `/clock` 전달 지연의 크기를 1b 첫 실측 항목에 넣는다. 지상 취소 분기의 disarm 확인 기준(DISARMED 표본의 PX4 timestamp와 disarm 전송 stamp의 비교)을 더 직접적인 신호로 바꿀지는 그 값을 본 뒤 정한다(px4-engineer).
-- EKF 원점은 첫 GNSS fix 위치이고 스폰 지점과의 오차는 측정하지 않았다. 원점 이동 변환의 입력을 정할 때 함께 본다.
-
-- takeoff 빌더와 `goto_setpoint` 공개 검토(`idsim_common`, ros2-engineer와 px4-engineer). TargetState -> setpoint 변환 위치와 원점 이동 변환 함수.
-- 다대 원점 판정의 pose 보정 방식(`check_px4 --expect-pose-enu` 또는 `stack.json`의 기체별 기대 위경도). 지금 `--expect-origin`은 1대 기준이다(architect, test-engineer).
-- 기체별 EKF 원점은 월드 원점이 아니라 스폰 지점이다. 월드 ENU `TargetState`를 기체 NED setpoint로 바꾸는 입력과, 커스텀 월드에서 `world.origin`과 SDF `<spherical_coordinates>`의 일치를 검사하는 주체를 정한다. 월드 SDF에 `<plugin>`이 하나라도 있으면 서버 설정 파일이 무시된다.
-- bridge healthcheck는 `/clock` 1회 수신을 유지하고 표적 어댑터 판정은 별도 단계로 둔다. 커스텀 모델은 `GZ_SIM_RESOURCE_PATH`에 `/opt/idsim/sim/models`를 더해야 한다.
 
 Phase 2와 3 전에 정할 것.
 

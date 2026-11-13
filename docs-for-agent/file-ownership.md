@@ -9,7 +9,7 @@
 | `docker/Dockerfile.sim-base`, `ros_ws/src/idsim_sim/`(Gazebo GUI 설정 `gui.config`, gazebo와 gz-gui wrapper `scripts/` 포함) | sim-engineer |
 | `config/cyclonedds.xml`, `ros_ws/src/idsim_common/`, 루트 `.clang-format`, `.clang-tidy`, `tests/smoke/capture.sh`, `tools/to_interface.py`, `docs/interface.md` 초안, `ros_ws/src/idsim_mission/`(launch, `include/idsim_mission/core/snapshot.hpp` 포함. 아래 px4-engineer 몫 제외) | ros2-engineer |
 | `tests/support/`(`stack.py` 포함), `tests/fixtures/` 골든 갱신 절차, `tests/tools/` 승인, `tests/sitl/`(`run_sitl.sh` 포함) | test-engineer |
-| `docs/architecture.md`, `docs/roadmap.md`, `docs/smoke-test.md`, `docs/interface.md` 최종, `ros_ws/src/idsim_interfaces/` | architect |
+| `docs/architecture.md`, `docs/roadmap.md`, `docs/smoke-test.md`, `docs/interface.md` 최종, `ros_ws/src/idsim_interfaces/`, `docs-for-agent/file-ownership.md`(이 파일) | architect |
 
 골든 파일(`tests/fixtures/px4/<태그>/`)의 내용 변경은 px4-engineer와 ros2-engineer가 diff를 승인한다.
 
