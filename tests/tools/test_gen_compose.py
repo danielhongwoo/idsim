@@ -235,8 +235,11 @@ def test_golden_stack_loads_with_support_loader(case):
             assert v.raw["params_file"] == f"params/ops-{v.id}.yaml"
             assert v.raw["executor_node"] == f"{v.ns}/mission_executor"
             assert s.services["ops"] == [f"ops-{x.id}" for x in s.vehicles]
-            assert s.raw["startup"]["node_stages"] == [s.services["ops"]]
+            node = s.services["ops"] + (["targets"] if s.raw["targets"] else [])
+            assert s.raw["startup"]["node_stages"] == [node]
+            assert (s.raw["services"]["targets"] == "targets") == bool(s.raw["targets"])
             assert s.raw["run"]["params_dir"] == "params"
+    assert [t["id"] for t in s.raw["targets"]] == (["target_a", "target_b"] if case == "3대-k0" else [])
     assert s.vehicle_by_ns(s.vehicles[0].ns) is s.vehicles[0]
     assert s.vehicles[0].ns == "/" + s.vehicles[0].px4_ns
     assert s.service("agent") == "xrce-agent" and s.service("runner") == "runner"
@@ -1102,3 +1105,372 @@ def test_real_template_and_fleet_generate_and_assert():
 def test_print_airframes_lists_registered(capsys):
     assert gc.main(["--print-airframes"]) == 0
     assert capsys.readouterr().out.split() == list(gc.AIRFRAME_SENSOR_Z_M)
+
+
+# ------------------------------------------------------------------ targets(표적 스키마, 서비스, params)
+def wp(t, x, y, z=3.0):
+    return {"t": t, "x": x, "y": y, "z": z}
+
+
+def tgt(**changes):
+    """검증을 통과하는 표적 하나(기체 1은 원점). changes의 값이 DELETE이면 key를 지운다."""
+    t = {"id": "target_a", "start_s": 0, "loop": False,
+         "waypoints": [wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 20.0)]}
+    for key, value in changes.items():
+        if value is DELETE:
+            del t[key]
+        else:
+            t[key] = value
+    return t
+
+
+def with_targets(*items, base=None):
+    f = copy.deepcopy(BASE_FLEET if base is None else base)
+    f["targets"] = list(items)
+    return f
+
+
+def test_targets_valid_is_normalized_to_float_in_fleet_order():
+    norm, _ = gc.validate_fleet(with_targets(
+        tgt(id="zeta", start_s=2, waypoints=[{"t": 0, "x": 10, "y": 0, "z": 0}, {"t": 4, "x": 10, "y": 8, "z": 2}]),
+        tgt(id="alpha")))
+    assert [t["id"] for t in norm["targets"]] == ["zeta", "alpha"]
+    z = norm["targets"][0]
+    assert z["start_s"] == 2.0 and isinstance(z["start_s"], float) and z["loop"] is False
+    assert z["waypoints"][0] == {"t": 0.0, "x": 10.0, "y": 0.0, "z": 0.0}
+    assert all(isinstance(v, float) for w in z["waypoints"] for v in w.values())
+
+
+def test_targets_empty_list_and_non_list():
+    assert gc.validate_fleet(with_targets())[0]["targets"] == []
+    with pytest.raises(gc.FleetError, match="목록이어야"):
+        gc.validate_fleet(fleet(targets=None))
+
+
+STATIONARY_END = [wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 10.0), wp(20.0, 20.0, 0.0)]
+TARGET_REJECTS = [
+    pytest.param(tgt(id="Target"), "id: ", id="id-대문자"),
+    pytest.param(tgt(id="1abc"), "id: ", id="id-숫자로-시작"),
+    pytest.param(tgt(id="a" * 33), "id: ", id="id-33자"),
+    pytest.param(tgt(id=5), "id: ", id="id-문자열-아님"),
+    pytest.param(tgt(id="x500_1"), "기체 모델 이름 형식", id="id-기체-모델-이름"),
+    pytest.param(tgt(id="x500_7"), "기체 모델 이름 형식", id="id-없는-기체-번호도-거부"),
+    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0)]), "2개 이상", id="waypoint-1개"),
+    pytest.param(tgt(waypoints=[]), "2개 이상", id="waypoint-0개"),
+    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0), wp(0.0, 20.0, 5.0)]), "엄격히 증가", id="t-같음"),
+    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 5.0), wp(9.0, 20.0, 6.0)]), "엄격히 증가", id="t-감소"),
+    pytest.param(tgt(waypoints=[wp(1.0, 20.0, 0.0), wp(10.0, 20.0, 5.0)]), "첫 t는 0", id="첫-t-양수"),
+    pytest.param(tgt(waypoints=[wp(-1.0, 20.0, 0.0), wp(10.0, 20.0, 5.0)]), "첫 t는 0", id="첫-t-음수"),
+    pytest.param(tgt(loop=True, waypoints=[wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 10.0)]), "loop가 true", id="loop-끝-다름"),
+    pytest.param(tgt(loop=True, waypoints=[wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 10.0), wp(20.0, 20.0, 0.0, 4.0)]),
+                 "loop가 true", id="loop-z만-다름"),
+    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0, 0.0), wp(10.0, 20.0, 10.0, -0.5)]), "0 이상이어야", id="z-음수"),
+    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0), wp(1.0, 20.0, 5.5)]), "수평 속도 5.500", id="수평-속도-초과"),
+    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0, 1.0), wp(2.0, 20.0, 0.0, 3.5)]), "수직 속도 1.250", id="수직-속도-초과"),
+    pytest.param(tgt(waypoints=[wp(0.0, 1.0, 1.0), wp(10.0, 20.0, 20.0)]), "스폰 지점의 수평 거리", id="스폰-근처"),
+    pytest.param(tgt(waypoints=[wp(0.0, 1.9, 0.0), wp(10.0, 20.0, 0.0)]), "스폰 지점의 수평 거리 1.90", id="스폰-1.9m"),
+    pytest.param(tgt(start_s=-1), "start_s", id="start_s-음수"),
+    pytest.param(tgt(start_s="0"), "start_s", id="start_s-문자열"),
+    pytest.param(tgt(loop=1), "loop", id="loop-bool-아님"),
+    pytest.param(tgt(start_s=DELETE), "필수 key가 없다.*start_s", id="start_s-없음"),
+    pytest.param(tgt(loop=DELETE), "필수 key가 없다.*loop", id="loop-없음"),
+    pytest.param(tgt(id=DELETE), "필수 key가 없다.*id", id="id-없음"),
+    pytest.param(tgt(waypoints=DELETE), "필수 key가 없다.*waypoints", id="waypoints-없음"),
+    pytest.param(dict(tgt(), speed=1), "모르는 key", id="모르는-key"),
+    pytest.param(tgt(waypoints=[{"t": 0.0, "x": 20.0, "y": 0.0}, wp(10.0, 20.0, 5.0)]), "필수 key가 없다.*z", id="waypoint-z-없음"),
+    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0), {"t": 10.0, "x": 20.0, "y": "5", "z": 3.0}]), "숫자가 아닌 값 y",
+                 id="waypoint-값-문자열"),
+    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0), dict(wp(10.0, 20.0, 5.0), v=1)]), "모르는 key", id="waypoint-모르는-key"),
+    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0), wp(float("nan"), 20.0, 5.0)]), "숫자가 아닌 값 t", id="waypoint-nan"),
+    pytest.param("target_a", "매핑이어야", id="항목-매핑-아님"),
+]
+
+
+@pytest.mark.parametrize("item, match", TARGET_REJECTS)
+def test_targets_rejects(item, match):
+    with pytest.raises(gc.FleetError, match=match):
+        gc.validate_fleet(with_targets(item))
+
+
+def test_targets_duplicate_id_rejected():
+    with pytest.raises(gc.FleetError, match="중복"):
+        gc.validate_fleet(with_targets(tgt(), tgt()))
+
+
+def test_targets_speed_limits_are_inclusive():
+    """상한과 같은 속도(수평 5 m/s, 수직 1 m/s)는 통과한다."""
+    norm, _ = gc.validate_fleet(with_targets(tgt(waypoints=[wp(0.0, 20.0, 0.0, 0.0), wp(2.0, 26.0, 8.0, 2.0)])))
+    assert len(norm["targets"]) == 1  # 수평 10/2 = 5, 수직 2/2 = 1
+    with pytest.raises(gc.FleetError, match="수평 속도"):
+        gc.validate_fleet(with_targets(tgt(waypoints=[wp(0.0, 20.0, 0.0), wp(2.0, 26.0, 8.1)])))
+
+
+def test_targets_loop_closed_is_accepted():
+    f = with_targets(tgt(loop=True, waypoints=[wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 10.0), wp(20.0, 20.0, 0.0)]))
+    assert gc.validate_fleet(f)[0]["targets"][0]["loop"] is True
+
+
+def test_targets_spawn_check_uses_every_vehicle_horizontal_only():
+    f = three_vehicles()  # 기체 y = 0, 4, 8
+    f["targets"] = [tgt(waypoints=[wp(0.0, 0.0, 9.0, 30.0), wp(10.0, 20.0, 9.0, 30.0)])]  # 기체 3과 수평 1 m, 높이는 무관
+    with pytest.raises(gc.FleetError, match="기체 3의 스폰"):
+        gc.validate_fleet(f)
+    f["targets"] = [tgt(waypoints=[wp(0.0, 0.0, 10.0, 0.0), wp(10.0, 20.0, 10.0, 0.0)])]  # 정확히 2 m는 통과
+    assert gc.validate_fleet(f)[0]["targets"]
+
+
+def test_targets_limits():
+    many = [tgt(id=f"t{i}", waypoints=[wp(0.0, 20.0 + i, 0.0), wp(10.0, 20.0 + i, 10.0)]) for i in range(gc.TARGETS_MAX)]
+    assert len(gc.validate_fleet(with_targets(*many))[0]["targets"]) == gc.TARGETS_MAX
+    with pytest.raises(gc.FleetError, match="상한 32"):
+        gc.validate_fleet(with_targets(*many, tgt(id="extra", waypoints=[wp(0.0, 90.0, 0.0), wp(10.0, 90.0, 5.0)])))
+    n = gc.WAYPOINTS_MAX
+    ok = [wp(float(i), 20.0, 0.1 * i, 0.0) for i in range(n)]
+    assert len(gc.validate_fleet(with_targets(tgt(waypoints=ok)))[0]["targets"][0]["waypoints"]) == n
+    with pytest.raises(gc.FleetError, match="상한 256"):
+        gc.validate_fleet(with_targets(tgt(waypoints=ok + [wp(float(n), 20.0, 0.1 * n, 0.0)])))
+
+
+def test_targets_error_reports_every_problem():
+    with pytest.raises(gc.FleetError) as e:
+        gc.validate_fleet(with_targets(tgt(id="Bad"), tgt(id="x500_1")))
+    assert "targets[0].id" in str(e.value) and "targets[1].id" in str(e.value)
+
+
+def test_targets_id_collides_with_template_names():
+    norm, _ = gc.validate_fleet(with_targets(tgt(id="ground_plane")))
+    real = _read(os.path.join(REPO, REAL_TEMPLATE))
+    with pytest.raises(gc.FleetError, match="ground_plane.*이름과 같다"):
+        gc.build_world_sdf(norm, real)
+    light = _sdf('    <light name="lamp" type="point"/>')
+    norm, _ = gc.validate_fleet(with_targets(tgt(id="lamp")))
+    with pytest.raises(gc.FleetError, match="lamp.*이름과 같다"):
+        gc.build_world_sdf(norm, light)
+
+
+def target_fleet():
+    return with_targets(
+        tgt(id="target_a", start_s=0, loop=True,
+            waypoints=[{"t": 0, "x": 20, "y": 0, "z": 3}, wp(10.0, 20.0, 20.0), wp(20.0, 20.0, 0.0)]),
+        tgt(id="target_b", start_s=5.5, waypoints=[wp(0.0, -15.5, 12.25, 0.0), wp(8.0, -15.5, -3.75, 0.5)]))
+
+
+def test_targets_service_details():
+    compose, stack, _ = gen(f=target_fleet(), k=2)
+    s = compose["services"]
+    assert list(s) == ["xrce-agent", "gazebo", "px4-1", "bridge", "ops-1", "targets", "runner", "gz-gui", "foxglove",
+                       "lichtblick"]
+    t = s["targets"]
+    assert t["command"] == ["ros2", "run", "idsim_sim", "target_adapter", "--ros-args", "--params-file",
+                            "/opt/idsim/artifacts/runs/20261109-090000-k2/params/targets.yaml"]
+    assert t["init"] is True and t["stop_signal"] == "SIGINT"
+    assert t["depends_on"] == {"bridge": {"condition": "service_healthy"}}
+    assert t["healthcheck"]["test"] == ["CMD-SHELL", "test -f /tmp/idsim/targets_ready"]
+    assert t["network_mode"] == "host" and t["restart"] == "no" and "profiles" not in t
+    ops = s["ops-1"]
+    for key in ("image", "user", "volumes", "network_mode"):
+        assert t[key] == ops[key]
+    for key in ("RMW_IMPLEMENTATION", "CYCLONEDDS_URI", "ROS_DOMAIN_ID", "HOME"):
+        assert t["environment"][key] == ops["environment"][key]
+    assert t["environment"]["ROS_DOMAIN_ID"] == "22" and t["environment"]["ROS_LOG_DIR"].endswith("/ros_log/targets")
+    assert "GZ_PARTITION" not in t["environment"]
+    assert stack["services"]["targets"] == "targets"
+    assert stack["startup"]["node_stages"] == [["ops-1", "targets"]]
+    assert "targets" not in [n for stage in stack["startup"]["stages"] for n in stage]
+    assert s["runner"]["depends_on"] == {n: {"condition": "service_healthy"} for n in ("ops-1", "targets")}
+    assert [x["id"] for x in stack["targets"]] == ["target_a", "target_b"]
+    assert stack["targets"][0]["waypoints"][0] == {"t": 0.0, "x": 20.0, "y": 0.0, "z": 3.0}
+    assert stack["generator"]["version"] == gc.GENERATOR_VERSION
+
+
+def test_targets_absent_makes_no_service_params_or_log_dir():
+    compose, stack, _ = gen()
+    assert "targets" not in compose["services"]
+    assert stack["services"]["targets"] is None and stack["targets"] == []
+    assert stack["startup"]["node_stages"] == [["ops-1"]]
+    files = gc.render_files(compose, stack, gen_world())
+    assert "params/targets.yaml" not in files
+    assert "ros_log/targets" not in gc.render_dirs(compose, stack)
+
+
+def test_targets_render_dirs_and_files_when_present():
+    compose, stack, _ = gen(f=target_fleet())
+    assert "ros_log/targets" in gc.render_dirs(compose, stack)
+    assert "params/targets.yaml" in gc.render_files(compose, stack, "<world/>")
+
+
+def test_targets_params_exact_text():
+    _, stack, _ = gen(f=target_fleet())
+    text = gc.render_targets_params(stack["targets"])
+    assert text == (
+        "# 생성 파일. tools/gen_compose.py가 config/fleet.yaml의 targets에서 만든다. 손으로 고치지 않는다.\n"
+        "# 표적 궤적만 담는다. 발행 주기는 노드 선언 기본값을 쓴다.\n"
+        "/**:\n"
+        "  ros__parameters:\n"
+        "    use_sim_time: true\n"
+        '    target_ids: ["target_a", "target_b"]\n'
+        "    targets.target_a.start_s: 0.0\n"
+        "    targets.target_a.loop: true\n"
+        "    targets.target_a.t: [0.0, 10.0, 20.0]\n"
+        "    targets.target_a.x: [20.0, 20.0, 20.0]\n"
+        "    targets.target_a.y: [0.0, 20.0, 0.0]\n"
+        "    targets.target_a.z: [3.0, 3.0, 3.0]\n"
+        "    targets.target_b.start_s: 5.5\n"
+        "    targets.target_b.loop: false\n"
+        "    targets.target_b.t: [0.0, 8.0]\n"
+        "    targets.target_b.x: [-15.5, -15.5]\n"
+        "    targets.target_b.y: [12.25, -3.75]\n"
+        "    targets.target_b.z: [0.0, 0.5]\n")
+
+
+def test_targets_params_parse_as_double_arrays_and_bool():
+    yaml = pytest.importorskip("yaml")
+    _, stack, _ = gen(f=target_fleet())
+    doc = yaml.safe_load(gc.render_targets_params(stack["targets"]))
+    p = doc["/**"]["ros__parameters"]
+    assert p["use_sim_time"] is True and p["target_ids"] == ["target_a", "target_b"]
+    for t in stack["targets"]:
+        base = f"targets.{t['id']}."
+        assert p[base + "loop"] is t["loop"] and isinstance(p[base + "start_s"], float)
+        for key in gc.WAYPOINT_KEYS:
+            arr = p[base + key]
+            assert len(arr) == len(t["waypoints"]) and all(isinstance(v, float) for v in arr)
+            assert arr == [w[key] for w in t["waypoints"]]
+
+
+def test_targets_params_quote_ids_that_yaml_reads_as_non_strings():
+    yaml = pytest.importorskip("yaml")
+    f = with_targets(tgt(id="null"), tgt(id="true", waypoints=[wp(0.0, 30.0, 0.0), wp(10.0, 30.0, 5.0)]))
+    _, stack, _ = gen(f=f)
+    doc = yaml.safe_load(gc.render_targets_params(stack["targets"]))
+    assert doc["/**"]["ros__parameters"]["target_ids"] == ["null", "true"]
+
+
+def test_targets_embedded_warns_and_ignores():
+    compose, stack, warnings = gen(f=target_fleet(), variant="embedded")
+    assert stack["targets"] == [] and stack["services"]["targets"] is None
+    assert "targets" not in compose["services"] and stack["startup"]["node_stages"] == []
+    assert any("targets 2개를 무시" in w for w in warnings)
+    _, _, none_warnings = gen(variant="embedded")
+    assert not any("targets" in w for w in none_warnings)
+
+
+def test_targets_invariants_catch_tampering():
+    for mutate in (
+        lambda c, st: c["services"]["targets"].update(init=False),
+        lambda c, st: c["services"]["targets"].update(stop_signal="SIGTERM"),
+        lambda c, st: c["services"]["targets"]["depends_on"].update({"px4-1": {"condition": "service_healthy"}}),
+        lambda c, st: c["services"]["targets"]["healthcheck"].update(test=["CMD-SHELL", "true"]),
+        lambda c, st: c["services"]["targets"].update(command=["true"]),
+        lambda c, st: c["services"]["targets"].update(profiles=["viz"]),
+        lambda c, st: st["startup"]["stages"][-1].append("targets"),
+        lambda c, st: st["startup"].update(node_stages=[["ops-1"]]),
+        lambda c, st: c["services"]["runner"]["depends_on"].pop("targets"),
+        lambda c, st: st["services"].update(targets=None),
+        lambda c, st: c["services"].pop("targets"),
+        lambda c, st: st["targets"].append(dict(st["targets"][0])),
+    ):
+        compose, stack, _ = gen(f=target_fleet())
+        mutate(compose, stack)
+        with pytest.raises(gc.FleetError, match="단정 실패"):
+            gc.assert_invariants(compose, stack)
+
+
+def test_targets_stack_json_loads_with_support_loader(tmp_path):
+    _, stack, _ = gen(f=target_fleet())
+    path = tmp_path / "stack.json"
+    path.write_text(gc.dump_stack(stack), encoding="utf-8")
+    s = stk.load(str(path))
+    assert s.targets_service == "targets" and [t["id"] for t in s.targets] == ["target_a", "target_b"]
+    assert s.node_stages == [["ops-1", "targets"]]
+
+
+# ------------------------------------------------------------------ targets의 Actor(월드 SDF)
+def _actors(text):
+    _, world = _world_children(text)
+    return [c for c in world if c.tag == "actor"]
+
+
+def _actor_points(actor):
+    return [(w.findtext("time"), w.findtext("pose")) for w in actor.iter("waypoint")]
+
+
+def test_actor_samples_by_hand():
+    t = {"waypoints": [{"t": 0.0, "x": 0.0, "y": 0.0, "z": 0.0}, {"t": 1.0, "x": 4.0, "y": 2.0, "z": 1.0},
+                       {"t": 1.1, "x": 4.0, "y": 2.0, "z": 1.0}]}
+    # 구간 1(1.0 s)은 0.25 s씩 4개, 구간 2(0.1 s, 정지)는 1개, 마지막 점 하나
+    assert gc.actor_samples(t) == [
+        (0.0, 0.0, 0.0, 0.0), (0.25, 1.0, 0.5, 0.25), (0.5, 2.0, 1.0, 0.5), (0.75, 3.0, 1.5, 0.75),
+        (1.0, 4.0, 2.0, 1.0), (1.1, 4.0, 2.0, 1.0)]
+
+
+def test_actor_samples_include_every_waypoint_and_respect_dt():
+    t = {"waypoints": [{"t": 0.0, "x": 0.0, "y": 0.0, "z": 0.0}, {"t": 0.3, "x": 1.0, "y": 0.0, "z": 0.0},
+                       {"t": 2.0, "x": 1.0, "y": 5.0, "z": 0.0}]}
+    samples = gc.actor_samples(t)
+    times = [s[0] for s in samples]
+    assert 0.3 in times and times[0] == 0.0 and times[-1] == 2.0
+    assert all(b - a <= gc.ACTOR_SAMPLE_DT_S + 1e-9 and b > a for a, b in zip(times, times[1:]))
+    # 정확히 0.25의 배수인 구간은 올림 오차로 한 개 더 나뉘지 않는다
+    exact = gc.actor_samples({"waypoints": [{"t": 0.0, "x": 0.0, "y": 0.0, "z": 0.0},
+                                            {"t": 0.5, "x": 1.0, "y": 0.0, "z": 0.0}]})
+    assert [s[0] for s in exact] == [0.0, 0.25, 0.5]
+
+
+def test_actor_element_shape_and_number_format():
+    norm, _ = gc.validate_fleet(with_targets(
+        tgt(id="target_a", start_s=2, loop=True,
+            waypoints=[{"t": 0, "x": 20, "y": 0, "z": 3}, wp(0.5, 20.0, 1.0), wp(1.0, 20.0, 0.0)])))
+    text = gc.build_world_sdf(norm, _read(os.path.join(REPO, FIXTURE_TEMPLATE)))
+    (actor,) = _actors(text)
+    assert actor.get("name") == "target_a" and [c.tag for c in actor] == ["pose", "link", "script"]
+    assert actor.findtext("pose") == "0.000000 0.000000 0.000000 0.000000 0.000000 0.000000"
+    link = actor.find("link")
+    assert [c.tag for c in link] == ["visual"] and link.find("visual/geometry/sphere/radius").text == "0.3"
+    assert [c.tag for c in actor.find("script")] == ["loop", "delay_start", "auto_start", "trajectory"]
+    assert actor.findtext("script/loop") == "true" and actor.findtext("script/delay_start") == "2.000000"
+    traj = actor.find("script/trajectory")
+    assert traj.attrib == {"id": "0", "type": "idsim_target", "tension": "0.0"}
+    pts = _actor_points(actor)
+    assert pts[0] == ("0.000000", "20.000000 0.000000 3.000000 0.000000 0.000000 0.000000")  # 정수 입력도 6자리
+    assert pts[-1][0] == "1.000000"
+    assert not {el.tag for el in actor.iter()} & set(gc.ACTOR_FORBIDDEN_DESCENDANTS)
+    assert "-0.000000" not in text
+    assert text.count("<spherical_coordinates") == 1 and "dynamic_pose" not in text
+
+
+def test_actor_negative_zero_is_written_as_zero():
+    assert gc._f6(-0.0) == "0.000000" and gc._f6(-1e-9) == "0.000000" and gc._f6(-0.5) == "-0.500000"
+
+
+def test_actors_follow_fleet_order_after_spherical_coordinates_and_keep_indent():
+    norm, _ = gc.validate_fleet(with_targets(tgt(id="zeta"), tgt(id="alpha", waypoints=[wp(0.0, 30.0, 0.0), wp(4.0, 30.0, 4.0)])))
+    text = gc.build_world_sdf(norm, _read(os.path.join(REPO, FIXTURE_TEMPLATE)))
+    _, world = _world_children(text)
+    tags = [c.tag for c in world]
+    assert [c.get("name") for c in world if c.tag == "actor"] == ["zeta", "alpha"]
+    assert tags.index("spherical_coordinates") < tags.index("actor")
+    assert '\n    <actor name="zeta">\n      <pose>' in text and text.rstrip().endswith("</actor>\n  </world>\n</sdf>")
+
+
+def test_actor_free_world_when_no_targets():
+    text = gen_world()
+    assert _actors(text) == [] and "<actor" not in text
+
+
+def test_check_world_sdf_catches_actor_tampering():
+    norm, _ = gc.validate_fleet(with_targets(tgt(id="target_a", loop=True,
+                                                 waypoints=[wp(0.0, 20.0, 0.0), wp(2.0, 20.0, 10.0), wp(4.0, 20.0, 0.0)])))
+    good = gc.build_world_sdf(norm, _read(os.path.join(REPO, FIXTURE_TEMPLATE)))
+    for old, new, match in (
+        ("<link name=\"link\">", "<link name=\"link\"><collision name=\"c\"/>", "금지 요소"),
+        ("</script>", "<plugin name=\"p\" filename=\"f\"/></script>", "금지 요소"),
+        ("<time>0.250000</time>", "<time>0.000000</time>", "엄격히 증가"),
+        ("<time>0.250000</time>", "<time>0.900000</time>", "엄격히 증가|넘는다"),
+        ("<loop>true</loop>", "<loop>false</loop>", "loop"),
+        ("<delay_start>0.000000</delay_start>", "<delay_start>1.000000</delay_start>", "delay_start"),
+        ("<pose>20.000000 10.000000 3.000000", "<pose>20.000000 10.000001 3.000000", "원래 waypoint"),
+    ):
+        assert old in good, old
+        with pytest.raises(gc.FleetError, match=match):
+            gc.check_world_sdf(good.replace(old, new, 1), norm)

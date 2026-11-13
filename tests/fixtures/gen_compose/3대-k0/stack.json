@@ -20,7 +20,7 @@
     },
     "fleet": {
       "path": "tests/fixtures/gen_compose/3\ub300-k0/fleet.yaml",
-      "sha256": "cff4c5b0770cf03e4eeeaf26cd9e127da76ba454a899482c57e4979f1bc38c12"
+      "sha256": "62a311b474cd59336344dad1bf3f201a1ea1f8de3ac78cf82aea53a3a2ad24f9"
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",
@@ -75,7 +75,7 @@
     ],
     "runner": "runner",
     "sim_oracle": null,
-    "targets": null
+    "targets": "targets"
   },
   "stack": {
     "agent_port": 8888,
@@ -104,7 +104,8 @@
       [
         "ops-1",
         "ops-2",
-        "ops-3"
+        "ops-3",
+        "targets"
       ]
     ],
     "stages": [
@@ -122,7 +123,64 @@
       ]
     ]
   },
-  "targets": [],
+  "targets": [
+    {
+      "id": "target_a",
+      "loop": true,
+      "start_s": 0.0,
+      "waypoints": [
+        {
+          "t": 0.0,
+          "x": 20.0,
+          "y": 0.0,
+          "z": 3.0
+        },
+        {
+          "t": 10.0,
+          "x": 20.0,
+          "y": 20.0,
+          "z": 3.0
+        },
+        {
+          "t": 20.0,
+          "x": 40.0,
+          "y": 20.0,
+          "z": 5.0
+        },
+        {
+          "t": 30.0,
+          "x": 20.0,
+          "y": 0.0,
+          "z": 3.0
+        }
+      ]
+    },
+    {
+      "id": "target_b",
+      "loop": false,
+      "start_s": 5.5,
+      "waypoints": [
+        {
+          "t": 0.0,
+          "x": -15.5,
+          "y": 12.25,
+          "z": 0.0
+        },
+        {
+          "t": 8.0,
+          "x": -15.5,
+          "y": -3.75,
+          "z": 0.5
+        },
+        {
+          "t": 12.0,
+          "x": -15.5,
+          "y": -3.75,
+          "z": 0.5
+        }
+      ]
+    }
+  ],
   "user": {
     "gid": 1000,
     "uid": 1000

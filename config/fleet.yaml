@@ -43,7 +43,21 @@ vehicles:
     pose: {x: 6.0, y: -3.0, z: 0.0, yaw: 0.0}
     px4_params: {}
 
-# 이동 표적 목록. 지금은 비어 있어야 한다(표적 스키마는 아직 없다).
+# 이동 표적 목록(스크립트 궤적을 따르는 점 표적). 비워 두면(`[]`) 표적 어댑터(targets 서비스)와 Actor를 만들지 않는다.
+# 항목마다 아래 네 key가 모두 필요하고 기본값이 없다(표적 32개, 표적당 waypoint 256개까지). embedded 변형은 경고와 함께 무시한다.
+#   - id: 표적 id. ^[a-z][a-z0-9_]{0,31}$, 중복 금지. 토픽 /targets/<id>/state와 Gazebo Actor 이름이 된다.
+#     기체 모델 이름(x500_N 형식)과 월드 템플릿 최상위 <model>, <actor>, <light> 이름과 같으면 거부한다.
+#     start_s: 시작 시각(s, 0 이상). 그 전에는 첫 waypoint에 정지해 있다.
+#     loop: true이면 끝에서 처음으로 되풀이한다(처음과 끝 waypoint의 x, y, z가 같아야 한다). false이면 끝난 뒤 마지막 점에 선다.
+#     waypoints: 2개 이상의 {t, x, y, z}. world ENU m, t는 start_s 기준 s, 첫 t는 0이고 엄격히 증가한다. z는 0 이상.
+#       구간 직선 보간이고 구간 속도는 수평 5 m/s, 수직 1 m/s 이하여야 한다. t=0 위치는 어느 기체의 스폰과도 수평 2 m 넘게 떨어진다.
+# 예(주석):
+#   - id: target_a
+#     start_s: 0
+#     loop: false
+#     waypoints:
+#       - {t: 0.0, x: 20.0, y: 0.0, z: 3.0}
+#       - {t: 10.0, x: 20.0, y: 20.0, z: 3.0}
 targets: []
 
 px4:

@@ -51,12 +51,12 @@ compose 파일은 손으로 쓰지 않는다. `tools/gen_compose.py`가 `config/
 모든 컨테이너는 `network_mode: host`로 호스트 네트워크를 공유하고, 자동 재시작하지 않는다(`restart: "no"`). 기체 한 대가 컨테이너 하나(`px4-N`)다.
 
 ```
-xrce-agent --> gazebo --> px4-1..N --> bridge      (본 스택, up --wait 대상)
- (에이전트)    (시뮬레이터)  (기체)       (/clock)
+xrce-agent --> gazebo --> px4-1..N --> bridge --> ops-1..N, targets   (본 스택, up --wait 대상)
+ (에이전트)    (시뮬레이터)  (기체)       (/clock)    (노드 단계)
                   +--> gz-gui, foxglove, lichtblick (viz 프로필)   runner (tools 프로필, 판정 명령용)
 ```
 
-화살표는 시작 순서다. 앞 컨테이너가 healthy가 되어야 다음 컨테이너가 뜬다. `fleet.yaml`의 `px4.start: sequential`이면 `px4-(N+1)`이 `px4-N`을 기다린다.
+화살표는 시작 순서다. 앞 컨테이너가 healthy가 되어야 다음 컨테이너가 뜬다. `fleet.yaml`의 `px4.start: sequential`이면 `px4-(N+1)`이 `px4-N`을 기다린다. 노드 단계는 `ops-N`(기체마다)과 `targets`(`fleet.yaml`에 표적이 있을 때만)를 병렬로 올리고, 서로 기다리지 않는다. `--infra-only`는 이 단계를 올리지 않는다.
 
 | 서비스 | 이미지 | 하는 일 | 준비 판정 | 실행 사용자 |
 | --- | --- | --- | --- | --- |
@@ -64,6 +64,8 @@ xrce-agent --> gazebo --> px4-1..N --> bridge      (본 스택, up --wait 대상
 | `gazebo` | sim-base | `idsim_sim`의 `gz_server.sh`가 생성된 월드 SDF(`/opt/idsim/world/<월드>.sdf`, 실행 디렉터리의 `world/`를 읽기 전용으로 마운트)를 검사하고(월드 이름, `<spherical_coordinates>` 정확히 하나) Gazebo 서버를 헤드리스로 띄운다. 원점은 그 SDF에 들어 있고 런타임에 설정하지 않는다 | `scene/info` 서비스 응답과 준비 파일 `/tmp/idsim/ready`(응답 직후에 생성) | root |
 | `px4-N` | px4 | 기체 N의 비행 제어기(`px4 -d -i N`). Gazebo에 `<모델>_N`을 스폰하고 에이전트에 접속한다. 작업 디렉터리 `rootfs/N`은 실행 디렉터리 `px4-N/`의 바인드 마운트(ULog, 파라미터 파일이 산출물로 남는다) | 에이전트 연결 상태가 `Running, connected` | 호스트 uid:gid |
 | `bridge` | ros-ws | Gazebo의 시뮬레이션 시계를 ROS 2 `/clock` 토픽으로 넘긴다 | `/clock` 수신(30초 간격, 시작 구간은 5초) | 호스트 uid:gid |
+| `ops-N` | ros-ws | 기체 N의 Mission Executor 노드(`ros2 launch idsim_mission`). 식별값은 `params/ops-N.yaml`로 받는다. 시작 순서의 노드 단계 | 노드가 lifecycle active(8초 상한의 `ros2 lifecycle get`) | 호스트 uid:gid |
+| `targets` | ros-ws | 표적 어댑터(`ros2 run idsim_sim target_adapter`). `fleet.yaml`의 `targets` 궤적(`params/targets.yaml`)을 시뮬레이션 시간에 맞춰 평가해 `/targets/<id>/state`로 발행한다. 표적이 없으면 서비스와 params를 만들지 않고, `embedded` 변형에서도 뜨지 않는다 | 표시 파일 `/tmp/idsim/targets_ready`(모든 표적이 한 번 이상 발행된 뒤 노드가 만든다) | 호스트 uid:gid |
 | `runner` | ros-ws | 상주하지 않는다. 스크립트가 `compose run`으로 판정 명령을 실행할 때 쓴다. 프로필 `tools` | 없음 | 호스트 uid:gid |
 | `gz-gui` | sim-base | Gazebo GUI 클라이언트. 프로필 `viz`. 아래 "시각 도구" 절 | 없음 | 호스트 uid:gid |
 | `foxglove` | ros-ws | foxglove_bridge. 기체 토픽(`/px4_N/...`)을 읽기 전용 WebSocket으로 내보낸다. 프로필 `viz`. 아래 "시각 도구" 절 | 없음 | 호스트 uid:gid |
@@ -147,13 +149,13 @@ UBUNTU_APT_MIRROR=http://archive.ubuntu.com/ubuntu python3 tools/ci/build_images
 
 CI(`build-images.yml`)는 runner가 미국에 있어 위 방식으로 우분투 기본 미러를 쓴다. `tools/check_host.sh`의 미러 검사도 같은 값을 읽는다.
 
-스택 올리기와 내리기. 저장소 루트에서 실행한다. `up` 한 번이 생성, 떠 있던 같은 스택 내리기, 인프라 세 단계 `up --wait`(에이전트와 gazebo, px4-N, bridge. 1단계 뒤 이 스택의 모델이 Gazebo에 남아 있지 않은지 확인한다), 노드 단계(Mission Executor `ops-N`이 lifecycle active가 될 때까지)를 모두 한다. `ros_ws/install/idsim_mission/`이 없으면 아무것도 올리기 전에 실패하므로 먼저 `tools/ros_ws.sh build`를 한다. 실패하면 에이전트의 `bind error`와 px4의 `bind failed`를 찾아 알려 준다.
+스택 올리기와 내리기. 저장소 루트에서 실행한다. `up` 한 번이 생성, 떠 있던 같은 스택 내리기, 인프라 세 단계 `up --wait`(에이전트와 gazebo, px4-N, bridge. 1단계 뒤 이 스택의 모델이 Gazebo에 남아 있지 않은지 확인한다), 노드 단계(Mission Executor `ops-N`이 lifecycle active가 되고 `targets`의 표시 파일이 생길 때까지)를 모두 한다. `ros_ws/install/idsim_mission/`(표적이 있으면 `ros_ws/install/idsim_sim/`도)이 없으면 아무것도 올리기 전에 실패하므로 먼저 `tools/ros_ws.sh build`를 한다. 실패하면 에이전트의 `bind error`와 px4의 `bind failed`를 찾아 알려 준다.
 
 ```
 tools/sim_stack.sh up                 # 스택 0. 실행 디렉터리 경로를 출력한다
 tools/sim_stack.sh up --stack 1       # 스택 1을 동시에
 tools/sim_stack.sh up --viz           # Gazebo GUI까지
-tools/sim_stack.sh up --infra-only    # Executor(ops-N) 없이 인프라만(스모크와 측정 스크립트가 쓴다)
+tools/sim_stack.sh up --infra-only    # Executor(ops-N)와 표적 어댑터(targets) 없이 인프라만(스모크와 측정 스크립트가 쓴다)
 tools/sim_stack.sh ps
 tools/sim_stack.sh logs px4-1
 tools/sim_stack.sh down               # docker compose -p idsim-0 down
