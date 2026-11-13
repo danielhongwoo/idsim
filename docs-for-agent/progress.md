@@ -67,7 +67,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. 1b: README 진행 순서대로 B2(W 실측)와 B3, B4, B5, B8을 시작한다. B3 PR에는 `decisions.md` "문서 반영 목록"의 B3 묶음(architect의 `docs/` 문장 포함)이 함께 들어간다.
+1. 1b: README 진행 순서대로 B3, B4, B5, B8을 시작한다(B2는 끝났다. 1a 규칙 유지, 지상 arm 진입의 arm 순서 불변식은 B9가 구현한다). B3 PR에는 `decisions.md` "문서 반영 목록"의 B3 묶음(architect의 `docs/` 문장 포함)이 함께 들어간다.
 
 ## 미해결 사항
 
