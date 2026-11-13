@@ -13,7 +13,7 @@
 #      모델 잔존 사전 검사와 gz 서버 유일성 검사), 실패하면 에이전트 bind error와 px4 bind failed를 보고한다. images는 스택을 올리지 않는다.
 #      --infra-only로 올리므로 Mission Executor(ops-N)는 뜨지 않는다. 스모크는 PX4, Gazebo, DDS 회귀 판정이고
 #      px4-in의 arm과 disarm이 Executor와 같은 기체에 명령을 보내는 일을 피한다.
-#   2. 판정에 쓰는 식별자(네임스페이스, system id, 모델 이름, 원점, 기대 파라미터, 서비스 이름)는 모두
+#   2. 판정에 쓰는 식별자(네임스페이스, system id, 모델 이름, 기대 GPS, 기대 파라미터, 서비스 이름)는 모두
 #      stack.json에서 읽는다(python3 표준 라이브러리). 이 스크립트는 식별자를 계산하지 않는다.
 #   3. 단계별 판정. embedded, px4-out, px4-in은 ros-ws 안의 check_px4.py(px4-in만 --arm), px4-out은 모델 유일성, gz 서버 유일성, pxh 판정,
 #      PX4 로그(gz_bridge 오류, MAVLink bind failed), golden은 capture.sh와 tests.support.normalize
@@ -130,6 +130,30 @@ s0_run() { # 설명 이미지 bash명령
     s0_fail=1
   fi
 }
+# 센서 높이 대조: sim-base 안에서 sdformat으로 읽은 x500 모델의 GNSS 센서(base_link) 높이와 생성기 상수가 같은지.
+# 두 출처(생성기의 AIRFRAME_SENSOR_Z_M, 모델 SDF)가 PX4_GZ_MODELS_REF를 올릴 때 어긋나는 것을 잡는다.
+check_sensor_z() {
+  local af="4001_gz_x500" model want got
+  model="${af#*_gz_}"
+  want="$(python3 tools/gen_compose.py --print-sensor-z "$af" 2>/dev/null || true)"
+  got="$(docker run --rm -i --network none --entrypoint python3 idsim/sim-base:local - "$model" 2>/dev/null <<'PY' | tail -n 1 || true
+import sys
+import sdformat14 as sdf
+cfg = sdf.ParserConfig()
+cfg.add_uri_path("model://", "/opt/px4-gz/models")
+root = sdf.Root()
+err = root.load("/opt/px4-gz/models/%s/model.sdf" % sys.argv[1], cfg)
+sensor = root.model().link_by_name("base_link").sensor_by_name("navsat_sensor")
+print("%.6f" % sensor.semantic_pose().resolve("__model__").pos().z())
+PY
+)"
+  if [ -n "$want" ] && [ -n "$got" ] && python3 -c 'import sys; sys.exit(0 if abs(float(sys.argv[1]) - float(sys.argv[2])) < 1e-6 else 1)' "$want" "$got"; then
+    echo "ok   ${af} GNSS 센서 높이: 모델 SDF ${got} m == gen_compose.py --print-sensor-z ${want} m"
+  else
+    echo "FAIL ${af} GNSS 센서 높이: 모델 SDF '${got}' != gen_compose.py --print-sensor-z '${want}' (AIRFRAME_SENSOR_Z_M을 고치라)" >&2
+    s0_fail=1
+  fi
+}
 check_s0() {
   local gz_major img py
   case "$GZ_RELEASE" in
@@ -152,6 +176,7 @@ check_s0() {
     echo "FAIL idsim/ros-ws:local PyYAML '${py}' != versions.env LINT_PYYAML_VERSION '${LINT_PYYAML_VERSION}'" >&2
     s0_fail=1
   fi
+  check_sensor_z
   # shellcheck disable=SC2016
   s0_run "RMW_IMPLEMENTATION" idsim/ros-ws:local '[ "$(printenv RMW_IMPLEMENTATION)" = rmw_cyclonedds_cpp ]'
   s0_run "gz sim 버전" idsim/px4:local "gz sim --versions | grep -qE '^${gz_major}\\.'"
@@ -185,15 +210,16 @@ pending() {
   echo "$*" >>"${out_dir}/pending.txt"
 }
 
-# 원점 판정 인자 --expect-origin LAT LON ALT. 원점이 없으면(embedded이거나 fleet.yaml에 origin이 없음) 넘기지 않는다.
+# 원점 판정 인자 --expect-origin LAT LON ALT. 기대값은 stack.json의 vehicles.0.expect_gps다(생성기가 world.origin과
+# 스폰 pose와 센서 높이로 계산한 기체 1의 GNSS 센서 위치. 이 스크립트는 계산하지 않는다). embedded는 null이라 넘기지 않는다.
 origin_args() {
-  # world.origin key 자체가 없으면 sj가 실패하므로 실패로 끝낸다. null만 빈 값(sj가 빈 문자열로 출력)으로 받는다.
+  # vehicles.0.expect_gps key 자체가 없으면 sj가 실패하므로 실패로 끝낸다. null만 빈 값(sj가 빈 문자열로 출력)으로 받는다.
   local o lat lon alt
-  o="$(sj world.origin)" || return 1
+  o="$(sj vehicles.0.expect_gps)" || return 1
   [ -n "$o" ] || return 0
-  lat="$(sj world.origin.lat)" || return 1
-  lon="$(sj world.origin.lon)" || return 1
-  alt="$(sj world.origin.alt)" || return 1
+  lat="$(sj vehicles.0.expect_gps.lat)" || return 1
+  lon="$(sj vehicles.0.expect_gps.lon)" || return 1
+  alt="$(sj vehicles.0.expect_gps.alt)" || return 1
   echo "--expect-origin ${lat} ${lon} ${alt}"
 }
 
