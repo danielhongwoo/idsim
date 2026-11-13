@@ -7,7 +7,7 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 1a 완료 범위의 계약은 `docs/interface.md`에 고정되어 있다 |
-| 1b | 착수 전 설계 확정. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B0(reviewer 검토) 대기 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1(설계 문서의 범위와 경로) 반영됨 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
@@ -67,7 +67,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. 1b 계획 B0: reviewer가 `plan-1b-mission-target/decisions.md`와 README를 검토한다. 통과하면 README의 진행 순서대로 B1-B13을 시작한다.
+1. 1b: README 진행 순서대로 B2(W 실측)와 B3, B4, B5, B8을 시작한다. B3 PR에는 `decisions.md` "문서 반영 목록"의 B3 묶음(architect의 `docs/` 문장 포함)이 함께 들어간다.
 
 ## 미해결 사항
 

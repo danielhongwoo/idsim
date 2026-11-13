@@ -33,7 +33,7 @@
 | B0. 설계 확정 | architect, reviewer | 확정한 결정(쟁점 1-17)의 reviewer 검토. 검토 지적은 architect가 `decisions.md`에 반영 | 없음. 맨 먼저 |
 | B1. 설계 문서의 범위와 경로 | architect | `decisions.md` "문서 반영 목록"의 B1 항목. U10 문구 | B0 |
 | B2. W 실측 | px4-engineer | `run_sitl.sh` 1회의 ULog로 W와 disarm 전후 `vehicle_status` 간격. 쟁점 11의 기준으로 판단 | 없음 |
-| B3. 원점과 월드 | devops-engineer(생성기 판 5, fleet schema 2, fixture 템플릿과 golden, `config/fleet.yaml`의 기체 1 스폰, `sim_stack.sh` 사전 검사, `run_smoke.sh`의 `expect_gps`와 S0 센서 높이 대조, `docker/README.md`와 저장소 `README.md`의 원점 문장), sim-engineer(`idsim_base.sdf`, `gz_server.sh`), test-engineer(`stack.py` 판 5 명세), px4-engineer(`check_px4.py` 고도 주석) | 쟁점 2, 16. 월드 생성, `IDSIM_ORIGIN_*` 제거, 런타임 원점 호출 제거를 한 PR로. M5, S2-a는 그 PR의 스모크 | B0 |
+| B3. 원점과 월드 | devops-engineer(생성기 판 5, fleet schema 2, fixture 템플릿과 golden, `config/fleet.yaml`의 기체 1 스폰, `sim_stack.sh` 사전 검사, `run_smoke.sh`의 `expect_gps`와 S0 센서 높이 대조, `docker/README.md`와 저장소 `README.md`의 원점 문장), sim-engineer(`idsim_base.sdf`, `gz_server.sh`), test-engineer(`stack.py` 판 5 명세), px4-engineer(`check_px4.py` 고도 주석), architect(`decisions.md` "문서 반영 목록"의 B3 묶음: `docs/smoke-test.md`, `docs/architecture.md` gazebo 행의 원점 단계와 시작 순서 문장, `docs/roadmap.md` 1a 3번의 원점 문장, `docs/interface.md`의 원점 적용 문장과 bridge 문장) | 쟁점 2, 16. 월드 생성, `IDSIM_ORIGIN_*` 제거, 런타임 원점 호출 제거를 한 PR로. M5, S2-a는 그 PR의 스모크 | B0 |
 | B4. `idsim_common` 추가 | ros2-engineer | 쟁점 4, 14. `geo.hpp`와 gz-math LOCAL2, PX4 `MapProjection` 차등 단위 테스트, `TargetId`, `target_state_topic`, 상태 QoS, `position_setpoint`의 속도 인자. 머지는 S2-a 통과(B3 PR의 스모크) 뒤 | B0. 머지는 B3 뒤 |
 | B5. SITL 파라미터 | px4-engineer(값과 근거 주석), devops-engineer(스모크 `expected_params`, 생성기 golden 재생성) | 쟁점 9의 일곱 파라미터. `sitl_params.env`가 바뀌면 생성기 golden(`inputs`의 sha256, `expected_params`)이 바뀐다 | B0 |
 | B6. 표적 어댑터 | sim-engineer(`idsim_sim` ament_python 전환, 어댑터, Actor 생성 내용), devops-engineer(`targets` 스키마, 서비스, healthcheck, 생성기) | 쟁점 1, 3. M1 | B3 |
@@ -43,7 +43,7 @@
 | B10. 노드 껍질과 YAML 로더 | ros2-engineer(노드, 표적 구독과 변환, 로더, CLI), devops-engineer(`ops-N` params의 `world.origin`) | 쟁점 4의 노드 쪽, 8의 표적 구독, 14 | B9 |
 | B11. 통합 테스트 | test-engineer(판정, 시나리오 F1-F4, 미션 YAML, gate 기록, 비행 단위 fixture), sim-engineer(정답 pose 경로 확인), devops-engineer(compose와 `sitl.yml`) | 쟁점 5, 11의 gate 기록, 15. R1-R4, 공중 시작, RTL 실측 | B5, B6, B7, B10 |
 | B12. viz 확인 | sim-engineer | 쟁점 17. M4 | B6 |
-| B13. 계약 고정 문서 | architect | `decisions.md` "1a 고정 계약 영향" (a)-(s)와 "문서 반영 목록"의 B13 항목. `idsim_interfaces` 의미 주석 | B11의 완료 기준 충족 |
+| B13. 계약 고정 문서 | architect | `decisions.md` "1a 고정 계약 영향" (a)-(s)((r)과 (k) 앞부분은 B3)와 "문서 반영 목록"의 B13 항목. `idsim_interfaces` 의미 주석 | B11의 완료 기준 충족 |
 
 커밋은 담당자 소유 단위로 나눈다. PR은 단위마다 하나이고, 담당이 여럿인 단위는 담당자별 커밋으로 나눈다. 생성기 golden을 바꾸는 PR(B3, B5, B6, B7)은 나중에 머지되는 쪽이 main에 rebase한 뒤 golden을 생성기로 다시 만든다(손으로 합치지 않는다. 재생성은 devops-engineer). 예외 둘:
 - B9의 snapshot 헤더 변경(`SetpointOut` 속도 포함)은 W 결과(B2) 뒤에 한 PR로 묶는다(쟁점 12). 상태기 변경은 B8의 칸 목록이 들어간 뒤 PR마다 칸 목록 diff를 함께 낸다.
@@ -67,7 +67,7 @@
 | B0 | reviewer | 결정의 근거([소스], [실측], [추정] 표기), 원칙(운용 서비스가 시뮬레이터를 모른다, 기체 식별 단일 출처, `/clock` 기준) 준수, 생성기와 서비스 결정(쟁점 2, 3, 5, 16)이 서로 맞는지 |
 | B1 | reviewer | 범위 문구가 U10과 같은지, `docs/`가 `docs-for-agent/`를 가리키지 않는지 |
 | B2 | ros2-engineer | W의 계산(명령과 ack의 대응), 기준 판단 |
-| B3 | sim-engineer, test-engineer, devops-engineer(서로의 경계), px4-engineer(원점 적용과 `sensor_gps`), ros2-engineer(`config/fleet.yaml` 인터페이스 검토) | 생성기 golden diff, 월드 직속 `<plugin>` 거부 테스트, M5와 S2-a 결과, 스모크 S2 통과 |
+| B3 | sim-engineer, test-engineer, devops-engineer(서로의 경계), px4-engineer(원점 적용과 `sensor_gps`), ros2-engineer(`config/fleet.yaml` 인터페이스 검토), reviewer(architect의 문서 커밋) | 생성기 golden diff, 월드 직속 `<plugin>` 거부 테스트, M5와 S2-a 결과, 스모크 S2 통과, 문서의 원점 경로가 M5 결과와 같은지 |
 | B4 | px4-engineer(`MapProjection` 재현, 속도 인자), sim-engineer(`PositionTransform` LOCAL2 재현), test-engineer(테스트가 노드 없이 도는지) | 차등 테스트의 기준값과 원문 판 고정, 왕복 오차 |
 | B5 | devops-engineer, test-engineer | 근거 주석, 스모크 `expected_params` 대조 통과, 생성기 golden diff가 파라미터 변경분뿐인지 |
 | B6 | ros2-engineer(QoS, stamp, 이름 조립, DDS 환경), test-engineer(궤적 평가 golden), devops-engineer | 계약 상태 행 QoS, 같거나 작은 stamp 미발행, params 평탄화, 생성기 거부 조건 |
@@ -87,7 +87,7 @@
 - B0: reviewer 검토를 받았고 지적이 `decisions.md`에 반영되었다.
 - B1: B1 항목이 `docs/`에 반영되고 reviewer가 확인했다.
 - B2: W의 최댓값과 표본 수, 처리 전 표본이 확인 계수에 들어간 기록의 유무, 그에 따른 판단(1a 규칙 유지 또는 ack timestamp 기준)이 PR 본문에 있다.
-- B3: `tools/ci/lint.sh all` 통과(생성기 단위 테스트와 golden, 월드 SDF 원점 단정, 월드 직속 `<plugin>` 거부, bridge 허용 목록). 스모크 images(S0 센서 높이 대조 포함), px4-out-clock 통과(S2 포함, M5, S2-a). fleet `schema` 1과 `world.file`은 생성이 실패한다. `world.origin`이 없는 `fleet.yaml`은 생성이 실패한다.
+- B3: `tools/ci/lint.sh all` 통과(생성기 단위 테스트와 golden, 월드 SDF 원점 단정, 월드 직속 `<plugin>` 거부, bridge 허용 목록). 스모크 images(S0 센서 높이 대조 포함), px4-out-clock 통과(S2 포함, M5, S2-a). fleet `schema` 1과 `world.file`은 생성이 실패한다. `world.origin`이 없는 `fleet.yaml`은 생성이 실패한다. `decisions.md` "문서 반영 목록"의 B3 묶음이 M5 결과대로 반영되었다.
 - B4: `tools/ros_ws.sh ci` 통과. `geo` 차등 테스트와 왕복 테스트, `position_setpoint` 속도 인자 테스트가 있고 기존 테스트가 통과한다. S2-a가 통과했다(NavSat이 LOCAL2를 쓴다는 [추정]의 확인).
 - B5: 스모크가 일곱 파라미터의 적용 값을 `expected_params`와 대조해 통과한다. 생성기 golden이 다시 만들어졌고 `tools/ci/lint.sh all`이 통과한다.
 - B6: 표적 어댑터 단위 테스트(손 계산 golden) 통과, `targets` 서비스 healthcheck 통과, 그래프의 발행자 QoS가 계약 상태 행과 같다. M1 결과가 PR 본문에 있다.

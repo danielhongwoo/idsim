@@ -416,7 +416,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 
 ## 1a 고정 계약 영향
 
-모두 `docs/interface.md`의 1a 고정 절이고 `idsim_interfaces`의 필드와 상수는 바뀌지 않는다(golden과 type hash 무변경. 정의 주석만 바뀐다). `docs/architecture.md`의 변경 절차("고정 뒤에는 새 요구가 있어야 한다. 변경 절차를 따른다")가 적용된다. 새 요구는 1b 범위(U3의 공중 종료, 로드맵 1b의 RTL과 공중 시작과 표적 추종, U7, U8)다. 반영은 B13(계약 고정 문서)에서 한 PR로 하고, PR 본문에 아래 목록과 근거를 적으며 architect 승인과 reviewer 검토를 받는다. 1a에서 받던 미션(첫 항목 TAKEOFF와 마지막 LAND, `[LAND]`)에 대한 동작은 아래 예외 하나 말고는 어느 항목에서도 바뀌지 않는다. 예외: W가 쟁점 11의 기준을 넘으면 취소 지상 분기의 DISARMED 확인 기준이 ack timestamp 기준으로 바뀌고((k)), 이 기준은 1a에서 받던 TAKEOFF 미션의 취소에도 적용된다. 끝난 결과(CANCELED, 지상 DISARMED)는 같고 확인 시점이 늦어질 수 있다. 이 예외는 B13 PR 본문에 적는다.
+모두 `docs/interface.md`의 1a 고정 절이고 `idsim_interfaces`의 필드와 상수는 바뀌지 않는다(golden과 type hash 무변경. 정의 주석만 바뀐다). `docs/architecture.md`의 변경 절차("고정 뒤에는 새 요구가 있어야 한다. 변경 절차를 따른다")가 적용된다. 새 요구는 1b 범위(U3의 공중 종료, 로드맵 1b의 RTL과 공중 시작과 표적 추종, U7, U8)다. 반영은 B13(계약 고정 문서)에서 한 PR로 하고((r)과 (k)의 앞부분인 bridge 문장은 사실 갱신이라 B3 PR에서 한다. "문서 반영 목록"의 B3 묶음), PR 본문에 아래 목록과 근거를 적으며 architect 승인과 reviewer 검토를 받는다. 1a에서 받던 미션(첫 항목 TAKEOFF와 마지막 LAND, `[LAND]`)에 대한 동작은 아래 예외 하나 말고는 어느 항목에서도 바뀌지 않는다. 예외: W가 쟁점 11의 기준을 넘으면 취소 지상 분기의 DISARMED 확인 기준이 ack timestamp 기준으로 바뀌고((k)), 이 기준은 1a에서 받던 TAKEOFF 미션의 취소에도 적용된다. 끝난 결과(CANCELED, 지상 DISARMED)는 같고 확인 시점이 늦어질 수 있다. 이 예외는 B13 PR 본문에 적는다.
 
 | 번호 | 대상 문장 | 바꾸는 이유 | 성격 |
 | --- | --- | --- | --- |
@@ -470,7 +470,7 @@ U6의 산출물 최소 원칙을 1b에도 쓴다. 결과는 PR 본문과, 상수
 
 ## 문서 반영 목록
 
-B1은 지금 고칠 수 있고, B13은 1b 완료 기준을 만족한 뒤 고친다.
+B1은 설계와 계획 문서(`docs/architecture.md`, `docs/roadmap.md`)의 1b 설계 문장이고, 지금의 동작과 다른 것에는 Phase 한정어("1b", "1b부터")를 달아 구현 전에 고친다. B3 몫은 한정어 없이 지금 실행되는 절차나 구현된 동작을 설명하는 문장(`docs/smoke-test.md`, 서비스 표의 현재 동작, `docs/interface.md`의 사실 문장)이라 B3 PR에서 그 구현과 함께 고친다(먼저 고치면 문서와 main의 코드가 어긋난다). B13은 1b 완료 기준을 만족한 뒤 고친다.
 
 B1(architect)
 - `docs/architecture.md` "목표와 범위"의 "다루지 않는 것" 문단(U10). 초안:
@@ -484,17 +484,22 @@ B1(architect)
 
 - 같은 절의 구성 요소 표 `idsim_sim` 행("Gazebo pose -> `TargetState`"를 "궤적 정의 -> `TargetState`"로, ros_gz_bridge는 `/clock`만), 토픽 표의 `/targets/*/state` 발행자.
 - `docs/architecture.md` "기체 식별과 설정의 단일 출처": `world.origin`의 적용 방식(생성된 월드 SDF), `ops-N` params의 `world.origin`, 표적 어댑터는 원점을 받지 않는 것, `targets` 스키마 요지(네 key 필수와 상한), `world.file` 삭제와 `world.template`, fleet `schema` 2. "`config/fleet.yaml` 하나에서 파생한다"는 문장은 "스택 하나는 그 스택을 만든 fleet 파일 하나에서 파생한다"로 고치고, 개발 스택은 `config/fleet.yaml`, SITL 통합 테스트는 전용 `tests/sitl/fleet.yaml`(쟁점 15)을 쓰며 어느 파일인지는 `stack.json`의 `inputs`에 남는다는 것을 적는다.
-- `docs/architecture.md` "Docker Compose 실행 환경 설계": `bridge` 서비스 설명의 "1b에서 Gazebo 표적 pose를 더한다"를 "`/clock`만"으로, 서비스 표에 `targets`(ros-ws, 표적 어댑터)와 `sim-oracle`(sim-base, SITL 전용 정답 pose) 행, 그림의 표적 pose 화살표와 "1b에서 정한다" 문장, `gz_server.sh`의 원점 단계(M5 뒤), 디렉터리 설명의 `idsim_sim`(ament_python 패키지, 월드 템플릿).
+- `docs/architecture.md` "Docker Compose 실행 환경 설계": `bridge` 서비스 설명의 "1b에서 Gazebo 표적 pose를 더한다"를 "`/clock`만"으로, 서비스 표에 `targets`(ros-ws, 표적 어댑터)와 `sim-oracle`(sim-base, SITL 전용 정답 pose) 행, 그림의 표적 pose 화살표와 "1b에서 정한다" 문장, 디렉터리 설명의 `idsim_sim`(ament_python 패키지, 월드 템플릿).
 - `docs/architecture.md` "테스트 자동화와 CI": 도달 판정 문장("goal의 목표값과 `vehicle_local_position`")을 계약 판정과 정답 판정의 구분으로, `/sim/` 토픽 규칙(운용 패키지는 쓰지 않고 lint가 소스, launch, params YAML을 검사, SITL 기록물에는 들어간다), SITL 시나리오 목록(B, C, A, D, F1, F2, F3, F4, T)과 CI `sitl` 15분 목표.
+- `docs/architecture.md` 인터페이스 계약 절 시간 기준 요지의 bridge 문장("1b에서 표적 pose를 더한다"를 "브리지하는 토픽은 `/clock` 하나"로). 쟁점 2의 확정 사항이고 계약 고정과 무관하다.
 - `docs/roadmap.md` Phase 1b: 2번의 `bridge.yaml`, "Gazebo pose -> `TargetState`", "표적 상태의 생산 경로는 1b 착수 때 정한다"를 해법 (가)와 U10 문구로, "EKF 원점 오차 실측으로 표적 접근 임계값을 정한다"를 R2와 R1의 역할로, 4번의 판정 문장("반경 1 m 이내 도달"은 그대로 두고(U14), 판정 입력이 정답 pose라는 것과 표적 접근 임계값 `1 m + v x L`, 합친 미션 하나로 판정한다는 것(U13)을 더한다). 리스크 표의 해당 행(Actor pose, 범위 문구, `bridge.yaml` 금지 검사, "범위 확장 유혹"의 "pose를 따라가는 Actor")을 지금 유효한 대응으로. 확장 후보에 "Gazebo 기반 표적 생산자".
 - `docs/roadmap.md` Phase 2: 기록 대상에 SITL 실행의 `/sim/` 토픽(U12), 리플레이 판정이 도달 판정까지 덮는다는 것.
-- `docs/smoke-test.md`: S2의 원점 적용 경로와 `origin_set` 표시 파일(M5 뒤), S2의 기대값은 `stack.json` `vehicles[0].expect_gps`(base_link 높이 포함), 기체 1의 원점에서 떨어진 스폰, S0의 센서 높이 대조.
-- devops-engineer가 고치는 것(B3과 같은 PR): `docker/README.md`의 서비스 표(gazebo 행의 원점 문장, `targets`와 `sim-oracle` 행)와 생성 절의 `world.origin` 문장, 저장소 `README.md`의 "기체 출발 위치는 `world.origin`" 문장.
+
+B3(B3 PR 안에서. 구현과 M5 결과를 본 뒤)
+- architect: `docs/smoke-test.md`. "서비스별 환경변수"의 `gazebo` 문단(명령이 생성된 월드 `/opt/idsim/world/<월드>.sdf`를 연다, wrapper의 원점 단계), healthcheck 표의 gazebo 행(준비 파일의 조건), px4-out과 "예외 사항과 가정"의 원점 판정 문장(기대값은 `stack.json` `vehicles[0].expect_gps`, base_link 높이 포함, 기체 1은 원점에서 떨어진 스폰), images 단계의 센서 높이 대조(S0). M5가 통과하면 원점은 월드 SDF로만 들어가고 `set_spherical_coordinates` 호출과 `origin_set`이 없다고 적고, 실패해서 `IDSIM_ORIGIN_*` 전달을 되살리면 그 경로를 적는다.
+- architect: `docs/architecture.md` "Docker Compose 실행 환경 설계"의 `gazebo` 서비스 행(wrapper의 런타임 `set_spherical_coordinates` 호출과 "원점 단계가 끝나면 준비 파일" 문장을 M5 결과대로, 여는 월드가 생성된 월드라는 것)과 시작 순서 문단의 gazebo healthcheck 문장. `docs/roadmap.md` Phase 1a 3번의 "원점 설정 완료 표시"와 "wrapper가 월드 로드 직후 한 번 설정" 문장도 같은 결과로 고친다.
+- architect: `docs/interface.md` "SITL 파라미터" 절의 "월드 원점은 gazebo wrapper가 `world.origin`으로 적용한다"(위 (r))를 M5 결과대로, "시간 기준" 절의 "1a는 `/clock`만 브리지한다"(위 (k)의 앞부분)를 "브리지하는 토픽은 `/clock` 하나"로. 둘 다 계약 고정과 무관한 사실 갱신이다. 앞의 것은 B3 구현 뒤에 사실이 되고, 뒤의 것은 같은 파일의 같은 커밋에 묶는다.
+- devops-engineer: `docker/README.md`의 서비스 표(gazebo 행의 원점 문장, `targets`와 `sim-oracle` 행)와 생성 절의 `world.origin` 문장, 저장소 `README.md`의 "기체 출발 위치는 `world.origin`" 문장.
 
 B13(1b 완료 전, architect)
-- `docs/interface.md`: 위 "1a 고정 계약 영향" (a)-(s), "GoToItem과 TrackEntityItem" 절의 확정 문장(쟁점 8, 속도 feedforward 포함), "TargetState" 절의 "고정 전" 해제와 QoS 상태 행 고정, `REASON_TARGET_LOST` 의미, "공중에서 끝나는 미션" 절(쟁점 10, 지면 높이 목표의 경합 문장 포함), 고정 시점 표의 1b 행, 미확인 목록의 1b 항목(K1-K4의 결과).
+- `docs/interface.md`: 위 "1a 고정 계약 영향" (a)-(s)(B3 묶음의 (r)과 (k) 앞부분 제외), "GoToItem과 TrackEntityItem" 절의 확정 문장(쟁점 8, 속도 feedforward 포함), "TargetState" 절의 "고정 전" 해제와 QoS 상태 행 고정, `REASON_TARGET_LOST` 의미, "공중에서 끝나는 미션" 절(쟁점 10, 지면 높이 목표의 경합 문장 포함), 고정 시점 표의 1b 행, 미확인 목록의 1b 항목(K1-K4의 결과).
 - `ros_ws/src/idsim_interfaces/`: `ExecuteMission.action`, `MissionItem.msg`, `YawSetpoint.msg`, `TakeoffItem.msg`, `GoToItem.msg`, `TrackEntityItem.msg`, `TargetState.msg`의 의미 주석. golden 무변경을 단정한다.
-- `docs/architecture.md` 인터페이스 계약 절: 묶음 표의 1b 행, 미션 실행 요지의 재진입 문장(h), 공중 종료 문장, RTL 요지, 시간 기준 요지의 bridge 문장.
+- `docs/architecture.md` 인터페이스 계약 절: 묶음 표의 1b 행, 미션 실행 요지의 재진입 문장(h), 공중 종료 문장, RTL 요지.
 
 ## 넘김 목록
 
