@@ -1391,7 +1391,7 @@ def parse_args(argv):
     p.add_argument("--git-commit")
     p.add_argument("--git-dirty", choices=("true", "false"))
     args = p.parse_args(argv)
-    if (args.print_gcs_port is None and args.print_agent_port is None and args.print_sensor_z is None
+    if (args.print_gcs_port is None and args.print_agent_port is None and args.print_sensor_z is None and not args.print_airframes
             and not args.host_repo_root):
         p.error("--host-repo-root가 필요하다(tools/gen_compose.sh가 넘긴다)")
     return args

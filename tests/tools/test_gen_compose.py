@@ -1097,3 +1097,8 @@ def test_real_template_and_fleet_generate_and_assert():
     assert text.count("<spherical_coordinates") == 1 and "dynamic_pose" not in text
     # 템플릿 자신에는 월드 직속 금지 요소가 없다
     gc.parse_world_template(_read(os.path.join(REPO, REAL_TEMPLATE)))
+
+
+def test_print_airframes_lists_registered(capsys):
+    assert gc.main(["--print-airframes"]) == 0
+    assert capsys.readouterr().out.split() == list(gc.AIRFRAME_SENSOR_Z_M)
