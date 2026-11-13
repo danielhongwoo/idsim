@@ -6,15 +6,15 @@ Gazebo 시뮬레이션 쪽 설정과 노드를 모으는 패키지다. 설계는
 
 지금 있는 것.
 
-- 월드 템플릿 `worlds/idsim_base.sdf` 하나. 손으로 쓰는 파일이고 원점과 표적은 들어 있지 않다. 생성기 `tools/gen_compose.py`가 `world.origin`의 `<spherical_coordinates>`와 fleet 파일(`config/fleet.yaml`)의 `targets`에서 만든 표적 `<actor>`를 넣어 월드 SDF를 생성한다. Actor는 화면 확인용이다. 표적 위치의 원천은 Actor가 아니라 fleet 파일의 궤적 정의이고, Actor는 waypoint 사이를 spline으로 보간하므로 화면 위치는 참고용이다. 표적은 물리 모델이 아니라 Actor로 만들어 결정적이고 가볍게 한다.
+- 월드 템플릿 `worlds/idsim_base.sdf` 하나. 손으로 쓰는 파일이고 원점과 표적은 들어 있지 않다. 생성기 `tools/gen_compose.py`가 `world.origin`의 `<spherical_coordinates>`를 넣어 월드 SDF를 생성한다. 지금은 fleet 파일(`config/fleet.yaml`)의 `targets`가 빈 목록이어야 하고, 표적 `<actor>` 생성은 아직 없다.
 - ros_gz_bridge 설정. bridge 토픽은 `/clock`(gz -> ROS) 하나다. 표적 pose와 정답 pose는 bridge를 거치지 않는다.
 - Gazebo 서버와 GUI 진입 스크립트, GUI 설정(아래 "현재 들어 있는 것").
 
-B6/B7에서 생기는 것(rclpy 노드, 아직 없다).
+Phase 1b에서 생기는 것(아직 없다).
 
-- 표적 어댑터 노드. 생성기가 params(`params/targets.yaml`)로 준 표적 궤적(fleet 파일에서 정규화한 값. Actor와 같은 출처)을 노드 시계(`/clock`)에서 평가해 `TargetState` 계약으로 발행한다. Gazebo를 구독하지 않고, 운용 노드도 Gazebo 토픽을 직접 보지 않는다.
-- `sim_oracle` 노드. Gazebo의 기체 pose를 gz-transport로 직접 구독해 base_link 기준 정답 pose `/sim/<vehicle_id>/pose`를 낸다. SITL 판정 전용이고 계약이 아니다. `dynamic_pose/info`는 구독하지 않는다.
-- 위 노드의 launch 파일.
+- 표적 `<actor>` 생성. 생성기가 `targets`의 궤적을 Actor로 월드 SDF에 넣는다. Actor는 화면 확인용이다. 표적 위치의 원천은 Actor가 아니라 fleet 파일의 궤적 정의이고, Actor는 waypoint 사이를 spline으로 보간하므로 화면 위치는 참고용이다. 표적은 물리 모델이 아니라 Actor로 만들어 결정적이고 가볍게 한다.
+- 표적 어댑터 노드(rclpy). 생성기가 params(`params/targets.yaml`)로 준 표적 궤적(fleet 파일에서 정규화한 값. Actor와 같은 출처)을 노드 시계(`/clock`)에서 평가해 `TargetState` 계약으로 발행한다. Gazebo를 구독하지 않고, 운용 노드도 Gazebo 토픽을 직접 보지 않는다.
+- `sim_oracle` 노드(rclpy). Gazebo의 기체 pose를 gz-transport로 직접 구독해 base_link 기준 정답 pose `/sim/<vehicle_id>/pose`를 낸다. SITL 판정 전용이고 계약이 아니다. `dynamic_pose/info`는 구독하지 않는다.
 
 아직 ROS 패키지가 아니다(`package.xml` 없음). 노드가 생길 때 ROS 패키지(ament_python)로 만든다.
 
