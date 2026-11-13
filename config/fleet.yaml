@@ -8,17 +8,18 @@
 #   - 스택 번호 k(0-9): 생성 인자 --stack, 없으면 IDSIM_STACK_INDEX, 없으면 0.
 #   - px4_params의 식별 파라미터: MAV_SYS_ID, UXRCE_DDS_KEY, UXRCE_DDS_DOM_ID, UXRCE_DDS_AG_IP, SYS_AUTOSTART.
 
-# 파일 형식 번호. 1만 받는다.
-schema: 1
+# 파일 형식 번호. 2만 받는다(1의 world.file은 world.template으로 바뀌었다).
+schema: 2
 
 world:
   # 월드 이름. SDF의 <world name>과 같아야 한다(gazebo wrapper가 검사). PX4_GZ_WORLD와 healthcheck 경로가 된다.
   name: default
-  # 월드 SDF의 컨테이너 안 절대 경로(sim-base 이미지의 /opt/px4-gz/worlds).
-  file: /opt/px4-gz/worlds/default.sdf
-  # 월드 원점(WGS84 위도와 경도는 도, 고도는 m). 셋을 모두 적거나 origin을 통째로 뺀다.
-  # gazebo wrapper가 월드 로드 직후 한 번 set_spherical_coordinates로 적용한다. 기본값은 서울시청.
-  # 빼면 월드 SDF의 <spherical_coordinates>가 그대로 쓰인다(PX4 기본 월드는 취리히).
+  # 월드 템플릿 SDF(저장소 기준 상대 경로, .sdf, 절대 경로와 ..은 거부). 생성기가 이 템플릿에 <world name>과
+  # <spherical_coordinates>(origin)를 넣어 실행 디렉터리의 world/<name>.sdf로 쓰고 gazebo 서비스가 그 파일을 연다.
+  # 템플릿에는 월드 직속 plugin, spherical_coordinates, actor, include를 둘 수 없다(생성기가 거부한다).
+  template: ros_ws/src/idsim_sim/worlds/idsim_base.sdf
+  # 월드 원점(WGS84 위도와 경도는 도, 고도는 m). 필수이고 셋을 모두 적는다. 기본값은 서울시청.
+  # 월드 SDF의 <spherical_coordinates>로만 들어간다(heading 0, ENU).
   origin:
     lat: 37.5665
     lon: 126.9780
@@ -33,14 +34,16 @@ vehicles:
   #   Gazebo 모델 이름(x500_N)이 여기서 나온다.
   # pose: 초기 위치. Gazebo 월드 좌표 ENU, x, y, z는 m, yaw는 rad(x축에서 반시계).
   #   기체 간 수평 간격 2 m 미만은 거부, 4 m 미만은 경고. 여러 대면 예: y 0, 4, 8.
+  #   기체 1은 원점에서 떨어진 (6, -3, 0)에 둔다. 스모크 S2가 NavSat 위경도 변환의 수평 반전(약 13.4 m)을 가려낸다.
+  #   생성기가 이 pose에서 기체별 기대 GPS(stack.json vehicles[].expect_gps)를 계산한다.
   # px4_params: 이 기체에만 주는 SITL 파라미터 {이름: 값}. 공통 파일 값을 덮는다(경고).
   #   이름은 ^[A-Z0-9_]{1,16}$, 값은 숫자 또는 공백 없는 문자열(bool 불가).
   - id: 1
     airframe: 4001_gz_x500
-    pose: {x: 0.0, y: 0.0, z: 0.0, yaw: 0.0}
+    pose: {x: 6.0, y: -3.0, z: 0.0, yaw: 0.0}
     px4_params: {}
 
-# 이동 표적 목록. 1a에서는 비어 있어야 한다(1b에서 정의한다).
+# 이동 표적 목록. 지금은 비어 있어야 한다(스키마는 표적 어댑터 단위에서 정한다).
 targets: []
 
 px4:

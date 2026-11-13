@@ -4,7 +4,7 @@
     "git_commit": "0000000000000000000000000000000000000000",
     "git_dirty": false,
     "script": "tools/gen_compose.py",
-    "version": 4
+    "version": 5
   },
   "images": {
     "lichtblick": null,
@@ -20,7 +20,7 @@
     },
     "fleet": {
       "path": "tests/fixtures/gen_compose/embedded/fleet.yaml",
-      "sha256": "fa6ef8da59cead6cabd0413fb83ce2b1b208b0af89767767fac53b5261627784"
+      "sha256": "cf11616a9d176e5f91bae4038858bfe58aa351af430160da990608082a223919"
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",
@@ -29,6 +29,10 @@
     "versions_env": {
       "path": "docker/versions.env",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "world_template": {
+      "path": "tests/fixtures/gen_compose/world_template.sdf",
+      "sha256": "acae64a8352a4d5106b3151ee77be17b82f3dd28e6f5707ab188c99da817e7a2"
     }
   },
   "px4": {
@@ -59,7 +63,9 @@
     "px4": [
       "px4-1"
     ],
-    "runner": "runner"
+    "runner": "runner",
+    "sim_oracle": null,
+    "targets": null
   },
   "stack": {
     "agent_port": 8888,
@@ -94,6 +100,7 @@
       ]
     ]
   },
+  "targets": [],
   "user": {
     "gid": 1000,
     "uid": 1000
@@ -110,6 +117,7 @@
         "UXRCE_DDS_KEY": "2"
       },
       "executor_node": null,
+      "expect_gps": null,
       "expected_params": {
         "COM_DISARM_PRFLT": "-1.0",
         "COM_OBL_RC_ACT": "4",
@@ -148,9 +156,10 @@
     }
   ],
   "world": {
-    "file": "/opt/px4-gz/worlds/default.sdf",
+    "file": null,
     "name": "default",
     "origin": null,
-    "speed_factor": null
+    "speed_factor": null,
+    "template": "tests/fixtures/gen_compose/world_template.sdf"
   }
 }
