@@ -48,9 +48,11 @@ PX4 쪽 사실 (v1.17.0 소스 기준)
   나간다(tests/fixtures/px4/v1.17.0/topics.txt). gz 경로에서 이 값은 gz navsat 센서
   값을 gz_bridge가 옮긴 것이며 EKF를 거치지 않는다. vehicle_global_position(EKF 추정)과
   home_position(시동 등에서 다시 설정됨)보다 "월드 원점이 적용되었는가"에 직접적이다.
-- 원점 판정은 기체가 월드 원점 위에 있다고 가정한다. 기체 pose(x, y, z)가 0이 아니면
-  GPS는 원점에서 그만큼 떨어지며(ENU, x는 동쪽, y는 북쪽), 이 스크립트는 그것을 보정하지
-  않는다. 수직 오차에는 기체가 바닥에 놓였을 때의 navsat 센서 높이(base_link)가 들어간다.
+- --expect-origin의 기대값은 호출하는 쪽이 주는 기체별 base_link(GNSS 센서) 위치다.
+  생성기가 world.origin과 스폰 pose로 계산해 stack.json vehicles[].expect_gps에 싣는다.
+  고도는 world.origin.alt + 스폰 z + 센서 높이(x500은 0.24 m)이므로 센서 높이가 기대값에
+  이미 들어 있다. 이 스크립트는 스폰 pose나 센서 높이를 보정하지 않고 받은 값과만 비교한다.
+  다대 비교는 호출하는 쪽이 기체(vehicles[i])마다 이 스크립트를 따로 부른다.
 """
 import argparse
 import json
@@ -92,7 +94,8 @@ TARGET_COMPONENT = 1
 SOURCE_SYSTEM = 254
 SOURCE_COMPONENT = 1
 
-# 원점 판정 허용 오차. 2026-11-10 실측(v1.17.0, x500, 바닥에 놓인 상태, 90초 2666개, 약 30 Hz):
+# 원점 판정 허용 오차. 아래 실측은 기대값을 원점 고도로 둔 것이라 base_link 높이가 오차에
+# 들어 있었다. 지금 기대값은 base_link 고도이므로 수직은 잡음만 남는다. 2026-11-10 실측(v1.17.0, x500, 바닥에 놓인 상태, 90초 2666개, 약 30 Hz):
 # 수평 오차 최대 0.070 m(평균 0.025), 고도 38.098-38.338(평균 38.222, 원점 38.0). 고도 평균의
 # 0.22 m는 navsat가 붙은 base_link 높이, 나머지는 시간에 따라 커지지 않는 잡음이다(사분위별
 # 최대가 일정). x500 model.sdf의 navsat에는 noise 요소가 없으므로 잡음은 PX4 gz_bridge 쪽에서
@@ -387,8 +390,9 @@ def parse_args(argv):
                    help="예산이 바닥나도 시동 끄기에 주는 최소 시간(초). 기본 10")
     p.add_argument("--expect-origin", type=float, nargs=3, metavar=("LAT", "LON", "ALT"),
                    default=None,
-                   help="px4-out 원점 판정. stack.json world.origin(도, 도, m). "
-                        "기체 pose가 0이라고 가정한다")
+                   help="px4-out 원점 판정. 기체의 base_link(GNSS 센서) 기대 위치(도, 도, m)로 "
+                        "stack.json vehicles[].expect_gps이며 고도에 센서 높이가 들어 있다. "
+                        "다대는 기체마다 따로 부른다")
     args = p.parse_args(argv)
     args.ns = args.ns.strip("/")
     return args
