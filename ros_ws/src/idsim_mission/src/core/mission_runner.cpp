@@ -184,16 +184,19 @@ void MissionRunner::step_tick(Tick & t)
   finalize(t);
 }
 
-StepOutput MissionRunner::write_states_under_one_tag(
-  const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock, Event event,
-  const std::vector<StateKey> & writes)
+StepOutput MissionRunner::run_test_steps(
+  const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock,
+  const std::vector<TestStep> & steps)
 {
   StepOutput out;
   Tick t(input, snapshot, clock, out);
   t.checkpoint = state_key();
-  tag(event, t);
-  for (const StateKey & next : writes) {
-    set_state(t, next);
+  for (const TestStep & step : steps) {
+    if (step.is_tag) {
+      tag(step.event, t);
+    } else {
+      set_state(t, step.key);
+    }
   }
   flush_records(t);
   return out;

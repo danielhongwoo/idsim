@@ -124,12 +124,19 @@ private:
   // 지금 tick에 취소의 정리를 시작한다(step의 단계 처리 없이). MissionRunnerTestAccess만 부른다.
   StepOutput begin_cancel_without_stage(
     const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock);
-  // 전이 관측의 untagged 검출을 시험하려고 둔다(TransitionTestAccess만 부른다). 꼬리표 하나를 달고
-  // writes를 차례로 set_state한 뒤 그 tick의 기록을 넘긴다. 상태기의 단계 처리는 하지 않는다.
+  // 전이 관측의 untagged 검출을 시험하려고 둔다(TransitionTestAccess만 부른다). 한 tick 안에서
+  // steps를 차례로(꼬리표 달기 또는 set_state) 한 뒤 그 tick의 기록을 넘긴다. 상태기의 단계 처리는
+  // 하지 않는다.
   friend class TransitionTestAccess;
-  StepOutput write_states_under_one_tag(
-    const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock, Event event,
-    const std::vector<StateKey> & writes);
+  struct TestStep
+  {
+    bool is_tag{false};
+    Event event{Event::kCancel};  // is_tag일 때
+    StateKey key;                 // is_tag가 아닐 때
+  };
+  StepOutput run_test_steps(
+    const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock,
+    const std::vector<TestStep> & steps);
 
   struct Tick;
   struct AckView

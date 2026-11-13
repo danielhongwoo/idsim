@@ -47,20 +47,36 @@
 namespace idsim_mission::core
 {
 
-// untagged 검출의 시험용(mission_runner.hpp의 friend). 상태기 단계 처리 없이 꼬리표 하나 아래에서
-// 상태 쓰기를 차례로 한다.
+// untagged 검출의 시험용(mission_runner.hpp의 friend). 상태기 단계 처리 없이 한 tick 안에서 꼬리표
+// 달기와 상태 쓰기를 차례로 한다.
 class TransitionTestAccess
 {
 public:
-  static StepOutput write_states(
-    MissionRunner & runner, Event event, const std::vector<StateKey> & writes)
+  using Step = MissionRunner::TestStep;
+
+  static Step tag(Event event)
+  {
+    Step step;
+    step.is_tag = true;
+    step.event = event;
+    return step;
+  }
+
+  static Step write(const StateKey & key)
+  {
+    Step step;
+    step.key = key;
+    return step;
+  }
+
+  static StepOutput run(MissionRunner & runner, const std::vector<Step> & steps)
   {
     TickInput input;
     input.tick = 1;
     input.now_ns = 0;
     Snapshot snapshot;
     test::FakeClock clock;
-    return runner.write_states_under_one_tag(input, snapshot, clock, event, writes);
+    return runner.run_test_steps(input, snapshot, clock, steps);
   }
 };
 
@@ -436,8 +452,10 @@ TEST(TransitionUntagged, SecondChangeUnderOneTagIsUntagged)
   // 꼬리표 하나 아래의 두 번째 상태 변경은 앞 기록의 to에 섞이지 않고 untagged 기록이 된다.
   EdgeLog log;
   MissionRunner runner(standard_mission(), Config{}, kStartNs, &log);
-  TransitionTestAccess::write_states(
-    runner, Event::kCancel, {cancel_cleanup(Branch::kNone), cancel_cleanup(Branch::kAir)});
+  using A = TransitionTestAccess;
+  A::run(
+    runner, {A::tag(Event::kCancel), A::write(cancel_cleanup(Branch::kNone)),
+             A::write(cancel_cleanup(Branch::kAir))});
   ASSERT_EQ(log.edges.size(), 2U);
   EXPECT_TRUE(log.edges[0].tagged);
   EXPECT_EQ(log.edges[0].event, Event::kCancel);
@@ -454,8 +472,10 @@ TEST(TransitionUntagged, SameValueWriteIsNotCounted)
   EdgeLog log;
   MissionRunner runner(standard_mission(), Config{}, kStartNs, &log);
   const StateKey start{};  // 새 runner의 상태(PREPARING.WAIT_READY, 항목 0)
-  TransitionTestAccess::write_states(
-    runner, Event::kCancel, {start, start, cancel_cleanup(Branch::kNone)});
+  using A = TransitionTestAccess;
+  A::run(
+    runner, {A::tag(Event::kCancel), A::write(start), A::write(start),
+             A::write(cancel_cleanup(Branch::kNone))});
   ASSERT_EQ(log.edges.size(), 1U);
   EXPECT_TRUE(log.edges[0].tagged);
   EXPECT_EQ(state_key_name(log.edges[0].to), "CLEANUP.CANCEL.NONE");
@@ -465,9 +485,52 @@ TEST(TransitionUntagged, OneChangeUnderOneTagIsTagged)
 {
   EdgeLog log;
   MissionRunner runner(standard_mission(), Config{}, kStartNs, &log);
-  TransitionTestAccess::write_states(runner, Event::kCancel, {cancel_cleanup(Branch::kNone)});
+  using A = TransitionTestAccess;
+  A::run(runner, {A::tag(Event::kCancel), A::write(cancel_cleanup(Branch::kNone))});
   ASSERT_EQ(log.edges.size(), 1U);
   EXPECT_TRUE(log.edges[0].tagged);
+}
+
+TEST(TransitionUntagged, ThirdChangeJoinsTheSameUntaggedRecord)
+{
+  // 두 번째 변경으로 생긴 untagged 기록에 세 번째 변경도 합쳐진다(from은 두 번째 변경 직전, to는
+  // 세 번째 변경 뒤).
+  EdgeLog log;
+  MissionRunner runner(standard_mission(), Config{}, kStartNs, &log);
+  using A = TransitionTestAccess;
+  A::run(
+    runner, {A::tag(Event::kCancel), A::write(cancel_cleanup(Branch::kNone)),
+             A::write(cancel_cleanup(Branch::kAir)), A::write(cancel_cleanup(Branch::kGround))});
+  ASSERT_EQ(log.edges.size(), 2U);
+  EXPECT_TRUE(log.edges[0].tagged);
+  EXPECT_EQ(state_key_name(log.edges[0].to), "CLEANUP.CANCEL.NONE");
+  EXPECT_FALSE(log.edges[1].tagged);
+  EXPECT_EQ(state_key_name(log.edges[1].from), "CLEANUP.CANCEL.NONE");
+  EXPECT_EQ(state_key_name(log.edges[1].to), "CLEANUP.CANCEL.GROUND");
+}
+
+TEST(TransitionUntagged, NewTagClosesTheUntaggedRecordFirst)
+{
+  // 두 번째 변경 뒤 새 꼬리표가 오면 untagged 기록이 먼저 닫히고, 새 꼬리표의 기록은 그 뒤의
+  // 상태에서 시작한다.
+  EdgeLog log;
+  MissionRunner runner(standard_mission(), Config{}, kStartNs, &log);
+  using A = TransitionTestAccess;
+  A::run(
+    runner, {A::tag(Event::kCancel), A::write(cancel_cleanup(Branch::kNone)),
+             A::write(cancel_cleanup(Branch::kAir)), A::tag(Event::kHoldTimeout),
+             A::write(cancel_cleanup(Branch::kAirLand))});
+  ASSERT_EQ(log.edges.size(), 3U);
+  EXPECT_TRUE(log.edges[0].tagged);
+  EXPECT_EQ(log.edges[0].event, Event::kCancel);
+  EXPECT_EQ(state_key_name(log.edges[0].to), "CLEANUP.CANCEL.NONE");
+  EXPECT_FALSE(log.edges[1].tagged);
+  EXPECT_EQ(state_key_name(log.edges[1].from), "CLEANUP.CANCEL.NONE");
+  EXPECT_EQ(state_key_name(log.edges[1].to), "CLEANUP.CANCEL.AIR");
+  EXPECT_TRUE(log.edges[2].tagged);
+  EXPECT_EQ(log.edges[2].event, Event::kHoldTimeout);
+  EXPECT_EQ(state_key_name(log.edges[2].from), "CLEANUP.CANCEL.AIR");
+  EXPECT_EQ(state_key_name(log.edges[2].to), "CLEANUP.CANCEL.AIR_LAND");
 }
 
 class CoverageEnvironment : public ::testing::Environment
