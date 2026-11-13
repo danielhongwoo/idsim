@@ -101,7 +101,7 @@ QoS 계약은 reliability와 durability 둘이다. 사건 행은 1a 완료에 �
 
 - 정식 기준은 ROS 시각이다. `use_sim_time`이 true이면 노드 시계는 `/clock`을 따르고, idsim의 모든 운용 노드는 true로 돈다(생성기가 `params/ops-N.yaml`의 `/**`에 `use_sim_time: true`를 싣고, Executor는 configure에서 false를 거부한다). 판정, 집계, 계약 메시지의 모든 시각 필드와 시간 길이 필드, 기록물 타임스탬프는 모두 ROS 시각이다. 벽시계가 아니다.
 - 이 문서에서 "ROS 시각"은 이 뜻이다. 메시지는 시뮬레이터에 의존하지 않으므로 "시뮬레이션 시각"이라고 쓰지 않는다.
-- `/clock`의 공급자는 `bridge` 서비스의 ros_gz_bridge다(1a는 `/clock`만 브리지한다).
+- `/clock`의 공급자는 `bridge` 서비스의 ros_gz_bridge다(브리지하는 토픽은 `/clock` 하나다).
 - 벽시계를 쓰는 곳과 그 이유는 `docs/architecture.md` "인터페이스 계약" 절의 목록이 정본이다. 어느 것도 판정 기준이 아니고 hang 방지와 시계 이상 검출이다.
 
 PX4 timestamp.
@@ -382,7 +382,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 - `PX4_SIM_SPEED_FACTOR`는 주지 않는다(주면 rcS 197-210행이 `COM_OF_LOSS_T` 등 손실 타임아웃을 덮어쓴다). 배속은 Phase 3에서 정한다.
 - `COM_RC_IN_MODE=4`의 영향: QGroundControl의 수동 모드 비행과 가상 조이스틱을 쓸 수 없다. QGC는 모니터링과 ARM, TAKEOFF, LAND 같은 명령에만 쓴다. 수동 계열 모드(Position, Altitude, Manual) 진입이 가능한지와 부팅 직후의 기본 모드는 확인하지 않았다(미확인). 보수적 동작: idsim은 수동 계열 모드를 요청하지 않고, Executor는 부팅 모드에 기대지 않고 arm 전에 Offboard를 요청한다.
 - 생성기가 px4 서비스 환경에 넣는 값(파라미터 파일 밖): `PX4_SYS_AUTOSTART`, `PX4_SIM_MODEL`, `PX4_GZ_WORLD`, `PX4_GZ_MODELS`, `PX4_GZ_MODEL_POSE`, `PX4_UXRCE_DDS_NS`, `PX4_UXRCE_DDS_PORT`, `ROS_DOMAIN_ID`, `IDSIM_MAVLINK_OFFSET`, `GZ_PARTITION`, `GZ_IP`, `HOME=/tmp`, 기체별 `px4_params`의 `PX4_PARAM_<이름>`, 그리고 변형에 따라 하나: standalone 변형(Gazebo가 `gazebo` 서비스에 있다)은 `PX4_GZ_STANDALONE=1`, embedded 변형(PX4가 Gazebo를 직접 띄운다. 진단용)은 `HEADLESS=1`(`tools/gen_compose.py`).
-- px4 서비스에는 `PX4_HOME_*`를 주지 않는다. 월드 원점은 gazebo wrapper가 `world.origin`으로 적용한다. gz 경로에서 `PX4_HOME_*`의 소비자는 `px4-rc.gzsim`의 원점 호출뿐이지만 SIH 경로 `px4-rc.sihsim`도 이 변수를 읽는다. SIH 변형을 더할 때는 원점의 출처가 둘이 되지 않도록 `PX4_HOME_*`와 `world.origin`의 관계를 다시 정한다. 지금 SIH 변형은 없다(생성기 단위 테스트 `tests/tools/test_gen_compose.py`가 `PX4_HOME_*`의 부재를 단정한다).
+- px4 서비스에는 `PX4_HOME_*`를 주지 않는다. 월드 원점은 생성 스크립트가 `world.origin`으로 만든 월드 SDF의 `<spherical_coordinates>`로만 들어간다. gz 경로에서 `PX4_HOME_*`의 소비자는 `px4-rc.gzsim`의 원점 호출뿐이지만 SIH 경로 `px4-rc.sihsim`도 이 변수를 읽는다. SIH 변형을 더할 때는 원점의 출처가 둘이 되지 않도록 `PX4_HOME_*`와 `world.origin`의 관계를 다시 정한다. 지금 SIH 변형은 없다(생성기 단위 테스트 `tests/tools/test_gen_compose.py`가 `PX4_HOME_*`의 부재를 단정한다).
 
 ## 포트
 
