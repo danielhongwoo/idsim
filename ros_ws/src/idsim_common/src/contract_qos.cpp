@@ -20,6 +20,15 @@ namespace idsim_common
 namespace
 {
 
+rclcpp::QoS state_qos(rclcpp::ReliabilityPolicy reliability)
+{
+  rclcpp::QoS qos(rclcpp::KeepLast(5));
+  qos.reliability(reliability)
+    .durability_volatile()
+    .liveliness(rclcpp::LivelinessPolicy::Automatic);
+  return qos;
+}
+
 rclcpp::QoS event_qos()
 {
   rclcpp::QoS qos(rclcpp::KeepLast(10));
@@ -28,6 +37,10 @@ rclcpp::QoS event_qos()
 }
 
 }  // namespace
+
+rclcpp::QoS state_pub_qos() { return state_qos(rclcpp::ReliabilityPolicy::Reliable); }
+
+rclcpp::QoS state_sub_qos() { return state_qos(rclcpp::ReliabilityPolicy::BestEffort); }
 
 rclcpp::QoS event_pub_qos() { return event_qos(); }
 

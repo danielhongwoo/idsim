@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 사건 토픽 QoS의 값과 호환 대조. 노드를 만들지 않는다.
-// 결정: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5, 7.
+// 계약 토픽 QoS(사건, 상태)의 값과 호환 대조. 노드를 만들지 않는다.
+// 결정: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5, 7(사건),
+// docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 3, 14(상태).
 
 #include <gtest/gtest.h>
 
@@ -78,5 +79,56 @@ TEST(ContractQos, NegativeEventSubscriberAgainstBestEffortPublisher)
     endpoint(rclcpp::ReliabilityPolicy::BestEffort, rclcpp::DurabilityPolicy::Volatile);
   EXPECT_EQ(
     rclcpp::qos_check_compatible(writer, idsim_common::event_sub_qos()).compatibility,
+    rclcpp::QoSCompatibility::Error);
+}
+
+// ---- 상태 행(VehicleState, TargetState) ----
+// 결정: plan-1b-mission-target decisions.md 쟁점 3, 14.
+
+TEST(ContractQos, StateProfileValues)
+{
+  const auto pub = idsim_common::state_pub_qos();
+  const auto sub = idsim_common::state_sub_qos();
+  EXPECT_EQ(pub.reliability(), rclcpp::ReliabilityPolicy::Reliable);
+  EXPECT_EQ(sub.reliability(), rclcpp::ReliabilityPolicy::BestEffort);
+  for (const auto & qos : {pub, sub}) {
+    EXPECT_EQ(qos.durability(), rclcpp::DurabilityPolicy::Volatile);
+    EXPECT_EQ(qos.history(), rclcpp::HistoryPolicy::KeepLast);
+    EXPECT_EQ(qos.depth(), 5U);
+    EXPECT_EQ(qos.liveliness(), rclcpp::LivelinessPolicy::Automatic);
+  }
+}
+
+TEST(ContractQos, StatePubSubCompatible)
+{
+  const auto result =
+    rclcpp::qos_check_compatible(idsim_common::state_pub_qos(), idsim_common::state_sub_qos());
+  EXPECT_EQ(result.compatibility, rclcpp::QoSCompatibility::Ok) << result.reason;
+}
+
+TEST(ContractQos, StateSubscriberMatchesBestEffortPublisher)
+{
+  // rosbag2 재생 발행자가 BEST_EFFORT여도 구독이 맺어진다(구독이 BEST_EFFORT인 이유).
+  const auto writer =
+    endpoint(rclcpp::ReliabilityPolicy::BestEffort, rclcpp::DurabilityPolicy::Volatile);
+  const auto result = rclcpp::qos_check_compatible(writer, idsim_common::state_sub_qos());
+  EXPECT_EQ(result.compatibility, rclcpp::QoSCompatibility::Ok) << result.reason;
+}
+
+TEST(ContractQos, StatePublisherMatchesReliableSubscriber)
+{
+  // 발행이 RELIABLE이라 RELIABLE 구독(예: 기록기)도 맺어진다.
+  const auto reader =
+    endpoint(rclcpp::ReliabilityPolicy::Reliable, rclcpp::DurabilityPolicy::Volatile);
+  const auto result = rclcpp::qos_check_compatible(idsim_common::state_pub_qos(), reader);
+  EXPECT_EQ(result.compatibility, rclcpp::QoSCompatibility::Ok) << result.reason;
+}
+
+TEST(ContractQos, NegativeTransientLocalSubscriberAgainstStatePublisher)
+{
+  const auto reader =
+    endpoint(rclcpp::ReliabilityPolicy::BestEffort, rclcpp::DurabilityPolicy::TransientLocal);
+  EXPECT_EQ(
+    rclcpp::qos_check_compatible(idsim_common::state_pub_qos(), reader).compatibility,
     rclcpp::QoSCompatibility::Error);
 }

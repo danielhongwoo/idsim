@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // Offboard position setpoint 헬퍼의 필드 표와 비유한 거부. 노드를 만들지 않는다.
-// 결정: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5.
+// 결정: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5,
+// 속도 feedforward 인자는 docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 8, 14.
 // 필드 값은 px4-engineer 의견서(git 이력) 넘김 표 (2).
 
 #include <gtest/gtest.h>
@@ -22,6 +23,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 
 #include "idsim_common/px4_setpoint.hpp"
@@ -122,4 +124,94 @@ TEST(Px4Setpoint, PositionSetpointRejectsNonFinite)
     EXPECT_FALSE(px4::position_setpoint(ts, Eigen::Vector3d(0.0, 0.0, -1.0), bad).has_value())
       << "yaw " << bad;
   }
+}
+
+// ---- 속도 feedforward 인자(1b) ----
+
+TEST(Px4Setpoint, PositionSetpointExplicitNoVelocityMatchesDefault)
+{
+  const auto a = px4::position_setpoint(timestamp(), Eigen::Vector3d(1.0, 2.0, -3.0), 0.25);
+  const auto b =
+    px4::position_setpoint(timestamp(), Eigen::Vector3d(1.0, 2.0, -3.0), 0.25, std::nullopt);
+  ASSERT_TRUE(a.has_value());
+  ASSERT_TRUE(b.has_value());
+  expect_all_nan(b->velocity, "velocity");
+  EXPECT_EQ(a->position, b->position);
+  EXPECT_EQ(a->yaw, b->yaw);
+}
+
+TEST(Px4Setpoint, PositionSetpointWithVelocityFieldTable)
+{
+  const auto sp = px4::position_setpoint(
+    timestamp(), Eigen::Vector3d(1.5, -2.25, -5.0), 0.5, Eigen::Vector3d(0.75, -1.25, 0.5));
+  ASSERT_TRUE(sp.has_value());
+  EXPECT_EQ(sp->timestamp, kTimestampUs);
+  EXPECT_EQ(sp->position[0], 1.5F);
+  EXPECT_EQ(sp->position[1], -2.25F);
+  EXPECT_EQ(sp->position[2], -5.0F);
+  // NED 그대로(축 치환 없음, 크기 자르지 않음).
+  EXPECT_EQ(sp->velocity[0], 0.75F);
+  EXPECT_EQ(sp->velocity[1], -1.25F);
+  EXPECT_EQ(sp->velocity[2], 0.5F);
+  EXPECT_EQ(sp->yaw, 0.5F);
+  // 나머지는 velocity가 없을 때와 같다.
+  expect_all_nan(sp->acceleration, "acceleration");
+  expect_all_nan(sp->jerk, "jerk");
+  EXPECT_TRUE(std::isnan(sp->yawspeed));
+}
+
+TEST(Px4Setpoint, PositionSetpointVelocityIsNotClamped)
+{
+  const auto sp = px4::position_setpoint(
+    timestamp(), Eigen::Vector3d::Zero(), 0.0, Eigen::Vector3d(250.0, -300.0, 40.0));
+  ASSERT_TRUE(sp.has_value());
+  EXPECT_EQ(sp->velocity[0], 250.0F);
+  EXPECT_EQ(sp->velocity[1], -300.0F);
+  EXPECT_EQ(sp->velocity[2], 40.0F);
+}
+
+TEST(Px4Setpoint, PositionSetpointZeroVelocityIsSent)
+{
+  // 0은 "제어하지 않음"이 아니라 정지 feedforward다. NaN으로 바꾸지 않는다.
+  const auto sp =
+    px4::position_setpoint(timestamp(), Eigen::Vector3d::Zero(), 0.0, Eigen::Vector3d::Zero());
+  ASSERT_TRUE(sp.has_value());
+  for (const float v : sp->velocity) {
+    EXPECT_EQ(v, 0.0F);
+  }
+}
+
+TEST(Px4Setpoint, PositionSetpointVelocityAcceptsFloatMax)
+{
+  const double max = static_cast<double>(std::numeric_limits<float>::max());
+  const auto sp = px4::position_setpoint(
+    timestamp(), Eigen::Vector3d::Zero(), 0.0, Eigen::Vector3d(max, -max, 0.0));
+  ASSERT_TRUE(sp.has_value());
+  EXPECT_EQ(sp->velocity[0], std::numeric_limits<float>::max());
+  EXPECT_EQ(sp->velocity[1], -std::numeric_limits<float>::max());
+}
+
+TEST(Px4Setpoint, PositionSetpointRejectsNonFiniteVelocity)
+{
+  const auto ts = timestamp();
+  const Eigen::Vector3d pos(1.0, 2.0, -3.0);
+  const double above_max = std::nextafter(
+    static_cast<double>(std::numeric_limits<float>::max()), std::numeric_limits<double>::max());
+  // 한 축만 나빠도 setpoint 전체를 거부한다(그 축만 NaN으로 보내지 않는다).
+  for (const double bad : {kNaN, kInf, -kInf, 1e39, -1e39, above_max, -above_max}) {
+    EXPECT_FALSE(px4::position_setpoint(ts, pos, 0.0, Eigen::Vector3d(bad, 0.0, 0.0)).has_value())
+      << "vx " << bad;
+    EXPECT_FALSE(px4::position_setpoint(ts, pos, 0.0, Eigen::Vector3d(0.0, bad, 0.0)).has_value())
+      << "vy " << bad;
+    EXPECT_FALSE(px4::position_setpoint(ts, pos, 0.0, Eigen::Vector3d(0.0, 0.0, bad)).has_value())
+      << "vz " << bad;
+  }
+}
+
+TEST(Px4Setpoint, PositionSetpointWithVelocityStillRejectsBadPosition)
+{
+  const auto ts = timestamp();
+  const Eigen::Vector3d vel(0.5, 0.5, 0.0);
+  EXPECT_FALSE(px4::position_setpoint(ts, Eigen::Vector3d(kNaN, 0.0, 0.0), 0.0, vel).has_value());
+  EXPECT_FALSE(px4::position_setpoint(ts, Eigen::Vector3d::Zero(), kInf, vel).has_value());
 }

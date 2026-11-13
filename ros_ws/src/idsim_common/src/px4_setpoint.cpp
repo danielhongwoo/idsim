@@ -33,6 +33,11 @@ bool finite_as_float(double value)
          std::fabs(value) <= static_cast<double>(std::numeric_limits<float>::max());
 }
 
+bool finite_as_float(const Eigen::Vector3d & v)
+{
+  return finite_as_float(v.x()) && finite_as_float(v.y()) && finite_as_float(v.z());
+}
+
 }  // namespace
 
 px4_msgs::msg::OffboardControlMode offboard_position_mode(Px4Timestamp timestamp)
@@ -50,11 +55,13 @@ px4_msgs::msg::OffboardControlMode offboard_position_mode(Px4Timestamp timestamp
 }
 
 std::optional<px4_msgs::msg::TrajectorySetpoint> position_setpoint(
-  Px4Timestamp timestamp, const Eigen::Vector3d & position_ned, double yaw_ned)
+  Px4Timestamp timestamp, const Eigen::Vector3d & position_ned, double yaw_ned,
+  const std::optional<Eigen::Vector3d> & velocity_ned)
 {
-  if (
-    !finite_as_float(position_ned.x()) || !finite_as_float(position_ned.y()) ||
-    !finite_as_float(position_ned.z()) || !finite_as_float(yaw_ned)) {
+  if (!finite_as_float(position_ned) || !finite_as_float(yaw_ned)) {
+    return std::nullopt;
+  }
+  if (velocity_ned.has_value() && !finite_as_float(*velocity_ned)) {
     return std::nullopt;
   }
   px4_msgs::msg::TrajectorySetpoint sp;
@@ -62,7 +69,13 @@ std::optional<px4_msgs::msg::TrajectorySetpoint> position_setpoint(
   sp.position = {
     static_cast<float>(position_ned.x()), static_cast<float>(position_ned.y()),
     static_cast<float>(position_ned.z())};
-  sp.velocity = {kNaN, kNaN, kNaN};
+  if (velocity_ned.has_value()) {
+    sp.velocity = {
+      static_cast<float>(velocity_ned->x()), static_cast<float>(velocity_ned->y()),
+      static_cast<float>(velocity_ned->z())};
+  } else {
+    sp.velocity = {kNaN, kNaN, kNaN};
+  }
   sp.acceleration = {kNaN, kNaN, kNaN};
   sp.jerk = {kNaN, kNaN, kNaN};
   sp.yaw = static_cast<float>(yaw_ned);
