@@ -159,6 +159,69 @@ PY
     fi
   done
 }
+# 월드 템플릿 대조: sim-base의 원본 default.sdf와 템플릿(ros_ws/src/idsim_sim/worlds/idsim_base.sdf)의 월드 직속 자식 요소를
+# canonical 형태(공백, 주석, 속성 순서 무시)로 순서까지 비교한다. 제외: 원본의 spherical_coordinates, world의 name 속성.
+# 원본에 월드 직속 plugin, include, actor가 있으면 템플릿으로 옮길 수 없으므로 따로 실패한다(모델 안의 plugin은 월드 직속이 아니라 대상이 아니다).
+# 템플릿은 stdin이 python 스크립트에 쓰이므로 읽기 전용 마운트로 넘긴다.
+check_world_template() {
+  local tpl_rel="ros_ws/src/idsim_sim/worlds/idsim_base.sdf" log="${out_dir}/s0_world_template.txt" ref_tpl
+  ref_tpl="$(sed -n 's/^[[:space:]]*PX4_GZ_MODELS_REF=\([0-9a-f]\{40\}\)[[:space:]]*$/\1/p' "${tpl_rel}")"
+  if docker run --rm -i --network none --entrypoint python3 \
+      -v "${repo_root}/${tpl_rel}:/tpl/template.sdf:ro" idsim/sim-base:local - \
+      /opt/px4-gz/worlds/default.sdf /tpl/template.sdf "$PX4_GZ_MODELS_REF" "${ref_tpl:-없음}" >"$log" 2>&1 <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+src_path, tpl_path, ref_src, ref_tpl = sys.argv[1:5]
+SKIP = {"spherical_coordinates"}
+UNMOVABLE = {"plugin", "include", "actor"}
+
+
+def load(path):
+    data = open(path, "rb").read()
+    if data.startswith(b"\xef\xbb\xbf"):
+        data = data[3:]
+    root = ET.fromstring(data)
+    worlds = root.findall("world")
+    if len(worlds) != 1:
+        sys.exit("%s: world 요소가 정확히 하나가 아니다(%d개)" % (path, len(worlds)))
+    return worlds[0]
+
+
+def canon(e):
+    return (e.tag, tuple(sorted(e.attrib.items())), (e.text or "").strip(), tuple(canon(c) for c in e))
+
+
+def label(e):
+    n = e.get("name")
+    return "<%s%s>" % (e.tag, " name=%s" % n if n else "")
+
+
+src, tpl = load(src_path), load(tpl_path)
+bad = [label(c) for c in src if c.tag in UNMOVABLE]
+if bad:
+    sys.exit("FAIL 원본 월드 직속에 옮길 수 없는 요소가 있다: %s. 템플릿에 옮길 수 없다. sim-engineer가 판단하라 (ref 원본 %s, 템플릿 %s)"
+             % (", ".join(bad), ref_src, ref_tpl))
+a = [c for c in src if c.tag not in SKIP]
+b = [c for c in tpl if c.tag not in SKIP]
+for i in range(max(len(a), len(b))):
+    x = a[i] if i < len(a) else None
+    y = b[i] if i < len(b) else None
+    if x is None or y is None or canon(x) != canon(y):
+        kind = "원본에만 있음" if y is None else ("템플릿에만 있음" if x is None else "내용 또는 순서가 다름")
+        sys.exit("FAIL 월드 템플릿 어긋남: 자리 %d 원본 %s, 템플릿 %s (%s). 원본 ref %s, 템플릿 ref %s. "
+                 "PX4_GZ_MODELS_REF를 올렸다면 새 default.sdf와 대조해 템플릿을 다시 옮기고 ref 줄을 고치라"
+                 % (i + 1, label(x) if x is not None else "-", label(y) if y is not None else "-", kind, ref_src, ref_tpl))
+print("ok 월드 직속 요소 %d개 일치(원본 ref %s, 템플릿 ref %s)" % (len(a), ref_src, ref_tpl))
+PY
+  then
+    echo "ok   idsim/sim-base:local 월드 템플릿 == 원본 default.sdf: $(tail -n 1 "$log")"
+  else
+    echo "FAIL 월드 템플릿 대조 (${log})" >&2
+    sed 's/^/  | /' "$log" >&2 || true
+    s0_fail=1
+  fi
+}
 check_s0() {
   local gz_major img py
   case "$GZ_RELEASE" in
@@ -182,6 +245,7 @@ check_s0() {
     s0_fail=1
   fi
   check_sensor_z
+  check_world_template
   # shellcheck disable=SC2016
   s0_run "RMW_IMPLEMENTATION" idsim/ros-ws:local '[ "$(printenv RMW_IMPLEMENTATION)" = rmw_cyclonedds_cpp ]'
   s0_run "gz sim 버전" idsim/px4:local "gz sim --versions | grep -qE '^${gz_major}\\.'"
