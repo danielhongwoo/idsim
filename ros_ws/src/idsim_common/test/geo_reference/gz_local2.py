@@ -17,10 +17,10 @@
 빌드와 테스트가 부르지 않는다. 기준값을 다시 만들 때만 sim-base 이미지(python3-gz-math7 7.7.0)에서
 손으로 돌린다.
 
-    docker run --rm --network none -v "$PWD:/w:ro" --entrypoint python3 idsim/sim-base:local \
+    docker run -i --rm --network none -v "$PWD:/w:ro" --entrypoint python3 idsim/sim-base:local \
         -I /w/gz_local2.py
 
-입력은 표준 입력의 줄이다.
+입력은 표준 입력의 줄이다(test_geo.cpp 표의 origin/enu 열을 줄로 옮긴 것).
     F <origin_lat_deg> <origin_lon_deg> <origin_alt_m> <e> <n> <u>
         PositionTransform((e, n, u), LOCAL2, SPHERICAL). 출력: F <lat_deg> <lon_deg> <alt_m>
     I <origin_lat_deg> <origin_lon_deg> <origin_alt_m> <lat_deg> <lon_deg> <alt_m>

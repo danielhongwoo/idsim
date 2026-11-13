@@ -34,7 +34,7 @@ namespace idsim_common
 {
 
 // 상태 발행용. RELIABLE, VOLATILE, KEEP_LAST 5, liveliness Automatic.
-// Python 발행자(표적 어댑터)는 이 함수를 쓰지 못하므로 같은 값을 다시 적는다.
+// Python 쪽 발행자는 이 함수를 쓰지 못하므로 같은 값을 직접 적는다.
 rclcpp::QoS state_pub_qos();
 
 // 상태 구독용. BEST_EFFORT, VOLATILE, KEEP_LAST 5, liveliness Automatic.

@@ -18,7 +18,7 @@
 // target_id 규칙은 ^[a-z][a-z0-9_]{0,31}$다(docs/interface.md "이름과 식별자"). 토픽은 절대 이름
 // /targets/<target_id>/state이고 idsim_interfaces TargetState의 TOPIC_PREFIX, TOPIC_SUFFIX 상수로
 // 조립한다(문자열을 다시 쓰지 않는다). 기체 네임스페이스에 속하지 않는다.
-// 같은 규칙의 Python 쪽은 판정이 tests/support, 발행이 표적 어댑터(idsim_sim)에 있다.
+// 같은 규칙의 Python 쪽은 판정을 tests/support가 하고, 발행자는 같은 상수로 토픽을 조립한다.
 
 #ifndef IDSIM_COMMON__TARGET_HPP_
 #define IDSIM_COMMON__TARGET_HPP_

@@ -42,6 +42,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -442,7 +443,7 @@ TEST(Geo, NonFiniteInputGivesNonFiniteOutput)
 // 원점 넷(서울, 취리히, 남반구 시드니, 고위도 70도)과 기준 셋(원점, 원점에서 수 m, 약 1.5 km)에서
 // world ENU 격자(수평 +-5 km, 고도 0-300 m)를 왕복시킨다. 오차의 원천은 gz geodetic 닫힌 식이
 // 정확한 역이 아닌 것뿐이고(MapProjection의 project와 reproject는 서로 정확한 역이다), 측정값은
-// 1e-9 m 수준이다. 허용 1e-6 m.
+// 1e-8 m 수준이다(실측 최대 1.11e-8 m). 허용 1e-6 m.
 
 namespace
 {
@@ -485,6 +486,14 @@ std::vector<Eigen::Vector3d> round_trip_points()
   return out;
 }
 
+// xml에 0.000000으로 남지 않도록 지수 표기로 기록한다.
+std::string sci(double v)
+{
+  char buf[32];
+  std::snprintf(buf, sizeof(buf), "%.3e", v);
+  return buf;
+}
+
 }  // namespace
 
 TEST(Geo, RoundTripWorldEnu)
@@ -500,7 +509,7 @@ TEST(Geo, RoundTripWorldEnu)
     }
   }
   std::cout << "world ENU -> local NED -> world ENU max error [m]: " << max_err << "\n";
-  RecordProperty("max_error_m", std::to_string(max_err));
+  RecordProperty("max_error_m", sci(max_err));
 }
 
 TEST(Geo, RoundTripLocalNed)
@@ -517,5 +526,5 @@ TEST(Geo, RoundTripLocalNed)
     }
   }
   std::cout << "local NED -> world ENU -> local NED max error [m]: " << max_err << "\n";
-  RecordProperty("max_error_m", std::to_string(max_err));
+  RecordProperty("max_error_m", sci(max_err));
 }
