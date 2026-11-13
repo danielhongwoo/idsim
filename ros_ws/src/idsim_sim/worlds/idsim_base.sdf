@@ -13,7 +13,8 @@
     IDSIM_WORLD_FILE로 연다(scripts/gz_server.sh 머리 주석).
 
     출처: PX4-gazebo-models worlds/default.sdf
-          ref는 docker/versions.env의 PX4_GZ_MODELS_REF
+          ref는 docker/versions.env의 PX4_GZ_MODELS_REF와 같아야 한다. 다음 줄이 그 값이다.
+    PX4_GZ_MODELS_REF=b6127f4ec20de867e215fb5f78ae88b80f371909
           sim-base 이미지의 /opt/px4-gz/worlds/default.sdf
     옮긴 것: physics, gravity, magnetic_field, atmosphere, scene, ground_plane 모델,
           sunUTC light. 값은 원본 그대로다(원본 첫머리의 UTF-8 BOM은 뺐다).
