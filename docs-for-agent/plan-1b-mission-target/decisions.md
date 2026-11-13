@@ -234,7 +234,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - TRACK_ENTITY의 지속 시간 필드는 더하지 않는다. `TrackEntityItem`과 `GoToItem`의 필드는 바꾸지 않는다.
 
 근거
-- [소스] 위치만 보내면 PX4 위치 제어는 순수 P 제어라(`PositionControl.cpp` 124-138행, `MPC_XY_P` 0.95) 일정 속도 v의 목표를 v / 0.95, 약 1.05 s 뒤처져 따른다([추정] 선형 근사). 1-2 m/s에서 1.1-2.2 m이고 b(수십 cm 아래로 예상)보다 훨씬 크다. 위치 setpoint와 함께 온 유한한 `velocity`는 feedforward로 더해지고 P 항이 그 위에 더해진다(`PositionControl.cpp` 99-106행). 그래서 feedforward를 실으면 정상 지연이 사라지고 남는 것은 표본 나이 상한 0.1 s와 tick 0.05 s에 여유 0.05 s를 더한 0.2 s x v(1-2 m/s에서 0.2-0.4 m)다.
+- [소스] 위치만 보내면 PX4 위치 제어는 순수 P 제어라(`PositionControl.cpp` 124-138행, `MPC_XY_P` 0.95) 일정 속도 v의 목표를 v / 0.95, 약 1.05 s 뒤처져 따른다([추정] 선형 근사). 1-2 m/s에서 1.1-2.2 m이고 b(수십 cm 아래로 예상)보다 훨씬 크다. 위치 setpoint와 함께 온 유한한 `velocity`는 feedforward로 더해지고 P 항이 그 위에 더해진다(`PositionControl.cpp`의 `_positionControl` 125-137행, `addIfNotNanVector3f`). 그래서 feedforward를 실으면 정상 지연이 사라지고 남는 것은 표본 나이 상한 0.1 s와 tick 0.05 s에 여유 0.05 s를 더한 0.2 s x v(1-2 m/s에서 0.2-0.4 m)다.
 - [소스] `target_timeout`과 `COM_OF_LOSS_T`(1.0 s, `config/px4/sitl_params.env`)는 서로 의존하지 않는다. PX4가 보는 것은 Offboard 신호의 지속이고 표적 표본이 아니며, 표적이 사라져도 발행은 끊기지 않는다. 1.0 s는 20 Hz 표본 20개 분량이라 산발 손실과 tick 지터에 오탐이 없다([추정]).
 - `target_fresh_age`가 0.1 s보다 작으면 정상 지터에도 신선하지 않은 tick이 생겨 feedforward가 깜박인다. `target_fresh_age`를 0.1 s로 조여 계약이 허용하는 최악 지연(`target_fresh_age` + tick, 0.15 s)을 L 0.2 s 안에 넣는다. 비교한 다른 안은 `target_fresh_age`를 0.2 s로 둔 채 L만 0.25 s 이상으로 키우는 것이고, 그 안에서는 feedforward 누락 같은 작은 퇴행이 판정 여유에 가려진다. R3 판단 기준에 따라 `target_fresh_age`와 L을 함께 올리는 것은 이 안과 다르다(표본 나이 상한과 판정이 같은 식으로 묶여 있다).
 - feedforward는 시나리오 표적 속도를 낮추거나 판정을 넓히지 않고 맞추는 길이다. 위치만 보내는 안은 판정 상수가 `MPC_XY_P`에 묶여 계약 파라미터가 하나 늘고, 시나리오 속도를 0.5 m/s 아래로 낮춰야 해 `NO_TARGET_MOTION` 단정이 약해진다.
@@ -465,7 +465,6 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 | (p) | "용어"의 "명령"(Offboard 전환, arm, disarm, Hold 전환, Land)과 "N회 연속 확인"의 확인 대상(OFFBOARD, ARMED, Hold, Land 모드, DISARMED) | RTL(NAV_RETURN_TO_LAUNCH) 명령과 AUTO_RTL 확인이 더해진다(쟁점 9) | 열거 확장 |
 | (q) | feedback 표의 `PHASE_EXECUTING` 행("setpoint 항목 실행 중. 그 항목의 ITEM_TIMEOUT 정리 중") | TARGET_LOST의 정리 중과 공중 종료 단계 중도 `PHASE_EXECUTING`이다(쟁점 8, 10) | 적용 구간 추가 |
 | (r) | "SITL 파라미터" 절의 "월드 원점은 gazebo wrapper가 `world.origin`으로 적용한다" | 원점은 생성기가 만든 월드 SDF의 `<spherical_coordinates>`로만 들어간다(쟁점 2, M5 통과 뒤) | 사실 갱신 |
-| (s) | "좌표계" 절 머리의 "표적 pose를 setpoint로 바꿀 때(1b) 모두 이 함수를 쓴다"와 "원점 이동(world ENU <-> 기체 로컬 NED)은 아직 없다. 1b에 `idsim_common`에 더하고" | 원점 이동은 `idsim_common::geo`의 사슬이고 표적 위치는 그 사슬로, 표적 속도는 `frames`의 축 치환으로 바꾼다. 입력과 기준 유효 술어는 쟁점 4 | 1b 몫 닫기 |
 | (t) | "준비 단계" 표의 Offboard 전환 행(완료 조건 "OFFBOARD 3회 연속 확인"), "GoalStatus와 reason" 표의 MODE_SWITCH_FAILED 의미("요청한 모드 전환이 확인되지 않았다"를 "요청한 모드 전환이 확인되지 않았다. 지상 arm 진입에서는 arm 전까지 그 명령의 ack가 오지 않았거나 확인한 모드가 유지되지 않은 것도 포함한다"로), 그리고 "시간 기준" 예외 문장의 FIFO 근거 | 지상 arm 진입의 arm은 마지막 DO_SET_MODE 전송 뒤의 ack와 OFFBOARD 3회 확인이 갖춰진 tick에만 보낸다. 확인 뒤 ack가 `mode_confirm_timeout` 안에 오지 않으면 MODE_SWITCH_FAILED. 처리 전 DISARMED 표본의 창에 이 goal이 보낸 다른 명령이 끼지 않게 한다(쟁점 11, 12) | 완료 조건 추가와 reason 의미 확장. 대기 구간의 사건은 P5 규칙(머리 문단의 예외) |
 
 ## 실측과 확인 목록
@@ -530,7 +529,7 @@ B7(B7 PR 안에서. `sim-oracle` 서비스와 함께)
 - devops-engineer: `docker/README.md` 서비스 표의 `sim-oracle` 행(sim-base, SITL 전용 정답 pose, 준비 판정은 표시 파일, standalone이면 항상 만든다)과 기동 순서 그림의 노드 단계.
 
 B13(1b 완료 전, architect)
-- `docs/interface.md`: 위 "1a 고정 계약 영향" (a)-(t)(B3 묶음의 (r)과 (k) 앞부분 제외. (k)의 뒷부분은 "시간 기준" 예외 문장의 "지연 크기는 미측정"을 쟁점 11의 실측으로, "3개가 되려면 ... 약 1 s 동안 처리되지 않아야 한다"를 쟁점 11의 유지 조건(W_arm 대 publish 간격 두 개)으로 고치는 것), "GoToItem과 TrackEntityItem" 절의 확정 문장(쟁점 8, 속도 feedforward 포함), "TargetState" 절의 "고정 전" 해제와 QoS 상태 행 고정, `REASON_TARGET_LOST` 의미, "공중에서 끝나는 미션" 절(쟁점 10, 지면 높이 목표의 경합 문장 포함), 고정 시점 표의 1b 행, 미확인 목록의 1b 항목(K1-K4의 결과).
+- `docs/interface.md`: 위 "1a 고정 계약 영향" (a)-(t)(B3 묶음의 (r)과 (k) 앞부분, (s)는 B4 PR에서 반영해 표에서 뺐다. (k)의 뒷부분은 "시간 기준" 예외 문장의 "지연 크기는 미측정"을 쟁점 11의 실측으로, "3개가 되려면 ... 약 1 s 동안 처리되지 않아야 한다"를 쟁점 11의 유지 조건(W_arm 대 publish 간격 두 개)으로 고치는 것), "GoToItem과 TrackEntityItem" 절의 확정 문장(쟁점 8, 속도 feedforward 포함), "TargetState" 절의 "고정 전" 해제와 QoS 상태 행 고정, `REASON_TARGET_LOST` 의미, "공중에서 끝나는 미션" 절(쟁점 10, 지면 높이 목표의 경합 문장 포함), 고정 시점 표의 1b 행, 미확인 목록의 1b 항목(K1-K4의 결과).
 - `ros_ws/src/idsim_interfaces/`: `ExecuteMission.action`, `MissionItem.msg`, `YawSetpoint.msg`, `TakeoffItem.msg`, `GoToItem.msg`, `TrackEntityItem.msg`, `TargetState.msg`의 의미 주석. golden 무변경을 단정한다.
 - `docs/architecture.md` 인터페이스 계약 절: 묶음 표의 1b 행, 미션 실행 요지의 재진입 문장(h), 공중 종료 문장, RTL 요지.
 

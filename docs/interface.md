@@ -80,7 +80,7 @@ PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 
 | --- | --- |
 | `vehicle_id` | 기체 네임스페이스에서 앞의 "/"를 뗀 ROS 이름 토큰 하나. 출처는 `config/fleet.yaml`에서 생성된 `stack.json`과 노드 params이고, 노드와 테스트는 계산하지 않고 읽는다("기체 식별과 네임스페이스" 절). 소비자는 내용을 해석하지 않는다(번호를 뽑거나 sysid를 계산하지 않는다) |
 | `mission_id` | `^[a-z0-9][a-z0-9_-]{0,63}$`. 불투명 문자열. Executor는 해석하지 않는다. 같은 값이 재사용될 수 있다 |
-| `target_id` | `^[a-z][a-z0-9_]{0,31}$`. 시뮬레이션에서는 `fleet.yaml`의 `targets[].id` = Gazebo 엔티티 이름 = 토픽 토큰 = 메시지 필드다 |
+| `target_id` | `^[a-z][a-z0-9_]{0,31}$`. 시뮬레이션에서는 `fleet.yaml`의 `targets[].id` = Gazebo 엔티티 이름 = 토픽 토큰 = 메시지 필드다. `idsim_common::TargetId::parse`가 이 규칙을 검사하고 `target_state_topic(id)`가 상수 두 개로 토픽을 조립한다(`target.hpp`) |
 
 ### 계약 토픽 QoS
 
@@ -88,7 +88,7 @@ QoS 계약은 reliability와 durability 둘이다. 사건 행은 1a 완료에 �
 
 | 토픽 묶음 | 발행 | 구독 | 구현(`idsim_common`) |
 | --- | --- | --- | --- |
-| 상태(`VehicleState`, `TargetState`) | RELIABLE, VOLATILE | BEST_EFFORT, VOLATILE | 미구현(첫 발행자가 생길 때 `idsim_common`에 둔다. 구현 값은 KEEP_LAST 5) |
+| 상태(`VehicleState`, `TargetState`) | RELIABLE, VOLATILE | BEST_EFFORT, VOLATILE | `state_pub_qos()`, `state_sub_qos()`(`contract_qos.hpp`. KEEP_LAST 5). 아직 발행하거나 구독하는 노드는 없다 |
 | 사건(`MissionEvent`) | RELIABLE, VOLATILE | RELIABLE, VOLATILE | `event_pub_qos()`, `event_sub_qos()`(`contract_qos.hpp`. KEEP_LAST 10) |
 
 - 상태 토픽 구독이 BEST_EFFORT인 것은 라이브 발행자와 rosbag2 재생 발행자 어느 쪽과도 맞게 하려는 것이다. 상태 토픽의 주기는 계약이 아니다.
@@ -151,7 +151,7 @@ PX4 timestamp.
 
 고정 시점: 1a 완료.
 
-PX4 쪽은 지구 NED, 동체 FRD이고 ROS와 Gazebo 쪽은 지구 ENU, 동체 FLU다. 변환은 `idsim_common::frames`(`ros_ws/src/idsim_common/include/idsim_common/frames.hpp`) 한 곳에 두고, setpoint를 보낼 때와 표적 pose를 setpoint로 바꿀 때(1b) 모두 이 함수를 쓴다.
+PX4 쪽은 지구 NED, 동체 FRD이고 ROS와 Gazebo 쪽은 지구 ENU, 동체 FLU다. 변환은 `idsim_common::frames`(`ros_ws/src/idsim_common/include/idsim_common/frames.hpp`) 한 곳에 두고, setpoint를 보낼 때 이 함수를 쓰고, 표적 속도를 setpoint로 바꿀 때(1b)도 축 치환은 이 함수를 쓴다.
 
 | 대상 | PX4 <-> ROS | 함수 |
 | --- | --- | --- |
@@ -165,7 +165,7 @@ PX4 쪽은 지구 NED, 동체 FRD이고 ROS와 Gazebo 쪽은 지구 ENU, 동체 
 - PX4 쿼터니언은 Hamilton 규약, 배열 순서 (w, x, y, z), FRD 동체 -> NED 지구 회전이다. q와 -q는 같은 회전으로 본다.
 - 벡터 변환은 축 치환과 부호만 쓰므로 NaN은 그 축에만 남는다(`TrajectorySetpoint`의 NaN은 "제어하지 않음"이다). 비대각 공분산은 다루지 않는다.
 - px4_ros_com `frame_transforms`는 래핑하지 않고 `test/test_frames.cpp`의 차등 비교 기준으로만 쓴다(공분산 변환 오류와 NaN 번짐이 있다).
-- 원점 이동(world ENU <-> 기체 로컬 NED)은 아직 없다. 1b에 `idsim_common`에 더하고, 입력은 PX4가 실제로 쓰는 원점과 params로 받은 `world.origin`이다.
+- 원점 이동(world ENU <-> 기체 로컬 NED)은 `idsim_common::geo`(`geo.hpp`)에 있다. 사슬은 gz LOCAL2 -> WGS84 -> PX4 MapProjection이고, `world_enu_to_local_ned`와 `local_ned_to_world_enu`가 한 번에 거친다. 입력은 PX4가 실제로 쓰는 원점(`LocalReference`)과 params로 받은 `world.origin`(`WorldOrigin`)이다. 기준이 유효한지 보는 술어는 호출하는 px4 어댑터가 먼저 거친다. 이 변환을 쓰는 운용 노드(표적 위치를 setpoint로 바꾸는 Executor, `FramePort`)는 아직 없다.
 - 기체 로컬 NED의 원점은 월드 원점이 아니라 그 기체의 EKF 원점이다. SITL에서 EKF 원점은 EKF2가 첫 GNSS fix를 받는 순간의 GNSS 위치다(`src/modules/ekf2/EKF/aid_sources/gnss/gps_control.cpp`의 `resetHorizontalPositionToGnss`, 226-239행, 442-445행). 기체가 스폰 지점에 정지한 채 부팅하므로 스폰 지점 근처지만, GNSS 잡음만큼의 오차가 있을 수 있고 그 크기는 측정하지 않았다. 또 이 원점은 월드 `spherical_coordinates`가 첫 fix 전에 적용되어 있어야 의미가 있다. 그래서 변환 입력은 스폰 pose가 아니라 `vehicle_local_position`의 `ref_lat`, `ref_lon`, `ref_alt`로 한다. 비행 중 EKF 원점이 다시 정해지는 조건은 확인하지 않았다.
 - 1a에서 PX4로 가는 setpoint는 기체 로컬 NED 위치(m)와 NED yaw(rad)다(`px4_setpoint.hpp`). ENU 값은 호출자가 `frames`로 바꿔서 넘긴다. 1a 미션의 yaw 입력(`YawSetpoint`)은 ENU yaw이고 `idsim_mission` core가 같은 식으로 NED yaw로 바꾼다(`ros_ws/src/idsim_mission/include/idsim_mission/core/rules.hpp`의 `enu_to_ned_yaw`. core는 ROS 비의존이라 식을 따로 두고 단위 테스트로 덮는다).
 
