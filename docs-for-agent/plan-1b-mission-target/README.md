@@ -38,7 +38,7 @@
 | B5. SITL 파라미터 | px4-engineer(값과 근거 주석), devops-engineer(스모크 `expected_params`, 생성기 golden 재생성) | 쟁점 9의 일곱 파라미터. `sitl_params.env`가 바뀌면 생성기 golden(`inputs`의 sha256, `expected_params`)이 바뀐다 | B0 |
 | B6. 표적 어댑터 | sim-engineer(`idsim_sim` ament_python 전환, 어댑터, Actor 생성 내용), devops-engineer(`targets` 스키마, 서비스, healthcheck, 생성기) | 쟁점 1, 3. M1 | B3 |
 | B7. 정답 pose | sim-engineer(`sim_oracle.py`, 오프셋 합성과 구독 토픽 단위 테스트), devops-engineer(`sim-oracle` 서비스와 healthcheck) | 쟁점 5. S1-a | B3 |
-| B8. 전이 관측 계측 | ros2-engineer(계측, `transition.hpp`, 칸 목록 파일), px4-engineer(1a 칸 목록 승인), test-engineer(테스트 실행 파일 통합의 구조 승인), architect(`docs-for-agent/file-ownership.md`에 `Event` 목록과 칸 목록 파일의 px4 승인 한 줄) | 쟁점 13. 동작 무변경 | B0 |
+| B8. 전이 관측 계측 | ros2-engineer(계측, `transition.hpp`, 칸 목록 파일), px4-engineer(1a 칸 목록 승인), test-engineer(테스트 실행 파일 통합의 구조 승인), architect(`docs-for-agent/file-ownership.md`에 `Event` 목록과 칸 목록 파일의 px4 승인 한 줄. U16) | 쟁점 13. 동작 무변경 | B0 |
 | B9. `idsim_mission` core와 px4 어댑터 | ros2-engineer(core, 단위 테스트), px4-engineer(`px4/` 어댑터, snapshot 헤더와 전이 표의 필수 승인, K1-K4 확인) | 쟁점 6-10, 12. 헤더 PR 하나(W 결과 뒤)와 상태기 PR들(칸 목록 diff로 승인) | B2, B4, B8 |
 | B10. 노드 껍질과 YAML 로더 | ros2-engineer(노드, 표적 구독과 변환, 로더, CLI), devops-engineer(`ops-N` params의 `world.origin`) | 쟁점 4의 노드 쪽, 8의 표적 구독, 14 | B9 |
 | B11. 통합 테스트 | test-engineer(판정, 시나리오 F1-F4, 미션 YAML, gate 기록, 비행 단위 fixture), sim-engineer(정답 pose 경로 확인), devops-engineer(compose와 `sitl.yml`) | 쟁점 5, 11의 gate 기록, 15. R1-R4, 공중 시작, RTL 실측 | B5, B6, B7, B10 |
@@ -47,7 +47,7 @@
 
 커밋은 담당자 소유 단위로 나눈다. PR은 단위마다 하나이고, 담당이 여럿인 단위는 담당자별 커밋으로 나눈다. 생성기 golden을 바꾸는 PR(B3, B5, B6, B7)은 나중에 머지되는 쪽이 main에 rebase한 뒤 golden을 생성기로 다시 만든다(손으로 합치지 않는다. 재생성은 devops-engineer). 예외 둘:
 - B9의 snapshot 헤더 변경(`SetpointOut` 속도 포함)은 W 결과(B2) 뒤에 한 PR로 묶는다(쟁점 12). 상태기 변경은 B8의 칸 목록이 들어간 뒤 PR마다 칸 목록 diff를 함께 낸다.
-- B11은 한 PR 안에서 커밋 둘로 나눈다. (가) F1-F4의 trace에 R2와 R4를 기록하는 커밋. 시험 미션의 `acceptance_radius_m`은 보정 값 0.5 m다. 로컬 `run_sitl.sh --repeat 30`으로만 돌리고 CI 시나리오 목록에는 b를 쓰는 F1-F4를 모두 넣지 않는다. (나) b와 `R_home`을 근거(`decisions.md` 쟁점 5의 항목)와 함께 `tests/support/sitl_judge.py` 머리말에 적고, 시험 미션 YAML의 `acceptance_radius_m`을 `1.0 - b`로 바꾸고, F1-F4를 CI 목록에 넣는 커밋. (나)의 상태로 로컬 부팅 10회 이상의 확인 실행을 한다. 머지되는 상태는 (나)뿐이다. 이렇게 해서 CI가 "b 미정" 적색으로 시작하지 않고, 상수를 통과와 실패를 보고 정하지 않는다.
+- B11은 한 PR 안에서 커밋 둘로 나눈다. (가) F1-F4의 trace에 R2와 R4를 기록하는 커밋. b와 `R_home`이 빈 보정 상태(`decisions.md` 쟁점 5)이고 시험 미션의 `acceptance_radius_m`은 보정 값 0.5 m다. 보정 상태에서는 `R_home`에 기대는 단정만 `recorded_only`이고 나머지 판정은 그대로 실패로 세므로, F1이 통과하면 F2-F4가 돌아 표본이 모인다. 로컬 `run_sitl.sh --repeat 30`으로만 돌리고 CI 시나리오 목록에는 F1-F4를 모두 넣지 않는다. (가)는 머지되지 않는 중간 상태다. (나) b와 `R_home`을 근거(`decisions.md` 쟁점 5의 항목)와 함께 `tests/support/sitl_judge.py` 머리말에 적고, 시험 미션 YAML의 `acceptance_radius_m`을 `1.0 - b`로 바꾸고, F1-F4를 CI 목록에 넣는 커밋. (나)의 상태로 로컬 부팅 10회 이상의 확인 실행을 한다. 머지되는 상태는 (나)뿐이다. 이렇게 해서 CI가 상수 없는 판정으로 시작하지 않고, 상수를 통과와 실패를 보고 정하지 않는다.
 
 실험용 스택 번호: px4 5, ros2 6, test 7, devops 8, sim 9. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
 
@@ -97,8 +97,8 @@
 - B10: `tools/ros_ws.sh ci` 통과. 로더가 시험 미션 YAML을 `Mission`으로 바꾸는 단위 테스트가 있다.
 - B11
   - `tests/sitl/run_sitl.sh --repeat 3`이 같은 commit, 같은 이미지 key에서 3회 연속 통과한다. 시나리오는 B, C, A, D, F1, F2, F3, F4, T다.
-  - CI `sitl` job이 통과한다. 단계별 시간과 판정 구간 RTF를 PR 본문에 남긴다. 15분(U11)을 넘으면 비행 사이에 겹치는 구간(U13), 순회 waypoint 수, Hold 유지 시간부터 줄이고, 그래도 넘으면 판정 기준을 느슨하게 하지 않고 측정값과 함께 architect와 사용자에게 올린다.
-  - b와 `R_home`이 근거(값, 부팅 30회 이상, 사건 수, `mean(s)`, `std(s)`, 최댓값, 실행 id)와 함께 판정 상수 머리말에 있고 모형 검증(최댓값 점검, Shapiro-Wilk)을 통과했다. b가 0.5 m 이하이고(시험 미션의 `acceptance_radius_m = 1.0 - b`가 0.5 m 이상) `R_home`이 1 m 이하다. 넘거나 모형 검증에 실패하면 올린다(쟁점 5). (나)의 확인 실행에서 모든 도달 사건이 1.0 m 안이다.
+  - CI `sitl` job이 통과한다. 단계별 시간과 판정 구간 RTF를 PR 본문에 남긴다. 15분(U11)을 넘으면 겹치는 비행 구간 -> 순회 waypoint 수 -> Hold 유지 시간 순으로 줄이고(U15), 그래도 넘으면 판정 기준을 느슨하게 하지 않고 측정값과 함께 architect와 사용자에게 올린다.
+  - b와 `R_home`이 근거(값, 부팅 30회 이상, 사건 수, `mean(s)`, `std(s)`, 최댓값, `s_track` 통계, 실행 id)와 함께 판정 상수 머리말에 있고 모형 검증(GOTO와 `s_track` 각각의 최댓값 점검과 Shapiro-Wilk, `s_track` 허용한계가 b 이하)을 통과했다. m과 m_home이 시나리오의 사건 수와 같다는 단위 테스트가 있다. b가 0.5 m 이하이고(시험 미션의 `acceptance_radius_m = 1.0 - b`가 0.5 m 이상) `R_home`이 1 m 이하다. 넘거나 모형 검증에 실패하면 올린다(쟁점 5). (나)의 확인 실행에서 모든 도달 사건이 1.0 m 안이다.
   - R1, R3가 `verdict.json`에 `recorded_only`로 남는다. F2, F4 trace로 표적 접근의 L(0.2 s)이 맞는지와 R3 판단 기준(나이 99.9% 분위수, 신선하지 않은 tick 비율)을 확인한 결과가 PR 본문에 있다.
 - B12: M4 결과(ogre2와 ogre, 재접속, 120 s 생존)가 PR 본문에 있다.
 - B13: `docs/interface.md`의 1b 계약이 고정되고 "고정 전" 표시가 1b 몫에서 빠진다. 계약 테스트 golden과 type hash가 그대로다. reviewer가 확인했다.
@@ -110,4 +110,4 @@
 
 ## 사용자 결정
 
-U7-U14는 `decisions.md` 머리의 "사용자 결정"에 있다. 지금 사용자 결정을 기다리는 항목은 없다.
+U7-U16은 `decisions.md` 머리의 "사용자 결정"에 있다. 지금 사용자 결정을 기다리는 항목은 없다.

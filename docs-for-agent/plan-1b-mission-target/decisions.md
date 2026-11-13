@@ -10,10 +10,12 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - U8: `COM_LOW_BAT_ACT`를 계약 SITL 파라미터 표에 넣어 2(Land)로 고정한다.
 - U9: `RTL_RETURN_ALT`는 미션 고도에 맞춘다. 1b는 순항 고도 5 m, `RTL_RETURN_ALT` 10 m다(쟁점 9).
 - U10: 범위 문구는 표적을 "`config/fleet.yaml`에 적은 스크립트 궤적을 시뮬레이션 시간에 맞춰 따르는 점 표적"으로 좁히고, "표적 생산자는 `TargetState` 계약 뒤에서 교체할 수 있고 Gazebo 기반 생산자는 확장 항목"을 함께 적는다. 문구 초안은 "문서 반영 목록"에 있다.
-- U11: CI `sitl` job의 시간 목표는 15분이고 F1, F2, F3을 모두 PR CI에 둔다. 넘으면 순회 waypoint 수와 Hold 유지 시간부터 줄이고, 그래도 넘으면 측정값과 함께 사용자에게 올린다. 판정 기준을 느슨하게 해서 줄이지 않는다.
+- U11: CI `sitl` job의 시간 목표는 15분이고 F1, F2, F3을 모두 PR CI에 둔다. 넘으면 겹치는 비행 구간 -> 순회 waypoint 수 -> Hold 유지 시간 순으로 줄인다(U15). 그래도 넘으면 측정값과 함께 사용자에게 올린다. 판정 기준을 느슨하게 해서 줄이지 않는다.
 - U12: 정답 pose(`/sim/` 토픽)를 SITL 실행의 기록물(MCAP)에 함께 기록한다. 실기체 기록물에는 없고 그때 판정은 계약 부분만 돈다. 효력은 Phase 2의 기록 대상 결정부터이고 1b 구현은 판정 코드를 계약 부분과 정답 부분으로 나누는 것까지다.
-- U13: roadmap 1b 목표("YAML 미션 하나로 이륙 -> 웨이포인트 순회 -> 표적 접근 -> 복귀, 착륙")를 그대로 덮는 합친 미션 시나리오 F4(`[TAKEOFF, GOTO x N, TRACK_ENTITY, RTL]`)를 더한다. F1-F3은 경계 상황(공중 종료, 공중 시작) 검증용으로 남긴다. CI `sitl` job이 15분을 넘으면 비행 사이에 겹치는 구간부터 줄인다(쟁점 15).
+- U13: roadmap 1b 목표("YAML 미션 하나로 이륙 -> 웨이포인트 순회 -> 표적 접근 -> 복귀, 착륙")를 그대로 덮는 합친 미션 시나리오 F4(`[TAKEOFF, GOTO x N, TRACK_ENTITY, RTL]`)를 더한다. F1-F3은 경계 상황(공중 종료, 공중 시작) 검증용으로 남긴다. CI `sitl` job이 15분을 넘을 때 줄이는 순서는 U15다.
 - U14: waypoint 판정 반경은 1 m(roadmap 1b 4번)를 유지한다. 시험 미션의 `acceptance_radius_m`은 `1 m - b` 이하로 둔다(쟁점 5).
+- U15: CI `sitl` job이 15분을 넘으면 겹치는 비행 구간 -> 순회 waypoint 수 -> Hold 유지 시간 순으로 줄인다. 겹치는 비행 구간은 F1과 F4의 순회처럼 같은 판정을 두 비행이 보는 부분이다. F2의 공중 종료와 F3의 공중 시작은 빼지 않는다.
+- U16: `docs-for-agent/file-ownership.md`의 소유자는 architect다.
 
 ## 결정 요약
 
@@ -122,12 +124,15 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - 공급: 별도 compose 서비스 `sim-oracle`(sim-base 이미지, `depends_on: gazebo` healthy). `ros_ws/src/idsim_sim/scripts/sim_oracle.py` 한 파일의 rclpy 노드가 gz-transport Python 바인딩으로 `/world/<월드>/pose/info`를 직접 구독한다. ros_gz_bridge를 거치지 않고 `/clock`을 구독하지 않는다. top-level model `x500_N` pose에 base_link 오프셋을 합성한다(`p_bl = p_model + R_model * offset`, 자세는 model과 같다). 오프셋은 노드가 시작할 때 sdformat14로 모델 SDF를 해석해 얻는다(손으로 적지 않는다). 합성 함수는 순수 Python으로 두고 단위 테스트한다. 구독 토픽은 상수로 조립하고 단위 테스트가 `/pose/info`로 끝나며 `dynamic_pose`를 포함하지 않음을 단정한다. `idsim_interfaces`에 의존하지 않는다.
 - 정답 pose 토픽 이름 `/sim/<vehicle_id>/pose`는 발행하는 `sim_oracle.py`와 구독하는 `tests/support`가 각자 조립한다. 공유 상수를 두지 않는다(`sim_oracle.py`는 sim-base 이미지에서 마운트로 돌고 `tests/support`는 다른 이미지와 소유자의 것이라, 한 모듈을 함께 import하면 이미지와 소유 경계를 넘는다). 대신 두 곳 모두 조립을 순수 함수 하나로 두고, 같은 사례 표(`px4_1 -> /sim/px4_1/pose` 등, 쟁점 3의 이름 조립과 같은 방식)로 각자 단위 테스트한다. 두 조립이 어긋나도 판정이 정답 pose를 받지 못해 `ORACLE_ABSENT`로 실패하므로 조용히 지나가지 않는다.
 - `sim-oracle` 서비스: standalone이면 표적과 무관하게 항상 만들고 embedded에는 없다. sim-base 이미지, 호스트 uid:gid, `init: true`, `depends_on` gazebo와 `px4-N` 전부 healthy(모델이 스폰된 뒤라야 준비 조건이 성립한다), 노드 단계(쟁점 3). 환경 변수는 `GZ_PARTITION`, `GZ_IP`, ROS 공통값, `IDSIM_WORLD_NAME`, 기체 목록 `IDSIM_ORACLE_VEHICLES`(`px4_1=x500_1 px4_2=x500_2` 형식, 생성기가 `vehicles[]`에서 만들고 `assert_invariants`가 대조한다). 볼륨은 `idsim_sim` 읽기 전용, `config/cyclonedds.xml` 파일 하나 읽기 전용, `ros_log/sim-oracle` 쓰기. healthcheck는 쟁점 3과 같은 표시 파일(`/tmp/idsim/oracle_ready`, 모든 기체의 pose를 한 번 이상 냈을 때)이다.
-- 웨이포인트 도달의 주 판정은 정답 판정이다: Executor가 항목을 완료로 넘긴 시각 `t_f`(feedback의 항목 전환 stamp)에서 정답 pose와 world 목표의 3차원 거리가 판정 반경 `R_judge` 1.0 m(U14, 판정 상수) 안이어야 한다(아니면 `REACH_MISMATCH`). 시험 미션의 `acceptance_radius_m`은 `1.0 m - b` 이하이므로 `acceptance_radius_m + b`는 1.0 m를 넘지 않는다. 정답 pose는 `t_f` 앞뒤 표본에서 선형 보간하고, 앞뒤 표본 간격이 0.1 s를 넘으면 그 사건은 `ORACLE_STALE`로 실패한다. 테스트는 Python에서 원점 변환을 다시 구현하지 않는다. 통과 기준은 3차원 하나이고 수평과 수직 성분은 trace에 따로 남긴다.
-- b의 정의(R2): GOTO 도달 사건마다 부호 있는 초과량 `s = d_oracle(t_f) - acceptance_radius_m`을 재고(0으로 자르지 않는다. `max(0, s)`는 trace 보고용이다), b는 `ceil_0.05(mean(s) + k x std(s))`다. k는 정규 분포의 단측 허용계수이고 신뢰 95%, 사건당 커버리지 `1 - 0.005 / m`이다. m은 한 실행에서 b를 쓰는 판정 사건(GOTO와 TRACK_ENTITY의 완료) 수이고, 실행당 실패 예산 1% 가운데 b에 0.5%를 주어 사건마다 Bonferroni로 나눈다. 1b 시나리오에서 m은 9(F1 3, F2 2, F3 1, F4 3)이고 부팅 30회에서 k = 4.237이다([계산] 비중심 t 분포). 표본은 부팅 30회 이상에서 모은 GOTO 사건 전부이고, 표본 크기는 사건 수가 아니라 부팅 수로 본다(한 부팅의 사건은 수직 편향을 공유한다). std는 사건 전체의 표본 분산으로 계산한다(부팅 간 분산을 포함해 보수적이다). 보정 실행의 `acceptance_radius_m`은 0.5 m다.
-- 모형 검증: 표본 최댓값이 허용한계 이하이고 `s`의 Shapiro-Wilk p가 0.01 이상이어야 b를 정한다. 어느 하나라도 실패하거나 부팅 수가 30 미만이면 상수를 정하지 않고("b 미정" 실패 유지) architect에게 올린다. 허용한계를 키워서 맞추지 않는다.
-- b를 정하는 커밋: 부팅 수, 사건 수, `mean(s)`, `std(s)`, 최댓값, k, Shapiro-Wilk p, 실행 id를 `tests/support/sitl_judge.py` 머리말에 적는다. 정하기 전에는 상수를 비워 두고 테스트는 "b 미정"으로 실패한다. 같은 커밋이 `tests/sitl/missions/`의 GOTO와 TRACK_ENTITY 항목 `acceptance_radius_m`을 `1.0 - b`로 바꾸고 F1-F4를 CI 시나리오 목록에 넣는다(README의 두 커밋 절차). b가 0.05 m 단위로 올린 값이라 `1.0 - b`도 0.05 m 단위다. 반경의 숫자는 미션 YAML에만 적고, 단위 테스트가 로더로 읽은 모든 sitl 미션의 `acceptance_radius_m`이 0.5 m 이상이고 `R_judge - b` 이하임을 판정 상수와 대조한다. 그 커밋의 상태로 로컬 부팅 10회 이상을 돌려 모든 도달 사건이 1.0 m 안인지 확인한다(보정 반경 0.5 m와 확정 반경의 차로 `s`가 달라지는지 보는 확인이다). 확인에서 1.0 m를 넘는 사건이 있으면 올린다.
+- waypoint 도달의 주 판정은 정답 판정이다: Executor가 항목을 완료로 넘긴 시각 `t_f`(feedback의 항목 전환 stamp)에서 정답 pose와 world 목표의 3차원 거리가 판정 반경 `R_judge` 1.0 m(U14, 판정 상수) 안이어야 한다(아니면 `REACH_MISMATCH`). 시험 미션의 `acceptance_radius_m`은 `1.0 m - b` 이하이므로 `acceptance_radius_m + b`는 1.0 m를 넘지 않는다. 정답 pose는 `t_f` 앞뒤 표본에서 선형 보간하고, 앞뒤 표본 간격이 0.1 s를 넘으면 그 사건은 `ORACLE_STALE`로 실패한다. 테스트는 Python에서 원점 변환을 다시 구현하지 않는다. 통과 기준은 3차원 하나이고 수평과 수직 성분은 trace에 따로 남긴다.
+- b의 정의(R2): GOTO 도달 사건마다 부호 있는 초과량 `s = d_oracle(t_f) - acceptance_radius_m`을 재고(0으로 자르지 않는다. `max(0, s)`는 trace 보고용이다), b는 `ceil_0.05(mean(s) + k x std(s))`다. k는 정규 분포의 단측 허용계수이고 신뢰 95%, 사건당 커버리지 `1 - 0.005 / m`이다. m은 한 실행에서 b를 쓰는 판정 사건(GOTO와 TRACK_ENTITY의 완료) 수이고, 실행당 실패 예산 1% 가운데 b에 0.5%를 주어 사건마다 Bonferroni로 나눈다. 1b 시나리오에서 m은 9(F1 3, F2 2, F3 1, F4 3)이고 부팅 30회에서 k = 4.237이다([계산] 비중심 t 분포). b의 평균과 표준편차는 부팅 30회 이상에서 모은 GOTO 도달 사건(부팅당 7개)으로만 계산하고, 표본 크기는 사건 수가 아니라 부팅 수로 본다(한 부팅의 사건은 수직 편향을 공유한다). std는 사건 전체의 표본 분산으로 계산한다(부팅 간 분산을 포함해 보수적이다). 보정 실행의 `acceptance_radius_m`은 0.5 m다.
+- TRACK_ENTITY 완료는 m에는 세지만 GOTO 표본에 섞지 않는다(표적 지연 항 `v x L`과 움직이는 setpoint의 추종 동특성이 있어 분포가 다르다). 대신 `s_track = d_oracle(t_f) - acceptance_radius_m - v x L`을 따로 재고(부팅당 2개), 같은 k의 정규 허용한계 `mean(s_track) + k x std(s_track)`가 b 이하인지 점검한다. 넘으면 L이 모자라거나 추종 오차가 크다는 뜻이므로 모형을 기각하고, 판정을 느슨하게 하지 않고 architect에게 올린다. 이 점검은 R3(F2, F4 추종 오차)와 함께 본다.
+- 판정 상수 m과 m_home은 시나리오에서 파생된 값이다. 단위 테스트가 판정 상수의 m이 sitl 시나리오 목록의 GOTO와 TRACK_ENTITY 완료 사건 수(지금 9)와 같고 m_home이 RTL 사건 수(지금 2)와 같음을 단정한다. 시나리오를 바꾸면 이 테스트가 깨져 k와 `q x f`를 다시 계산하게 한다.
+- 모형 검증: GOTO의 `s`와 `s_track` 각각에서 표본 최댓값이 자기 허용한계 이하이고 Shapiro-Wilk p가 0.01 이상이어야 b를 정한다. 어느 하나라도 실패하거나 부팅 수가 30 미만이면 상수를 정하지 않고(보정 상태 유지) architect에게 올린다. 허용한계를 키워서 맞추지 않는다.
+- 보정 상태: b와 `R_home`을 정하기 전에는 두 상수를 비워 둔다. 상수가 빈 상태가 곧 보정 상태이고 따로 스위치나 환경 변수를 두지 않는다. 보정 상태에서도 U14 뒤의 도달 판정(`REACH_MISMATCH`, 판정 반경 1.0 m)과 표적 접근 판정(1.0 m + v x L)은 b를 쓰지 않으므로 그대로 실패로 센다. 보정 상태에서 바뀌는 것은 `R_home`에 기대는 RTL 착륙 위치 단정 하나이고, 이 단정은 R4 값과 함께 `recorded_only`로 남기고 실패로 세지 않는다. 그 밖의 판정(계약 판정, `ORACLE_ABSENT`, `ORACLE_STALE`, 착륙 후 disarm, `UPSTREAM_FAILED` 규칙)은 그대로라 한 실행의 실패는 `--repeat`를 멈추고 0부터 다시 세게 한다(플래키를 감추지 않는다). 그래서 보정 실행에서 F1이 실패하지 않으면 F2-F4가 돌아 GOTO 표본과 R4가 모인다. 보정 상태는 머지되지 않는다: 단위 테스트가 "CI 시나리오 목록에 F1-F4가 있으면 b와 `R_home`이 정해져 있다"를 단정하므로, 상수가 빈 채 F1-F4를 CI에 넣는 상태는 lint에서 실패한다.
+- b를 정하는 커밋: 부팅 수, GOTO 사건 수, `mean(s)`, `std(s)`, 최댓값, `s_track`의 사건 수, 평균, 표준편차, 최댓값, k, 두 Shapiro-Wilk p, 실행 id를 `tests/support/sitl_judge.py` 머리말에 적는다. 같은 커밋이 `tests/sitl/missions/`의 GOTO와 TRACK_ENTITY 항목 `acceptance_radius_m`을 `1.0 - b`로 바꾸고 F1-F4를 CI 시나리오 목록에 넣는다(README의 두 커밋 절차). b가 0.05 m 단위로 올린 값이라 `1.0 - b`도 0.05 m 단위다. 반경의 숫자는 미션 YAML에만 적고, b가 정해진 상태에서 단위 테스트가 로더로 읽은 모든 sitl 미션의 `acceptance_radius_m`이 0.5 m 이상이고 `R_judge - b` 이하임을 판정 상수와 대조한다(보정 상태에서는 0.5 m임을 단정한다). 그 커밋의 상태로 로컬 부팅 10회 이상을 돌려 모든 도달 사건이 1.0 m 안인지 확인한다(보정 반경 0.5 m와 확정 반경의 차로 `s`가 달라지는지 보는 확인이다). 확인에서 1.0 m를 넘는 사건이 있으면 올린다.
 - 정한 뒤 통과와 실패를 보고 바꾸지 않는다. CI에서 판정 반경을 넘는 사건이 나오면 b를 올리지 않고 architect에게 올린다. 한 달에 2회를 넘게 나오면 모형이 틀린 것으로 본다.
-- b의 상한은 0.5 m다(`acceptance_radius_m` 0.5 m 이상. 그 아래에서는 Executor가 웨이포인트에서 도착 3표본 확인을 못 하고 정체할 위험이 커진다 [추정]). b가 0.5 m를 넘으면 반경을 줄이거나 판정을 넓히지 않고 보정 결과(분포, `d_h`, `d_v`, R1)를 들고 architect와 사용자에게 올린다. b가 0.35 m를 넘으면 통과하되 PR 본문에 적고 F1에서 도달 사건이 모두 비행당 시간 한도 안이었는지 보고한다(0.35는 [추정] 경고선이다).
+- b의 상한은 0.5 m다(`acceptance_radius_m` 0.5 m 이상. 그 아래에서는 Executor가 waypoint에서 도착 3표본 확인을 못 하고 정체할 위험이 커진다 [추정]). b가 0.5 m를 넘으면 반경을 줄이거나 판정을 넓히지 않고 보정 결과(분포, `d_h`, `d_v`, R1)를 들고 architect와 사용자에게 올린다. b가 0.35 m를 넘으면 통과하되 PR 본문에 적고 F1에서 도달 사건이 모두 비행당 시간 한도 안이었는지 보고한다(0.35는 [추정] 경고선이다).
 - `REACH_MISMATCH`는 보정 표본에서는 거의 늘 통과하고(허용한계가 표본 최댓값 이상이다) 보정 뒤의 퇴행을 잡는 검사다. EKF 오차를 독립으로 확인하는 실질은 "b가 0.5 m 이하"라는 상한 점검이다.
 - trace 항목: 도달 사건마다 `(t_f, d3, d_h, d_v, 정답 표본 간격)`, 부팅마다 `(R1_h, R1_v)`.
 - R1(EKF 원점과 기대 스폰 위치의 차)은 b의 입력이 아니라 기록 항목이다. sitl gate가 매 실행 `verdict.json`에 `recorded_only`로 남긴다.
@@ -224,7 +229,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 근거
 - [소스] 위치만 보내면 PX4 위치 제어는 순수 P 제어라(`PositionControl.cpp` 124-138행, `MPC_XY_P` 0.95) 일정 속도 v의 목표를 v / 0.95, 약 1.05 s 뒤처져 따른다([추정] 선형 근사). 1-2 m/s에서 1.1-2.2 m이고 b(수십 cm 아래로 예상)보다 훨씬 크다. 위치 setpoint와 함께 온 유한한 `velocity`는 feedforward로 더해지고 P 항이 그 위에 더해진다(`PositionControl.cpp` 99-106행). 그래서 feedforward를 실으면 정상 지연이 사라지고 남는 것은 표본 나이 상한 0.1 s와 tick 0.05 s에 여유 0.05 s를 더한 0.2 s x v(1-2 m/s에서 0.2-0.4 m)다.
 - [소스] `target_timeout`과 `COM_OF_LOSS_T`(1.0 s, `config/px4/sitl_params.env`)는 서로 의존하지 않는다. PX4가 보는 것은 Offboard 신호의 지속이고 표적 표본이 아니며, 표적이 사라져도 발행은 끊기지 않는다. 1.0 s는 20 Hz 표본 20개 분량이라 산발 손실과 tick 지터에 오탐이 없다([추정]).
-- `target_fresh_age`가 0.1 s보다 작으면 정상 지터에도 신선하지 않은 tick이 생겨 feedforward가 깜박인다. `target_fresh_age`를 0.1 s로 조여 계약이 허용하는 최악 지연(`target_fresh_age` + tick, 0.15 s)을 L 0.2 s 안에 넣는다. `target_fresh_age`를 그대로 두고 L을 0.25 s 이상으로 키우면 feedforward 누락 같은 작은 퇴행이 판정 여유에 가려진다.
+- `target_fresh_age`가 0.1 s보다 작으면 정상 지터에도 신선하지 않은 tick이 생겨 feedforward가 깜박인다. `target_fresh_age`를 0.1 s로 조여 계약이 허용하는 최악 지연(`target_fresh_age` + tick, 0.15 s)을 L 0.2 s 안에 넣는다. 비교한 다른 안은 `target_fresh_age`를 0.2 s로 둔 채 L만 0.25 s 이상으로 키우는 것이고, 그 안에서는 feedforward 누락 같은 작은 퇴행이 판정 여유에 가려진다. R3 판단 기준에 따라 `target_fresh_age`와 L을 함께 올리는 것은 이 안과 다르다(표본 나이 상한과 판정이 같은 식으로 묶여 있다).
 - feedforward는 시나리오 표적 속도를 낮추거나 판정을 넓히지 않고 맞추는 길이다. 위치만 보내는 안은 판정 상수가 `MPC_XY_P`에 묶여 계약 파라미터가 하나 늘고, 시나리오 속도를 0.5 m/s 아래로 낮춰야 해 `NO_TARGET_MOTION` 단정이 약해진다.
 - 표본 하나로 완료하면 GNSS 잡음이 실린 위치에서 경계 근처 조기 완료가 난다. 3개 연속은 약 0.15 s로 비용이 작다. TAKEOFF는 1a 고정이라 표본 하나 그대로다.
 - TARGET_LOST에서 발행만 멈추면 `COM_OF_LOSS_T` 뒤 offboard 손실 Land가 걸린다. 기체는 정상이므로 취소와 같은 Hold가 맞다.
@@ -348,7 +353,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
   - 비교: 칸 목록은 데이터 파일 `test/transition_cells.tsv`(from, 사건, to, reason, 부류, 겹침이면 함께 참이던 사건) 하나다. 덮음 테스트는 관측한 칸 집합이 "덮임" 부류와 같고, "불가능" 칸이 관측되지 않았고, 목록에 없는 칸이 관측되지 않았고, `Event` enum의 이름 집합이 목록의 사건 집합과 같음을 단정한다.
   - 집계: runner 상태기 테스트 파일들을 gtest 실행 파일 하나 `test_runner`로 묶고 `Environment::TearDown`에서 비교한다. `--gtest_filter`로 일부만 돌릴 때는 비교를 건너뛰고 그 사실을 출력한다.
 - 순서: 이 계측을 1b 동작 변경보다 먼저 동작 무변경 PR 하나로 넣는다. 그 PR에서 1a 칸 목록을 처음 만들고 px4-engineer가 승인한다. 처음 목록에서 드러난 1a 미덮임 칸은 그 PR에서 "미덮임"으로 두고 1b 완료 전에 0으로 만든다. 뒤의 상태기 PR은 칸 목록의 diff로 px4-engineer 승인을 받는다.
-- 소유: `transition.hpp`는 ros2-engineer 소유이고, `Event` 목록과 칸 목록 파일은 전이 표의 일부라 px4-engineer 승인 대상이다. 이 승인 규칙을 `docs-for-agent/file-ownership.md`의 "idsim_mission의 승인 규칙"에 한 줄 더하는 것은 architect가 계측 PR(B8)에 자기 커밋으로 넣는다(그 파일은 소유와 승인 규칙을 정하는 문서라 소유 경계의 결정권자가 고친다). 테스트 실행 파일 통합은 test-engineer의 구조 승인 대상이다.
+- 소유: `transition.hpp`는 ros2-engineer 소유이고, `Event` 목록과 칸 목록 파일은 전이 표의 일부라 px4-engineer 승인 대상이다. 이 승인 규칙을 `docs-for-agent/file-ownership.md`의 "idsim_mission의 승인 규칙"에 한 줄 더하는 것은 architect가 계측 PR(B8)에 자기 커밋으로 넣는다(U16. 그 파일의 소유자는 architect다). 테스트 실행 파일 통합은 test-engineer의 구조 승인 대상이다.
 - 줄과 분기 커버리지는 게이트로 쓰지 않는다. 변이 확인은 일회성 감사로 한다.
 
 근거
@@ -373,10 +378,10 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 | --- | --- | --- | --- |
 | B | 1b의 무효 사례로 한다(1a의 GOTO 사례는 1b에서 유효하므로 쓰지 않는다): 항목 없는 미션 `[]`, 첫 항목이 아닌 TAKEOFF, `[LAND, GOTO]`, 마지막이 아닌 RTL, `[RTL, ...]` 여러 항목, TRACK_ENTITY의 0 `offset`, 형식이 틀린 `target_id`, 기본값 TRACK_ENTITY 서브메시지 | 사례마다 ABORTED, INVALID_MISSION, 비행 없음 | 지상 |
 | C, A, D, T | 1a 그대로 | 1a 그대로 | 1a 그대로 |
-| F1 | `[TAKEOFF 5 m, GOTO x 3, LAND]`(한 변 10 m) | 웨이포인트 도달(정답 판정), 항목 순서, 착륙 후 disarm. b의 표본(R2) | 지상 DISARMED |
+| F1 | `[TAKEOFF 5 m, GOTO x 3, LAND]`(한 변 10 m) | waypoint 도달(정답 판정), 항목 순서, 착륙 후 disarm. b의 표본(R2) | 지상 DISARMED |
 | F2 | `[TAKEOFF, GOTO, TRACK_ENTITY]`, 표적 속도 1-2 m/s | 표적 접근, 공중 종료의 SUCCEEDED와 Hold(`HOLD_AIRBORNE`) | 공중 Hold |
 | F3 | `[GOTO, RTL]`(F2가 남긴 Hold에서 공중 시작, RTL `timeout` 60 s) | 공중 시작, RTL 완료(착륙 위치, disarm). `R_home`의 표본(R4) | 지상 DISARMED |
-| F4 | 합친 미션(U13) `[TAKEOFF 5 m, GOTO x 2, TRACK_ENTITY, RTL]`. 표적은 F2와 같은 표적(`loop` true), RTL `timeout` 60 s | roadmap 1b 목표 그대로의 미션 하나: 웨이포인트 도달(정답 판정, b의 표본), 표적 접근, RTL 착륙 위치(R4), 착륙 후 disarm | 지상 DISARMED |
+| F4 | 합친 미션(U13) `[TAKEOFF 5 m, GOTO x 2, TRACK_ENTITY, RTL]`. 표적은 F2와 같은 표적(`loop` true. 시작 위상은 앞 비행의 시간에 따라 달라진다), RTL `timeout` 60 s | roadmap 1b 목표 그대로의 미션 하나: waypoint 도달(정답 판정, b의 표본), 표적 접근, RTL 착륙 위치(R4), 착륙 후 disarm | 지상 DISARMED |
 
 - B의 구성: 사례를 순서대로 하나씩 보내 각각 ABORTED, INVALID_MISSION을 확인한다. DISARMED 유지와 `never_armed` 단정은 첫 goal 전송부터 끝까지 한 구간에 한 번 건다. 거부가 아닌 결과가 나오면 즉시 실패하고 비상 정리한다. 규칙 하나당 통합 사례 하나가 원칙이고 조합의 완전성은 `validate_mission_contract` 단위 테스트가 덮는다. `[TAKEOFF, TAKEOFF]`는 "첫 항목이 아닌 TAKEOFF"와 같은 규칙이라 넣지 않는다.
 - 형식은 맞지만 없는 `target_id`는 INVALID_MISSION이 아니다. 계약상 받아들여 이륙하고 TARGET_LOST로 끝난다. 그래서 B에 넣지 않는다.
@@ -384,7 +389,8 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - TARGET_LOST와 표적 서비스 정지의 통합 시나리오는 1b에 두지 않는다. 단위 테스트(가짜 `FramePort`와 표적 맵)로 덮고 계약 문장의 근거는 [단위 테스트]로 적는다.
 - `config/fleet.yaml`의 기체 1을 (6, -3, 0)에 스폰해 스모크 S2가 NavSat 변환의 수평 반전을 가려낸다(S2-a. 반전이면 수평 오차가 약 13.4 m라 0.5 m 허용으로 실패한다). 1a 시나리오 A, C, D, T는 위치와 무관한 미션이다.
 - sitl은 전용 fleet 파일 `tests/sitl/fleet.yaml`(test-engineer 소유. F2 표적 포함)을 `sim_stack.sh up --fleet`으로 쓴다. 개발용 `config/fleet.yaml`의 `targets`는 시연용 하나 또는 빈 목록이다(sim-engineer, test-engineer가 정한다). 개발 fleet을 고쳐도 CI 시나리오 기하가 바뀌지 않게 하려는 것이다.
-- 시간 규칙: 시나리오마다 항목 `timeout` 합 + 마진이 비행당 상한(ROS 시각 3분)을 넘지 않음을 단위 테스트가 단정한다. RTF가 1 미만이면 `SITL_PYTEST_TIMEOUT`(벽시계)은 올려도 되고 판정의 ROS 시각 한도는 올리지 않는다. CI `sitl` job의 목표는 15분이다(U11). 넘으면 먼저 비행 사이에 겹치는 구간(F1과 F4의 순회처럼 같은 판정을 두 비행이 보는 부분, U13), 순회 waypoint 수, Hold 유지 시간을 줄인다. 경계 상황을 보는 F2의 공중 종료와 F3의 공중 시작은 빼지 않는다. 그래도 넘으면 측정값과 함께 사용자에게 올린다. 판정 기준을 느슨하게 해서 줄이지 않는다.
+- TRACK_ENTITY의 `timeout`은 표적 위상과 무관하게 잡는다. `loop` 표적의 위상은 앞 시나리오의 소요 시간에 따라 달라지므로(F2, F4), 항목 시작점(직전 GOTO 목표)에서 loop 궤적 위 가장 먼 점까지의 거리를 따라잡는 시간에 완료 마진을 더한 값으로 둔다. 접근 속도와 마진의 값은 [추정]이고 test-engineer가 미션 YAML 주석에 근거와 함께 적는다.
+- 시간 규칙: 시나리오마다 항목 `timeout` 합 + 마진이 비행당 상한(ROS 시각 3분)을 넘지 않음을 단위 테스트가 단정한다. 같은 단위 테스트가 TRACK_ENTITY의 `timeout`이 `tests/sitl/fleet.yaml`의 궤적에서 계산한 최원점 기준 값 이상임을 단정한다. RTF가 1 미만이면 `SITL_PYTEST_TIMEOUT`(벽시계)은 올려도 되고 판정의 ROS 시각 한도는 올리지 않는다. CI `sitl` job의 목표는 15분이다(U11). 넘으면 겹치는 비행 구간 -> 순회 waypoint 수 -> Hold 유지 시간 순으로 줄인다(U15). 겹치는 비행 구간은 F1과 F4의 순회처럼 같은 판정을 두 비행이 보는 부분이다. 경계 상황을 보는 F2의 공중 종료와 F3의 공중 시작은 빼지 않는다. 그래도 넘으면 측정값과 함께 사용자에게 올린다. 판정 기준을 느슨하게 해서 줄이지 않는다.
 - [추정] 1b 추가 뒤 `run_sitl.sh`는 약 5.5-7분(F1 약 45 s, F2 약 40 s, F3 약 40 s, F4 약 75 s, B 약 11 s), CI `sitl` job은 보통 약 9.5-10.5분, 가장 나쁜 조합(pull 캐시 없음, ros_ws 빌드 최장)에서 약 14-14.5분이다. 근거는 1a 실행 기록의 이정표와 최근 sitl 실행의 step 시각이고, 순회, 표적 접근, RTL 구간은 실측 전 추정이다. 인프라 추가(새 서비스 둘, 월드 생성, `idsim_sim` 빌드)는 20초 아래다. 1b 첫 로컬 보정 실행(`--repeat 30`)의 값으로 교체한다. RTF가 0.7로 떨어지면 가장 나쁜 조합이 약 16분으로 15분을 넘는다. 15분을 넘으면 위 시간 규칙의 순서를 따른다.
 
 근거
@@ -450,8 +456,8 @@ U6의 산출물 최소 원칙을 1b에도 쓴다. 결과는 PR 본문과, 상수
 | S2-a | 원점에서 떨어진 스폰에서 `sensor_gps` 위경도와 LOCAL2 기대값의 차 | NavSat이 LOCAL2를 쓴다는 [추정]. 반전이면 사슬의 기준 식이 바뀐다(쟁점 4) | sim-engineer, test-engineer | 스모크 S2(기체 1을 (6, -3)에 스폰) |
 | S3-a | `targets` 컨테이너 CPU, `/clock` 수신 주기, `TargetState` 발행 간격 분위수 | Python의 `/clock` 수신 비용과 timer 흔들림(쟁점 3) | sim-engineer | F2와 같은 실행, R3와 함께 |
 | R1 | `ref_*`와 `expect_gps`의 차(수평, 수직, base_link 기준) | 기록(쟁점 5) | test-engineer | sitl gate의 `recorded_only` |
-| R2 | GOTO 도달 사건마다 `t_f`의 부호 있는 초과량 `s`, 성분과 정답 표본 간격 | b(쟁점 5). 부팅 30회 이상, 모형 검증 | test-engineer | F1-F4 trace, 로컬 `--repeat 30` |
-| R3 | `TargetState` 나이, `/clock` 간격, `now - vehicle_status.timestamp` 분위수, 신선하지 않은 tick 비율, F2와 F4 추종 오차 | `target_timeout`, `target_fresh_age`, 표적 접근 L(쟁점 5, 8, 11). 판단 기준: `TargetState` 나이의 99.9% 분위수가 0.1 s를 넘거나 신선하지 않은 tick 비율이 1%를 넘으면 `target_fresh_age`를 0.15 s로 올리고 L을 같은 식으로 함께 올린다(값과 근거를 PR 본문에 남긴다). 추종 오차에 비해 L이 모자라면 판정을 느슨하게 하지 않고 architect에게 올린다 | test-engineer | sitl gate의 `recorded_only`, F2, F4 trace |
+| R2 | GOTO 도달 사건마다 `t_f`의 부호 있는 초과량 `s`, 성분과 정답 표본 간격. TRACK_ENTITY 완료는 `s_track`을 따로 | b와 `s_track` 점검(쟁점 5). 부팅 30회 이상, 두 표본 각각의 모형 검증 | test-engineer | F1-F4 trace, 로컬 `--repeat 30` |
+| R3 | `TargetState` 나이, `/clock` 간격, `now - vehicle_status.timestamp` 분위수, 신선하지 않은 tick 비율, F2와 F4 추종 오차 | `target_timeout`, `target_fresh_age`, 표적 접근 L(쟁점 5, 8, 11). 판단 기준: `TargetState` 나이의 99.9% 분위수가 0.1 s를 넘거나 신선하지 않은 tick 비율이 1%를 넘으면 `target_fresh_age`를 0.15 s로 올리고 L을 같은 식으로 함께 올린다(값과 근거를 PR 본문에 남긴다). 이 전환은 판정의 통과 여부가 아니라 나이 분위수와 tick 비율로 미리 정한 규칙이다. 추종 오차에 비해 L이 모자라면 판정을 느슨하게 하지 않고 architect에게 올린다 | test-engineer | sitl gate의 `recorded_only`, F2, F4 trace |
 | R4 | RTL 착륙 수평 위치와 그 비행 기준점(쟁점 5)의 거리 | `R_home`(쟁점 5). 부팅 30회 이상 | test-engineer | F3, F4 trace, 로컬 `--repeat 30`(R2와 같은 실행) |
 | 공중 시작 | F3 진입 구간의 위치 변화, P4-P5 소요 | 섞임 크기(쟁점 7) | test-engineer | F3 trace |
 | RTL | AUTO_RTL 확인 시간, 착지까지, disarm까지 | RTL `timeout` 60 s(쟁점 9) | test-engineer | F3, F4 trace |
