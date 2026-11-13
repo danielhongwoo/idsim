@@ -499,7 +499,7 @@ idsim/
     qgc.sh           # QGroundControl AppImage 내려받기(버전, sha256 고정), 캐시, 호스트 실행. --stack k로 GCS 포트 선택
   ros_ws/src/
     idsim_interfaces/ # 커스텀 msg/action (미션, 미션 기록 사건, 기체 상태, 표적 상태)와 계약 테스트(golden)
-    idsim_common/     # QoS 프로필, 좌표 변환, 토픽 이름 매핑, 네임스페이스 유틸 (C++ 라이브러리)
+    idsim_common/     # QoS 프로필(PX4, 계약), 좌표 변환과 원점 이동, PX4 토픽 이름 매핑, 계약 이름 조립과 id 검증, 네임스페이스 유틸 (C++ 라이브러리)
     idsim_mission/    # 미션 실행 노드 Executor (Offboard 제어, lifecycle 컴포넌트)와 ops-N의 launch. 상태기(core)는 ROS와
                       # px4_msgs에 비의존인 순수 C++ 클래스이고 PX4 enum의 해석은 px4/ 디렉터리에만 둔다
     idsim_telemetry/  # 수집기, WebSocket 발행
