@@ -8,7 +8,7 @@ docs/smoke-test.md를 따른다.
   check_px4.py --ns px4_1 --system-id 2 --timeout 30   # embedded, px4-out
   check_px4.py --ns px4_1 --system-id 2 --timeout 60 --arm   # px4-in
   check_px4.py --ns px4_1 --system-id 2 --timeout 60 \
-      --expect-origin 37.5665 126.978 38.0                     # px4-out (원점 판정 추가)
+      --expect-origin 37.56647297 126.978067914 38.24  # px4-out (원점 판정 추가)
 
 판정 항목
   status_topic     ros2 topic list에서 ^/(<ns>/)?fmu/out/vehicle_status(_v[0-9]+)?$
@@ -94,13 +94,11 @@ TARGET_COMPONENT = 1
 SOURCE_SYSTEM = 254
 SOURCE_COMPONENT = 1
 
-# 원점 판정 허용 오차. 아래 실측은 기대값을 원점 고도로 둔 것이라 base_link 높이가 오차에
-# 들어 있었다. 지금 기대값은 base_link 고도이므로 수직은 잡음만 남는다. 2026-11-10 실측(v1.17.0, x500, 바닥에 놓인 상태, 90초 2666개, 약 30 Hz):
-# 수평 오차 최대 0.070 m(평균 0.025), 고도 38.098-38.338(평균 38.222, 원점 38.0). 고도 평균의
-# 0.22 m는 navsat가 붙은 base_link 높이, 나머지는 시간에 따라 커지지 않는 잡음이다(사분위별
-# 최대가 일정). x500 model.sdf의 navsat에는 noise 요소가 없으므로 잡음은 PX4 gz_bridge 쪽에서
-# 더해지는 것으로 추정한다(소스 미확인). 수평 0.5 m는 실측 최대의 약 7배이면서 원점 소수
-# 다섯째 자리(약 1.1 m) 차이를 잡고, 수직 1.0 m는 base_link 높이와 잡음을 합한 0.34 m의 약 3배다.
+# 원점 판정 허용 오차. 기대값은 기체별 base_link(GNSS 센서) 위치이므로 오차는 잡음만 남는다.
+# 실측(B3 스모크: 기체 1을 (6, -3)에 스폰, 3D fix 표본 10): 수평 최대 0.051 m, 수직 최대
+# 0.063 m. 잡음은 x500 model.sdf의 navsat에 noise 요소가 없으므로 PX4 gz_bridge 쪽에서
+# 더해지는 것으로 추정한다(소스 미확인). 수평 0.5 m는 실측 최대의 약 10배이면서 원점 소수
+# 다섯째 자리(약 1.1 m) 차이를 잡고, 수직 1.0 m는 실측 최대의 약 16배다.
 # 원점이 아예 적용되지 않으면 기본 월드(취리히, 47.398, 8.546) 값이 나와 수천 km 차이다.
 ORIGIN_TOL_H_M = 0.5
 ORIGIN_TOL_V_M = 1.0
