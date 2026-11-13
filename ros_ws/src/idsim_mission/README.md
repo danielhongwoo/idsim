@@ -6,7 +6,7 @@
 
 | 대상 | 내용 | 의존 | 소유 | 단계 |
 | --- | --- | --- | --- | --- |
-| `idsim_mission_core` | 미션 검증, `TYPE_*` 분류, 상태기(`MissionRunner`), 종료 결과 | 없음(C++17 표준 라이브러리만) | ros2-engineer. `core/snapshot.hpp`와 상태기 전이 표는 px4-engineer 필수 승인 | P3b, P4 |
+| `idsim_mission_core` | 미션 검증, `TYPE_*` 분류, 상태기(`MissionRunner`), 종료 결과, 전이 관측(`core/transition.hpp`) | 없음(C++17 표준 라이브러리만) | ros2-engineer. `core/snapshot.hpp`, 상태기 전이 표, `Event` 목록과 칸 목록(`test/transition_cells.tsv`)은 px4-engineer 필수 승인 | P3b, P4 |
 | `idsim_mission_px4` | px4_msgs -> snapshot 변환, 명령 목록 -> `VehicleCommand`와 setpoint | core, `idsim_common`, px4_msgs | px4-engineer(`include/idsim_mission/px4/`, `src/px4/`, `test/px4/`) | P3c |
 | `mission_executor_component` | lifecycle 노드 껍질 `idsim_mission::MissionExecutorNode`(컴포넌트), action 서버, 사건 발행, 계약 메시지 변환(`node/conversion.hpp`) | core, px4 어댑터, idsim_interfaces, rclcpp_lifecycle, rclcpp_action, rclcpp_components | ros2-engineer | P3d |
 
@@ -64,6 +64,7 @@ action 서버(P3d)
 - 정리 중 한 tick의 순서(decisions.md 쟁점 3 M6): (1) 상태 끊김 (2) 공중 DISARMED (3) 정리할 것 없음 (4) 정리의 상한(정리 시작 tick부터 `hold_confirm_timeout + 3 x mode_confirm_timeout`, 기본 12 s) (5) 그 분기의 실행. 상한 tick에는 발행을 멈추고 대기 명령을 지운 뒤 지상이면 disarm, 공중이면 NAV_LAND를 한 번 보내고 끝낸다. 식별이 어긋난 표본의 tick이면 직전 분기로 정한다.
 - 비행 중 감시 표로 끝낼 때는 정리 분기에 들어가지 않는다. 순위 2는 arm을 보냈으면, 순위 3, 6, 7, 8은 arm을 보냈고 첫 ARMED 표본 뒤 landed false를 본 적이 없고 그 tick의 landed가 true이면 강제가 아닌 disarm을 한 번 보낸다(`monitor_sends_disarm`). P6과 setpoint 항목이 같은 종료 함수(`end_by_monitor`)를 쓴다.
 - 시간 경계: 경과가 값 이상(`>=`)이면 만료다.
+- 전이 관측(`docs-for-agent/plan-1b-mission-target/decisions.md` 쟁점 13): 전이를 일으키는 함수(`terminate`, `begin_cleanup`, `start_signal`, `enter_prep`, `start_item`, `complete_item`, `enter_ground`, `enter_air`, `enter_air_land`, `finish`)는 첫 인자로 사건 꼬리표 `Event`를 받는다. 상태 key 성분(`stage_`, `prep_`, `item_index_`, `cause_`, `branch_`)은 `set_state` 한 곳에서만 쓴다. 생성자의 `TransitionObserver`(기본 nullptr. 노드는 넘기지 않는다)가 있으면 tick마다 (from, 사건, to, reason, 함께 참이던 사건) 기록을 넘기고, 꼬리표 없이 상태가 바뀌면 untagged 기록을 넘긴다. 겹침을 실으려고 setpoint 항목은 감시 표, ITEM_TIMEOUT, 완료의 조건을 먼저 계산해 둔다(상태를 바꾸지 않는 식이고 고르는 순서는 그대로다). `evaluate_monitor`는 맞는 행 전부를 `matched`에 함께 싣는다(고르는 행은 그대로 첫 행이다). observer가 없으면 기록을 만들지 않고 출력은 같다.
 - `termination`은 정확히 한 번 나오고, 그 뒤의 step은 빈 출력이다(명령, setpoint, feedback, 종료 없음).
 - "N회 연속"은 서로 다른 vehicle_status 표본 N개다. timestamp가 직전 표본보다 크지 않은 표본은 건너뛴다(`SampleCounter`).
 - 대기 중인 명령은 한 번에 하나다. 분기나 단계가 바뀌는 tick에 이전 명령의 재전송을 지운다(그 tick에 이미 쌓인 재전송도 지운다). ack는 대기 중인 명령의 command 묶음이고 첫 전송 tick 뒤에 받은 것만 본다.
@@ -132,11 +133,14 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 
 ## 테스트
 
-`test/`의 core 단위 테스트는 gtest와 core만 링크한다(노드와 DDS 참가자를 만들지 않는다). `test/px4/`는 어댑터(px4-engineer), `test/node/`는 노드 껍질 테스트다.
+`test/`의 core 단위 테스트는 gtest와 core만 링크한다(노드와 DDS 참가자를 만들지 않는다). `test/px4/`는 어댑터(px4-engineer), `test/node/`는 노드 껍질 테스트다. runner를 쓰는 테스트 파일(`test_mission_validation.cpp`, `test_runner_*.cpp`)과 `test_transition_coverage.cpp`는 gtest 실행 파일 하나 `test_runner`로 묶는다(전이 칸 대조가 모든 상태기 테스트의 관측을 모아야 한다). `test_termination`, `test_monitor_table`, `test_confirm_rules`는 runner를 쓰지 않아 따로 둔다.
 
 | 파일 | 내용 |
 | --- | --- |
-| `runner_harness.hpp` | tick 열 헬퍼(20 Hz 흉내, 합성 timestamp, 가짜 PX4 반응, `feed`로 표본 열 주입, 종료 불변식: 정확히 1건, result == 종료 사건, 종료 뒤 빈 출력) |
+| `runner_harness.hpp` | tick 열 헬퍼(20 Hz 흉내, 합성 timestamp, 가짜 PX4 반응, `feed`로 표본 열 주입, 종료 불변식: 정확히 1건, result == 종료 사건, 종료 뒤 빈 출력). 만드는 runner에 전이 기록기를 넘긴다 |
+| `transition_recorder.hpp` | 전이 기록기(관측한 칸과 그 칸을 처음 낸 테스트, untagged 기록) |
+| `transition_cells.tsv` | 1a 전이 칸 목록(covered, impossible과 이유, uncovered, 겹침 칸) |
+| `test_transition_coverage.cpp` | 칸 목록 파일 형식, `Event` 이름 집합 == 목록의 사건 집합, 기록기를 켜고 끈 두 실행의 출력이 같음, `Environment::TearDown`의 대조(관측 == covered, impossible 미관측, 목록 밖 칸 미관측, untagged 0. 일부만 돌리면 건너뛴다). `IDSIM_TRANSITION_CELLS_DUMP=<경로>`이면 관측한 칸을 같은 형식으로 쓴다 |
 | `test_mission_validation.cpp` | 검증 규칙, 1a 제한, `TYPE_*` 분류 전수, `screen_goal` 순서 |
 | `test_termination.cpp` | status와 reason 전수 대응표, reason 값, 종료 결과 == 종료 사건 |
 | `test_monitor_table.cpp` | 감시 표 순위마다 한 건, 같은 tick 동률 24쌍, 순위 5의 가지, 행 수와 parametrize 수, 감시 표로 끝낼 때의 disarm 술어(8행 전수 x 입력 16조합) |

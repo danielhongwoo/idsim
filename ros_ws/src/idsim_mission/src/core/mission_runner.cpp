@@ -29,8 +29,10 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "idsim_mission/core/mission_validation.hpp"
+#include "idsim_mission/core/transition.hpp"
 
 namespace idsim_mission::core
 {
@@ -59,6 +61,11 @@ struct MissionRunner::Tick
   bool stamp_queried{false};
   bool stamp_ok{false};
   std::uint64_t stamp_us{0};
+  // 전이 관측(observer가 있을 때만 쓴다). checkpoint는 마지막으로 닫은 기록의 to(처음은 tick 시작).
+  std::vector<TransitionEdge> edges;
+  TransitionEdge open_edge;
+  bool open{false};
+  StateKey checkpoint;
 };
 
 namespace
@@ -71,10 +78,36 @@ bool position_finite(const PositionSample & p)
 
 const char * arming_name(Arming arming) { return arming == Arming::kArmed ? "ARMED" : "DISARMED"; }
 
+Event monitor_event(MonitorRow row)
+{
+  switch (row) {
+    case MonitorRow::kTimestampFailure:
+      return Event::kMonitorTimestampFailure;
+    case MonitorRow::kIdentityMismatch:
+      return Event::kMonitorIdentityMismatch;
+    case MonitorRow::kLinkLost:
+      return Event::kMonitorLinkLost;
+    case MonitorRow::kDisarmedInAir:
+      return Event::kMonitorDisarmedInAir;
+    case MonitorRow::kDisarmedOnGround:
+      return Event::kMonitorDisarmedOnGround;
+    case MonitorRow::kModeFailsafe:
+      return Event::kMonitorModeFailsafe;
+    case MonitorRow::kModeExternal:
+      return Event::kMonitorModeExternal;
+    case MonitorRow::kModeDefensive:
+      return Event::kMonitorModeDefensive;
+  }
+  return Event::kMonitorTimestampFailure;
+}
+
+bool in_flow_stage(Stage stage) { return stage == Stage::kPreparing || stage == Stage::kItem; }
+
 }  // namespace
 
-MissionRunner::MissionRunner(MissionSpec mission, Config config, std::int64_t accept_ns)
-: accept_ns_(accept_ns), mission_(std::move(mission)), config_(config)
+MissionRunner::MissionRunner(
+  MissionSpec mission, Config config, std::int64_t accept_ns, TransitionObserver * observer)
+: accept_ns_(accept_ns), observer_(observer), mission_(std::move(mission)), config_(config)
 {
   mission_valid_ = validate_mission(mission_).valid;
 }
@@ -110,10 +143,24 @@ StepOutput MissionRunner::step(
     return out;
   }
   Tick t(input, snapshot, clock, out);
+  t.checkpoint = state_key();
+  step_tick(t);
+  flush_records(t);
+  return out;
+}
+
+void MissionRunner::step_tick(Tick & t)
+{
   if (!mission_valid_) {
-    terminate(t, aborted(Reason::kInternal, "mission did not pass validate_mission"));
-    return out;
+    terminate(
+      Event::kInvalidMission, t,
+      aborted(Reason::kInternal, "mission did not pass validate_mission"));
+    if (t.input.cancel_requested) {
+      note_ignored_cancel(t);
+    }
+    return;
   }
+  const bool in_flow_at_start = in_flow_stage(stage_);
   switch (stage_) {
     case Stage::kPreparing:
       step_preparing(t);
@@ -128,11 +175,12 @@ StepOutput MissionRunner::step(
       break;
   }
   // 취소는 실패와 완료 뒤에 본다. 정리 중(취소, ITEM_TIMEOUT, PREPARING 실패)이면 무시한다.
-  if (input.cancel_requested && (stage_ == Stage::kPreparing || stage_ == Stage::kItem)) {
-    begin_cleanup(t, CleanupCause::kCancel, Reason::kNone, "");
+  if (t.input.cancel_requested && (stage_ == Stage::kPreparing || stage_ == Stage::kItem)) {
+    begin_cleanup(Event::kCancel, t, CleanupCause::kCancel, Reason::kNone, "");
+  } else if (t.input.cancel_requested && in_flow_at_start) {
+    note_ignored_cancel(t);
   }
   finalize(t);
-  return out;
 }
 
 StepOutput MissionRunner::begin_cancel_without_stage(
@@ -143,8 +191,10 @@ StepOutput MissionRunner::begin_cancel_without_stage(
     return out;
   }
   Tick t(input, snapshot, clock, out);
-  begin_cleanup(t, CleanupCause::kCancel, Reason::kNone, "");
+  t.checkpoint = state_key();
+  begin_cleanup(Event::kCancel, t, CleanupCause::kCancel, Reason::kNone, "");
   finalize(t);
+  flush_records(t);
   return out;
 }
 
@@ -166,7 +216,7 @@ void MissionRunner::step_preparing(Tick & t)
     if (arm_sent_) {
       send_final(t, CommandKind::kDisarm, detail);
     }
-    terminate(t, aborted(Reason::kInternal, detail));
+    terminate(Event::kPreparingIdentityMismatch, t, aborted(Reason::kInternal, detail));
     return;
   }
   switch (prep_) {
@@ -193,7 +243,8 @@ void MissionRunner::prepare_wait_ready(Tick & t)
   // P0: 식별 불일치가 확정되면 그 tick에 NOT_READY.
   if (s != nullptr && s->identity == IdentityCheck::kMismatch) {
     terminate(
-      t, aborted(Reason::kNotReady, "vehicle_status identity mismatch: " + s->identity_detail));
+      Event::kReadyIdentityMismatch, t,
+      aborted(Reason::kNotReady, "vehicle_status identity mismatch: " + s->identity_detail));
     return;
   }
   std::string waiting;
@@ -217,7 +268,8 @@ void MissionRunner::prepare_wait_ready(Tick & t)
       const std::string need =
         takeoff_first ? "TAKEOFF needs landed and DISARMED" : "LAND needs not landed and ARMED";
       terminate(
-        t, aborted(
+        Event::kPreconditionFailed, t,
+        aborted(
              Reason::kPreconditionFailed, need + " (landed=" + (landed ? "true" : "false") +
                                             ", arming=" + arming_name(s->arming) + ")"));
       return;
@@ -236,7 +288,8 @@ void MissionRunner::prepare_wait_ready(Tick & t)
   }
   if (elapsed(t, accept_ns_) >= config_.timeouts.ready_timeout_ns) {
     terminate(
-      t, aborted(
+      Event::kReadyTimeout, t,
+      aborted(
            Reason::kNotReady,
            "ready_timeout: waiting for " + (waiting.empty() ? std::string("nothing") : waiting)));
     return;
@@ -245,13 +298,13 @@ void MissionRunner::prepare_wait_ready(Tick & t)
     return;
   }
   if (takeoff_first) {
-    start_signal(t);
+    start_signal(Event::kReadyTakeoff, t);
   } else {
-    start_item(t, 0);
+    start_item(Event::kReadyLand, t, 0);
   }
 }
 
-void MissionRunner::start_signal(Tick & t)
+void MissionRunner::start_signal(Event event, Tick & t)
 {
   // P3: 목표점은 이 tick의 위치에서 z만 -height_m. yaw는 항상 유한값(MODE_KEEP이면 지금 heading).
   const PositionSample * const p = t.position;
@@ -269,7 +322,15 @@ void MissionRunner::start_signal(Tick & t)
   publish_count_ = 0;
   signal_start_ns_ = t.input.now_ns;
   signal_start_tick_ = t.input.tick;
-  prep_ = PrepStep::kSignal;
+  enter_prep(event, t, PrepStep::kSignal);
+}
+
+void MissionRunner::enter_prep(Event event, Tick & t, PrepStep prep)
+{
+  tag(event, t);
+  StateKey next = state_key();
+  next.prep = prep;
+  set_state(next);
 }
 
 void MissionRunner::prepare_signal(Tick & t)
@@ -277,7 +338,7 @@ void MissionRunner::prepare_signal(Tick & t)
   // P4: 발행 10회 이상이고 발행 시작 뒤에 받은 failsafe_flags가 신호 있음.
   if (elapsed(t, signal_start_ns_) >= config_.timeouts.offboard_signal_timeout_ns) {
     begin_cleanup(
-      t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      Event::kSignalTimeout, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
       "offboard_signal_timeout: offboard signal not confirmed (published " +
         std::to_string(publish_count_) + ")");
     return;
@@ -285,7 +346,7 @@ void MissionRunner::prepare_signal(Tick & t)
   const bool signal_ok = t.flags != nullptr && t.flags->received_tick > signal_start_tick_ &&
                          !t.flags->offboard_signal_lost;
   if (publish_count_ >= kOffboardSignalMinPublishes && signal_ok) {
-    prep_ = PrepStep::kOffboard;
+    enter_prep(Event::kSignalConfirmed, t, PrepStep::kOffboard);
     step_start_ns_ = t.input.now_ns;
     counter_.reset();
     send(t, CommandKind::kSetModeOffboard);
@@ -301,19 +362,19 @@ void MissionRunner::prepare_offboard(Tick & t)
   }
   if (ack.fresh && is_rejection(ack.result)) {
     begin_cleanup(
-      t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      Event::kOffboardRejected, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
       std::string("DO_SET_MODE(OFFBOARD) rejected: ") + ack_result_name(ack.result));
     return;
   }
   if (elapsed(t, step_start_ns_) >= config_.timeouts.mode_confirm_timeout_ns) {
     begin_cleanup(
-      t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      Event::kOffboardTimeout, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
       "mode_confirm_timeout: OFFBOARD not confirmed");
     return;
   }
   if (counter_.count() >= kConfirmSamples) {
     clear_pending();
-    prep_ = PrepStep::kArm;
+    enter_prep(Event::kOffboardConfirmed, t, PrepStep::kArm);
     step_start_ns_ = t.input.now_ns;
     counter_.reset();
     send(t, CommandKind::kArm);
@@ -352,7 +413,7 @@ void MissionRunner::prepare_arm(Tick & t)
     clear_pending();
   }
   // 같은 tick의 순서: 감시 표(순위 1-8) -> 확인 기한 -> 확인(3회 연속) -> 취소(step).
-  if (monitor_flight(t, "preparing (arm confirm)")) {
+  if (monitor_flight(t, "preparing (arm confirm)", {})) {
     return;
   }
   if (trusted_status_.has_value()) {
@@ -364,12 +425,12 @@ void MissionRunner::prepare_arm(Tick & t)
   }
   if (elapsed(t, first_armed_ns_) >= config_.timeouts.mode_confirm_timeout_ns) {
     begin_cleanup(
-      t, CleanupCause::kPreparingFailure, Reason::kArmRejected,
+      Event::kArmConfirmTimeout, t, CleanupCause::kPreparingFailure, Reason::kArmRejected,
       "ARMED observed but ARMED in OFFBOARD not confirmed within mode_confirm_timeout");
     return;
   }
   if (counter_.count() >= kConfirmSamples) {
-    start_item(t, 0);
+    start_item(Event::kArmConfirmed, t, 0);
   }
 }
 
@@ -381,13 +442,14 @@ void MissionRunner::prepare_arm_before_armed(Tick & t)
   const AckView ack = take_ack(t);
   if (ack.fresh && ack.result != AckResult::kTemporarilyRejected && is_rejection(ack.result)) {
     begin_cleanup(
-      t, CleanupCause::kPreparingFailure, Reason::kArmRejected,
+      Event::kArmRejected, t, CleanupCause::kPreparingFailure, Reason::kArmRejected,
       std::string("ARM rejected: ") + ack_result_name(ack.result));
     return;
   }
   if (elapsed(t, step_start_ns_) >= config_.timeouts.arm_timeout_ns) {
     begin_cleanup(
-      t, CleanupCause::kPreparingFailure, Reason::kArmRejected, "arm_timeout: ARMED not observed");
+      Event::kArmTimeout, t, CleanupCause::kPreparingFailure, Reason::kArmRejected,
+      "arm_timeout: ARMED not observed");
     return;
   }
   resend_due(t);
@@ -411,7 +473,8 @@ const StatusSample * MissionRunner::monitored_status(const Tick & t)
   return &*trusted_status_;
 }
 
-bool MissionRunner::monitor_flight(Tick & t, const std::string & label)
+bool MissionRunner::monitor_flight(
+  Tick & t, const std::string & label, const std::vector<Event> & later)
 {
   // 비행 중 감시 표(rules.hpp). 순위 1을 보려고 timestamp를 판정 맨 앞에서 묻는다. 끝냈으면 true.
   MonitorInput monitor;
@@ -429,7 +492,7 @@ bool MissionRunner::monitor_flight(Tick & t, const std::string & label)
   }
   const std::optional<MonitorVerdict> verdict = evaluate_monitor(monitor);
   if (verdict.has_value()) {
-    end_by_monitor(t, *verdict, label);
+    end_by_monitor(t, *verdict, label, later);
     return true;
   }
   // 순위 5의 이력: 이력 구간 안에서 받은 표본의 failsafe만 남긴다. 지금 표본은 판정 뒤에 넣는다.
@@ -440,11 +503,23 @@ bool MissionRunner::monitor_flight(Tick & t, const std::string & label)
 }
 
 void MissionRunner::end_by_monitor(
-  Tick & t, const MonitorVerdict & verdict, const std::string & label)
+  Tick & t, const MonitorVerdict & verdict, const std::string & label,
+  const std::vector<Event> & later)
 {
   // 감시 표의 행으로 끝낸다. 정리 분기에 들어가지 않고 그 tick에 발행을 멈춘다. P6과 setpoint
   // 항목이 같이 쓴다. disarm을 보내는 행이면 확인 없이 한 번만 보낸다(끝나는 tick의 명령은 늘
   // 하나다).
+  const Event event = monitor_event(verdict.row);
+  if (observer_ != nullptr) {
+    std::vector<Event> also_true;
+    for (const MonitorRow row : verdict.matched) {
+      if (row != verdict.row) {
+        also_true.push_back(monitor_event(row));
+      }
+    }
+    also_true.insert(also_true.end(), later.begin(), later.end());
+    tag(event, t, also_true);
+  }
   t.out.commands.clear();
   clear_pending();
   std::string detail = label + ": " + verdict.detail;
@@ -459,15 +534,18 @@ void MissionRunner::end_by_monitor(
   if (verdict.row == MonitorRow::kTimestampFailure && acted_) {
     detail += "; vehicle state unknown, may remain armed on ground";
   }
-  terminate(t, aborted(verdict.reason, detail));
+  terminate(event, t, aborted(verdict.reason, detail));
 }
 
 // ---- 항목 ----
 
-void MissionRunner::start_item(Tick & t, std::uint32_t index)
+void MissionRunner::start_item(Event event, Tick & t, std::uint32_t index)
 {
-  stage_ = Stage::kItem;
-  item_index_ = index;
+  tag(event, t);
+  StateKey next = state_key();
+  next.stage = Stage::kItem;
+  next.item_index = index;
+  set_state(next);
   item_start_ns_ = t.input.now_ns;
   item_start_tick_ = t.input.tick;
   if (index != 0 || !armed_seen_) {
@@ -482,16 +560,16 @@ void MissionRunner::start_item(Tick & t, std::uint32_t index)
   }
 }
 
-void MissionRunner::complete_item(Tick & t)
+void MissionRunner::complete_item(Event event, Tick & t)
 {
   ++items_completed_;
   const std::uint32_t next = item_index_ + 1;
   if (next >= mission_.items.size()) {
     // validate_mission이 마지막을 LAND로 두므로 setpoint 항목에서는 닿지 않는다.
-    terminate(t, succeeded());
+    terminate(event, t, succeeded());
     return;
   }
-  start_item(t, next);
+  start_item(event, t, next);
 }
 
 void MissionRunner::step_item(Tick & t)
@@ -505,30 +583,44 @@ void MissionRunner::step_item(Tick & t)
 
 void MissionRunner::step_setpoint_item(Tick & t)
 {
-  // 감시 표를 먼저 본다(같은 tick이면 감시 표의 행이 ITEM_TIMEOUT과 완료를 이긴다).
-  if (monitor_flight(t, item_label())) {
-    return;
-  }
+  // 감시 표를 먼저 본다(같은 tick이면 감시 표의 행이 ITEM_TIMEOUT과 완료를 이긴다). 그 뒤는
+  // ITEM_TIMEOUT -> 완료다. 셋의 조건은 상태를 바꾸지 않는 식이라 먼저 계산해 겹침 칸에 싣는다.
   const ItemSpec & item = current_item();
-  if (elapsed(t, item_start_ns_) >= item.timeout.to_ns()) {
-    begin_cleanup(t, CleanupCause::kItemTimeout, Reason::kItemTimeout, item_label() + " timeout");
-    return;
-  }
+  const bool timed_out = elapsed(t, item_start_ns_) >= item.timeout.to_ns();
+  bool completed = false;
+  Event completion = Event::kLoiterElapsed;
   if (item.type == item_type::kTakeoff) {
     // validate_mission이 TAKEOFF를 첫 항목에만 두므로 takeoff_target_z_는 이 항목의 목표다.
     const PositionSample * const p = t.position;
-    if (
-      p != nullptr && p->z_valid && std::isfinite(p->z) &&
-      std::abs(p->z - takeoff_target_z_) < item.takeoff.acceptance_m) {
-      complete_item(t);
+    completed = p != nullptr && p->z_valid && std::isfinite(p->z) &&
+                std::abs(p->z - takeoff_target_z_) < item.takeoff.acceptance_m;
+    completion = Event::kTakeoffReached;
+  } else if (item.type == item_type::kLoiter) {
+    completed = elapsed(t, item_start_ns_) >= item.loiter.duration.to_ns();
+  }
+  std::vector<Event> later;
+  if (observer_ != nullptr) {
+    if (timed_out) {
+      later.push_back(Event::kItemTimeout);
     }
+    if (completed) {
+      later.push_back(completion);
+    }
+  }
+  if (monitor_flight(t, item_label(), later)) {
     return;
   }
-  if (item.type == item_type::kLoiter) {
-    if (elapsed(t, item_start_ns_) >= item.loiter.duration.to_ns()) {
-      complete_item(t);
+  if (timed_out) {
+    if (completed) {
+      tag(Event::kItemTimeout, t, {completion});
     }
+    begin_cleanup(
+      Event::kItemTimeout, t, CleanupCause::kItemTimeout, Reason::kItemTimeout,
+      item_label() + " timeout");
     return;
+  }
+  if (completed) {
+    complete_item(completion, t);
   }
 }
 
@@ -538,13 +630,15 @@ void MissionRunner::step_land(Tick & t)
   const StatusSample * const s = t.status;
   if (s != nullptr && s->identity == IdentityCheck::kMismatch) {
     terminate(
-      t, aborted(
+      Event::kLandIdentityMismatch, t,
+      aborted(
            Reason::kInternal,
            item_label() + ": vehicle_status identity mismatch: " + s->identity_detail));
     return;
   }
   if (s == nullptr || link_lost(t)) {
-    terminate(t, aborted(Reason::kLinkLost, item_label() + ": vehicle_status lost"));
+    terminate(
+      Event::kLandLinkLost, t, aborted(Reason::kLinkLost, item_label() + ": vehicle_status lost"));
     return;
   }
   const bool landed = t.land != nullptr && t.land->landed;
@@ -561,7 +655,9 @@ void MissionRunner::step_land(Tick & t)
         disarm_class_ = landed ? DisarmClass::kGround : DisarmClass::kAir;
       }
       if (disarm_class_ == DisarmClass::kAir) {
-        terminate(t, aborted(Reason::kFailsafe, item_label() + ": disarmed while not landed"));
+        terminate(
+          Event::kLandDisarmedInAir, t,
+          aborted(Reason::kFailsafe, item_label() + ": disarmed while not landed"));
         return;
       }
       ++land_.disarm_count;
@@ -578,7 +674,8 @@ void MissionRunner::step_land(Tick & t)
       } else if (s->nav != NavMode::kLand) {
         // 확인 뒤: ARMED인 동안 AUTO_LAND를 벗어나면 이탈.
         terminate(
-          t, aborted(
+          Event::kLandLeftMode, t,
+          aborted(
                s->failsafe ? Reason::kFailsafe : Reason::kExternalModeChange,
                item_label() + ": left AUTO_LAND while ARMED"));
         return;
@@ -595,7 +692,8 @@ void MissionRunner::step_land(Tick & t)
     !land_.confirmed &&
     elapsed(t, land_.first_send_ns) >= config_.timeouts.mode_confirm_timeout_ns) {
     terminate(
-      t, aborted(
+      Event::kLandModeTimeout, t,
+      aborted(
            Reason::kModeSwitchFailed,
            item_label() + ": mode_confirm_timeout: AUTO_LAND not confirmed"));
     return;
@@ -605,7 +703,7 @@ void MissionRunner::step_land(Tick & t)
     return;
   }
   if (land_.disarm_count >= kConfirmSamples) {
-    terminate(t, succeeded());
+    terminate(Event::kLandDisarmConfirmed, t, succeeded());
     return;
   }
   // 대비책: landed이고 ARMED인 채 land_disarm_fallback_delay가 지나면 강제가 아닌 disarm.
@@ -646,22 +744,26 @@ void MissionRunner::land_item_timeout(Tick & t, bool landed)
   if (t.status != nullptr && t.status->arming == Arming::kArmed && landed) {
     detail += "; landed and still ARMED";
   }
-  terminate(t, aborted(Reason::kItemTimeout, detail));
+  terminate(Event::kLandItemTimeout, t, aborted(Reason::kItemTimeout, detail));
 }
 
 // ---- 정리(취소, ITEM_TIMEOUT, PREPARING 실패) ----
 
-void MissionRunner::begin_cleanup(Tick & t, CleanupCause cause, Reason reason, std::string detail)
+void MissionRunner::begin_cleanup(
+  Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail)
 {
+  tag(event, t);
   // 분기나 단계가 바뀌는 tick에 이전 명령의 재전송을 지운다(arm 재전송은 이 tick에 멈춘다).
   t.out.commands.clear();
   clear_pending();
   cleanup_phase_ = cause == CleanupCause::kCancel ? FeedbackPhase::kCanceling : current_phase();
-  stage_ = Stage::kCleanup;
-  cause_ = cause;
+  StateKey next = state_key();
+  next.stage = Stage::kCleanup;
+  next.cause = cause;
+  next.branch = Branch::kNone;
+  set_state(next);
   cleanup_reason_ = reason;
   cleanup_detail_ = std::move(detail);
-  branch_ = Branch::kNone;
   cleanup_start_ns_ = t.input.now_ns;
   hold_failed_ = false;
   hold_observed_ = false;
@@ -678,7 +780,7 @@ void MissionRunner::step_cleanup(Tick & t)
     // 아무것도 하지 않았고 판단할 표본도 없다.
     publishing_ = false;
     clear_pending();
-    finish(t, Outcome::kSuccess, "nothing to clean up");
+    finish(Event::kCleanupNoSample, t, Outcome::kSuccess, "nothing to clean up");
     return;
   }
   if (s->identity == IdentityCheck::kMismatch) {
@@ -711,9 +813,9 @@ void MissionRunner::step_cleanup(Tick & t)
     if (choice == CleanupChoice::kGround) {
       std::string what = "vehicle_status lost during ground disarm; disarm not confirmed";
       send_final(t, CommandKind::kDisarm, what);
-      finish(t, Outcome::kLinkLost, what);
+      finish(Event::kCleanupLinkLost, t, Outcome::kLinkLost, what);
     } else {
-      finish(t, Outcome::kLinkLost, "vehicle_status lost");
+      finish(Event::kCleanupLinkLost, t, Outcome::kLinkLost, "vehicle_status lost");
     }
     return;
   }
@@ -721,14 +823,15 @@ void MissionRunner::step_cleanup(Tick & t)
     // (2)
     publishing_ = false;
     clear_pending();
-    finish(t, Outcome::kAirDisarm, "disarmed while not landed");
+    finish(Event::kCleanupAirDisarm, t, Outcome::kAirDisarm, "disarmed while not landed");
     return;
   }
   if (choice == CleanupChoice::kEnd) {
     // (3)
     publishing_ = false;
     clear_pending();
-    finish(t, Outcome::kSuccess, "on ground and DISARMED, arm never sent");
+    finish(
+      Event::kCleanupNothingToDo, t, Outcome::kSuccess, "on ground and DISARMED, arm never sent");
     return;
   }
   if (cleanup_cap_reached(t)) {
@@ -739,14 +842,14 @@ void MissionRunner::step_cleanup(Tick & t)
   // (5)
   if (choice == CleanupChoice::kGround) {
     if (branch_ != Branch::kGround) {
-      enter_ground(t);
+      enter_ground(Event::kEnterGround, t);
       return;
     }
     run_ground(t);
     return;
   }
   if (branch_ != Branch::kAir && branch_ != Branch::kAirLand) {
-    enter_air(t);
+    enter_air(Event::kEnterAir, t);
     return;
   }
   if (branch_ == Branch::kAir) {
@@ -786,12 +889,13 @@ void MissionRunner::end_at_cleanup_cap(Tick & t, bool on_ground)
   publishing_ = false;
   clear_pending();
   t.out.commands.clear();
+  tag(Event::kCleanupCap, t);
   std::string what = "cleanup cap reached (" +
                      std::to_string(cleanup_cap_ns(config_.timeouts) / 1000000) +
                      " ms), last branch " + last_branch;
   if (on_ground) {
     send_final(t, CommandKind::kDisarm, what);
-    finish(t, Outcome::kCapGround, what);
+    finish(Event::kCleanupCap, t, Outcome::kCapGround, what);
     return;
   }
   const bool sent = send_final(t, CommandKind::kNavLand, what);
@@ -802,7 +906,7 @@ void MissionRunner::end_at_cleanup_cap(Tick & t, bool on_ground)
       publish_count_ > 0 ? "; Hold was observed and publishing stopped" : "; Hold was observed";
     what += sent ? ", vehicle stays in Hold if NAV_LAND is lost" : ", vehicle stays in Hold";
   }
-  finish(t, Outcome::kCapAir, what);
+  finish(Event::kCleanupCap, t, Outcome::kCapAir, what);
 }
 
 void MissionRunner::cleanup_with_untrusted_sample(Tick & t)
@@ -821,7 +925,8 @@ void MissionRunner::cleanup_with_untrusted_sample(Tick & t)
       send_final(t, CommandKind::kDisarm, detail);
     }
     terminate(
-      t, cause_ == CleanupCause::kCancel
+      Event::kCleanupIdentityMismatch, t,
+      cause_ == CleanupCause::kCancel
            ? aborted(Reason::kInternal, "cancel: " + detail)
            : aborted(cleanup_reason_, cleanup_detail_ + "; cleanup: " + detail));
     return;
@@ -847,11 +952,14 @@ void MissionRunner::cleanup_with_untrusted_sample(Tick & t)
   }
 }
 
-void MissionRunner::enter_ground(Tick & t)
+void MissionRunner::enter_ground(Event event, Tick & t)
 {
   // 재실측 (2), (3)이 바꿀 수 있는 곳(README.md). 지상 arm 분기에 들어간 tick에 발행 중이면
   // setpoint를 지상 setpoint로 바꾼다. 이미 멈춘 발행은 다시 켜지 않고 disarm만 보낸다.
-  branch_ = Branch::kGround;
+  tag(event, t);
+  StateKey next = state_key();
+  next.branch = Branch::kGround;
+  set_state(next);
   if (publishing_) {
     setpoint_ = ground_setpoint(t);
   }
@@ -874,29 +982,32 @@ void MissionRunner::run_ground(Tick & t)
     std::string what =
       "disarm not confirmed within mode_confirm_timeout (last DISARM ack: " + last_ack + ")";
     send_final(t, CommandKind::kDisarm, what);
-    finish(t, Outcome::kDisarmFailed, what);
+    finish(Event::kGroundDisarmTimeout, t, Outcome::kDisarmFailed, what);
     return;
   }
   if (disarm_confirm_.count() >= kConfirmSamples) {
     publishing_ = false;
     clear_pending();
-    finish(t, Outcome::kSuccess, "disarm confirmed");
+    finish(Event::kGroundDisarmConfirmed, t, Outcome::kSuccess, "disarm confirmed");
     return;
   }
   resend_due(t);
 }
 
-void MissionRunner::enter_air(Tick & t)
+void MissionRunner::enter_air(Event event, Tick & t)
 {
   // 재실측 (2)가 바꿀 수 있는 곳(README.md). 지금 발행 중인 setpoint(지상 분기에서 넘어왔으면 지상
   // setpoint)를 TAKEOFF 목표점으로 되돌리지 않고 유지한 채 Hold를 보낸다.
   if (hold_failed_) {
     // 이 정리에서 Hold가 한 번 실패했으면 공중 재진입은 Land 경로다(decisions.md 쟁점 3 M4). 기준
     // 시각은 다시 들어간 시각이다.
-    enter_air_land(t, hold_failed_why_ + "; air re-entered after Hold failure");
+    enter_air_land(event, t, hold_failed_why_ + "; air re-entered after Hold failure");
     return;
   }
-  branch_ = Branch::kAir;
+  tag(event, t);
+  StateKey next = state_key();
+  next.branch = Branch::kAir;
+  set_state(next);
   clear_pending();
   counter_.reset();
   send(t, CommandKind::kSetModeHold);
@@ -912,25 +1023,29 @@ void MissionRunner::run_air(Tick & t)
       t.status->arming == Arming::kArmed && t.status->nav == NavMode::kHold);
   }
   if (ack.fresh && is_rejection(ack.result)) {
-    enter_air_land(t, std::string("Hold rejected: ") + ack_result_name(ack.result));
+    enter_air_land(
+      Event::kHoldRejected, t, std::string("Hold rejected: ") + ack_result_name(ack.result));
     return;
   }
   if (elapsed(t, branch_first_ns_) >= config_.timeouts.hold_confirm_timeout_ns) {
-    enter_air_land(t, "Hold not confirmed within hold_confirm_timeout");
+    enter_air_land(Event::kHoldTimeout, t, "Hold not confirmed within hold_confirm_timeout");
     return;
   }
   if (counter_.count() >= kConfirmSamples) {
     publishing_ = false;
     clear_pending();
-    finish(t, Outcome::kSuccess, "Hold confirmed");
+    finish(Event::kHoldConfirmed, t, Outcome::kSuccess, "Hold confirmed");
     return;
   }
   resend_due(t);
 }
 
-void MissionRunner::enter_air_land(Tick & t, const std::string & why)
+void MissionRunner::enter_air_land(Event event, Tick & t, const std::string & why)
 {
-  branch_ = Branch::kAirLand;
+  tag(event, t);
+  StateKey next = state_key();
+  next.branch = Branch::kAirLand;
+  set_state(next);
   if (!hold_failed_) {
     hold_failed_why_ = why;  // 재진입 문구가 쌓이지 않게 처음 실패한 이유만 남긴다
   }
@@ -947,46 +1062,50 @@ void MissionRunner::run_air_land(Tick & t)
   if (t.status != nullptr && t.status->nav == NavMode::kLand) {
     publishing_ = false;
     clear_pending();
-    finish(t, Outcome::kHoldFailed, land_path_why_ + "; Land sent, AUTO_LAND observed");
+    finish(
+      Event::kLandPathModeObserved, t, Outcome::kHoldFailed,
+      land_path_why_ + "; Land sent, AUTO_LAND observed");
     return;
   }
   if (elapsed(t, branch_first_ns_) >= config_.timeouts.mode_confirm_timeout_ns) {
     publishing_ = false;
     clear_pending();
-    finish(t, Outcome::kHoldFailed, land_path_why_ + "; Land sent, AUTO_LAND not confirmed");
+    finish(
+      Event::kLandPathTimeout, t, Outcome::kHoldFailed,
+      land_path_why_ + "; Land sent, AUTO_LAND not confirmed");
     return;
   }
   resend_due(t);
 }
 
-void MissionRunner::finish(Tick & t, Outcome outcome, const std::string & what)
+void MissionRunner::finish(Event event, Tick & t, Outcome outcome, const std::string & what)
 {
   if (cause_ != CleanupCause::kCancel) {
     // ITEM_TIMEOUT과 PREPARING 실패: reason은 원래 것을 유지하고 정리 결과는 detail에만 적는다.
-    terminate(t, aborted(cleanup_reason_, cleanup_detail_ + "; cleanup: " + what));
+    terminate(event, t, aborted(cleanup_reason_, cleanup_detail_ + "; cleanup: " + what));
     return;
   }
   switch (outcome) {
     case Outcome::kSuccess:
-      terminate(t, canceled(what));
+      terminate(event, t, canceled(what));
       return;
     case Outcome::kHoldFailed:
-      terminate(t, aborted(Reason::kModeSwitchFailed, "cancel: " + what));
+      terminate(event, t, aborted(Reason::kModeSwitchFailed, "cancel: " + what));
       return;
     case Outcome::kDisarmFailed:
-      terminate(t, aborted(Reason::kDisarmFailed, "cancel: " + what));
+      terminate(event, t, aborted(Reason::kDisarmFailed, "cancel: " + what));
       return;
     case Outcome::kLinkLost:
-      terminate(t, aborted(Reason::kLinkLost, "cancel: " + what));
+      terminate(event, t, aborted(Reason::kLinkLost, "cancel: " + what));
       return;
     case Outcome::kAirDisarm:
-      terminate(t, aborted(Reason::kFailsafe, "cancel: " + what));
+      terminate(event, t, aborted(Reason::kFailsafe, "cancel: " + what));
       return;
     case Outcome::kCapGround:
-      terminate(t, aborted(Reason::kDisarmFailed, "cancel: " + what));
+      terminate(event, t, aborted(Reason::kDisarmFailed, "cancel: " + what));
       return;
     case Outcome::kCapAir:
-      terminate(t, aborted(Reason::kModeSwitchFailed, "cancel: " + what));
+      terminate(event, t, aborted(Reason::kModeSwitchFailed, "cancel: " + what));
       return;
   }
 }
@@ -1016,7 +1135,8 @@ void MissionRunner::finalize(Tick & t)
         std::string("Px4Timestamp unavailable") +
         (acted_ ? "; vehicle state unknown, may remain armed on ground" : "");
       terminate(
-        t, keep_reason ? aborted(cleanup_reason_, cleanup_detail_ + "; " + what)
+        Event::kStampUnavailable, t,
+        keep_reason ? aborted(cleanup_reason_, cleanup_detail_ + "; " + what)
                        : aborted(Reason::kInternal, what));
       return;
     }
@@ -1187,12 +1307,121 @@ bool MissionRunner::query_stamp(Tick & t)
   return t.stamp_ok;
 }
 
-void MissionRunner::terminate(Tick & t, Termination termination)
+void MissionRunner::terminate(Event event, Tick & t, Termination termination)
 {
-  stage_ = Stage::kDone;
+  tag(event, t);
+  StateKey next = state_key();
+  next.stage = Stage::kDone;
+  set_state(next);
   publishing_ = false;
   clear_pending();
   t.out.termination = std::move(termination);
+}
+
+// ---- 전이 관측(transition.hpp) ----
+
+StateKey MissionRunner::state_key() const
+{
+  StateKey key;
+  key.stage = stage_;
+  key.prep = prep_;
+  key.cause = cause_;
+  key.branch = branch_;
+  key.item_index = item_index_;
+  key.item_type = item_index_ < mission_.items.size() ? mission_.items[item_index_].type : 0;
+  return key;
+}
+
+void MissionRunner::set_state(const StateKey & next)
+{
+  stage_ = next.stage;
+  prep_ = next.prep;
+  cause_ = next.cause;
+  branch_ = next.branch;
+  item_index_ = next.item_index;
+}
+
+void MissionRunner::tag(Event event, Tick & t, const std::vector<Event> & also_true)
+{
+  if (observer_ == nullptr) {
+    return;
+  }
+  if (t.open && t.open_edge.event == event && state_key() == t.open_edge.from) {
+    for (const Event e : also_true) {
+      t.open_edge.also_true.push_back(e);
+    }
+    return;
+  }
+  close_record(t);
+  t.open_edge = TransitionEdge{};
+  t.open_edge.tick = t.input.tick;
+  t.open_edge.event = event;
+  t.open_edge.also_true = also_true;
+  t.open_edge.from = state_key();
+  t.open = true;
+}
+
+void MissionRunner::close_record(Tick & t)
+{
+  if (observer_ == nullptr) {
+    return;
+  }
+  const StateKey now = state_key();
+  TransitionEdge edge;
+  if (t.open) {
+    edge = t.open_edge;
+    t.open = false;
+  } else if (now != t.checkpoint) {
+    edge.tick = t.input.tick;
+    edge.tagged = false;
+    edge.from = t.checkpoint;
+  } else {
+    return;
+  }
+  edge.to = now;
+  if (now.stage == Stage::kDone && t.out.termination.has_value()) {
+    edge.terminated = true;
+    edge.status = t.out.termination->status;
+    edge.reason = t.out.termination->reason;
+  }
+  // also_true를 kAllEvents 순서로 두고 중복을 없앤다(칸 비교가 순서에 묶이지 않게).
+  std::vector<Event> sorted;
+  for (const Event e : kAllEvents) {
+    for (const Event a : edge.also_true) {
+      if (a == e && a != edge.event) {
+        sorted.push_back(e);
+        break;
+      }
+    }
+  }
+  edge.also_true = sorted;
+  t.edges.push_back(edge);
+  t.checkpoint = now;
+}
+
+void MissionRunner::note_ignored_cancel(Tick & t)
+{
+  if (observer_ == nullptr) {
+    return;
+  }
+  close_record(t);
+  for (auto it = t.edges.rbegin(); it != t.edges.rend(); ++it) {
+    if (in_flow_stage(it->from.stage) && !in_flow_stage(it->to.stage)) {
+      it->also_true.push_back(Event::kCancel);
+      return;
+    }
+  }
+}
+
+void MissionRunner::flush_records(Tick & t)
+{
+  if (observer_ == nullptr) {
+    return;
+  }
+  close_record(t);
+  for (const TransitionEdge & edge : t.edges) {
+    observer_->on_edge(edge);
+  }
 }
 
 Termination MissionRunner::aborted(Reason reason, std::string detail) const

@@ -21,6 +21,8 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace idsim_mission::core
 {
@@ -116,24 +118,29 @@ Reason monitor_row_reason(MonitorRow row, const MonitorInput & input)
 
 std::optional<MonitorVerdict> evaluate_monitor(const MonitorInput & input)
 {
+  std::vector<MonitorRow> matched;
   for (const MonitorRow row : kMonitorRankOrder) {
-    if (!monitor_row_matches(row, input)) {
-      continue;
+    if (monitor_row_matches(row, input)) {
+      matched.push_back(row);
     }
-    MonitorVerdict verdict;
-    verdict.row = row;
-    verdict.reason = monitor_row_reason(row, input);
-    verdict.detail =
-      "monitor rank " + std::to_string(monitor_rank(row)) + " " + monitor_row_name(row);
-    if (row == MonitorRow::kIdentityMismatch && input.status != nullptr) {
-      verdict.detail += ": " + input.status->identity_detail;
-    }
-    if (row == MonitorRow::kDisarmedOnGround) {
-      verdict.detail += ": disarmed on ground (not sent by executor)";
-    }
-    return verdict;
   }
-  return std::nullopt;
+  if (matched.empty()) {
+    return std::nullopt;
+  }
+  const MonitorRow row = matched.front();
+  MonitorVerdict verdict;
+  verdict.row = row;
+  verdict.reason = monitor_row_reason(row, input);
+  verdict.detail =
+    "monitor rank " + std::to_string(monitor_rank(row)) + " " + monitor_row_name(row);
+  if (row == MonitorRow::kIdentityMismatch && input.status != nullptr) {
+    verdict.detail += ": " + input.status->identity_detail;
+  }
+  if (row == MonitorRow::kDisarmedOnGround) {
+    verdict.detail += ": disarmed on ground (not sent by executor)";
+  }
+  verdict.matched = std::move(matched);
+  return verdict;
 }
 
 MonitorDisarm monitor_row_disarm(MonitorRow row)
