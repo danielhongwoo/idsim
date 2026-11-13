@@ -66,7 +66,7 @@
 | --- | --- | --- |
 | B0 | reviewer | 결정의 근거([소스], [실측], [추정] 표기), 원칙(운용 서비스가 시뮬레이터를 모른다, 기체 식별 단일 출처, `/clock` 기준) 준수, 생성기와 서비스 결정(쟁점 2, 3, 5, 16)이 서로 맞는지 |
 | B1 | reviewer | 범위 문구가 U10과 같은지, `docs/`가 `docs-for-agent/`를 가리키지 않는지 |
-| B2 | ros2-engineer | W의 계산(명령과 ack의 대응), 기준 판단 |
+| B2 | ros2-engineer | W의 계산(명령과 ack의 대응), 쟁점 11 유지 조건 판단 |
 | B3 | sim-engineer, test-engineer, devops-engineer(서로의 경계), px4-engineer(원점 적용과 `sensor_gps`), ros2-engineer(`config/fleet.yaml` 인터페이스 검토), reviewer(architect의 문서 커밋) | 생성기 golden diff, 월드 직속 `<plugin>` 거부 테스트, M5와 S2-a 결과, 스모크 S2 통과, 문서의 원점 경로가 M5 결과와 같은지 |
 | B4 | px4-engineer(`MapProjection` 재현, 속도 인자), sim-engineer(`PositionTransform` LOCAL2 재현), test-engineer(테스트가 노드 없이 도는지) | 차등 테스트의 기준값과 원문 판 고정, 왕복 오차 |
 | B5 | devops-engineer, test-engineer | 근거 주석, 스모크 `expected_params` 대조 통과, 생성기 golden diff가 파라미터 변경분뿐인지 |
