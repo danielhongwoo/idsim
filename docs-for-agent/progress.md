@@ -54,10 +54,12 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - U8: `COM_LOW_BAT_ACT`를 계약 SITL 파라미터 표에 넣어 2(Land)로 고정한다.
 - U9: `RTL_RETURN_ALT`는 미션 고도에 맞춰 정한다(1b는 순항 5 m에 10 m).
 - U10: 표적은 "스크립트 궤적을 따르는 점 표적"이다. 표적 생산자는 교체 가능하며 Gazebo 기반 생산자는 확장 항목이다. `docs/architecture.md` 범위 문구를 이에 맞춘다.
-- U11: CI `sitl` 목표 15분. 1b 비행 시나리오 F1-F3을 모두 PR CI에 두고, 넘으면 waypoint 수와 Hold 시간부터 줄인다.
+- U11: CI `sitl` 목표 15분. 1b 비행 시나리오를 모두 PR CI에 두고, 넘으면 U15 순서로 줄인다.
 - U12: Gazebo 정답 pose(`/sim/`)를 SITL MCAP 기록물에 넣는다(Phase 2부터 효과).
-- U13: roadmap 1b 목표(YAML 미션 하나로 이륙 -> 순회 -> 표적 접근 -> 복귀, 착륙)를 그대로 덮는 합친 미션 시나리오(F4)를 둔다. F1-F3은 경계 상황 검증용으로 남긴다. CI 15분을 넘으면 겹치는 비행, waypoint 수, Hold 시간부터 줄인다.
+- U13: roadmap 1b 목표(YAML 미션 하나로 이륙 -> 순회 -> 표적 접근 -> 복귀, 착륙)를 그대로 덮는 합친 미션 시나리오(F4)를 둔다. F1-F3은 경계 상황 검증용으로 남긴다. CI 15분을 넘을 때의 조정은 U15를 따른다.
 - U14: 1b waypoint 판정 반경은 1 m를 유지한다. 시험 미션의 `acceptance_radius_m`은 `1 m - b` 이하로 둔다.
+- U15: CI `sitl`이 15분을 넘으면 겹치는 비행 구간 -> waypoint 수 -> Hold 시간 순으로 줄인다. F2의 공중 종료와 F3의 공중 시작은 빼지 않는다.
+- U16: `docs-for-agent/file-ownership.md`의 소유자는 architect다.
 - 저장소 라이선스는 Apache-2.0이다. 새 소스와 CMake 파일에 머리말을 넣고 `ament_copyright`와 cpplint `legal/copyright` 검사를 켠 채로 둔다.
 - 이미지 빌드의 apt 미러 기본값은 kr 미러(`docker/versions.env`의 `UBUNTU_APT_MIRROR`)이고 CI는 우분투 기본 미러를 쓴다.
 - ros-ws 이미지에 clang-tidy와 clang-format을 그대로 둔다. 별도 도구 이미지로 빼지 않는다.
