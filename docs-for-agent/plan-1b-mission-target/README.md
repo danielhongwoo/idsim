@@ -32,21 +32,21 @@
 | --- | --- | --- | --- |
 | B0. 설계 확정 | architect, reviewer | 확정한 결정(쟁점 1-17)의 reviewer 검토. 검토 지적은 architect가 `decisions.md`에 반영 | 없음. 맨 먼저 |
 | B1. 설계 문서의 범위와 경로 | architect | `decisions.md` "문서 반영 목록"의 B1 항목. U10 문구 | B0 |
-| B2. W 실측 | px4-engineer | `run_sitl.sh` 1회의 ULog로 W와 disarm 전후 `vehicle_status` 간격. 쟁점 11의 기준으로 판단 | 없음 |
+| B2. W 실측 | px4-engineer | `run_sitl.sh` 1회의 ULog로 W와 disarm 전후 `vehicle_status` 간격. 쟁점 11의 유지 조건으로 판단 | 없음 |
 | B3. 원점과 월드 | devops-engineer(생성기 판 5, fleet schema 2, fixture 템플릿과 golden, `config/fleet.yaml`의 기체 1 스폰, `sim_stack.sh` 사전 검사, `run_smoke.sh`의 `expect_gps`와 S0 센서 높이 대조, `docker/README.md`와 저장소 `README.md`의 원점 문장), sim-engineer(`idsim_base.sdf`, `gz_server.sh`), test-engineer(`stack.py` 판 5 명세), px4-engineer(`check_px4.py` 고도 주석), architect(`decisions.md` "문서 반영 목록"의 B3 묶음: `docs/smoke-test.md`, `docs/architecture.md` gazebo 행의 원점 단계와 시작 순서 문장, `docs/roadmap.md` 1a 3번의 원점 문장, `docs/interface.md`의 원점 적용 문장과 bridge 문장) | 쟁점 2, 16. 월드 생성, `IDSIM_ORIGIN_*` 제거, 런타임 원점 호출 제거를 한 PR로. M5, S2-a는 그 PR의 스모크 | B0 |
 | B4. `idsim_common` 추가 | ros2-engineer | 쟁점 4, 14. `geo.hpp`와 gz-math LOCAL2, PX4 `MapProjection` 차등 단위 테스트, `TargetId`, `target_state_topic`, 상태 QoS, `position_setpoint`의 속도 인자. 머지는 S2-a 통과(B3 PR의 스모크) 뒤 | B0. 머지는 B3 뒤 |
 | B5. SITL 파라미터 | px4-engineer(값과 근거 주석), devops-engineer(스모크 `expected_params`, 생성기 golden 재생성) | 쟁점 9의 일곱 파라미터. `sitl_params.env`가 바뀌면 생성기 golden(`inputs`의 sha256, `expected_params`)이 바뀐다 | B0 |
 | B6. 표적 어댑터 | sim-engineer(`idsim_sim` ament_python 전환, 어댑터, Actor 생성 내용), devops-engineer(`targets` 스키마, 서비스, healthcheck, 생성기) | 쟁점 1, 3. M1 | B3 |
 | B7. 정답 pose | sim-engineer(`sim_oracle.py`, 오프셋 합성과 구독 토픽 단위 테스트), devops-engineer(`sim-oracle` 서비스와 healthcheck) | 쟁점 5. S1-a | B3 |
 | B8. 전이 관측 계측 | ros2-engineer(계측, `transition.hpp`, 칸 목록 파일), px4-engineer(1a 칸 목록 승인), test-engineer(테스트 실행 파일 통합의 구조 승인), architect(`docs-for-agent/file-ownership.md`에 `Event` 목록과 칸 목록 파일의 px4 승인 한 줄. U16) | 쟁점 13. 동작 무변경 | B0 |
-| B9. `idsim_mission` core와 px4 어댑터 | ros2-engineer(core, 단위 테스트), px4-engineer(`px4/` 어댑터, snapshot 헤더와 전이 표의 필수 승인, K1-K4 확인) | 쟁점 6-10, 12. 헤더 PR 하나(W 결과 뒤)와 상태기 PR들(칸 목록 diff로 승인) | B2, B4, B8 |
+| B9. `idsim_mission` core와 px4 어댑터 | ros2-engineer(core, 단위 테스트), px4-engineer(`px4/` 어댑터, snapshot 헤더와 전이 표의 필수 승인, K1-K4 확인) | 쟁점 6-10, 12. 헤더 PR 하나와 상태기 PR들(칸 목록 diff로 승인) | B4, B8 |
 | B10. 노드 껍질과 YAML 로더 | ros2-engineer(노드, 표적 구독과 변환, 로더, CLI), devops-engineer(`ops-N` params의 `world.origin`) | 쟁점 4의 노드 쪽, 8의 표적 구독, 14 | B9 |
 | B11. 통합 테스트 | test-engineer(판정, 시나리오 F1-F4, 미션 YAML, gate 기록, 비행 단위 fixture), sim-engineer(정답 pose 경로 확인), devops-engineer(compose와 `sitl.yml`) | 쟁점 5, 11의 gate 기록, 15. R1-R4, 공중 시작, RTL 실측 | B5, B6, B7, B10 |
 | B12. viz 확인 | sim-engineer | 쟁점 17. M4 | B6 |
 | B13. 계약 고정 문서 | architect | `decisions.md` "1a 고정 계약 영향" (a)-(s)((r)과 (k) 앞부분은 B3)와 "문서 반영 목록"의 B13 항목. `idsim_interfaces` 의미 주석 | B11의 완료 기준 충족 |
 
 커밋은 담당자 소유 단위로 나눈다. PR은 단위마다 하나이고, 담당이 여럿인 단위는 담당자별 커밋으로 나눈다. 생성기 golden을 바꾸는 PR(B3, B5, B6, B7)은 나중에 머지되는 쪽이 main에 rebase한 뒤 golden을 생성기로 다시 만든다(손으로 합치지 않는다. 재생성은 devops-engineer). 예외 둘:
-- B9의 snapshot 헤더 변경(`SetpointOut` 속도 포함)은 W 결과(B2) 뒤에 한 PR로 묶는다(쟁점 12). 상태기 변경은 B8의 칸 목록이 들어간 뒤 PR마다 칸 목록 diff를 함께 낸다.
+- B9의 snapshot 헤더 변경(`SetpointOut` 속도 포함)은 한 PR로 묶는다(쟁점 12). 상태기 변경은 B8의 칸 목록이 들어간 뒤 PR마다 칸 목록 diff를 함께 낸다.
 - B11은 한 PR 안에서 커밋 둘로 나눈다. (가) F1-F4의 trace에 R2와 R4를 기록하는 커밋. b와 `R_home`이 빈 보정 상태(`decisions.md` 쟁점 5)이고 시험 미션의 `acceptance_radius_m`은 보정 값 0.5 m다. 보정 상태에서는 `R_home`에 기대는 단정만 `recorded_only`이고 나머지 판정은 그대로 실패로 세므로, F1이 통과하면 F2-F4가 돌아 표본이 모인다. 로컬 `run_sitl.sh --repeat 30`으로만 돌리고 CI 시나리오 목록에는 F1-F4를 모두 넣지 않는다. (가)는 머지되지 않는 중간 상태다. (나) b와 `R_home`을 근거(`decisions.md` 쟁점 5의 항목)와 함께 `tests/support/sitl_judge.py` 머리말에 적고, 시험 미션 YAML의 `acceptance_radius_m`을 `1.0 - b`로 바꾸고, F1-F4를 CI 목록에 넣는 커밋. (나)의 상태로 로컬 부팅 10회 이상의 확인 실행을 한다. 머지되는 상태는 (나)뿐이다. 이렇게 해서 CI가 상수 없는 판정으로 시작하지 않고, 상수를 통과와 실패를 보고 정하지 않는다.
 
 실험용 스택 번호: px4 5, ros2 6, test 7, devops 8, sim 9. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
@@ -55,7 +55,7 @@
 
 1. B0. 확정한 결정을 reviewer가 검토한다. B2는 바로 시작한다(실측이라 결정을 기다리지 않는다).
 2. B0 뒤 B1, B3, B4, B5, B8을 병렬로.
-3. B6, B7(B3 뒤). B9(B2, B4, B8 뒤. 헤더 PR이 먼저).
+3. B6, B7(B3 뒤). B9(B4, B8 뒤. 헤더 PR이 먼저).
 4. B10(B9 뒤), B12(B6 뒤).
 5. B11. 커밋 (가)로 로컬 `--repeat 30`에서 b와 `R_home`을 정하고 커밋 (나)로 적는다. (나)에서 확인 실행(부팅 10회 이상), 그 뒤 로컬 3회 연속과 CI.
 6. B13.
@@ -86,7 +86,7 @@
 
 - B0: reviewer 검토를 받았고 지적이 `decisions.md`에 반영되었다.
 - B1: B1 항목이 `docs/`에 반영되고 reviewer가 확인했다.
-- B2: W의 최댓값과 표본 수, 처리 전 표본이 확인 계수에 들어간 기록의 유무, 그에 따른 판단(1a 규칙 유지 또는 ack timestamp 기준)이 PR 본문에 있다.
+- B2: 명령별 W의 최댓값과 표본 수(W_arm 포함), 처리 전 표본이 확인 계수에 들어간 기록의 유무, 쟁점 11의 유지 조건에 따른 판단이 PR 본문에 있다.
 - B3: `tools/ci/lint.sh all` 통과(생성기 단위 테스트와 golden, 월드 SDF 원점 단정, 월드 직속 `<plugin>` 거부, bridge 허용 목록). 스모크 images(S0 센서 높이 대조 포함), px4-out-clock 통과(S2 포함, M5, S2-a). fleet `schema` 1과 `world.file`은 생성이 실패한다. `world.origin`이 없는 `fleet.yaml`은 생성이 실패한다. `decisions.md` "문서 반영 목록"의 B3 묶음이 M5 결과대로 반영되었다.
 - B4: `tools/ros_ws.sh ci` 통과. `geo` 차등 테스트와 왕복 테스트, `position_setpoint` 속도 인자 테스트가 있고 기존 테스트가 통과한다. S2-a가 통과했다(NavSat이 LOCAL2를 쓴다는 [추정]의 확인).
 - B5: 스모크가 일곱 파라미터의 적용 값을 `expected_params`와 대조해 통과한다. 생성기 golden이 다시 만들어졌고 `tools/ci/lint.sh all`이 통과한다.

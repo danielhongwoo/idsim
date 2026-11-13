@@ -31,8 +31,8 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 | 8. GOTO, TRACK_ENTITY | 도달은 서로 다른 위치 표본 3개 연속. TRACK_ENTITY는 표적 속도를 feedforward로 싣는다. `target_fresh_age` 0.1 s, `target_timeout` 1.0 s | "정리"와 "정리의 상한"의 원인 목록, "종료의 충돌 규칙", feedback의 `PHASE_EXECUTING`, "Offboard setpoint"의 `velocity`, "좌표계"의 원점 이동 | 확정 |
 | 9. RTL과 SITL 파라미터 | 모드 명령 항목. 실패 폴백은 Land. 파라미터 일곱을 계약 표에 더한다. F3, F4 RTL `timeout` 60 s | SITL 파라미터 표, "LAND 항목" 절, "용어"의 명령과 확인 대상 | 확정 |
 | 10. 공중에서 끝나는 미션 | 공중 Hold 3회 확인이면 SUCCEEDED. 지상에서는 세지 않고 지상 대기 뒤 지상 DISARMED 3회로 SUCCEEDED | "끝난 뒤 기체 상태" SUCCEEDED 행, "정리의 상한"의 원인과 결과, feedback의 `PHASE_EXECUTING` | 확정 |
-| 11. 지상 취소의 disarm 확인 | 명령에서 ack까지의 창 W를 ULog로 잰다. 기준을 넘으면 ack timestamp 기준 | 바뀌면 "시간 기준"의 예외 문장과 "취소" 절 | 확정(W 결과 조건) |
-| 12. snapshot과 core 구조 | 헤더 추가는 한 PR, px4-engineer 조건부 승인 네 조건과 `SetpointOut` 속도 | 없음 | 확정(W 결과 뒤 PR) |
+| 11. 지상 취소의 disarm 확인 | 1a 규칙(tick 조건, timestamp 조건, 3회 연속)을 유지한다. 처리 전 표본의 창은 arm 처리 전(폭 W_arm)이고 publish 간격 두 개보다 좁다. Phase 2 다중 스택 부하에서 다시 본다 | "시간 기준" 예외 문장의 근거 서술(사실 갱신. 규칙은 그대로) | 확정 |
+| 12. snapshot과 core 구조 | 헤더 추가는 한 PR, px4-engineer 조건부 승인 네 조건과 `SetpointOut` 속도 | 없음 | 확정 |
 | 13. 전이 덮음 | 사건 꼬리표 계측을 동작 무변경 PR로 먼저. 칸 목록 파일과 관측 집합 비교 | 없음 | 확정 |
 | 14. YAML 로더, `idsim_common` 공개 | 로더는 `idsim_mission` 안의 Python 모듈. `position_setpoint`에 속도 feedforward 인자 | 없음 | 확정 |
 | 15. 시나리오와 CI 시간 | B(1b 무효 사례로 교체), C, A, D, F1, F2, F3, F4(합친 미션, U13), T. 15분 목표 | 없음 | 확정 |
@@ -308,13 +308,19 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 ## 쟁점 11. 지상 취소의 disarm 확인과 /clock 지연 실측
 
 결정
-- 1b 첫 실측은 W다: 명령에 실은 timestamp(노드의 ROS 시각)와 같은 명령의 `vehicle_command_ack.timestamp`(Commander가 처리한 PX4 시각)의 차를 `run_sitl.sh` 한 회의 ULog에서 모든 명령(arm, disarm, DO_SET_MODE, NAV_LAND)에 대해 모은다. 새 시나리오를 만들지 않는다. 같은 ULog에서 disarm 전후 `vehicle_status` publish 간격을 함께 본다.
-- 판단 기준: W의 최댓값이 100 ms 미만이고 처리 전 표본이 확인 계수에 들어간 기록이 없으면 1a 규칙(tick 조건, timestamp 조건, 3회 연속)을 유지한다. 아니면 "받아들여진 disarm ack의 PX4 `timestamp` 이상인 DISARMED 표본만 센다. ack가 없으면 1a 규칙"으로 바꾼다. "ack 뒤에 받은 표본만 센다"는 쓰지 않는다(토픽 간 수신 순서가 보장되지 않는다).
-- 같은 확인 함수를 공중 종료 단계의 지상 대기 disarm(쟁점 10)에도 쓴다. PX4 자동 disarm은 Executor가 명령을 보내지 않았으므로 W와 무관하다.
-- L(gz `/clock`과 ROS `/clock`의 도착 차)은 W가 기준을 넘어 원인을 나눠야 할 때만 잰다. 별도 `clockskew` 측정 항목은 두지 않는다. sitl gate가 이미 보는 `now - vehicle_status.timestamp`의 분위수를 `verdict.json`에 `recorded_only`로 남긴다. 표적 어댑터가 생긴 뒤 `TargetState` 나이(R3)와 `/clock` 간격도 같은 방식으로 남긴다.
+- 취소 지상 분기의 DISARMED 확인은 1a 규칙(tick 조건, timestamp 조건, 서로 다른 timestamp 3회 연속)을 그대로 쓴다. ack timestamp 기준은 쓰지 않고, snapshot에 `AckSample.timestamp_us`를 더하지 않는다.
+- 유지 조건: 처리 전 DISARMED 표본이 확인에 들어갈 수 있는 창은 arm이 처리되기 전이고, 그 폭은 W_arm(arm에 실은 timestamp에서 그 arm의 `vehicle_command_ack.timestamp`까지) 이하다. 잘못된 확인에는 이 창 안에 서로 다른 timestamp의 DISARMED `vehicle_status` publish 3개, 즉 publish 간격 두 개가 들어가야 한다. W_arm이 창 안의 publish 간격 두 개보다 좁으면 1a 규칙을 유지한다. 판단은 W의 상한 하나가 아니라 W_arm과 그 창 안의 publish 트리거(처리한 명령, 500 ms 주기, 상태 변화)로 한다.
+- 이 조건이 깨지는 관측이 나오면 "받아들여진 disarm ack의 PX4 `timestamp` 이상인 DISARMED 표본만 센다. ack가 없으면 1a 규칙"으로 바꾸고, `AckSample.timestamp_us`(`vehicle_command_ack.timestamp`)를 snapshot 헤더에 더한다(px4-engineer 필수 승인). "ack 뒤에 받은 표본만 센다"는 쓰지 않는다(토픽 간 수신 순서가 보장되지 않는다). 다시 볼 시점은 Phase 2 다중 스택 부하다("넘김 목록").
+- 전제: 이 goal 밖의 명령 출처(GCS 등)가 기체를 arm하지 않는다.
+- 같은 확인 함수를 공중 종료 단계의 지상 대기 disarm(쟁점 10)에도 쓴다. PX4 자동 disarm은 Executor가 명령을 보내지 않았으므로 이 창과 무관하다.
+- L(gz `/clock`과 ROS `/clock`의 도착 차)은 유지 조건이 깨져 원인을 나눠야 할 때만 잰다. 별도 `clockskew` 측정 항목은 두지 않는다. sitl gate가 이미 보는 `now - vehicle_status.timestamp`의 분위수를 `verdict.json`에 `recorded_only`로 남긴다. 표적 어댑터가 생긴 뒤 `TargetState` 나이(R3)와 `/clock` 간격도 같은 방식으로 남긴다.
 
 근거
-- 위험은 "disarm 처리 전에 publish된 DISARMED 표본이 timestamp 조건을 통과하는 것"이고 그 창은 L이 아니라 W다. [소스] Commander는 한 주기에 ack를 먼저, `vehicle_status`를 나중에 publish한다(`Commander.cpp` 1887-1899행, 2674-2680행, 1930-1945행).
+- 위험은 "disarm 처리 전에 publish된 DISARMED 표본이 timestamp 조건을 통과하는 것"이고 그 창은 L이 아니라 명령에서 ack까지다. [소스] Commander는 루프마다 `vehicle_command` 하나를 FIFO로 처리하고, 한 주기에 ack를 먼저, `vehicle_status`를 나중에 publish한다(`Commander.cpp` 1887-1899행, 2674-2680행, 1930-1945행).
+- [소스] 처리 전 DISARMED 표본이 계수에 들어가는 길은 `arm_sent` 경합뿐이다. 정리의 분기 고르기에서 `in_ground_branch`로 들어온 DISARMED는 실제 상태이고(`rules.cpp` 187-197행), 지상 ARMED에서 보낸 disarm의 처리 전 표본은 ARMED라 계수를 0으로 되돌린다(`rules.cpp` 207-216행). arm에 실은 timestamp는 disarm의 것 이하이고 두 명령은 FIFO이므로, 해로운 표본의 timestamp는 (첫 disarm의 timestamp, arm ack timestamp) 안에 있고 이는 (arm의 timestamp, arm ack timestamp]에 들어간다. 그래서 disarm 명령의 W는 판단에 필요하지 않다.
+- [소스] 창 안의 publish 트리거: 처리한 명령마다 즉시(`Commander.cpp` 1897-1899행), 500 ms 주기와 상태 변화(1931-1945행). 처리할 명령이 없으면 루프는 10 ms 잔다(1977-1980행, `Commander.hpp` 217행). 1a 진입 순서에서 arm을 보낼 때 앞의 DO_SET_MODE는 이미 처리되어 queue에서 arm 앞에 명령이 없다.
+- [실측] `run_sitl.sh` 1회(SITL lockstep)의 ULog에서 arm, DO_SET_MODE, NAV_LAND의 W가 모두 16 ms 이하이고 W_arm은 8 ms 이하다. ULog의 `vehicle_command.timestamp`는 실은 값 이하이므로 이 값은 상한이다. 같은 ULog의 지상 DISARMED 구간에서 수십 ms 간격의 publish가 이어진 곳이 있어, W 상한 하나(예: 100 ms)로는 조건이 되지 않는다.
+- 처리 전 표본이 계수에 들어간 기록은 1a 시나리오가 취소 지상 분기를 타지 않아 관찰할 기회가 없다. 새 시나리오를 만들지 않고(U6) 위의 구조 논증과 1a 실측(arm 직후 disarm 10회가 모두 DISARMED)으로 대신한다.
 - gate에 얹은 기록은 별도 실행이 없어 비용이 0이다(U6의 산출물 최소 원칙).
 
 ## 쟁점 12. snapshot 헤더와 core 구조 변경
@@ -332,11 +338,9 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 | `FramePort` | `world_to_local`(점), `world_velocity_to_local`(벡터). 기준과 유효 술어는 쟁점 4 |
 | `TargetSample`과 표적 맵 | PX4 메시지가 아니다. 시각 필드는 ROS 시각임이 이름에 드러나는 `stamp_ns` |
 | `SetpointOut`의 속도 | `velocity_valid`(기본 false)와 로컬 NED 속도(m/s). false면 어댑터가 `velocity`를 NaN으로 낸다(쟁점 8) |
-| `AckSample.timestamp_us`(W가 기준을 넘을 때만) | `vehicle_command_ack.timestamp` |
 
-- 승인 조건(px4-engineer): (1) `FramePort`의 유효 술어(쟁점 4)를 기준을 읽는 px4 어댑터 함수에 둔다. (2) 기준은 그 tick의 `Snapshot.position`과 같은 표본에서 읽는다. (3) `TargetSample`의 시각 필드 이름이 ROS 시각임을 드러낸다. (4) 헤더 머리 주석의 "어댑터가 채울 것"과 "출력에 할 것" 표를 같은 PR에서 고친다(`NAVIGATION_STATE_AUTO_RTL -> kRtl`, `VEHICLE_CMD_NAV_RETURN_TO_LAUNCH -> kNavRtl`, `timestamp_us <- timestamp`, `xy_valid <- xy_valid`, `kNavRtl -> rtl`, `FramePort`의 기준 필드와 유효 술어, `SetpointOut` 속도 -> `trajectory_setpoint.velocity`, W 조건부 `AckSample.timestamp_us <- timestamp`).
+- 승인 조건(px4-engineer): (1) `FramePort`의 유효 술어(쟁점 4)를 기준을 읽는 px4 어댑터 함수에 둔다. (2) 기준은 그 tick의 `Snapshot.position`과 같은 표본에서 읽는다. (3) `TargetSample`의 시각 필드 이름이 ROS 시각임을 드러낸다. (4) 헤더 머리 주석의 "어댑터가 채울 것"과 "출력에 할 것" 표를 같은 PR에서 고친다(`NAVIGATION_STATE_AUTO_RTL -> kRtl`, `VEHICLE_CMD_NAV_RETURN_TO_LAUNCH -> kNavRtl`, `timestamp_us <- timestamp`, `xy_valid <- xy_valid`, `kNavRtl -> rtl`, `FramePort`의 기준 필드와 유효 술어, `SetpointOut` 속도 -> `trajectory_setpoint.velocity`).
 - 더하지 않는 것: `ref_timestamp`, `xy_reset_counter`, `z_reset_counter`(원점 변경 WARN은 노드가 기준을 읽을 때 남기고, EKF reset은 프레임이 아니라 추정을 옮긴다), `heading_good_for_control`(1a TAKEOFF와 같은 규칙), world ENU yaw의 기준 의존 변환(축 치환이고 자오선 수렴은 무시한다).
-- W 결과로 ack timestamp 기준을 쓰게 되면 `AckSample`의 PX4 timestamp를 같은 PR에 넣는다. 그래서 헤더 변경 PR은 W 결과 뒤에 연다.
 - core 구조(ros2-engineer): `EntryPlan`(지상 arm, 공중 Offboard, 모드 명령), setpoint 항목의 type별 처리(setpoint, 완료, TARGET_LOST만 내고 감시 표, ITEM_TIMEOUT, 정리 진입은 공통), 모드 명령 항목 처리의 일반화(보낼 명령, 확인할 모드), 공중 종료 단계(쟁점 10). 전이 표는 px4-engineer 필수 승인이다.
 - `idsim_mission_core`는 계속 `idsim_common`과 px4_msgs를 모른다(`check_core_purity.cmake` 그대로).
 
@@ -416,7 +420,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 
 ## 1a 고정 계약 영향
 
-모두 `docs/interface.md`의 1a 고정 절이고 `idsim_interfaces`의 필드와 상수는 바뀌지 않는다(golden과 type hash 무변경. 정의 주석만 바뀐다). `docs/architecture.md`의 변경 절차("고정 뒤에는 새 요구가 있어야 한다. 변경 절차를 따른다")가 적용된다. 새 요구는 1b 범위(U3의 공중 종료, 로드맵 1b의 RTL과 공중 시작과 표적 추종, U7, U8)다. 반영은 B13(계약 고정 문서)에서 한 PR로 하고((r)과 (k)의 앞부분인 bridge 문장은 사실 갱신이라 B3 PR에서 한다. "문서 반영 목록"의 B3 묶음), PR 본문에 아래 목록과 근거를 적으며 architect 승인과 reviewer 검토를 받는다. 1a에서 받던 미션(첫 항목 TAKEOFF와 마지막 LAND, `[LAND]`)에 대한 동작은 아래 예외 하나 말고는 어느 항목에서도 바뀌지 않는다. 예외: W가 쟁점 11의 기준을 넘으면 취소 지상 분기의 DISARMED 확인 기준이 ack timestamp 기준으로 바뀌고((k)), 이 기준은 1a에서 받던 TAKEOFF 미션의 취소에도 적용된다. 끝난 결과(CANCELED, 지상 DISARMED)는 같고 확인 시점이 늦어질 수 있다. 이 예외는 B13 PR 본문에 적는다.
+모두 `docs/interface.md`의 1a 고정 절이고 `idsim_interfaces`의 필드와 상수는 바뀌지 않는다(golden과 type hash 무변경. 정의 주석만 바뀐다). `docs/architecture.md`의 변경 절차("고정 뒤에는 새 요구가 있어야 한다. 변경 절차를 따른다")가 적용된다. 새 요구는 1b 범위(U3의 공중 종료, 로드맵 1b의 RTL과 공중 시작과 표적 추종, U7, U8)다. 반영은 B13(계약 고정 문서)에서 한 PR로 하고((r)과 (k)의 앞부분인 bridge 문장은 사실 갱신이라 B3 PR에서 한다. "문서 반영 목록"의 B3 묶음), PR 본문에 아래 목록과 근거를 적으며 architect 승인과 reviewer 검토를 받는다. 1a에서 받던 미션(첫 항목 TAKEOFF와 마지막 LAND, `[LAND]`)에 대한 동작은 어느 항목에서도 바뀌지 않는다.
 
 | 번호 | 대상 문장 | 바꾸는 이유 | 성격 |
 | --- | --- | --- | --- |
@@ -430,7 +434,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 | (h) | 미션 정의 절의 "1a 노드의 임시 제한(계약 문장이 아니다. 1b에서 푼다)"과 `MissionItem.timeout`, `YawSetpoint.mode`, `TakeoffItem.height_m`의 "1b에서 정한다" 괄호. `docs/architecture.md` 인터페이스 계약 절의 "다음 setpoint 항목에서 Offboard 재진입 절차를 다시 밟는다" | 순서 규칙이 계약이 된다(쟁점 6, U7) | 임시 제한의 계약화와 1b 몫 닫기 |
 | (i) | "SITL 파라미터"의 계약 표 | `RTL_TYPE`, `RTL_CONE_ANG`, `RTL_RETURN_ALT`, `RTL_LAND_DELAY`, `COM_DISARM_LAND`, `COM_LOW_BAT_ACT`, `EKF2_HGT_REF` 행 추가(쟁점 9, U8, U9) | 행 추가 |
 | (j) | 공통 규칙 "이름과 식별자"의 "Python은 `tests/support`가 한다" | Python 생산자(표적 어댑터)가 생긴다(쟁점 3) | 위치 추가 |
-| (k) | "시간 기준"의 "1a는 `/clock`만 브리지한다", 그리고 W 결과에 따라 "예외 하나: 취소의 지상 분기"와 "취소" 절의 DISARMED 확인 문장 | 1b도 bridge는 `/clock` 하나이고 표적과 정답 pose는 bridge를 거치지 않는다(쟁점 2, 5). disarm 확인 기준(쟁점 11) | 사실 갱신. 기준 변경은 W가 기준을 넘을 때만 |
+| (k) | "시간 기준"의 "1a는 `/clock`만 브리지한다", 그리고 "예외 하나: 취소의 지상 분기"의 근거 서술("지연 크기는 미측정", "3개가 되려면 표본 간격 약 0.5 s로 arm이 약 1 s 동안 처리되지 않아야 한다") | 1b도 bridge는 `/clock` 하나이고 표적과 정답 pose는 bridge를 거치지 않는다(쟁점 2, 5). 처리 전 표본의 창은 W_arm 이하이고 잘못된 확인에는 그 창 안에 publish 간격 두 개가 들어가야 한다(쟁점 11의 유지 조건과 실측) | 사실 갱신. 확인 규칙은 그대로 |
 | (l) | "Offboard setpoint" 절의 "`velocity`, `acceleration`, `jerk`, `yawspeed`는 NaN"과 "1a는 position 제어만 쓴다" | TRACK_ENTITY는 표적 속도를 `velocity` feedforward로 싣는다. `offboard_control_mode`는 그대로 position만 true다(쟁점 8) | 예외 추가. 1a 항목의 setpoint는 그대로 |
 | (m) | "끝난 뒤 기체 상태"의 `MODE_SWITCH_FAILED(준비 단계)` 행("arm 전이므로 지상 DISARMED"), `MODE_SWITCH_FAILED(LAND 항목)`과 `ITEM_TIMEOUT(LAND 항목)` 행, `ITEM_TIMEOUT(setpoint 항목)` 행 | 공중 Offboard 진입의 P4, P5 실패는 정리의 공중 분기를 거쳐 공중 Hold(또는 Hold 실패 뒤 Land 진행 중)로 끝난다(쟁점 7). RTL 항목의 실패는 Land 폴백 뒤 끝나 LAND 항목 행과 상태가 다르다(쟁점 9). TARGET_LOST 행을 더한다(ITEM_TIMEOUT(setpoint 항목)과 같은 정리, 쟁점 8) | 행 분할과 추가. 지상 arm 진입의 행은 그대로 |
 | (n) | "정리의 상한" 절 첫 문장의 원인 목록(취소, setpoint 항목의 ITEM_TIMEOUT, 준비 단계의 실패)과 상한에서의 결과 문장("ITEM_TIMEOUT과 준비 단계 실패의 정리이면 같은 동작에 원래 reason을 유지") | TARGET_LOST의 정리는 원래 reason을 유지한다(쟁점 8). 공중 종료 단계도 같은 상한을 쓰고 상한에서 공중 NAV_LAND 1회, 지상 ARMED disarm 1회 뒤 ABORTED, MODE_SWITCH_FAILED다(쟁점 10의 결과 표) | 원인과 결과 대응 추가 |
@@ -446,7 +450,6 @@ U6의 산출물 최소 원칙을 1b에도 쓴다. 결과는 PR 본문과, 상수
 
 | 이름 | 무엇 | 왜 | 담당 | 방법 |
 | --- | --- | --- | --- | --- |
-| W | 명령 timestamp -> ack timestamp 차, disarm 전후 `vehicle_status` 간격 | 지상 취소 disarm 확인 기준(쟁점 11) | px4-engineer | `run_sitl.sh` 1회의 ULog |
 | M1 | `<skin>` 없는 Actor가 GUI에서 보이고 움직이는가 | 커스텀 모델 필요 여부(쟁점 2) | sim-engineer | 수동 1회 |
 | M4 | Actor 월드에 `gz-gui` 연결, 재접속, 120 s 생존. M2(Actor와 `TargetState` 차)를 육안으로 같이 | viz 서버 생존 리스크(쟁점 17) | sim-engineer | 수동 1회 |
 | M5 | 원점을 SDF로만 넣었을 때 스모크 S2 통과 | 런타임 원점 호출 제거(쟁점 2) | sim-engineer, test-engineer | 스모크 1회 |
@@ -466,7 +469,7 @@ U6의 산출물 최소 원칙을 1b에도 쓴다. 결과는 PR 본문과, 상수
 | K3 | GNSS 기준 설정에서 위경도 원점과 고도 원점이 늘 같은 EKF 갱신에서 정해지는가 | `ref_alt` 0 창의 크기. 술어는 이와 무관하게 둔다(쟁점 4) | px4-engineer | 소스 확인, B9 헤더 PR 때 |
 | K4 | EKF2의 IMU, GPS 위치 오프셋 파라미터가 x500 SITL에서 0인가 | PX4 로컬 위치가 base_link 원점이라는 전제(쟁점 5) | px4-engineer | 소스 확인, S1-b와 함께 |
 
-재지 않는 것: L(gz와 ROS `/clock` 도착 차. W가 기준을 넘을 때만), M3(model과 actor 수준 plugin의 영향), M6(표적 수와 서버 CPU. Phase 3 입력), 반복 이륙(U7), 지면 높이 목표에서 OFFBOARD 중의 land detector 시점(단위 테스트로만 덮는다).
+재지 않는 것: L(gz와 ROS `/clock` 도착 차. 쟁점 11의 유지 조건이 깨질 때만), M3(model과 actor 수준 plugin의 영향), M6(표적 수와 서버 CPU. Phase 3 입력), 반복 이륙(U7), 지면 높이 목표에서 OFFBOARD 중의 land detector 시점(단위 테스트로만 덮는다).
 
 ## 문서 반영 목록
 
@@ -497,7 +500,7 @@ B3(B3 PR 안에서. 구현과 M5 결과를 본 뒤)
 - devops-engineer: `docker/README.md`의 서비스 표(gazebo 행의 원점 문장, `targets`와 `sim-oracle` 행)와 생성 절의 `world.origin` 문장, 저장소 `README.md`의 "기체 출발 위치는 `world.origin`" 문장.
 
 B13(1b 완료 전, architect)
-- `docs/interface.md`: 위 "1a 고정 계약 영향" (a)-(s)(B3 묶음의 (r)과 (k) 앞부분 제외), "GoToItem과 TrackEntityItem" 절의 확정 문장(쟁점 8, 속도 feedforward 포함), "TargetState" 절의 "고정 전" 해제와 QoS 상태 행 고정, `REASON_TARGET_LOST` 의미, "공중에서 끝나는 미션" 절(쟁점 10, 지면 높이 목표의 경합 문장 포함), 고정 시점 표의 1b 행, 미확인 목록의 1b 항목(K1-K4의 결과).
+- `docs/interface.md`: 위 "1a 고정 계약 영향" (a)-(s)(B3 묶음의 (r)과 (k) 앞부분 제외. (k)의 뒷부분은 "시간 기준" 예외 문장의 "지연 크기는 미측정"을 쟁점 11의 실측으로, "3개가 되려면 ... 약 1 s 동안 처리되지 않아야 한다"를 쟁점 11의 유지 조건(W_arm 대 publish 간격 두 개)으로 고치는 것), "GoToItem과 TrackEntityItem" 절의 확정 문장(쟁점 8, 속도 feedforward 포함), "TargetState" 절의 "고정 전" 해제와 QoS 상태 행 고정, `REASON_TARGET_LOST` 의미, "공중에서 끝나는 미션" 절(쟁점 10, 지면 높이 목표의 경합 문장 포함), 고정 시점 표의 1b 행, 미확인 목록의 1b 항목(K1-K4의 결과).
 - `ros_ws/src/idsim_interfaces/`: `ExecuteMission.action`, `MissionItem.msg`, `YawSetpoint.msg`, `TakeoffItem.msg`, `GoToItem.msg`, `TrackEntityItem.msg`, `TargetState.msg`의 의미 주석. golden 무변경을 단정한다.
 - `docs/architecture.md` 인터페이스 계약 절: 묶음 표의 1b 행, 미션 실행 요지의 재진입 문장(h), 공중 종료 문장, RTL 요지.
 
@@ -506,6 +509,7 @@ B13(1b 완료 전, architect)
 | 받는 쪽 | 시점 | 항목 |
 | --- | --- | --- |
 | px4-engineer, ros2-engineer, architect | 반복 비행의 소비자가 생길 때(Phase 3 이후) | 첫 항목이 아닌 TAKEOFF 허용. 규칙 후보: LAND나 RTL 바로 뒤에만, 준비 단계를 P0부터 다시, `ready_timeout`은 항목 시작부터, P5는 그 항목의 DO_SET_MODE 뒤 표본만 |
+| px4-engineer, architect | Phase 2(다중 스택 부하) | 쟁점 11의 유지 조건을 다시 본다. 부하 아래 ULog에서 W_arm과 arm 처리 전 창의 `vehicle_status` publish 간격(지상 DISARMED 구간의 촘촘한 publish 원인 포함). 조건이 깨지면 쟁점 11의 ack timestamp 기준과 `AckSample.timestamp_us` |
 | px4-engineer, architect | Phase 3 | `RTL_RETURN_ALT`를 기체별 `px4_params`로 덮어도 계약 안으로 두는 예외(고도 층 분리) |
 | ops-service-engineer | Phase 3 | Fleet의 배분 전 검증은 core `validate_mission_contract`를 쓴다. 공중 종료 미션의 끝점이 겹치지 않게 하는 계획 책임. 공중 시작 미션은 Hold인 기체에만 보낸다 |
 | px4-engineer | Phase 3 설계 후보 | `VEHICLE_CMD_SET_GPS_GLOBAL_ORIGIN`으로 모든 기체의 EKF 원점을 `world.origin`에 맞추는 안(실측 없이 1b에 넣지 않는다) |
