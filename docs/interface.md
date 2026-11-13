@@ -101,7 +101,7 @@ QoS 계약은 reliability와 durability 둘이다. 사건 행은 1a 완료에 �
 
 - 정식 기준은 ROS 시각이다. `use_sim_time`이 true이면 노드 시계는 `/clock`을 따르고, idsim의 모든 운용 노드는 true로 돈다(생성기가 `params/ops-N.yaml`의 `/**`에 `use_sim_time: true`를 싣고, Executor는 configure에서 false를 거부한다). 판정, 집계, 계약 메시지의 모든 시각 필드와 시간 길이 필드, 기록물 타임스탬프는 모두 ROS 시각이다. 벽시계가 아니다.
 - 이 문서에서 "ROS 시각"은 이 뜻이다. 메시지는 시뮬레이터에 의존하지 않으므로 "시뮬레이션 시각"이라고 쓰지 않는다.
-- `/clock`의 공급자는 `bridge` 서비스의 ros_gz_bridge다(브리지하는 토픽은 `/clock` 하나다).
+- `/clock`의 공급자는 `bridge` 서비스의 ros_gz_bridge다(bridge가 넘기는 토픽은 `/clock` 하나다).
 - 벽시계를 쓰는 곳과 그 이유는 `docs/architecture.md` "인터페이스 계약" 절의 목록이 정본이다. 어느 것도 판정 기준이 아니고 hang 방지와 시계 이상 검출이다.
 
 PX4 timestamp.
