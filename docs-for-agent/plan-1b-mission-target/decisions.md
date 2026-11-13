@@ -2,7 +2,7 @@
 
 Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 이 문서를 따른다. 지금 유효한 것만 적는다. 결정의 경위(담당자 의견, 토론, 검토)는 커밋 메시지와 PR 본문에 있다. 작업 단위와 완료 기준은 같은 디렉터리의 `README.md`에, `docs/`에 반영할 것은 아래 "문서 반영 목록"에 있다.
 
-표기: [소스]는 PX4 v1.17.0, gz-sim 8.15.0, gz-math 7, sdformat14, 저장소 원문으로 확인한 것, [실측]은 1a에서 잰 것이거나 이미지 안의 라이브러리로 계산한 것, [추정]은 확인하지 않은 판단이다. 상태 표기: "확정"은 그대로 구현한다. "답 대기(D-n)"는 아래 "남은 재질문"의 답을 받아 그 부분만 확정한다. 답이 이 문서의 결정을 뒤집으면 해당 쟁점을 고쳐 쓴다. 구현 중에 확인할 사실은 "실측과 확인 목록"에 있고, 확인 결과가 결정과 다르면 architect에게 올린다.
+표기: [소스]는 PX4 v1.17.0, gz-sim 8.15.0, gz-math 7, sdformat14, 저장소 원문으로 확인한 것, [실측]은 1a에서 잰 것이거나 이미지 안의 라이브러리로 계산한 것, [추정]은 확인하지 않은 판단이다. 모든 쟁점은 확정이고 그대로 구현한다. 구현 중에 확인할 사실은 "실측과 확인 목록"에 있고, 확인 결과가 결정과 다르면 architect에게 올린다.
 
 ## 사용자 결정
 
@@ -18,8 +18,8 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 | 쟁점 | 결정 | 1a 고정 계약 영향 | 상태 |
 | --- | --- | --- | --- |
 | 1. 표적 생산 경로 | 어댑터가 `fleet.yaml`의 궤적 정의에서 계산한다. Gazebo Actor는 같은 정의로 생성하는 화면 확인용. 구간 속도 상한 수평 5 m/s, 수직 1 m/s | 없음(`TargetState`는 1b 고정) | 확정 |
-| 2. 월드, 원점, bridge | 월드 SDF를 템플릿에서 생성. 원점은 SDF로만. 월드 직속 `<plugin>` 거부. bridge는 `/clock` 하나 | 없음 | 확정(M5 조건). `world.file` key와 golden은 답 대기(D-1) |
-| 3. 표적 어댑터와 `TargetState` 발행 | Python(rclpy) 노드, 별도 compose 서비스 `targets`. params 평탄화, 표시 파일 healthcheck | 공통 규칙 "이름과 식별자"의 Python 조립 위치 | 확정. 서비스 생성 세부는 답 대기(D-1) |
+| 2. 월드, 원점, bridge | `world.template`에서 월드 SDF를 생성(fleet schema 2). 원점은 SDF로만. 템플릿의 월드 직속 `<plugin>`과 `<include>` 거부. bridge는 명령행 인자 `/clock` 하나 | 없음 | 확정(M5 조건) |
+| 3. 표적 어댑터와 `TargetState` 발행 | Python(rclpy) 노드, 별도 compose 서비스 `targets`. params 평탄화, 표시 파일 healthcheck | 공통 규칙 "이름과 식별자"의 Python 조립 위치 | 확정 |
 | 4. 원점 이동 변환 | gz와 PX4의 식을 그대로 재현하는 사슬(`idsim_common::geo`). core에는 `FramePort`로 주입. 기준 유효 술어에 `ref_alt != 0.0` | 없음 | 확정 |
 | 5. 판정 입력과 임계값 | 정답 pose는 `sim-oracle`이 낸 base_link pose. b는 R2(부팅 10회 이상의 최댓값). `R_home`은 R4로 따로 | 없음 | 확정 |
 | 6. 항목 순서 규칙 | "TAKEOFF는 첫 항목에만, LAND와 RTL은 마지막에만"을 계약으로 | 1a 임시 제한 문장을 계약 문장으로 | 확정 |
@@ -32,17 +32,18 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 | 13. 전이 덮음 | 사건 꼬리표 계측을 동작 무변경 PR로 먼저. 칸 목록 파일과 관측 집합 비교 | 없음 | 확정 |
 | 14. YAML 로더, `idsim_common` 공개 | 로더는 `idsim_mission` 안의 Python 모듈. `position_setpoint`에 속도 feedforward 인자 | 없음 | 확정 |
 | 15. 시나리오와 CI 시간 | B(1b 무효 사례로 교체), C, A, D, F1, F2, F3, T. 15분 목표 | 없음 | 확정 |
-| 16. 다대 원점 판정 | `stack.json`의 기체별 `expect_gps`를 생성기가 계산하고 `check_px4`는 비교만 | 없음 | 확정. 스모크 영향은 답 대기(D-2) |
+| 16. 다대 원점 판정 | `stack.json`의 기체별 `expect_gps`(base_link 기준)를 생성기가 계산하고 `check_px4`는 비교만 | 없음 | 확정 |
 | 17. viz 확인 | Actor 월드에 `gz-gui`를 붙이는 수동 확인 1회 | 없음 | 확정 |
 
 ## 쟁점 1. 표적 상태 생산 경로
 
 결정
 - 표적 어댑터가 `config/fleet.yaml`의 `targets` 궤적 정의를 노드 시계(ROS 시각) t에서 평가해 `TargetState`를 낸다. 월드 SDF의 Actor는 같은 정의에서 생성하는 화면 확인용이다. 표적 위치의 원천은 Gazebo가 아니다(U10).
-- 궤적 정의의 유일한 출처는 `fleet.yaml`의 `targets`다. 생성기가 정규화한 값을 월드 SDF의 Actor, 어댑터 params, `stack.json` 셋에 낸다. 어댑터는 `fleet.yaml`을 읽지 않는다.
+- 궤적 정의의 유일한 출처는 `fleet.yaml`의 `targets`다. 생성기가 정규화한 값을 월드 SDF의 Actor, 어댑터 params(`params/targets.yaml`, 쟁점 3의 평탄화 형식, 실수는 모두 소수점 표기), `stack.json`의 `targets` 셋에 낸다. 어댑터는 `fleet.yaml`을 읽지 않는다.
 - 스키마(devops-engineer 소유, sim-engineer 접점 검토): `targets[]`의 `id`(`target_id` 규칙, 중복 금지), `start_s`(그 전에는 첫 waypoint에 정지), `loop`(true면 처음과 끝 waypoint가 같아야 한다), `waypoints[]`의 `{t, x, y, z}`(world ENU m, t는 `start_s` 기준 s, 첫 t는 0, 엄격히 증가, 2개 이상).
 - 보간은 구간 직선이고 속도는 구간 기울기다(`velocity_valid` true, 정지 구간은 0 벡터). waypoint 시각 정확히에서는 다음 구간 값이다. `loop` false면 끝난 뒤 마지막 점에 정지한다.
-- 생성기 거부 조건: id 형식과 중복, waypoint 2개 미만, t 비증가, 첫 t가 0이 아님, `loop`인데 처음과 끝이 다름, z < 0, 구간 속도 상한 초과(수평 5 m/s, 수직 성분 1 m/s), t=0 위치가 기체 스폰 지점과 수평 2 m 안.
+- 네 key(`id`, `start_s`, `loop`, `waypoints`)와 waypoint의 `{t, x, y, z}`는 모두 필수이고 기본값이 없다. 개수 상한은 표적 32, 표적당 waypoint 256이다. `embedded` 변형은 `targets`를 경고와 함께 무시한다.
+- 생성기 거부 조건: id 형식과 중복, waypoint 2개 미만, t 비증가, 첫 t가 0이 아님, `loop`인데 처음과 끝이 다름, z < 0, 구간 속도 상한 초과(수평 5 m/s, 수직 성분 1 m/s), t=0 위치가 기체 스폰 지점과 수평 2 m 안, `id`가 기체 모델 이름(`x500_N` 형식)이나 템플릿 최상위 `<model>`, `<actor>`, `<light>` 이름과 같음(Actor 이름이 `target_id`라 충돌하면 oracle과 GUI가 다른 엔티티를 본다), 상한 초과.
 - Gazebo Actor는 spline 보간이라 waypoint 사이에서 `TargetState`와 어긋난다. 이 차이는 `TargetState` 계약에 적지 않는다(`TargetState`는 시뮬레이터를 모른다). `docs/architecture.md`의 시뮬레이션 레이어 설명과 `idsim_sim` README에 "Gazebo 화면의 Actor 위치는 참고용"으로 적는다. 생성기는 Actor waypoint를 촘촘히 샘플한다(간격은 sim-engineer가 M4의 육안 확인으로 정한다).
 
 근거
@@ -53,19 +54,22 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 ## 쟁점 2. 월드 SDF, 원점, bridge, 커스텀 모델
 
 결정
-- 손으로 쓰는 월드는 템플릿 하나 `ros_ws/src/idsim_sim/worlds/idsim_base.sdf`다(PX4 `default.sdf`의 physics, scene, light, ground를 출처 주석과 함께 옮긴다. 월드 직속 `<plugin>`, `<spherical_coordinates>`, `<actor>`는 넣지 않는다). 생성기가 이 템플릿에 `<world name>`, `<spherical_coordinates>`(`world.origin`, heading 0, ENU), 표적마다 `<actor>`를 넣어 `artifacts/runs/<실행 id>/world/<name>.sdf`로 쓰고 gazebo 서비스에 읽기 전용으로 마운트한다. 표적이 없어도 같은 경로로 생성한다.
-- `world.origin`은 필수다. 생성기가 누락을 거부한다. `world.file`의 key 이름과 의미, `fleet.yaml`의 `schema` 번호, 생성된 월드 SDF의 golden 처리는 D-1의 답으로 정한다.
-- 원점은 SDF로만 넣는다. `gz_server.sh`의 런타임 `set_spherical_coordinates` 호출과 표시 파일 `origin_set`을 지운다. 조건: M5(원점을 SDF로만 넣은 스택에서 스모크 S2의 `sensor_gps` 판정이 통과)가 통과해야 지운다. wrapper는 SDF에 `<spherical_coordinates>`가 정확히 하나인지만 본다.
+- 손으로 쓰는 월드는 템플릿 하나 `ros_ws/src/idsim_sim/worlds/idsim_base.sdf`다(PX4 `default.sdf`의 physics, scene, light, ground를 출처 주석과 함께 옮긴다. 월드 직속 `<plugin>`, `<spherical_coordinates>`, `<actor>`는 넣지 않는다). 생성기가 이 템플릿에 `<world name>`, `<spherical_coordinates>`(`world.origin`, heading 0, ENU), 표적마다 `<actor>`를 넣어 `artifacts/runs/<실행 id>/world/<name>.sdf`로 쓰고 gazebo 서비스의 `/opt/idsim/world`에 읽기 전용으로 마운트한다(`IDSIM_WORLD_FILE`이 그 파일을 가리킨다). 표적이 없어도 같은 경로로 생성한다. embedded 변형은 PX4가 이미지의 `/opt/px4-gz/worlds/<name>.sdf`를 직접 열므로 생성하지 않는다. 생성은 표준 라이브러리 `xml.etree`로 하고(출처 주석 보존), 출력을 다시 파싱해 `<spherical_coordinates>` 정확히 하나, 월드 직속 `<plugin>` 0, `<actor>` 이름 집합 = 표적 id 집합, `dynamic_pose` 문자열 없음을 단정한다.
+- `world.origin`은 필수다. 생성기가 누락을 거부한다.
+- 템플릿은 `world.template`(저장소 기준 상대 경로. 절대 경로와 `..` 거부, `.sdf`로 끝남)으로 고르고 `world.file`은 없앤다. 옛 key는 "모르는 key"로 실패하고 오류 메시지가 새 key를 알려 준다. `fleet.yaml`의 `schema`는 2로 올리고 2만 받는다(이행 기간 없이 한 PR에서 `config/fleet.yaml`과 fixture를 모두 바꾼다). `stack.json`은 `schema` 1을 유지하고 생성기 판 5(`GENERATOR_VERSION` 5)에서 key를 더한다: `inputs.world_template`, `world.template`, 실행 디렉터리 기준 `world.file`, `targets`, `services.targets`, `services.sim_oracle`, `vehicles[].expect_gps`. 판 5부터 필수이고 로더(`tests/support/stack.py`)에 판 5 명세를 더한다.
+- golden(4종)은 저장소의 실제 템플릿이 아니라 fixture 전용 템플릿 `tests/fixtures/gen_compose/world_template.sdf`를 쓴다(실제 템플릿을 고칠 때 생성기 golden이 깨지지 않게). 3대-k0 fixture에 표적 둘(`loop` true와 false, `start_s` 0과 0 초과, 정수로 적은 좌표 하나)을 넣는다. 실제 템플릿과 `config/fleet.yaml`은 golden이 아닌 단위 테스트 하나가 검증, 생성, 출력 단정까지 통과함을 본다.
+- 원점은 SDF로만 넣는다. `gz_server.sh`의 런타임 `set_spherical_coordinates` 호출과 표시 파일 `origin_set`을 지운다. 조건: M5(원점을 SDF로만 넣은 스택에서 스모크 S2의 `sensor_gps` 판정이 통과)가 통과해야 지운다. 월드 생성, 생성기의 `IDSIM_ORIGIN_*` 전달 제거, 런타임 호출 제거를 한 PR에 넣고 M5는 그 PR의 스모크 S2로 한다. 실패하면 그 PR에서 `IDSIM_ORIGIN_*` 전달을 되살린다. wrapper는 SDF에 `<spherical_coordinates>`가 정확히 하나인지만 본다.
 - 일치 검사는 하지 않고 구성으로 보장한다. 생성기 단위 테스트가 생성된 SDF의 위도, 경도, 고도, heading 0, ENU가 `fleet.yaml` 값과 같음을 단정한다. 실제 적용은 스모크 S2가 판정한다.
-- 생성기는 템플릿과 출력 SDF에서 월드 직속 `<plugin>`을 찾으면 거부한다(있으면 `server.idsim.config`가 무시된다). Actor 안에도 `<plugin>`을 넣지 않는다.
-- bridge: 1b의 bridge 토픽은 `/clock`(gz -> ROS) 하나다. 표적 pose와 정답 pose는 bridge를 거치지 않는다. 형식(명령행 인자 유지 또는 생성 파일)은 sim-engineer와 devops-engineer가 정한다. 어느 형식이든 생성기 단위 테스트가 허용 목록(토픽과 방향)과 금지 정규식 `dynamic_pose`를 검사한다. 같은 금지 검사를 `sim-oracle`의 구독 토픽에도 적용한다(쟁점 5, `idsim_sim` 단위 테스트). `gui.config`의 plugin 목록도 고정하고 `dynamic_pose` 문자열이 없음을 단위 테스트가 본다.
+- 생성기는 템플릿에서 `<world>`가 정확히 하나가 아니거나 월드 직속 `<plugin>`(있으면 `server.idsim.config`가 무시된다), `<spherical_coordinates>`, `<actor>`, `<include>`(include된 모델의 월드 수준 plugin은 생성기가 볼 수 없다)가 있으면 거부한다. Actor 안에도 `<plugin>`을 넣지 않는다.
+- bridge: 1b의 bridge 토픽은 `/clock`(gz -> ROS) 하나다. 표적 pose와 정답 pose는 bridge를 거치지 않는다. 형식은 지금의 명령행 인자 하나(`/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock`)를 유지한다. 생성기 단위 테스트가 bridge 토픽 인자 집합이 정확히 그 하나임과, compose와 생성된 SDF 어디에도 `dynamic_pose`가 없음을 단정한다. 같은 금지 검사를 `sim-oracle`의 구독 토픽에도 적용한다(쟁점 5, `idsim_sim` 단위 테스트). `gui.config`의 plugin 목록도 고정하고 `dynamic_pose` 문자열이 없음을 단위 테스트가 본다.
 - bridge healthcheck는 `/clock` 1회 수신 그대로다.
 - 커스텀 모델: M1(`<skin>` 없이 `<link>` visual만 가진 Actor가 GUI에서 보이고 움직이는가)이 통과하면 모델 파일을 두지 않는다. 실패하면 `idsim_target` 모델 하나를 두고 `GZ_SIM_RESOURCE_PATH` 뒤에 `/opt/idsim/sim/models`를 붙인다(커스텀 모델 이름은 `idsim_` 접두, 생성기 단위 테스트가 확인).
 
 근거
 - Actor 궤적과 원점을 SDF에 손으로 다시 적으면 출처가 둘이 된다.
 - 원점이 월드 로드 때 들어가면 PX4 첫 GNSS fix보다 늦을 수 없다. 런타임 호출은 대개 앞서지만 순서가 구조로 보장되지 않는다([추정]). M5가 확인한다.
-- 표적과 정답 pose가 bridge를 거치지 않으므로 bridge 설정을 표적 목록에서 만들 이유가 없다. 검사 지점은 형식과 무관하게 단위 테스트다.
+- 표적과 정답 pose가 bridge를 거치지 않으므로 bridge 설정을 생성 파일로 옮길 이유가 없다.
+- `world.file`의 의미를 "컨테이너 안 완성 월드"에서 "저장소 안 템플릿"으로 바꾸면 옛 값이 다른 경로로 조용히 해석된다. 이름을 바꾸면 옛 파일이 바로 실패한다. `stack.json`은 바뀌는 것이 모두 key 추가라 지금의 판 문턱 규칙으로 충분하고, `schema`를 올리면 읽는 쪽 셋이 함께 바뀌는데 얻는 것이 없다.
 
 ## 쟁점 3. 표적 어댑터 노드와 TargetState 발행
 
@@ -73,8 +77,9 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - 언어: Python(rclpy). `docs/architecture.md` 기술 스택의 "도구, 테스트, 어댑터 Python"을 따른다.
 - 패키지: `ros_ws/src/idsim_sim`을 ament_python 패키지로 만든다(`package.xml` 신설, 의존 `rclpy`, `idsim_interfaces`). `scripts/`의 셸 wrapper와 `sim_oracle.py`(쟁점 5)는 설치 대상이 아니고 지금처럼 마운트해서 쓴다.
 - 구조: 노드 하나가 모든 표적을 발행한다(표적별 publisher). 궤적 평가와 stamp 단조 규칙("직전 stamp, 지금 t -> 발행 여부")은 rclpy를 import하지 않는 순수 함수이고, 단위 테스트가 같은 평가 함수를 부르지 않고 손으로 계산한 golden 표와 비교한다(표의 위치는 test-engineer가 정한다).
-- params는 평탄화한다: `target_ids`(문자열 배열)와 표적마다 `targets.<id>.start_s`, `targets.<id>.loop`, `targets.<id>.t`, `.x`, `.y`, `.z`(같은 길이의 double 배열). ROS 2 파라미터가 구조체 배열을 담지 못하기 때문이다. 생성기가 이 형식으로 내고, 노드는 배열 길이 불일치와 누락에서 시작을 거부한다.
-- 실행 위치: 별도 compose 서비스 `targets`(ros-ws 이미지, `depends_on: bridge` healthy). 다른 ROS 서비스와 같은 `RMW_IMPLEMENTATION`, `CYCLONEDDS_URI`, `ROS_DOMAIN_ID`, `network_mode: host`를 받는다. `targets`가 비면 서비스를 만들지 않는다. `ops-N`은 `targets`를 기다리지 않는다. 기동 단계(`startup.node_stages`)의 위치는 D-1의 답으로 정한다.
+- params는 평탄화한다: `target_ids`(문자열 배열)와 표적마다 `targets.<id>.start_s`, `targets.<id>.loop`, `targets.<id>.t`, `.x`, `.y`, `.z`(같은 길이의 double 배열). ROS 2 파라미터가 구조체 배열을 담지 못하기 때문이다. 생성기가 이 형식으로 내고(`/**: ros__parameters:` 아래 `use_sim_time: true`와 위 이름들. 실수는 모두 소수점 표기로 써서 `double_array` 선언과 타입이 맞게 한다), 노드는 배열 길이 불일치와 누락에서 시작을 거부한다.
+- 실행 위치: 별도 compose 서비스 `targets`(ros-ws 이미지, `depends_on: bridge` healthy, `init: true`, `stop_signal: SIGINT`). 생성기가 다른 ros-ws 서비스와 같은 함수로 만들어 `network_mode: host`, `RMW_IMPLEMENTATION`, `CYCLONEDDS_URI`, `ROS_DOMAIN_ID`, 호스트 uid:gid, 저장소 마운트가 같다. 명령은 `ros2 run idsim_sim <실행 이름> --ros-args --params-file <실행 디렉터리>/params/targets.yaml`이고 실행 이름은 생성기 상수 하나다. `targets`가 비면 서비스, `params/targets.yaml`, `services.targets`를 만들지 않는다.
+- 기동 단계: `startup.node_stages = [[ops-1 .. ops-N, targets(있으면), sim-oracle]]` 한 단계이고 셋을 병렬로 올린다. `ops-N`은 `targets`를 기다리지 않는다. 스모크(`--infra-only`)에서는 둘 다 뜨지 않는다(두 서비스의 실패가 스모크 판정을 흐리지 않게). `runner.depends_on`은 `ops-N` 전부, `targets`(있으면), `sim-oracle`이다. `targets`가 있으면 `sim_stack.sh up`의 사전 검사가 `ros_ws/install/idsim_sim`도 본다.
 - healthcheck: 표시 파일. 노드는 시작 때 `/tmp/idsim/targets_ready`를 지우고, 모든 표적이 stamp > 0으로 한 번 이상 발행된 순간 임시 파일에 쓴 뒤 rename으로 원자적으로 만든다(내용은 표적 id와 각 첫 stamp). healthcheck는 `test -f /tmp/idsim/targets_ready`다. 설정 오류(`use_sim_time` false, params 누락, id 형식)는 0이 아닌 종료 코드로 끝낸다. 이것은 "한 번 이상 발행"만 보고, 발행 중단은 R3 기록과 Executor의 `target_timeout`이 맡는다.
 - 토픽: 절대 이름 `/targets/<target_id>/state`. 메시지 상수 `TOPIC_PREFIX`, `TOPIC_SUFFIX`(rosidl Python 클래스 상수)로 조립한다. 노드 네임스페이스는 기체 네임스페이스가 아니다.
 - QoS: 계약 상태 행(발행 RELIABLE, VOLATILE). 구현 값 KEEP_LAST 5. Python은 `contract_qos.hpp`를 쓰지 못하므로 값을 다시 적고, 통합 테스트가 그래프의 발행자 QoS를 계약과 대조한다.
@@ -112,7 +117,8 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 결정
 - 판정 입력은 둘로 나눈다. 계약 판정은 계약 토픽과 PX4 토픽(`mission_event`, feedback, result, `vehicle_status`, `vehicle_land_detected`, `vehicle_local_position`, `TargetState`)만 쓴다. 정답 판정은 SITL 전용 정답 pose를 쓴다. 판정 코드는 두 부분을 함수 수준에서 나눈다. 정답 pose가 있어야 하는 실행에서 없으면 실패(`ORACLE_ABSENT`)이고 조용히 건너뛰지 않는다.
 - 정답 pose: 토픽 `/sim/<vehicle_id>/pose`, `geometry_msgs/msg/PoseStamped`, `header.frame_id` `world`, `header.stamp`는 Gazebo `pose/info`의 sim 시각, 약 50 Hz. 기준점은 기체 base_link 원점(PX4 센서가 붙은 점, PX4 로컬 위치가 가리키는 점)이고 model 원점이 아니다.
-- 공급: 별도 compose 서비스 `sim-oracle`(sim-base 이미지, `depends_on: gazebo` healthy). `ros_ws/src/idsim_sim/scripts/sim_oracle.py` 한 파일의 rclpy 노드가 gz-transport Python 바인딩으로 `/world/<월드>/pose/info`를 직접 구독한다. ros_gz_bridge를 거치지 않고 `/clock`을 구독하지 않는다. top-level model `x500_N` pose에 base_link 오프셋을 합성한다(`p_bl = p_model + R_model * offset`, 자세는 model과 같다). 오프셋은 노드가 시작할 때 sdformat14로 모델 SDF를 해석해 얻는다(손으로 적지 않는다). 합성 함수는 순수 Python으로 두고 단위 테스트한다. 구독 토픽은 상수로 조립하고 단위 테스트가 `/pose/info`로 끝나며 `dynamic_pose`를 포함하지 않음을 단정한다. 기체 목록(`x500_N` <-> `vehicle_id`)은 생성기가 준다. healthcheck는 쟁점 3과 같은 표시 파일(`/tmp/idsim/oracle_ready`, 모든 기체의 pose를 한 번 이상 냈을 때)이다. `idsim_interfaces`에 의존하지 않는다.
+- 공급: 별도 compose 서비스 `sim-oracle`(sim-base 이미지, `depends_on: gazebo` healthy). `ros_ws/src/idsim_sim/scripts/sim_oracle.py` 한 파일의 rclpy 노드가 gz-transport Python 바인딩으로 `/world/<월드>/pose/info`를 직접 구독한다. ros_gz_bridge를 거치지 않고 `/clock`을 구독하지 않는다. top-level model `x500_N` pose에 base_link 오프셋을 합성한다(`p_bl = p_model + R_model * offset`, 자세는 model과 같다). 오프셋은 노드가 시작할 때 sdformat14로 모델 SDF를 해석해 얻는다(손으로 적지 않는다). 합성 함수는 순수 Python으로 두고 단위 테스트한다. 구독 토픽은 상수로 조립하고 단위 테스트가 `/pose/info`로 끝나며 `dynamic_pose`를 포함하지 않음을 단정한다. `idsim_interfaces`에 의존하지 않는다.
+- `sim-oracle` 서비스: standalone이면 표적과 무관하게 항상 만들고 embedded에는 없다. sim-base 이미지, 호스트 uid:gid, `init: true`, `depends_on` gazebo와 `px4-N` 전부 healthy(모델이 스폰된 뒤라야 준비 조건이 성립한다), 노드 단계(쟁점 3). 환경 변수는 `GZ_PARTITION`, `GZ_IP`, ROS 공통값, `IDSIM_WORLD_NAME`, 기체 목록 `IDSIM_ORACLE_VEHICLES`(`px4_1=x500_1 px4_2=x500_2` 형식, 생성기가 `vehicles[]`에서 만들고 `assert_invariants`가 대조한다). 볼륨은 `idsim_sim` 읽기 전용, `config/cyclonedds.xml` 파일 하나 읽기 전용, `ros_log/sim-oracle` 쓰기. healthcheck는 쟁점 3과 같은 표시 파일(`/tmp/idsim/oracle_ready`, 모든 기체의 pose를 한 번 이상 냈을 때)이다.
 - 웨이포인트 도달의 주 판정은 정답 판정이다: Executor가 항목을 완료로 넘긴 시각 `t_f`(feedback의 항목 전환 stamp)에서 정답 pose와 world 목표의 3차원 거리가 `R_judge = acceptance_radius_m + b` 안이어야 한다(아니면 `REACH_MISMATCH`). 정답 pose는 `t_f` 앞뒤 표본에서 선형 보간하고, 앞뒤 표본 간격이 0.1 s를 넘으면 그 사건은 `ORACLE_STALE`로 실패한다. 테스트는 Python에서 원점 변환을 다시 구현하지 않는다. 통과 기준은 3차원 하나이고 수평과 수직 성분은 trace에 따로 남긴다.
 - b의 정의(R2): 도달 사건마다 `excess = max(0, d_oracle(t_f) - acceptance_radius_m)`을 재고, b는 부팅 10회 이상에서 모은 excess의 최댓값을 0.05 m 단위로 올린 값이다. 여유 계수를 곱하지 않는다. 표본 수는 부팅 수와 도달 사건 수를 둘 다, 값과 실행 id와 함께 `tests/support/sitl_judge.py` 머리말에 적는다. 정하기 전에는 상수를 비워 두고 테스트는 "b 미정"으로 실패한다. F1을 CI 시나리오 목록에 넣는 커밋이 b를 적는 커밋이다(README의 두 커밋 절차). 정한 뒤 통과와 실패를 보고 바꾸지 않는다. CI에서 b를 넘는 사건이 나오면 b를 올리지 않고 architect에게 올린다. b가 0.5 m를 넘으면 판정을 느슨하게 하지 않고 architect와 사용자에게 올린다.
 - `REACH_MISMATCH`는 보정 표본에서는 늘 통과하고 보정 뒤의 퇴행을 잡는 검사다. EKF 오차를 독립으로 확인하는 실질은 "b가 0.5 m 이하"라는 상한 점검이다.
@@ -364,9 +370,10 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - 형식은 맞지만 없는 `target_id`는 INVALID_MISSION이 아니다. 계약상 받아들여 이륙하고 TARGET_LOST로 끝난다. 그래서 B에 넣지 않는다.
 - 비행 시나리오(A, D, F1, F2, F3)가 실패하면 뒤의 비행 시나리오는 실행하지 않고 `UPSTREAM_FAILED`(실패로 센다)로 기록한다. A, D의 실패도 F1-F3을 `UPSTREAM_FAILED`로 만든다. 정리용 `[LAND]`는 한 번 시도하고 판정에 넣지 않는다. 정리도 실패해 T의 선행조건(지상 DISARMED)이 맞지 않으면 T는 `PRECONDITION`으로 실패하고 `UPSTREAM_FAILED`와 따로 분류한다. F3만 따로 돌릴 수 없다는 것을 `tests/sitl/README.md`에 적는다.
 - TARGET_LOST와 표적 서비스 정지의 통합 시나리오는 1b에 두지 않는다. 단위 테스트(가짜 `FramePort`와 표적 맵)로 덮고 계약 문장의 근거는 [단위 테스트]로 적는다.
-- 스모크나 sitl 실행 중 적어도 하나는 기체를 원점에서 수평으로 떨어진 곳에 스폰해 NavSat 변환의 수평 반전을 가려낸다(S2-a. 위치는 D-2의 답과 함께 정한다).
+- `config/fleet.yaml`의 기체 1을 (6, -3, 0)에 스폰해 스모크 S2가 NavSat 변환의 수평 반전을 가려낸다(S2-a. 반전이면 수평 오차가 약 13.4 m라 0.5 m 허용으로 실패한다). 1a 시나리오 A, C, D, T는 위치와 무관한 미션이다.
+- sitl은 전용 fleet 파일 `tests/sitl/fleet.yaml`(test-engineer 소유. F2 표적 포함)을 `sim_stack.sh up --fleet`으로 쓴다. 개발용 `config/fleet.yaml`의 `targets`는 시연용 하나 또는 빈 목록이다(sim-engineer, test-engineer가 정한다). 개발 fleet을 고쳐도 CI 시나리오 기하가 바뀌지 않게 하려는 것이다.
 - 시간 규칙: 시나리오마다 항목 `timeout` 합 + 마진이 비행당 상한(ROS 시각 3분)을 넘지 않음을 단위 테스트가 단정한다. RTF가 1 미만이면 `SITL_PYTEST_TIMEOUT`(벽시계)은 올려도 되고 판정의 ROS 시각 한도는 올리지 않는다. CI `sitl` job의 목표는 15분이다(U11). 넘으면 순회 waypoint 수와 Hold 유지 시간을 먼저 줄이고, 그래도 넘으면 측정값과 함께 사용자에게 올린다. 판정 기준을 느슨하게 해서 줄이지 않는다.
-- [추정] 1b 추가 뒤 `run_sitl.sh`는 약 4-5.5분(F1 약 45 s, F2 약 40 s, F3 약 40 s, B 약 11 s), CI `sitl` job은 보통 약 8-9분, 가장 나쁜 조합(pull 캐시 없음, ros_ws 빌드 최장)에서 약 13분이다. 근거는 1a 실행 기록의 이정표와 최근 sitl 실행의 step 시각이고, 순회, 표적 접근, RTL 구간은 실측 전 추정이다. 1b 첫 로컬 `--repeat 10`의 값으로 교체한다. RTF가 0.7로 떨어지면 가장 나쁜 조합이 약 14분이다.
+- [추정] 1b 추가 뒤 `run_sitl.sh`는 약 4-5.5분(F1 약 45 s, F2 약 40 s, F3 약 40 s, B 약 11 s), CI `sitl` job은 보통 약 8-9분, 가장 나쁜 조합(pull 캐시 없음, ros_ws 빌드 최장)에서 약 13분이다. 근거는 1a 실행 기록의 이정표와 최근 sitl 실행의 step 시각이고, 순회, 표적 접근, RTL 구간은 실측 전 추정이다. 인프라 추가(새 서비스 둘, 월드 생성, `idsim_sim` 빌드)는 20초 아래다. 1b 첫 로컬 `--repeat 10`의 값으로 교체한다. RTF가 0.7로 떨어지면 가장 나쁜 조합이 약 14분이다. 15분을 넘을 때 판정을 건드리지 않는 devops 쪽 수단으로 colcon 산출물 캐시를 먼저 검토한다.
 
 근거
 - 1a의 B 사례(GOTO가 든 미션)는 쟁점 6으로 유효 미션이 되어 그대로 두면 기체가 이륙한다. 그래서 B의 사례를 1b 기준으로 바꾼다.
@@ -377,21 +384,16 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 
 결정
 - 생성기(`tools/gen_compose.py`)가 기체별 기대 GPS `vehicles[].expect_gps = {lat, lon, alt}`를 `world.origin`과 스폰 pose로 계산해 `stack.json`에 싣는다. `check_px4`는 지금의 `--expect-origin`을 기체마다 그 값으로 부르기만 한다. `--expect-pose-enu`는 두지 않는다.
-- 식: 위경도는 gz `PositionTransform(LOCAL2)`과 같은 WGS84 타원체 식, 고도는 `world.origin.alt + 스폰 z + base_link 오프셋`(x500은 0.24 m)이다. base_link 오프셋은 `sim-oracle`과 같은 값이어야 한다. 생성기가 그 값을 얻는 방법은 D-2의 답으로 정한다.
-- 생성기의 식은 스모크 기대값이고 운용 변환이 아니다. "world ENU <-> 로컬 NED 변환은 `idsim_common` 한 곳"은 운용 노드의 규칙이고 이 식에 적용하지 않는다. 생성기 단위 테스트(3대-k0 fixture)가 식을 고정한다.
+- 기준점은 GNSS 센서가 붙은 base_link다. 식은 WGS84 곡률 반지름의 국소 근사(`M`, `N`을 원점 위도에서 계산, 표준 라이브러리 `math`)이고 고도는 `world.origin.alt + 스폰 z + 센서 높이`다. 센서 높이는 생성기 상수 `AIRFRAME_SENSOR_Z_M = {"4001_gz_x500": 0.24}`(airframe 허용 목록 옆)다. 오프셋이 수직뿐이라 yaw와 무관하다. embedded는 null이다.
+- 센서 높이의 출처가 생성기 상수와 x500 모델 SDF(`sim-oracle`이 읽는다) 둘이므로, 스모크 images 단계(S0)가 sim-base 안에서 sdformat으로 읽은 base_link 높이를 생성기의 `--print-sensor-z AIRFRAME` 출력과 대조한다. `PX4_GZ_MODELS_REF`가 바뀌는 PR에서 어긋남이 드러난다.
+- `run_smoke.sh`는 `vehicles.0.expect_gps`를 같은 `--expect-origin`으로 넘긴다. 허용 오차(수평 0.5 m, 수직 1.0 m)는 그대로다. 다대 비교는 호출하는 쪽이 `vehicles[i]`마다 `check_px4`를 부른다.
+- 생성기의 식은 스모크 기대값이고 운용 변환이 아니다. "world ENU <-> 로컬 NED 변환은 `idsim_common` 한 곳"은 운용 노드의 규칙이고 이 식에 적용하지 않는다. 생성기 단위 테스트가 gz-math 7.7.0 LOCAL2 값 둘(원점 서울시청에서 북 100 m, 동 100 m)과 1e-8 도 안에서 맞음을 단정하고 3대-k0 golden이 값을 바이트로 고정한다.
 
-근거: 비교기는 그대로이고 인자 출처만 바뀐다. GNSS 고도는 센서가 붙은 base_link의 고도이므로 스폰 z만 더하면 R1 수직 기록이 0.24 m 치우친다.
+근거: 비교기는 그대로이고 인자 출처만 바뀐다. 근사와 gz-math LOCAL2의 차는 원점에서 100 m에 약 0.7 mm다([실측, 계산]). GNSS 고도는 센서가 붙은 base_link의 고도이므로 스폰 z만 더하면 R1 수직 기록이 0.24 m 치우친다.
 
 ## 쟁점 17. Actor 월드의 viz 확인
 
 결정: sim-engineer의 수동 절차(M4)를 1회 하고 결과를 PR 본문에 남긴다. ogre2와 ogre 둘 다, GUI 재접속 1회, 120 s 동안 서버 생존과 `/clock` 증가와 `vehicle_status` 수신. CI에 넣지 않는다. Actor 위치와 `TargetState`의 차이(M2)는 같은 확인에서 육안으로 본다. `gui.config` 고정 목록 밖의 plugin 추가 금지를 운영 문서에 적는다.
-
-## 남은 재질문
-
-devops-engineer에게 메인 세션이 따로 묻고 있다(답 대기). 답을 받으면 해당 쟁점의 "D-n의 답으로 정한다" 문장을 결정으로 바꾼다.
-
-- D-1(쟁점 2, 3, 5). `world.file`이 "템플릿 경로"로 바뀌고 생성기가 월드 SDF를 실행 디렉터리에 쓴다. key 이름을 유지할지 바꿀지, `fleet.yaml`의 `schema` 번호를 올릴지, 생성된 월드 SDF와 `targets`, `sim-oracle` 서비스를 생성기 golden(4종)에 어떻게 넣을지. `targets`가 비었을 때 서비스를 만들지 않는 것과 `startup.node_stages`에서 `targets`와 `sim-oracle`의 위치. 두 서비스의 DDS 환경(다른 ROS 서비스와 같은 블록), 표적 params 평탄화 형식, 기체 이름 목록 전달, 표시 파일 healthcheck.
-- D-2(쟁점 16). `stack.json`의 `vehicles[].expect_gps` 추가와 fixture 갱신, `world.origin` 필수화가 스모크(embedded 포함)에 주는 영향. `expect_gps` 고도의 base_link 오프셋을 생성기가 얻는 방법(`sim-oracle`과 한 값). 원점에서 떨어진 스폰(S2-a)을 어느 스모크나 fixture에 둘지.
 
 ## 1a 고정 계약 영향
 
@@ -425,9 +427,9 @@ U6의 산출물 최소 원칙을 1b에도 쓴다. 결과는 PR 본문과, 상수
 | S1-a | 지상 정지에서 oracle의 base_link 위치와 스폰 pose(x, y 같고 z는 스폰 z + 0.24 근처), Pose_V의 `x500_N` model 항목이 world 기준인지 | 오프셋 합성과 top-level pose가 world 기준이라는 [추정](쟁점 5) | sim-engineer | M5와 같은 실행 |
 | S1-b | 호버 중 oracle 위치와 `vehicle_local_position`을 사슬 역변환한 값의 차, 수평과 수직 | 기준점이 같다는 판단과 사슬의 부호, 축(쟁점 4, 5) | sim-engineer, test-engineer | F1 trace |
 | S1-c | oracle 프로세스 CPU와 `/sim/*/pose` 발행 주기 | 비용 [추정] 확인 | sim-engineer | F1 중 `docker stats` |
-| S2-a | 원점에서 떨어진 스폰에서 `sensor_gps` 위경도와 LOCAL2 기대값의 차 | NavSat이 LOCAL2를 쓴다는 [추정]. 반전이면 사슬의 기준 식이 바뀐다(쟁점 4) | sim-engineer, test-engineer | `expect_gps` 비교(D-2) |
+| S2-a | 원점에서 떨어진 스폰에서 `sensor_gps` 위경도와 LOCAL2 기대값의 차 | NavSat이 LOCAL2를 쓴다는 [추정]. 반전이면 사슬의 기준 식이 바뀐다(쟁점 4) | sim-engineer, test-engineer | 스모크 S2(기체 1을 (6, -3)에 스폰) |
 | S3-a | `targets` 컨테이너 CPU, `/clock` 수신 주기, `TargetState` 발행 간격 분위수 | Python의 `/clock` 수신 비용과 timer 흔들림(쟁점 3) | sim-engineer | F2와 같은 실행, R3와 함께 |
-| R1 | `ref_*`와 `expect_gps`의 차(수평, 수직) | 기록(쟁점 5) | test-engineer | sitl gate의 `recorded_only` |
+| R1 | `ref_*`와 `expect_gps`의 차(수평, 수직, base_link 기준) | 기록(쟁점 5) | test-engineer | sitl gate의 `recorded_only` |
 | R2 | 도달 사건마다 `t_f`의 정답 거리 excess, 성분과 정답 표본 간격 | b(쟁점 5). 부팅 10회 이상 | test-engineer | F1 trace, 로컬 `--repeat 10` |
 | R3 | `TargetState` 나이, `/clock` 간격, `now - vehicle_status.timestamp` 분위수, F2 추종 오차 | `target_timeout`, `target_fresh_age`, 표적 접근 L(쟁점 5, 8, 11) | test-engineer | sitl gate의 `recorded_only`, F2 trace |
 | R4 | RTL 착륙 수평 위치와 이어받은 비행의 이륙 직전 정답 위치의 거리 | `R_home`(쟁점 5) | test-engineer | F3 trace, 로컬 `--repeat 10` |
@@ -442,7 +444,7 @@ U6의 산출물 최소 원칙을 1b에도 쓴다. 결과는 PR 본문과, 상수
 
 ## 문서 반영 목록
 
-B1은 지금 고칠 수 있고(D-1 답이 필요한 문장만 그 뒤), B13은 1b 완료 기준을 만족한 뒤 고친다.
+B1은 지금 고칠 수 있고, B13은 1b 완료 기준을 만족한 뒤 고친다.
 
 B1(architect)
 - `docs/architecture.md` "목표와 범위"의 "다루지 않는 것" 문단(U10). 초안:
@@ -454,12 +456,13 @@ B1(architect)
   > 이 원칙은 표적 경로에도 적용한다. Mission Executor는 Gazebo 토픽을 직접 구독하지 않고 `idsim_interfaces`의 `TargetState` 계약(`/targets/<id>/state`)만 구독한다. 시뮬레이션에서는 `idsim_sim`의 표적 어댑터 노드가 `config/fleet.yaml`의 궤적 정의를 시뮬레이션 시간에 평가해 이 계약으로 발행하고, Gazebo 월드의 Actor는 같은 정의로 생성해 화면에서 확인하는 용도다(Actor의 화면 위치는 참고용이다). 실기체에서는 같은 토픽을 추적기가 채운다.
 
 - 같은 절의 구성 요소 표 `idsim_sim` 행("Gazebo pose -> `TargetState`"를 "궤적 정의 -> `TargetState`"로, ros_gz_bridge는 `/clock`만), 토픽 표의 `/targets/*/state` 발행자.
-- `docs/architecture.md` "기체 식별과 설정의 단일 출처": `world.origin`의 적용 방식(생성된 월드 SDF), `ops-N` params의 `world.origin`, 표적 어댑터는 원점을 받지 않는 것, `targets` 스키마 요지, `world.file`의 의미(D-1 답 뒤).
+- `docs/architecture.md` "기체 식별과 설정의 단일 출처": `world.origin`의 적용 방식(생성된 월드 SDF), `ops-N` params의 `world.origin`, 표적 어댑터는 원점을 받지 않는 것, `targets` 스키마 요지(네 key 필수와 상한), `world.file` 삭제와 `world.template`, fleet `schema` 2.
 - `docs/architecture.md` "Docker Compose 실행 환경 설계": `bridge` 서비스 설명의 "1b에서 Gazebo 표적 pose를 더한다"를 "`/clock`만"으로, 서비스 표에 `targets`(ros-ws, 표적 어댑터)와 `sim-oracle`(sim-base, SITL 전용 정답 pose) 행, 그림의 표적 pose 화살표와 "1b에서 정한다" 문장, `gz_server.sh`의 원점 단계(M5 뒤), 디렉터리 설명의 `idsim_sim`(ament_python 패키지, 월드 템플릿).
 - `docs/architecture.md` "테스트 자동화와 CI": 도달 판정 문장("goal의 목표값과 `vehicle_local_position`")을 계약 판정과 정답 판정의 구분으로, `/sim/` 토픽 규칙(운용 패키지는 쓰지 않고 lint가 소스, launch, params YAML을 검사, SITL 기록물에는 들어간다), SITL 시나리오 목록(B, C, A, D, F1, F2, F3, T)과 CI `sitl` 15분 목표.
 - `docs/roadmap.md` Phase 1b: 2번의 `bridge.yaml`, "Gazebo pose -> `TargetState`", "표적 상태의 생산 경로는 1b 착수 때 정한다"를 해법 (가)와 U10 문구로, "EKF 원점 오차 실측으로 표적 접근 임계값을 정한다"를 R2와 R1의 역할로, 4번의 판정 문장. 리스크 표의 해당 행(Actor pose, 범위 문구, `bridge.yaml` 금지 검사, "범위 확장 유혹"의 "pose를 따라가는 Actor")을 지금 유효한 대응으로. 확장 후보에 "Gazebo 기반 표적 생산자".
 - `docs/roadmap.md` Phase 2: 기록 대상에 SITL 실행의 `/sim/` 토픽(U12), 리플레이 판정이 도달 판정까지 덮는다는 것.
-- `docs/smoke-test.md`: S2의 원점 적용 경로와 `origin_set` 표시 파일(M5 뒤), 원점에서 떨어진 스폰(D-2 답 뒤).
+- `docs/smoke-test.md`: S2의 원점 적용 경로와 `origin_set` 표시 파일(M5 뒤), S2의 기대값은 `stack.json` `vehicles[0].expect_gps`(base_link 높이 포함), 기체 1의 원점에서 떨어진 스폰, S0의 센서 높이 대조.
+- devops-engineer가 고치는 것(B3과 같은 PR): `docker/README.md`의 서비스 표(gazebo 행의 원점 문장, `targets`와 `sim-oracle` 행)와 생성 절의 `world.origin` 문장, 저장소 `README.md`의 "기체 출발 위치는 `world.origin`" 문장.
 
 B13(1b 완료 전, architect)
 - `docs/interface.md`: 위 "1a 고정 계약 영향" (a)-(l), "GoToItem과 TrackEntityItem" 절의 확정 문장(쟁점 8, 속도 feedforward 포함), "TargetState" 절의 "고정 전" 해제와 QoS 상태 행 고정, `REASON_TARGET_LOST` 의미, "공중에서 끝나는 미션" 절(쟁점 10, 지면 높이 목표의 경합 문장 포함), 고정 시점 표의 1b 행, 좌표계 절의 원점 이동 문장(쟁점 4, 기준 유효 술어), 미확인 목록의 1b 항목(K1-K4의 결과).
@@ -475,5 +478,8 @@ B13(1b 완료 전, architect)
 | ops-service-engineer | Phase 3 | Fleet의 배분 전 검증은 core `validate_mission_contract`를 쓴다. 공중 종료 미션의 끝점이 겹치지 않게 하는 계획 책임. 공중 시작 미션은 Hold인 기체에만 보낸다 |
 | px4-engineer | Phase 3 설계 후보 | `VEHICLE_CMD_SET_GPS_GLOBAL_ORIGIN`으로 모든 기체의 EKF 원점을 `world.origin`에 맞추는 안(실측 없이 1b에 넣지 않는다) |
 | logging-engineer, architect | Phase 2 | U12에 따라 SITL 기록물에 `/sim/` 토픽을 넣는 기록 대상 정의, 미션 YAML과 `stack.json`과 라이브 `verdict.json`을 기록물 디렉터리에 함께 두는 규약, bag 로그 시각이 sim 시각인지, 순수 Python mcap 읽기 |
+| test-engineer | B3, B11 | `tests/support/stack.py` 판 5 명세(`expect_gps`, `targets`, `services.targets`, `services.sim_oracle`, `world.template`), `run_smoke.sh` `origin_args`의 출처 변경과 S0 센서 높이 항목, `check_px4.py` 고도 주석("기대값에 base_link 높이를 넣었다"), `tests/sitl/fleet.yaml`과 `run_sitl.sh --fleet` |
+| sim-engineer | B3, B6, B7 | `idsim_sim` 실행 이름(생성기 상수 하나), `sim_oracle.py`의 환경 변수 계약(`IDSIM_WORLD_NAME`, `IDSIM_ORACLE_VEHICLES`), 두 표시 파일의 경로, Actor waypoint 표본 간격(M4 뒤), `idsim_base.sdf`가 생성기 거부 조건을 지키는지 |
+| devops-engineer | B3, B6, B7 | 생성기, fixture와 golden, `config/fleet.yaml`(schema 2, template, 기체 1 스폰), `sim_stack.sh` 사전 검사, `tools/ci/lint.sh`의 `/sim/` 검사(운용 패키지의 소스, launch, params YAML), `docker/README.md`. sim-base에 패키지가 필요해지면 이미지 변경만 담은 PR을 먼저 main에 합친다(sim-base와 px4 key가 바뀌어 `sitl` pull이 실패하는 문제를 피한다) |
 | sim-engineer | 플래키가 보일 때 | Xvfb와 소프트웨어 렌더링으로 `gz-gui` 생존 확인 자동화 |
 | sim-engineer, architect | Gazebo 기반 표적 생산자가 필요할 때(U10의 확장 항목) | 서버 plugin이 model을 이동하는 안(Actor를 쓰지 않아 `dynamic_pose` 위험이 사라진다) 또는 Actor 컴포넌트를 읽는 system. `TargetState`와 토픽은 그대로이고 생산자만 바뀐다 |
