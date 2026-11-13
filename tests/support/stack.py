@@ -24,6 +24,9 @@ SUPPORTED_SCHEMAS = frozenset({1})
 # 생성기 판 3부터 stack.json에 노드 단계 key(vehicle_id, params_file, executor_node, run.params_dir,
 # startup.node_stages, services.ops)가 있다. 판 3 이상이면 필수로 검사하고, 그보다 낮은 판은 읽기만 한다.
 NODE_KEYS_MIN_GENERATOR_VERSION = 3
+# 생성기 판 5부터 world template, 표적, 정답 pose 서비스, 기체별 기대 GPS key가 있다(Phase 1b 쟁점 2, 3, 5, 16).
+# 판 5 이상이면 필수로 검사하고, 그보다 낮은 판은 읽기만 한다(접근자는 StackError).
+WORLD_KEYS_MIN_GENERATOR_VERSION = 5
 
 
 class StackError(Exception):
@@ -63,7 +66,7 @@ _SPEC = {
                 "port_last": _INT, "participant_index_max": _INT},
     },
     # world.origin은 값이 있을 때만 하위 키 검사(_check_world_origin)
-    "world": {"name": _STR, "file": _STR, "origin": (dict, _NONE),
+    "world": {"name": _STR, "file": _NSTR, "origin": (dict, _NONE),
               "speed_factor": (int, float, _NONE)},
     "images": {"xrce_agent": _STR, "sim_base": _STR, "px4": _STR, "ros_ws": _STR,
                "lichtblick": _NSTR},
@@ -94,6 +97,20 @@ _V3_SPEC = {
     "services": {"ops": (list,)},
 }
 _V3_VEHICLE_SPEC = {"vehicle_id": _STR, "params_file": _NSTR, "executor_node": _NSTR}
+
+# 생성기 판 5 이상에서 추가로 검사하는 key. world.file은 판 5부터 실행 디렉터리 기준 상대 경로
+# ("world/<name>.sdf")이고 생성한 월드가 없는 embedded는 null이다. targets, services.targets,
+# services.sim_oracle은 key가 항상 있고, 해당 서비스가 없는 구성에서는 null 또는 빈 목록이다.
+_V5_SPEC = {
+    "inputs": {"world_template": {"path": _STR, "sha256": _STR}},
+    "world": {"template": _STR},
+    "targets": (list,),
+    "services": {"targets": _NSTR, "sim_oracle": _NSTR},
+}
+_V5_VEHICLE_SPEC = {"expect_gps": (dict, _NONE)}
+_NUM = (int, float)
+_TARGET_SPEC = {"id": _STR, "start_s": _NUM, "loop": (bool,), "waypoints": (list,)}
+_WAYPOINT_SPEC = {"t": _NUM, "x": _NUM, "y": _NUM, "z": _NUM}
 
 
 def _type_ok(value, types):
@@ -148,6 +165,33 @@ def _validate(data):
             raise StackError("services.ops: 문자열 배열이어야 한다")
     if not all(isinstance(s, str) for s in data["services"]["px4"]):
         raise StackError("services.px4: 문자열 배열이어야 한다")
+    if data["generator"]["version"] >= WORLD_KEYS_MIN_GENERATOR_VERSION:
+        _validate_v5(data)
+    elif data["world"]["file"] is None:
+        raise StackError("world.file: null은 생성기 판 5부터 허용한다")
+
+
+def _validate_v5(data):
+    _check(data, _V5_SPEC, "")
+    for i, v in enumerate(data["vehicles"]):
+        _check(v, _V5_VEHICLE_SPEC, f"vehicles[{i}]")
+        if v["expect_gps"] is not None:
+            _check(v["expect_gps"], _ORIGIN_SPEC, f"vehicles[{i}].expect_gps")
+    # decisions: embedded(gazebo 서비스 없음)만 world.file과 expect_gps가 null이다(양방향)
+    has_gazebo = data["services"]["gazebo"] is not None
+    if (data["world"]["file"] is None) == has_gazebo:
+        raise StackError("world.file: null은 gazebo 서비스가 없는 구성(embedded)에서만이고, "
+                         "gazebo 서비스가 있으면 값이 있어야 한다")
+    for i, v in enumerate(data["vehicles"]):
+        if (v["expect_gps"] is None) == has_gazebo:
+            raise StackError(f"vehicles[{i}].expect_gps: null은 gazebo 서비스가 없는 구성"
+                             "(embedded)에서만이고, gazebo 서비스가 있으면 값이 있어야 한다")
+    for i, t in enumerate(data["targets"]):
+        _check(t, _TARGET_SPEC, f"targets[{i}]")
+        for j, w in enumerate(t["waypoints"]):
+            _check(w, _WAYPOINT_SPEC, f"targets[{i}].waypoints[{j}]")
+    if (data["services"]["targets"] is None) != (not data["targets"]):
+        raise StackError("services.targets: targets가 비었을 때만 null이어야 한다")
 
 
 @dataclass(frozen=True)
@@ -173,6 +217,8 @@ class Vehicle:
     vehicle_id: str = None   # 계약 식별자("px4_1"). action 이름 /<vehicle_id>/execute_mission
     params_file: str = None  # 실행 디렉터리 기준 상대 경로(params/ops-N.yaml)
     executor_node: str = None  # Executor 노드 FQN("/px4_1/mission_executor")
+    # 생성기 판 5 이상에서만 값이 있다. {lat, lon, alt}(base_link 기준), embedded는 None
+    expect_gps: dict = None
 
 
 @dataclass(frozen=True)
@@ -301,6 +347,44 @@ class Stack:
         self._need_node_keys()
         return None if vehicle.params_file is None else self.resolve(vehicle.params_file)
 
+    # 생성기 판 5 이상의 key. 낮은 판이면 StackError
+    def _need_world_keys(self):
+        if self.generator_version < WORLD_KEYS_MIN_GENERATOR_VERSION:
+            raise StackError(
+                f"{self.path}: 생성기 판 {self.generator_version}에는 월드와 표적 key가 없다"
+                f"(필요: {WORLD_KEYS_MIN_GENERATOR_VERSION} 이상)")
+
+    @property
+    def world_template(self):
+        """world template의 저장소 기준 상대 경로(world.template)."""
+        self._need_world_keys()
+        return self.raw["world"]["template"]
+
+    @property
+    def world_file(self):
+        """생성한 월드 SDF의 절대 경로. 생성한 월드가 없는 embedded는 None."""
+        self._need_world_keys()
+        rel = self.raw["world"]["file"]
+        return None if rel is None else self.resolve(rel)
+
+    @property
+    def targets(self):
+        """표적 목록(각 {id, start_s, loop, waypoints[{t,x,y,z}]}). 없으면 빈 목록."""
+        self._need_world_keys()
+        return self.raw["targets"]
+
+    @property
+    def targets_service(self):
+        """targets 서비스 이름. 표적이 없으면 None."""
+        self._need_world_keys()
+        return self.raw["services"]["targets"]
+
+    @property
+    def sim_oracle_service(self):
+        """sim-oracle 서비스 이름. 없는 구성(embedded 등)이면 None."""
+        self._need_world_keys()
+        return self.raw["services"]["sim_oracle"]
+
     def vehicle_by_vehicle_id(self, vehicle_id):
         """계약 식별자("px4_1")로 기체를 찾는다."""
         for v in self.vehicles:
@@ -365,7 +449,8 @@ def _vehicle(d):
         rootfs_dir=d["rootfs_dir"], ulog_dir=d["ulog_dir"], host_rootfs_dir=d["host_rootfs_dir"],
         expected_params=dict(d["expected_params"]), derived_params=dict(d["derived_params"]),
         raw=d, vehicle_id=d.get("vehicle_id"), params_file=d.get("params_file"),
-        executor_node=d.get("executor_node"))
+        executor_node=d.get("executor_node"),
+        expect_gps=d.get("expect_gps"))
 
 
 def loads(text, path="<string>"):

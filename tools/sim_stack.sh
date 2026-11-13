@@ -11,7 +11,8 @@
 # up이 하는 일(인자 없는 up 한 번이 사용자 진입점이다)
 #   1. 같은 프로젝트(idsim-<k>)가 떠 있으면 먼저 내린다(항상 down 뒤 up. 옛 모델이 남은 Gazebo에 px4가
 #      다시 붙는 조용한 실패를 막는다).
-#   2. tools/gen_compose.sh로 artifacts/runs/<실행 id>/에 compose.yaml과 stack.json을 만든다.
+#   2. tools/gen_compose.sh로 artifacts/runs/<실행 id>/에 compose.yaml, stack.json, world/<월드>.sdf(standalone)를 만든다.
+#      아무것도 올리기 전에 생성된 월드 파일이 있고 <spherical_coordinates> 요소가 정확히 하나인지 본다(원점은 이 파일로만 들어간다).
 #   3. stack.json의 startup.stages를 차례로 `up -d --wait`한다. 세 단계(standalone): 1단계(에이전트, gazebo),
 #      2단계(px4-N), 3단계(bridge). embedded는 두 단계(에이전트, px4-1). standalone은 1단계 뒤
 #      sim-base 1회성 컨테이너로 같은 GZ_PARTITION의 `gz model --list`에 이 스택의 모델(<모델>_N)이 없는지
@@ -187,7 +188,7 @@ print(" ".join(bad))' 2>/dev/null)" || bad=""
 }
 
 do_up() {
-  local existing sf f stage i n_stages n_node_stages
+  local existing sf f stage i n_stages n_node_stages world_rel world_file n_sc
   existing="$(docker ps -a -q --filter "label=com.docker.compose.project=${project}")"
   if [ -n "$existing" ]; then
     say "떠 있는 ${project}를 먼저 내린다"
@@ -201,6 +202,13 @@ do_up() {
   f="${run_dir}/$(sj "$sf" run.compose_file)"
   [ "$(sj "$sf" stack.compose_project)" = "$project" ] || { say "stack.json 프로젝트가 ${project}가 아니다"; exit 1; }
   say "생성: ${f}"
+  world_rel="$(sj "$sf" world.file)"
+  if [ -n "$world_rel" ]; then
+    world_file="${run_dir}/${world_rel}"
+    [ -f "$world_file" ] || { say "생성된 월드 파일이 없다: ${world_file}"; exit 1; }
+    n_sc="$(grep -o '<spherical_coordinates' "$world_file" | wc -l || true)"
+    [ "$n_sc" = "1" ] || { say "월드 파일의 <spherical_coordinates>가 정확히 하나가 아니다(${n_sc}개): ${world_file}"; exit 1; }
+  fi
   n_node_stages="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["startup"]["node_stages"]))' "$sf")"
   if [ "$infra_only" -eq 0 ] && [ "$n_node_stages" -gt 0 ] && [ ! -d "${repo_root}/ros_ws/install/idsim_mission" ]; then
     say "ros_ws/install/idsim_mission/이 없다. 노드 단계를 올릴 수 없다. 먼저 tools/ros_ws.sh build를 하라(Executor 없이 인프라만 올리려면 --infra-only)"

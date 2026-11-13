@@ -61,7 +61,7 @@ xrce-agent --> gazebo --> px4-1..N --> bridge      (본 스택, up --wait 대상
 | 서비스 | 이미지 | 하는 일 | 준비 판정 | 실행 사용자 |
 | --- | --- | --- | --- | --- |
 | `xrce-agent` | xrce-agent | PX4의 uORB 토픽을 ROS 2 DDS 토픽으로 중계한다. 기체 전부가 이 에이전트 하나에 접속한다 | 에이전트 UDP 포트가 열림(16진수 포트는 생성기가 계산) | root |
-| `gazebo` | sim-base | `idsim_sim`의 `gz_server.sh`가 Gazebo 서버를 헤드리스로 띄우고 월드 이름을 검사하며, `world.origin`이 있으면 원점을 한 번 설정한다 | `scene/info` 서비스 응답과 준비 파일 `/tmp/idsim/ready` | root |
+| `gazebo` | sim-base | `idsim_sim`의 `gz_server.sh`가 생성된 월드 SDF(`/opt/idsim/world/<월드>.sdf`, 실행 디렉터리의 `world/`를 읽기 전용으로 마운트)를 검사하고(월드 이름, `<spherical_coordinates>` 정확히 하나) Gazebo 서버를 헤드리스로 띄운다. 원점은 그 SDF에 들어 있고 런타임에 설정하지 않는다 | `scene/info` 서비스 응답과 준비 파일 `/tmp/idsim/ready`(응답 직후에 생성) | root |
 | `px4-N` | px4 | 기체 N의 비행 제어기(`px4 -d -i N`). Gazebo에 `<모델>_N`을 스폰하고 에이전트에 접속한다. 작업 디렉터리 `rootfs/N`은 실행 디렉터리 `px4-N/`의 바인드 마운트(ULog, 파라미터 파일이 산출물로 남는다) | 에이전트 연결 상태가 `Running, connected` | 호스트 uid:gid |
 | `bridge` | ros-ws | Gazebo의 시뮬레이션 시계를 ROS 2 `/clock` 토픽으로 넘긴다 | `/clock` 수신(30초 간격, 시작 구간은 5초) | 호스트 uid:gid |
 | `runner` | ros-ws | 상주하지 않는다. 스크립트가 `compose run`으로 판정 명령을 실행할 때 쓴다. 프로필 `tools` | 없음 | 호스트 uid:gid |
@@ -72,7 +72,7 @@ xrce-agent --> gazebo --> px4-1..N --> bridge      (본 스택, up --wait 대상
 변형은 둘이다(`--variant`).
 
 - `standalone`(기본): 위 표 전부.
-- `embedded`: 진단용(스모크 embedded). 기체 1대, `gazebo`, `bridge`, `gz-gui`, `foxglove`, `lichtblick` 없이 PX4가 Gazebo를 컨테이너 안에서 직접 띄운다(`HEADLESS=1`). 원점은 적용하지 않는다.
+- `embedded`: 진단용(스모크 embedded). 기체 1대, `gazebo`, `bridge`, `gz-gui`, `foxglove`, `lichtblick` 없이 PX4가 Gazebo를 컨테이너 안에서 직접 띄운다(`HEADLESS=1`). 월드를 생성하지 않고 원점을 적용하지 않으며(PX4가 이미지의 `/opt/px4-gz/worlds/<월드>.sdf`를 연다) `stack.json`의 `world.file`과 `vehicles[].expect_gps`가 null이다.
 
 호스트에 쓰는 서비스는 호스트 사용자의 uid:gid로 돌고 `HOME`은 컨테이너 안 `/tmp`, ROS 로그는 `artifacts/runs/<실행 id>/ros_log/<서비스>/`다. 그래서 `artifacts/runs/`에는 root 소유 파일이 생기지 않는다. 바인드 마운트는 중첩하지 않는다(중첩하면 마운트 지점이 root 소유로 생긴다).
 
@@ -159,7 +159,7 @@ tools/sim_stack.sh logs px4-1
 tools/sim_stack.sh down               # docker compose -p idsim-0 down
 ```
 
-생성만 하려면 `tools/gen_compose.sh --stack k`를 쓴다. 생성기는 ros-ws 컨테이너 안에서 돌므로(호스트에 PyYAML이 필요 없다) ros-ws 이미지가 있어야 한다. 기체, 월드, 원점(`world.origin`), SITL 파라미터는 `config/fleet.yaml`에서 고친다.
+생성만 하려면 `tools/gen_compose.sh --stack k`를 쓴다. 생성기는 ros-ws 컨테이너 안에서 돌므로(호스트에 PyYAML이 필요 없다) ros-ws 이미지가 있어야 한다. 기체, 월드(`world.name`, 월드 템플릿 `world.template`), 원점(`world.origin`), SITL 파라미터는 `config/fleet.yaml`에서 고친다(`schema`는 2). 생성기는 템플릿에 월드 이름과 `<spherical_coordinates>`(`world.origin`, heading 0, ENU)를 넣어 실행 디렉터리의 `world/<월드>.sdf`로 쓰고, 기체별 기대 GPS(`stack.json`의 `vehicles[].expect_gps`, 스폰 pose와 센서 높이 반영)를 계산한다. 템플릿에 월드 직속 `<plugin>`, `<spherical_coordinates>`, `<actor>`, `<include>`가 있거나 `world.origin`이 없으면 생성이 실패한다.
 
 스모크 실행. 같은 생성기와 `tools/sim_stack.sh up`으로 스택을 올리고 판정한 뒤 내린다.
 

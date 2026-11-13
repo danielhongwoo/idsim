@@ -2,7 +2,7 @@
 """config/fleet.yaml -> <run-dir>/{compose.yaml, stack.json, params/ops-N.yaml}. 담당: devops-engineer.
 
 설계는 docs/architecture.md의 "기체 식별과 설정의 단일 출처"와 "Docker Compose 실행 환경 설계" 절,
-stack.json 형식은 tests/support/stack.py(로더)와 같은 schema 1을 따른다.
+stack.json 형식은 tests/support/stack.py(로더)와 같은 schema 1을 따른다. fleet.yaml의 schema는 2다.
 
 ros-ws 컨테이너 안에서 실행한다(PyYAML 6.0.1). 호스트 진입점은 tools/gen_compose.sh다.
 구조
@@ -22,6 +22,8 @@ ros-ws 컨테이너 안에서 실행한다(PyYAML 6.0.1). 호스트 진입점은
                  [--generated-at 2026-11-09T09:00:00Z] [--git-commit SHA] [--git-dirty true|false]
   gen_compose.py --print-gcs-port k     # QGC가 들을 GCS 포트(14550 + 1000k)만 출력
   gen_compose.py --print-agent-port k   # 에이전트 UDP 포트(8888 + k)만 출력
+  gen_compose.py --print-airframes          # 센서 높이가 등록된 airframe 목록(스모크 S0가 돈다)
+  gen_compose.py --print-sensor-z AIRFRAME  # airframe의 GNSS 센서 높이(m)만 출력(스모크 S0가 모델 SDF와 대조한다)
 종료 코드: 0 성공, 1 검증 실패(stderr에 이유), 2 인자 오류.
 """
 
@@ -38,8 +40,9 @@ import sys
 import xml.etree.ElementTree as ET
 
 # ---------------------------------------------------------------- 기준값(생성기 상수)
-SCHEMA = 1
-GENERATOR_VERSION = 4
+SCHEMA = 1  # stack.json의 schema
+FLEET_SCHEMA = 2  # fleet.yaml의 schema
+GENERATOR_VERSION = 5
 GENERATOR_SCRIPT = "tools/gen_compose.py"
 
 STACK_MIN, STACK_MAX = 0, 9
@@ -88,6 +91,8 @@ SIM_PKG_IN_CONTAINER = "/opt/idsim/sim"
 PX4_ROOTFS = "/opt/PX4-Autopilot/build/px4_sitl_default/rootfs"
 PX4_GZ_MODELS = "/opt/px4-gz/models"
 PX4_GZ_WORLDS = "/opt/px4-gz/worlds"
+WORLD_IN_CONTAINER = "/opt/idsim/world"  # 실행 디렉터리의 world/를 gazebo 서비스에 읽기 전용으로 마운트
+WORLD_DIR = "world"  # 실행 디렉터리 안의 생성 월드 디렉터리
 GZ_SERVER_CONFIG = "/opt/px4-gz/server.idsim.config"
 GZ_RESOURCE_PATH = "/opt/px4-gz/models:/opt/px4-gz/worlds"
 GZ_READY_FILE = "/tmp/idsim/ready"
@@ -100,12 +105,22 @@ CYCLONEDDS_REL = "config/cyclonedds.xml"
 
 # airframe 허용 목록. 이름에서 SYS_AUTOSTART, PX4_SIM_MODEL, Gazebo 모델 이름이 파생된다.
 ALLOWED_AIRFRAMES = ("4001_gz_x500",)
+# airframe별 GNSS 센서(base_link 기준 NavSat)의 지면 위 높이(m). x500 모델 SDF의 base_link 높이와 같아야 하고,
+# 스모크 images 단계(S0)가 sim-base 안의 모델과 --print-sensor-z 출력을 대조한다.
+AIRFRAME_SENSOR_Z_M = {"4001_gz_x500": 0.24}
+# WGS84 타원체(expect_gps의 국소 근사)
+WGS84_A_M = 6378137.0
+WGS84_E2 = 0.00669437999014
+# bridge 명령행의 토픽 인자. 1b의 bridge는 /clock 하나만 넘긴다(표적과 정답 pose는 bridge를 거치지 않는다).
+BRIDGE_TOPIC_ARGS = ("/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",)
+# 템플릿 world 직속에 있으면 거부하는 요소(plugin은 server config를 무시하게 하고, 나머지는 생성기가 넣는다)
+WORLD_FORBIDDEN_CHILDREN = ("plugin", "spherical_coordinates", "actor", "include")
+TEMPLATE_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+\.sdf$")
 # fleet.yaml에서 거부하는 식별 파라미터. PX4가 -i N과 환경에서 스스로 정한다.
 FORBIDDEN_PARAMS = ("MAV_SYS_ID", "UXRCE_DDS_KEY", "UXRCE_DDS_DOM_ID", "UXRCE_DDS_AG_IP", "SYS_AUTOSTART")
 PARAM_NAME_RE = re.compile(r"^[A-Z0-9_]{1,16}$")
 PARAM_VALUE_RE = re.compile(r"^[^\s'\"#]+$")
 WORLD_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-WORLD_FILE_RE = re.compile(r"^/[A-Za-z0-9_./-]+\.sdf$")
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 PATH_SAFE_RE = re.compile(r"^/[A-Za-z0-9_./@+-]*$")
 
@@ -115,7 +130,7 @@ ALLOWED_INTERPOLATIONS = ("${DISPLAY:-}", "${XAUTHORITY:-/dev/null}")
 GUI_PASS_ENV = ("IDSIM_GZ_GUI_ENGINE", "QSG_RENDER_LOOP", "vblank_mode")
 
 FLEET_KEYS = {"schema", "world", "vehicles", "targets", "px4"}
-WORLD_KEYS = {"name", "file", "origin", "speed_factor"}
+WORLD_KEYS = {"name", "template", "origin", "speed_factor"}
 ORIGIN_KEYS = ("lat", "lon", "alt")
 VEHICLE_KEYS = {"id", "airframe", "pose", "px4_params"}
 POSE_KEYS = ("x", "y", "z", "yaw")
@@ -252,7 +267,7 @@ def _unknown_keys(obj, allowed, where, errors):
 def validate_fleet(fleet):
     """fleet dict를 검사하고 정규화한 dict와 경고 목록을 돌려준다. 실패하면 FleetError.
 
-    정규화 결과: {"world": {name, file, origin(None 또는 {lat,lon,alt} 숫자), speed_factor None},
+    정규화 결과: {"world": {name, template, origin({lat,lon,alt} 숫자), speed_factor None},
                   "vehicles": [{id, airframe, pose{x,y,z,yaw} float, px4_params{이름: 문자열}}] (id 순),
                   "targets": [], "px4": {params_file, start}}
     """
@@ -266,48 +281,52 @@ def validate_fleet(fleet):
     if errors:
         raise FleetError("\n".join(errors))
 
-    if fleet["schema"] != 1 or isinstance(fleet["schema"], bool):
-        errors.append(f"schema: 1이어야 한다: {fleet['schema']!r}")
+    if fleet["schema"] != FLEET_SCHEMA or isinstance(fleet["schema"], bool):
+        errors.append(f"schema: {FLEET_SCHEMA}이어야 한다(월드 템플릿은 world.template이다): {fleet['schema']!r}")
 
     # world
     world = fleet["world"]
-    out_world = {"name": None, "file": None, "origin": None, "speed_factor": None}
+    out_world = {"name": None, "template": None, "origin": None, "speed_factor": None}
     if not isinstance(world, dict):
         errors.append("world: 매핑이어야 한다")
     else:
         _unknown_keys(world, WORLD_KEYS, "world", errors)
+        if "file" in world:
+            errors.append("world.file: 없어진 key다. 저장소 기준 월드 템플릿 경로 world.template을 쓴다(fleet schema 2)")
         name = world.get("name")
         if not isinstance(name, str) or not WORLD_NAME_RE.match(name):
             errors.append(f"world.name: ^[A-Za-z0-9_-]{{1,64}}$ 형식이어야 한다: {name!r}")
         out_world["name"] = name
-        wfile = world.get("file")
-        if not isinstance(wfile, str) or not WORLD_FILE_RE.match(wfile) or "/../" in wfile or "/./" in wfile:
-            errors.append(f"world.file: 컨테이너 안 .sdf 절대 경로여야 한다: {wfile!r}")
-        out_world["file"] = wfile
+        template = world.get("template")
+        if (not isinstance(template, str) or not TEMPLATE_PATH_RE.match(template) or os.path.isabs(template)
+                or ".." in template.split("/") or "." in template.split("/") or "" in template.split("/")):
+            errors.append(f"world.template: 저장소 기준 상대 경로의 .sdf 파일이어야 한다(절대 경로와 ..은 거부): {template!r}")
+        out_world["template"] = template
         origin = world.get("origin")
-        if origin is not None:
-            if not isinstance(origin, dict):
-                errors.append("world.origin: {lat, lon, alt} 매핑 또는 생략이어야 한다")
+        if origin is None:
+            errors.append("world.origin: 필수다. {lat, lon, alt}를 적어야 한다")
+        elif not isinstance(origin, dict):
+            errors.append("world.origin: {lat, lon, alt} 매핑이어야 한다")
+        else:
+            _unknown_keys(origin, set(ORIGIN_KEYS), "world.origin", errors)
+            missing = [key for key in ORIGIN_KEYS if key not in origin]
+            if missing:
+                errors.append(f"world.origin: lat, lon, alt 셋을 모두 적어야 한다(빠짐: {', '.join(missing)})")
             else:
-                _unknown_keys(origin, set(ORIGIN_KEYS), "world.origin", errors)
-                missing = [key for key in ORIGIN_KEYS if key not in origin]
-                if missing:
-                    errors.append(f"world.origin: lat, lon, alt 셋을 모두 적거나 origin을 빼야 한다(빠짐: {', '.join(missing)})")
+                vals = {key: origin[key] for key in ORIGIN_KEYS}
+                bad = [key for key, v in vals.items() if not _is_number(v)]
+                if bad:
+                    errors.append(f"world.origin: 숫자가 아닌 값: {', '.join(bad)}")
+                elif not (-90 <= vals["lat"] <= 90 and -180 <= vals["lon"] <= 180):
+                    errors.append(f"world.origin: 위도 -90-90, 경도 -180-180 범위 밖: {vals}")
                 else:
-                    vals = {key: origin[key] for key in ORIGIN_KEYS}
-                    bad = [key for key, v in vals.items() if not _is_number(v)]
-                    if bad:
-                        errors.append(f"world.origin: 숫자가 아닌 값: {', '.join(bad)}")
-                    elif not (-90 <= vals["lat"] <= 90 and -180 <= vals["lon"] <= 180):
-                        errors.append(f"world.origin: 위도 -90-90, 경도 -180-180 범위 밖: {vals}")
-                    else:
-                        out_world["origin"] = vals
+                    out_world["origin"] = vals
         if world.get("speed_factor") is not None:
             errors.append("world.speed_factor: 1a, 1b에서는 null이어야 한다(배속 기제는 Phase 3에서 정한다)")
 
     # targets
     if fleet["targets"] != []:
-        errors.append("targets: 1a에서는 빈 목록이어야 한다")
+        errors.append("targets: 빈 목록이어야 한다(표적 스키마는 아직 없다)")
 
     # px4
     px4 = fleet["px4"]
@@ -428,6 +447,136 @@ def parse_participant_max(xml_text):
     return int(found[0].strip())
 
 
+# ---------------------------------------------------------------- 월드 SDF 생성과 기대 GPS
+def _tag(el):
+    return el.tag if isinstance(el.tag, str) else None  # 주석과 처리 명령은 tag가 함수다
+
+
+def _parse_sdf(text, where):
+    """XML 본문을 주석을 보존해서 읽는다."""
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    try:
+        return ET.fromstring(text, parser=parser)
+    except ET.ParseError as e:
+        raise FleetError(f"{where}: XML 파싱 실패: {e}") from e
+
+
+def parse_world_template(text, where="world.template"):
+    """월드 템플릿 본문을 읽고(주석 보존) 거부 조건을 검사한 뒤 루트 요소를 돌려준다. 어기면 FleetError.
+
+    거부: 루트가 sdf가 아님, <world>가 정확히 하나가 아님(sdf 직속), 월드 직속 plugin, spherical_coordinates,
+    actor, include. 월드 직속 plugin이 있으면 gz-sim이 GZ_SIM_SERVER_CONFIG_PATH의 system plugin 목록을
+    통째로 무시하고, include된 모델의 월드 수준 plugin은 생성기가 볼 수 없다.
+    """
+    root = _parse_sdf(text, where)
+    errors = []
+    if root.tag != "sdf":
+        errors.append(f"{where}: 루트 요소가 sdf가 아니다: {root.tag!r}")
+    all_worlds = [el for el in root.iter() if _tag(el) == "world"]
+    worlds = [el for el in root if _tag(el) == "world"]
+    if len(all_worlds) != 1 or len(worlds) != 1:
+        errors.append(f"{where}: <world>가 sdf 직속으로 정확히 하나여야 한다(전체 {len(all_worlds)}개, 직속 {len(worlds)}개)")
+    else:
+        for child in worlds[0]:
+            if _tag(child) in WORLD_FORBIDDEN_CHILDREN:
+                errors.append(f"{where}: 월드 직속 <{child.tag}>는 둘 수 없다")
+    if errors:
+        raise FleetError("\n".join(errors))
+    return root
+
+
+def build_world_sdf(fleet_norm, template_text):
+    """템플릿에 <world name>과 <spherical_coordinates>(world.origin, heading 0, ENU)를 넣은 월드 SDF 본문.
+
+    표적 Actor 생성은 아직 없다. 출력을 다시 파싱해 구성 보장을 단정한다(어기면 FleetError, 생성기 버그):
+    spherical_coordinates 정확히 하나, 월드 직속 plugin 0, actor 이름 집합 = 표적 id 집합, dynamic_pose 없음.
+    """
+    world = fleet_norm["world"]
+    root = parse_world_template(template_text)
+    el = next(c for c in root if _tag(c) == "world")
+    el.set("name", world["name"])
+    # 마지막 자식 뒤에 넣고, 템플릿의 들여쓰기(자식 들여쓰기 = world.text, 닫는 들여쓰기 = 마지막 자식의 tail)를 따른다
+    child_indent = el.text if el.text and not el.text.strip() else "\n    "
+    close_indent = el[-1].tail if len(el) and el[-1].tail and not el[-1].tail.strip() else "\n  "
+    inner_indent = child_indent + "  "
+    sc = ET.Element("spherical_coordinates")
+    origin = world["origin"]
+    for tag, val in (("surface_model", "EARTH_WGS84"), ("world_frame_orientation", "ENU"),
+                     ("latitude_deg", _decimal_str(origin["lat"])), ("longitude_deg", _decimal_str(origin["lon"])),
+                     ("elevation", _decimal_str(origin["alt"])), ("heading_deg", "0")):
+        sub = ET.SubElement(sc, tag)
+        sub.text = val
+        sub.tail = inner_indent
+    sc[-1].tail = child_indent
+    sc.text = inner_indent
+    sc.tail = close_indent
+    if len(el):
+        el[-1].tail = child_indent
+    else:
+        el.text = child_indent
+    el.append(sc)
+    text = '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode") + "\n"
+    check_world_sdf(text, fleet_norm)
+    return text
+
+
+def check_world_sdf(text, fleet_norm):
+    """생성된 월드 SDF를 다시 읽어 구성 보장을 단정한다. 어기면 FleetError."""
+    world, origin = fleet_norm["world"], fleet_norm["world"]["origin"]
+    problems = []
+    root = _parse_sdf(text, "생성된 월드")
+    el = next(c for c in root if _tag(c) == "world")
+    if el.get("name") != world["name"]:
+        problems.append(f"world name {el.get('name')!r} != {world['name']!r}")
+    # wrapper(gz_server.sh)는 줄 단위로 grep한다. 여는 태그와 name이 한 줄에 있고 주석 안에 같은 문자열이 없어야 한다
+    if text.count("<world ") != 1 or not any(line.lstrip().startswith("<world name=") for line in text.splitlines()):
+        problems.append("<world name=...>가 한 줄에 정확히 한 번이 아니다")
+    if text.count("<spherical_coordinates") != 1:
+        problems.append(f"'<spherical_coordinates' 문자열이 {text.count('<spherical_coordinates')}번 나온다(정확히 1)")
+    scs = [c for c in el if _tag(c) == "spherical_coordinates"]
+    if len(scs) != 1:
+        problems.append(f"world 직속 spherical_coordinates가 {len(scs)}개다(정확히 1)")
+    else:
+        got = {c.tag: (c.text or "").strip() for c in scs[0]}
+        want = {"surface_model": "EARTH_WGS84", "world_frame_orientation": "ENU", "heading_deg": "0"}
+        for key, val in want.items():
+            if got.get(key) != val:
+                problems.append(f"spherical_coordinates.{key}={got.get(key)!r} != {val!r}")
+        for key, field in (("latitude_deg", "lat"), ("longitude_deg", "lon"), ("elevation", "alt")):
+            try:
+                same = float(got[key]) == float(origin[field])
+            except (KeyError, ValueError):
+                same = False
+            if not same:
+                problems.append(f"spherical_coordinates.{key}={got.get(key)!r} != world.origin.{field}={origin[field]!r}")
+    if [c for c in el if _tag(c) == "plugin"]:
+        problems.append("world 직속 plugin이 있다")
+    actors = sorted(c.get("name") for c in el if _tag(c) == "actor")
+    if actors != sorted(t["id"] for t in fleet_norm["targets"]):
+        problems.append(f"actor 이름 집합 {actors} != 표적 id 집합")
+    if "dynamic_pose" in text:
+        problems.append("dynamic_pose 문자열이 있다")
+    if problems:
+        raise FleetError("월드 SDF 단정 실패(버그):\n" + "\n".join(problems))
+
+
+def expect_gps(origin, pose, airframe):
+    """스폰 pose의 GNSS 센서(base_link) 기대 위경도와 고도. 스모크 S2의 기대값이다(운용 변환이 아니다).
+
+    원점 위도에서 계산한 WGS84 곡률 반지름의 국소 근사다. world ENU의 x는 동쪽, y는 북쪽이다.
+    고도 = world.origin.alt + 스폰 z + 센서 높이. 센서 오프셋이 수직뿐이라 yaw와 무관하다.
+    gz-math LOCAL2와 원점에서 100 m 안에서 1e-8 도(약 1 mm) 안으로 맞는다(단위 테스트가 고정한다).
+    """
+    lat0, lon0 = math.radians(origin["lat"]), math.radians(origin["lon"])
+    w = 1.0 - WGS84_E2 * math.sin(lat0) ** 2
+    m_radius = WGS84_A_M * (1.0 - WGS84_E2) / w ** 1.5  # 자오선 곡률 반지름
+    n_radius = WGS84_A_M / math.sqrt(w)  # 묘유선 곡률 반지름
+    lat = lat0 + pose["y"] / m_radius
+    lon = lon0 + pose["x"] / (n_radius * math.cos(lat0))
+    return {"lat": round(math.degrees(lat), 9), "lon": round(math.degrees(lon), 9),
+            "alt": round(origin["alt"] + pose["z"] + AIRFRAME_SENSOR_Z_M[airframe], 6)}
+
+
 # ---------------------------------------------------------------- compose와 stack.json 구조
 def _bind(source, target, read_only):
     # 긴 형식. create_host_path를 끄므로 없는 원본 경로를 dockerd가 root 소유로 만들지 않고 실패한다.
@@ -491,13 +640,14 @@ def build(fleet_norm, ctx):
     if variant == "embedded":
         if len(vehicles) != 1:
             raise FleetError(f"embedded 변형은 기체 1대만 허용한다: {len(vehicles)}대")
-        if world["origin"] is not None:
-            warnings.append("embedded 변형에는 원점을 적용하는 gazebo 서비스가 없어 world.origin을 무시한다(stack.json에 null)")
-        expected_file = f"{PX4_GZ_WORLDS}/{world['name']}.sdf"
-        if world["file"] != expected_file:
-            warnings.append(f"embedded 변형의 PX4는 {expected_file}을 연다. world.file({world['file']})은 쓰이지 않는다")
+        warnings.append("embedded 변형에는 원점을 적용하는 gazebo 서비스가 없어 world.origin을 무시한다(stack.json에 null)")
+        warnings.append(f"embedded 변형의 PX4는 이미지의 {PX4_GZ_WORLDS}/{world['name']}.sdf를 연다. "
+                        f"world.template({world['template']})은 월드를 만들지 않는다")
     standalone = variant == "standalone"
     origin = world["origin"] if standalone else None
+    world_file_rel = f"{WORLD_DIR}/{world['name']}.sdf" if standalone else None
+    if "world_template" not in ctx["inputs"]:
+        raise FleetError("ctx.inputs에 world_template {path, sha256}가 없다")
     images = ctx["images"]
     user = f"{ctx['uid']}:{ctx['gid']}"
     domain = ros_domain(k)
@@ -538,19 +688,14 @@ def build(fleet_norm, ctx):
             "GZ_SIM_SERVER_CONFIG_PATH": GZ_SERVER_CONFIG,
             "GZ_SIM_RESOURCE_PATH": GZ_RESOURCE_PATH,
             "IDSIM_WORLD_NAME": world["name"],
-            "IDSIM_WORLD_FILE": world["file"],
+            "IDSIM_WORLD_FILE": f"{WORLD_IN_CONTAINER}/{world['name']}.sdf",
         })
-        if origin is not None:
-            genv.update({
-                "IDSIM_ORIGIN_LAT": _decimal_str(origin["lat"]),
-                "IDSIM_ORIGIN_LON": _decimal_str(origin["lon"]),
-                "IDSIM_ORIGIN_ALT": _decimal_str(origin["alt"]),
-            })
         services["gazebo"] = dict(_base(images["sim-base"]), **{
             # root로 실행한다(호스트에 쓰지 않는다). wrapper 계약: ros_ws/src/idsim_sim/scripts/gz_server.sh 머리 주석
             "environment": genv,
             "command": [f"{SIM_PKG_IN_CONTAINER}/scripts/gz_server.sh"],
-            "volumes": [_bind(sim_pkg_host, SIM_PKG_IN_CONTAINER, True)],
+            "volumes": [_bind(sim_pkg_host, SIM_PKG_IN_CONTAINER, True),
+                        _bind(f"{run_dir}/{WORLD_DIR}", WORLD_IN_CONTAINER, True)],
             "healthcheck": {
                 "test": ["CMD-SHELL",
                          f'gz service -i --service /world/{world["name"]}/scene/info | grep -q "Service providers"'
@@ -625,6 +770,7 @@ def build(fleet_norm, ctx):
             "sim_model": sim_model,
             "gz_model_name": f"{model}_{n}",
             "pose": dict(p),
+            "expect_gps": expect_gps(world["origin"], p, v["airframe"]) if standalone else None,
             "service": svc,
             "mavlink": vehicle_mavlink(k, n),
             "rootfs_dir": f"px4-{n}",
@@ -655,8 +801,7 @@ def build(fleet_norm, ctx):
     if standalone:
         bridge = ros_ws_service("bridge", gz_env)
         bridge.update({
-            "command": ["ros2", "run", "ros_gz_bridge", "parameter_bridge",
-                        "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock"],
+            "command": ["ros2", "run", "ros_gz_bridge", "parameter_bridge", *BRIDGE_TOPIC_ARGS],
             "healthcheck": {
                 "test": ["CMD-SHELL", ". /opt/ros/$${ROS_DISTRO}/setup.sh && "
                          "ROS_LOG_DIR=/tmp/hc timeout 4 ros2 topic echo --once --no-daemon /clock > /dev/null"],
@@ -787,7 +932,8 @@ def build(fleet_norm, ctx):
         },
         "world": {
             "name": world["name"],
-            "file": world["file"],
+            "template": world["template"],
+            "file": world_file_rel,
             "origin": None if origin is None else {key: float(origin[key]) for key in ORIGIN_KEYS},
             "speed_factor": None,
         },
@@ -802,6 +948,8 @@ def build(fleet_norm, ctx):
             "ops": ops_services,
             "runner": "runner",
             "gz_gui": "gz-gui" if standalone else None,
+            "targets": None,
+            "sim_oracle": None,
             "foxglove": "foxglove" if standalone else None,
             "lichtblick": "lichtblick" if standalone else None,
             "profiles": profiles,
@@ -812,6 +960,7 @@ def build(fleet_norm, ctx):
             "node_stages": [ops_services] if standalone else [],
             "model_precheck": standalone,
         },
+        "targets": [],
         "vehicles": vehicle_out,
     }
     assert_invariants(compose, stack)
@@ -836,9 +985,17 @@ def render_ops_params(vehicle):
             + f"    vehicle.sysid: {vehicle['sysid']}\n")
 
 
-def render_files(compose, stack):
-    """실행 디렉터리에 만드는 파일 {상대 경로: 본문}. 생성 파일의 유일한 목록이다(golden 비교도 이 함수를 쓴다)."""
+def render_files(compose, stack, world_sdf=None):
+    """실행 디렉터리에 만드는 파일 {상대 경로: 본문}. 생성 파일의 유일한 목록이다(golden 비교도 이 함수를 쓴다).
+
+    world_sdf는 build_world_sdf의 결과다. stack.json의 world.file이 있으면(standalone) 필수이고 없으면(embedded) None이다.
+    """
     files = {"compose.yaml": dump_compose(compose), "stack.json": dump_stack(stack)}
+    wfile = stack["world"]["file"]
+    if (wfile is None) != (world_sdf is None):
+        raise FleetError(f"world.file={wfile!r}인데 world_sdf가 {'없다' if world_sdf is None else '있다'}")
+    if wfile is not None:
+        files[wfile] = world_sdf
     for v in stack["vehicles"]:
         if v["params_file"] is not None:
             files[v["params_file"]] = render_ops_params(v)
@@ -951,6 +1108,34 @@ def assert_invariants(compose, stack):
             problems.append(f"{name}: GZ_PARTITION이 stack.json과 다르다")
     if os.path.basename(stack["run"]["host_dir"]) != stack["run"]["id"]:
         problems.append("run.host_dir의 마지막 요소가 run.id와 다르다")
+    # 월드: 원점은 생성된 월드 SDF로만 들어간다. gazebo는 실행 디렉터리의 world/를 읽기 전용으로 받아 그 파일을 연다
+    wname, wfile = stack["world"]["name"], stack["world"]["file"]
+    if (wfile is None) != (stack["services"]["gazebo"] is None):
+        problems.append("world.file이 null인 것과 gazebo 서비스가 없는 것이 일치하지 않는다")
+    if wfile is not None:
+        gz = services["gazebo"]
+        genv = gz["environment"]
+        if wfile != f"{WORLD_DIR}/{wname}.sdf":
+            problems.append(f"world.file {wfile!r} != {WORLD_DIR}/{wname}.sdf")
+        if genv.get("IDSIM_WORLD_FILE") != f"{WORLD_IN_CONTAINER}/{wname}.sdf" or genv.get("IDSIM_WORLD_NAME") != wname:
+            problems.append("gazebo의 IDSIM_WORLD_FILE, IDSIM_WORLD_NAME이 stack.json world와 다르다")
+        if [k for k in genv if k.startswith("IDSIM_ORIGIN")]:
+            problems.append("gazebo에 IDSIM_ORIGIN_*가 있다(원점은 월드 SDF로만 넣는다)")
+        if ([(v["source"], v["target"], v["read_only"]) for v in gz["volumes"] if v["target"] == WORLD_IN_CONTAINER]
+                != [(f"{stack['run']['host_dir']}/{WORLD_DIR}", WORLD_IN_CONTAINER, True)]):
+            problems.append("gazebo의 world 볼륨이 실행 디렉터리 world/의 읽기 전용 마운트가 아니다")
+        if tuple(services["bridge"]["command"][4:]) != BRIDGE_TOPIC_ARGS:
+            problems.append(f"bridge 토픽 인자가 {BRIDGE_TOPIC_ARGS}가 아니다: {services['bridge']['command'][4:]}")
+    for v in stack["vehicles"]:
+        if (v["expect_gps"] is None) != (wfile is None):
+            problems.append(f"{v['service']}: expect_gps가 null인 것과 embedded 변형이 일치하지 않는다")
+    if (stack["services"]["targets"] is None) != (not stack["targets"]):
+        problems.append("services.targets가 null인 것과 targets가 빈 것이 일치하지 않는다")
+    if any("dynamic_pose" in text for text in _strings(compose)):
+        problems.append("compose에 dynamic_pose 문자열이 있다(정답 pose는 bridge를 거치지 않는다)")
+    wt = stack["inputs"].get("world_template")
+    if not isinstance(wt, dict) or wt.get("path") != stack["world"]["template"] or not wt.get("sha256"):
+        problems.append("inputs.world_template {path, sha256}가 없거나 world.template과 다르다")
     for v in stack["vehicles"]:
         if v["host_rootfs_dir"] != f"{stack['run']['host_dir']}/{v['rootfs_dir']}" or v["rootfs_dir"] != f"px4-{v['instance']}":
             problems.append(f"{v['service']}: host_rootfs_dir이 run.host_dir/px4-N이 아니다")
@@ -1116,6 +1301,9 @@ def generate(args, environ=os.environ):
     k = stack_index(args.stack, environ)
     fleet_abs, fleet_rel = _repo_rel(args.fleet, repo_root)
     fleet_norm, warnings = validate_fleet(load_yaml(_read(fleet_abs)))
+    template_abs, template_rel = _repo_rel(fleet_norm["world"]["template"], repo_root)
+    template_text = _read(template_abs)
+    parse_world_template(template_text, template_rel)
     params_abs, params_rel = _repo_rel(fleet_norm["px4"]["params_file"], repo_root)
     params_env = parse_params_env(_read(params_abs), params_rel)
     versions_abs = os.path.join(repo_root, VERSIONS_ENV_REL)
@@ -1152,6 +1340,7 @@ def generate(args, environ=os.environ):
             "px4_params_file": {"path": params_rel, "sha256": _sha256_file(params_abs)},
             "versions_env": {"path": VERSIONS_ENV_REL, "sha256": _sha256_file(versions_abs)},
             "cyclonedds_xml": {"path": CYCLONEDDS_REL, "sha256": _sha256_file(os.path.join(repo_root, CYCLONEDDS_REL))},
+            "world_template": {"path": template_rel, "sha256": _sha256_file(template_abs)},
         },
         "params_env": params_env,
         "participant_index_max": pmax,
@@ -1159,7 +1348,8 @@ def generate(args, environ=os.environ):
     }
     compose, stack, more = build(fleet_norm, ctx)
     warnings.extend(more)
-    files = render_files(compose, stack)
+    world_sdf = build_world_sdf(fleet_norm, template_text) if stack["world"]["file"] is not None else None
+    files = render_files(compose, stack, world_sdf)
 
     out = os.path.abspath(args.out_dir or host_run)
     if os.path.isdir(out) and os.listdir(out):
@@ -1180,6 +1370,10 @@ def parse_args(argv):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--print-gcs-port", metavar="K", help="스택 K의 GCS 포트만 출력하고 끝낸다(PyYAML 불필요)")
     p.add_argument("--print-agent-port", metavar="K", help="스택 K의 에이전트 UDP 포트만 출력하고 끝낸다(PyYAML 불필요)")
+    p.add_argument("--print-sensor-z", metavar="AIRFRAME",
+                   help="airframe의 GNSS 센서 높이(m)만 출력하고 끝낸다(PyYAML 불필요)")
+    p.add_argument("--print-airframes", action="store_true",
+                   help="센서 높이가 등록된 airframe 목록을 한 줄에 하나씩 출력하고 끝낸다(PyYAML 불필요)")
     p.add_argument("--repo-root", default=default_repo, help="저장소 경로(이 프로세스가 읽는 쪽, 기본: 스크립트 위)")
     p.add_argument("--fleet", default="config/fleet.yaml", help="저장소 기준 fleet 파일")
     p.add_argument("--stack", help="스택 번호 k 0-9 (없으면 IDSIM_STACK_INDEX, 없으면 0)")
@@ -1197,7 +1391,8 @@ def parse_args(argv):
     p.add_argument("--git-commit")
     p.add_argument("--git-dirty", choices=("true", "false"))
     args = p.parse_args(argv)
-    if args.print_gcs_port is None and args.print_agent_port is None and not args.host_repo_root:
+    if (args.print_gcs_port is None and args.print_agent_port is None and args.print_sensor_z is None and not args.print_airframes
+            and not args.host_repo_root):
         p.error("--host-repo-root가 필요하다(tools/gen_compose.sh가 넘긴다)")
     return args
 
@@ -1210,6 +1405,14 @@ def main(argv=None):
             return 0
         if args.print_agent_port is not None:
             print(agent_port(stack_index(args.print_agent_port, {})))
+            return 0
+        if args.print_airframes:
+            print("\n".join(AIRFRAME_SENSOR_Z_M))
+            return 0
+        if args.print_sensor_z is not None:
+            if args.print_sensor_z not in AIRFRAME_SENSOR_Z_M:
+                raise FleetError(f"airframe {args.print_sensor_z!r}의 센서 높이가 없다(허용: {', '.join(AIRFRAME_SENSOR_Z_M)})")
+            print(AIRFRAME_SENSOR_Z_M[args.print_sensor_z])
             return 0
         host_run, warnings = generate(args)
     except FleetError as e:

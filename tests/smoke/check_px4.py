@@ -8,7 +8,7 @@ docs/smoke-test.md를 따른다.
   check_px4.py --ns px4_1 --system-id 2 --timeout 30   # embedded, px4-out
   check_px4.py --ns px4_1 --system-id 2 --timeout 60 --arm   # px4-in
   check_px4.py --ns px4_1 --system-id 2 --timeout 60 \
-      --expect-origin 37.5665 126.978 38.0                     # px4-out (원점 판정 추가)
+      --expect-origin 37.56647297 126.978067914 38.24  # px4-out (원점 판정 추가)
 
 판정 항목
   status_topic     ros2 topic list에서 ^/(<ns>/)?fmu/out/vehicle_status(_v[0-9]+)?$
@@ -48,9 +48,11 @@ PX4 쪽 사실 (v1.17.0 소스 기준)
   나간다(tests/fixtures/px4/v1.17.0/topics.txt). gz 경로에서 이 값은 gz navsat 센서
   값을 gz_bridge가 옮긴 것이며 EKF를 거치지 않는다. vehicle_global_position(EKF 추정)과
   home_position(시동 등에서 다시 설정됨)보다 "월드 원점이 적용되었는가"에 직접적이다.
-- 원점 판정은 기체가 월드 원점 위에 있다고 가정한다. 기체 pose(x, y, z)가 0이 아니면
-  GPS는 원점에서 그만큼 떨어지며(ENU, x는 동쪽, y는 북쪽), 이 스크립트는 그것을 보정하지
-  않는다. 수직 오차에는 기체가 바닥에 놓였을 때의 navsat 센서 높이(base_link)가 들어간다.
+- --expect-origin의 기대값은 호출하는 쪽이 주는 기체별 base_link(GNSS 센서) 위치다.
+  생성기가 world.origin과 스폰 pose로 계산해 stack.json vehicles[].expect_gps에 싣는다.
+  고도는 world.origin.alt + 스폰 z + 센서 높이(x500은 0.24 m)이므로 센서 높이가 기대값에
+  이미 들어 있다. 이 스크립트는 스폰 pose나 센서 높이를 보정하지 않고 받은 값과만 비교한다.
+  다대 비교는 호출하는 쪽이 기체(vehicles[i])마다 이 스크립트를 따로 부른다.
 """
 import argparse
 import json
@@ -92,12 +94,17 @@ TARGET_COMPONENT = 1
 SOURCE_SYSTEM = 254
 SOURCE_COMPONENT = 1
 
-# 원점 판정 허용 오차. 2026-11-10 실측(v1.17.0, x500, 바닥에 놓인 상태, 90초 2666개, 약 30 Hz):
-# 수평 오차 최대 0.070 m(평균 0.025), 고도 38.098-38.338(평균 38.222, 원점 38.0). 고도 평균의
-# 0.22 m는 navsat가 붙은 base_link 높이, 나머지는 시간에 따라 커지지 않는 잡음이다(사분위별
-# 최대가 일정). x500 model.sdf의 navsat에는 noise 요소가 없으므로 잡음은 PX4 gz_bridge 쪽에서
-# 더해지는 것으로 추정한다(소스 미확인). 수평 0.5 m는 실측 최대의 약 7배이면서 원점 소수
-# 다섯째 자리(약 1.1 m) 차이를 잡고, 수직 1.0 m는 base_link 높이와 잡음을 합한 0.34 m의 약 3배다.
+# 원점 판정 허용 오차. 기대값은 기체별 base_link(GNSS 센서) 위치이므로 오차는 잡음만 남는다.
+# 실측 1(스모크 px4-out, 기체 1을 (6, -3)에 스폰, 3D fix 표본 10): 수평 최대 0.051 m,
+# 수직 최대 0.063 m.
+# 실측 2(같은 구성, 90초 2666개): 수평 최대 0.070 m, 고도 38.098-38.338 m. 기대 고도 38.24 m
+# 기준 수직 최대 약 0.14 m(38.24 - 38.098 = 0.142).
+# 잡음 출처는 Gazebo x500 NavSat가 아니라(model.sdf에 noise 요소 없음) PX4 GZBridge의
+# 1차 Gauss-Markov 잡음이다(PX4 소스 src/modules/simulation/gz_bridge/GZBridge.cpp
+# 680-711행, addGpsNoise).
+# 수평 0.5 m는 실측 2 최대의 약 7배, 수직 1.0 m는 약 7배다(실측 1 기준 약 10배, 약 16배).
+# 원점 소수 다섯째 자리(약 1.1 m) 차이를 잡는다.
+# 기체 1의 (6, -3) 오프셋 때문에 원점 미적용(약 6.7 m)이거나 x/y 반전(약 13 m)이어도 0.5 m를 크게 넘는다.
 # 원점이 아예 적용되지 않으면 기본 월드(취리히, 47.398, 8.546) 값이 나와 수천 km 차이다.
 ORIGIN_TOL_H_M = 0.5
 ORIGIN_TOL_V_M = 1.0
@@ -281,7 +288,7 @@ def collect_gps_fixes(node, topic, n, timeout_s):
 
 
 def run_origin_checks(node, args, deadline, report):
-    """px4-out. vehicle_gps_position이 기대 월드 원점을 보고하는지."""
+    """px4-out. vehicle_gps_position이 기대 GNSS 위치(기체별 base_link)를 보고하는지."""
     gps_topic = find_unique_topic(
         node, topic_regex(args.ns, "out", "vehicle_gps_position"), GPS_TYPE,
         deadline, report, "gps_topic")
@@ -387,8 +394,9 @@ def parse_args(argv):
                    help="예산이 바닥나도 시동 끄기에 주는 최소 시간(초). 기본 10")
     p.add_argument("--expect-origin", type=float, nargs=3, metavar=("LAT", "LON", "ALT"),
                    default=None,
-                   help="px4-out 원점 판정. stack.json world.origin(도, 도, m). "
-                        "기체 pose가 0이라고 가정한다")
+                   help="px4-out 원점 판정. 기체의 base_link(GNSS 센서) 기대 위치(도, 도, m)로 "
+                        "stack.json vehicles[].expect_gps이며 고도에 센서 높이가 들어 있다. "
+                        "다대는 기체마다 따로 부른다")
     args = p.parse_args(argv)
     args.ns = args.ns.strip("/")
     return args

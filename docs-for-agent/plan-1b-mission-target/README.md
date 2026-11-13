@@ -33,10 +33,10 @@
 | B0. 설계 확정 | architect, reviewer | 확정한 결정(쟁점 1-17)의 reviewer 검토. 검토 지적은 architect가 `decisions.md`에 반영 | 없음. 맨 먼저 |
 | B1. 설계 문서의 범위와 경로 | architect | `decisions.md` "문서 반영 목록"의 B1 항목. U10 문구 | B0 |
 | B2. W 실측 | px4-engineer | `run_sitl.sh` 1회의 ULog로 W와 disarm 전후 `vehicle_status` 간격. 쟁점 11의 유지 조건으로 판단 | 없음 |
-| B3. 원점과 월드 | devops-engineer(생성기 판 5, fleet schema 2, fixture 템플릿과 golden, `config/fleet.yaml`의 기체 1 스폰, `sim_stack.sh` 사전 검사, `run_smoke.sh`의 `expect_gps`와 S0 센서 높이 대조, `docker/README.md`와 저장소 `README.md`의 원점 문장), sim-engineer(`idsim_base.sdf`, `gz_server.sh`), test-engineer(`stack.py` 판 5 명세), px4-engineer(`check_px4.py` 고도 주석), architect(`decisions.md` "문서 반영 목록"의 B3 묶음: `docs/smoke-test.md`, `docs/architecture.md` gazebo 행의 원점 단계와 시작 순서 문장, `docs/roadmap.md` 1a 3번의 원점 문장, `docs/interface.md`의 원점 적용 문장과 bridge 문장) | 쟁점 2, 16. 월드 생성, `IDSIM_ORIGIN_*` 제거, 런타임 원점 호출 제거를 한 PR로. M5, S2-a는 그 PR의 스모크 | B0 |
+| B3. 원점과 월드 | devops-engineer(생성기 판 5, fleet schema 2, fixture 템플릿과 golden, `config/fleet.yaml`의 기체 1 스폰, `sim_stack.sh` 사전 검사, `run_smoke.sh`의 `expect_gps`와 S0 센서 높이 대조, S0 월드 템플릿 대조와 템플릿 출처 ref 단위 테스트, `docker/README.md`와 저장소 `README.md`의 원점 문장), sim-engineer(`idsim_base.sdf`와 출처 주석의 ref 줄, `gz_server.sh`, S0 월드 템플릿 대조의 비교 규칙 검토), test-engineer(`stack.py` 판 5 명세), px4-engineer(`check_px4.py` 고도 주석), architect(`decisions.md` "문서 반영 목록"의 B3 묶음: `docs/smoke-test.md`, `docs/architecture.md` gazebo 행의 원점 단계와 시작 순서 문장, `docs/roadmap.md` 1a 3번의 원점 문장, `docs/interface.md`의 원점 적용 문장과 bridge 문장) | 쟁점 2, 16. 월드 생성, `IDSIM_ORIGIN_*` 제거, 런타임 원점 호출 제거를 한 PR로. M5, S2-a는 그 PR의 스모크 | B0 |
 | B4. `idsim_common` 추가 | ros2-engineer | 쟁점 4, 14. `geo.hpp`와 gz-math LOCAL2, PX4 `MapProjection` 차등 단위 테스트, `TargetId`, `target_state_topic`, 상태 QoS, `position_setpoint`의 속도 인자. 머지는 S2-a 통과(B3 PR의 스모크) 뒤 | B0. 머지는 B3 뒤 |
 | B5. SITL 파라미터 | px4-engineer(값과 근거 주석), devops-engineer(스모크 `expected_params`, 생성기 golden 재생성) | 쟁점 9의 일곱 파라미터. `sitl_params.env`가 바뀌면 생성기 golden(`inputs`의 sha256, `expected_params`)이 바뀐다 | B0 |
-| B6. 표적 어댑터 | sim-engineer(`idsim_sim` ament_python 전환, 어댑터, Actor 생성 내용), devops-engineer(`targets` 스키마, 서비스, healthcheck, 생성기) | 쟁점 1, 3. M1 | B3 |
+| B6. 표적 어댑터 | sim-engineer(`idsim_sim` ament_python 전환, 어댑터, Actor 생성 내용, `gui.config` plugin 목록 고정 단위 테스트), devops-engineer(`targets` 스키마, 서비스, healthcheck, 생성기) | 쟁점 1, 3. M1 | B3 |
 | B7. 정답 pose | sim-engineer(`sim_oracle.py`, 오프셋 합성과 구독 토픽 단위 테스트), devops-engineer(`sim-oracle` 서비스와 healthcheck) | 쟁점 5. S1-a | B3 |
 | B8. 전이 관측 계측 | ros2-engineer(계측, `transition.hpp`, 칸 목록 파일), px4-engineer(1a 칸 목록 승인), test-engineer(테스트 실행 파일 통합의 구조 승인), architect(`docs-for-agent/file-ownership.md`에 `Event` 목록과 칸 목록 파일의 px4 승인 한 줄. U16) | 쟁점 13. 동작 무변경 | B0 |
 | B9. `idsim_mission` core와 px4 어댑터 | ros2-engineer(core, 단위 테스트), px4-engineer(`px4/` 어댑터, snapshot 헤더와 전이 표의 필수 승인, K1-K4 확인) | 쟁점 6-10, 12. 헤더 PR 하나와 상태기 PR들(칸 목록 diff로 승인). 지상 arm 진입의 arm 순서 불변식과 ack 대기 구간(쟁점 12), 단위 테스트 다섯 사례 | B4, B8 |
@@ -74,7 +74,7 @@
 | B7 | test-engineer(판정이 쓰는 형식), devops-engineer, px4-engineer(기준점이 PX4 로컬 위치와 같은지, K4) | base_link 오프셋 합성, `dynamic_pose` 금지 단정, 표시 파일 healthcheck |
 | B8 | px4-engineer(필수 승인: 1a 칸 목록과 `Event` 목록), test-engineer(구조 승인) | 동작 무변경(기존 테스트 본문 무변경), untagged 검출, 겹침 칸 |
 | B9 | px4-engineer(필수 승인: snapshot 헤더, 전이 표, 상태기 단위 테스트), test-engineer(칸 목록 diff), architect(계약 문장과 구현의 일치) | 진입 방식 셋, 지상 arm 진입의 순서 불변식(쟁점 12), 감시 표 면제 구간, RTL과 Land 폴백, 공중 종료 결과 표, 속도 feedforward 조건, 순서 규칙, core가 `idsim_common`과 px4_msgs에 의존하지 않는지 |
-| B10 | px4-engineer(`px4/` 어댑터와 `FramePort` 연결, 같은 표본에서 기준 읽기, `target_fresh_age` 0.1 s와 `target_timeout` 1.0 s 기본값), test-engineer(로더 출력) | 표적 구독 수명, TARGET_LOST 뒤 Hold 확인까지 발행 유지, `world.origin` 누락 시 configure 실패 |
+| B10 | px4-engineer(`px4/` 어댑터와 `FramePort` 연결, 같은 표본에서 기준 읽기, `target_fresh_age` 0.1 s와 `target_timeout` 1.0 s 기본값), test-engineer(로더 출력) | 표적 구독 수명, TARGET_LOST 뒤 Hold 확인까지 발행 유지, `world.origin` 누락 시 configure 실패(embedded 변형에는 `ops-N`이 없어 해당 없음. `decisions.md` 쟁점 4) |
 | B11 | px4-engineer(판정 필드와 timeout), sim-engineer(정답 pose 경로), devops-engineer(wrapper와 `sitl.yml`), architect(판정이 `decisions.md` 쟁점 5, 15와 같은지) | 계약 판정과 정답 판정의 분리, `ORACLE_ABSENT`, `ORACLE_STALE`, `UPSTREAM_FAILED`, b와 `R_home`의 근거와 모형 검증, 시험 미션 반경과 판정 상수의 대조 테스트, L과 `target_fresh_age`의 대조 테스트, 두 커밋 절차 |
 | B12 | devops-engineer | 서버 생존 기록 |
 | B13 | reviewer(필수), px4-engineer(SITL 파라미터 표, 전이 문장, "Offboard setpoint" 절의 속도 예외), ros2-engineer | golden 무변경, 1a 미션에 대한 의미가 그대로인지 |
@@ -87,10 +87,10 @@
 - B0: reviewer 검토를 받았고 지적이 `decisions.md`에 반영되었다.
 - B1: B1 항목이 `docs/`에 반영되고 reviewer가 확인했다.
 - B2: 명령별 W의 최댓값과 표본 수(W_arm 포함), 처리 전 표본이 확인 계수에 들어간 기록의 유무, 쟁점 11의 유지 조건에 따른 판단이 PR 본문에 있다.
-- B3: `tools/ci/lint.sh all` 통과(생성기 단위 테스트와 golden, 월드 SDF 원점 단정, 월드 직속 `<plugin>` 거부, bridge 허용 목록). 스모크 images(S0 센서 높이 대조 포함), px4-out-clock 통과(S2 포함, M5, S2-a). fleet `schema` 1과 `world.file`은 생성이 실패한다. `world.origin`이 없는 `fleet.yaml`은 생성이 실패한다. `decisions.md` "문서 반영 목록"의 B3 묶음이 M5 결과대로 반영되었다.
+- B3: `tools/ci/lint.sh all` 통과(생성기 단위 테스트와 golden, 월드 SDF 원점 단정, 월드 직속 `<plugin>` 거부, bridge 허용 목록). 스모크 images(S0 센서 높이 대조와 월드 템플릿 대조 포함), px4-out-clock 통과(S2 포함, M5, S2-a). fleet `schema` 1과 `world.file`은 생성이 실패한다. `world.origin`이 없는 `fleet.yaml`은 생성이 실패한다. `decisions.md` "문서 반영 목록"의 B3 묶음이 M5 결과대로 반영되었다.
 - B4: `tools/ros_ws.sh ci` 통과. `geo` 차등 테스트와 왕복 테스트, `position_setpoint` 속도 인자 테스트가 있고 기존 테스트가 통과한다. S2-a가 통과했다(NavSat이 LOCAL2를 쓴다는 [추정]의 확인).
 - B5: 스모크가 일곱 파라미터의 적용 값을 `expected_params`와 대조해 통과한다. 생성기 golden이 다시 만들어졌고 `tools/ci/lint.sh all`이 통과한다.
-- B6: 표적 어댑터 단위 테스트(손 계산 golden) 통과, `targets` 서비스 healthcheck 통과, 그래프의 발행자 QoS가 계약 상태 행과 같다. M1 결과가 PR 본문에 있다.
+- B6: 표적 어댑터 단위 테스트(손 계산 golden)와 `gui.config` plugin 목록 고정 테스트 통과, `targets` 서비스 healthcheck 통과, 그래프의 발행자 QoS가 계약 상태 행과 같다. M1 결과가 PR 본문에 있다.
 - B7: `sim_oracle.py` 단위 테스트(오프셋 합성, 구독 토픽) 통과, `sim-oracle` healthcheck 통과. S1-a 결과가 PR 본문에 있다.
 - B8: `tools/ros_ws.sh ci` 통과. 1a 칸 목록이 있고 px4-engineer가 승인했다. untagged 기록이 0이다. 기존 runner 테스트 본문이 바뀌지 않았다.
 - B9: `tools/ros_ws.sh ci` 통과. 승인된 전이 칸 목록에 대해 미덮임이 0이고 목록에 없는 변이 관측되지 않는다. px4-engineer가 승인했다. K1-K4 결과가 PR 본문에 있다. `idsim_interfaces` golden 무변경.

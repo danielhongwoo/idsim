@@ -15,8 +15,10 @@ diff는 리뷰에서 본다. 고정 인자 중 versions_env의 sha256만 상수�
 import copy
 import hashlib
 import json
+import math
 import os
 import re
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -44,11 +46,14 @@ FIXED = {
     "cyclonedds_xml_sha256": "0" * 64,
 }
 
+FIXTURE_TEMPLATE = "tests/fixtures/gen_compose/world_template.sdf"
+REAL_TEMPLATE = "ros_ws/src/idsim_sim/worlds/idsim_base.sdf"
+
 BASE_FLEET = {
-    "schema": 1,
+    "schema": 2,
     "world": {
         "name": "default",
-        "file": "/opt/px4-gz/worlds/default.sdf",
+        "template": FIXTURE_TEMPLATE,
         "origin": {"lat": 37.5665, "lon": 126.978, "alt": 38},
         "speed_factor": None,
     },
@@ -115,6 +120,7 @@ def make_ctx(k=0, variant="standalone", run_id=None, fleet_path="config/fleet.ya
                                 "sha256": gc._sha256_file(os.path.join(REPO, "config/px4/sitl_params.env"))},
             "versions_env": {"path": gc.VERSIONS_ENV_REL, "sha256": FIXED["versions_env_sha256"]},
             "cyclonedds_xml": {"path": gc.CYCLONEDDS_REL, "sha256": FIXED["cyclonedds_xml_sha256"]},
+            "world_template": {"path": FIXTURE_TEMPLATE, "sha256": "b" * 64},
         },
         "params_env": PARAMS_ENV,
         "participant_index_max": PMAX,
@@ -128,6 +134,12 @@ def gen(f=None, **ctx_kw):
     return compose, stack, warnings + more
 
 
+def gen_world(f=None, template=FIXTURE_TEMPLATE):
+    """fleet의 월드 SDF 본문(build_world_sdf). 템플릿은 저장소 파일이다."""
+    norm, _ = gc.validate_fleet(copy.deepcopy(BASE_FLEET if f is None else f))
+    return gc.build_world_sdf(norm, _read(os.path.join(REPO, template)))
+
+
 # ------------------------------------------------------------------ 골든
 def _golden_build(case):
     k, variant = GOLDEN_CASES[case]
@@ -135,8 +147,10 @@ def _golden_build(case):
     path = os.path.join(REPO, rel)
     norm, _ = gc.validate_fleet(gc.load_yaml(_read(path)))
     ctx = make_ctx(k=k, variant=variant, fleet_path=rel, fleet_sha=gc._sha256_file(path))
+    ctx["inputs"]["world_template"]["sha256"] = gc._sha256_file(os.path.join(REPO, FIXTURE_TEMPLATE))
     compose, stack, _ = gc.build(norm, ctx)
-    return compose, stack
+    world_sdf = None if stack["world"]["file"] is None else gc.build_world_sdf(norm, _read(os.path.join(REPO, FIXTURE_TEMPLATE)))
+    return compose, stack, world_sdf
 
 
 def _golden_outputs(case):
@@ -331,7 +345,11 @@ def test_standalone_services_and_healthchecks():
     assert hc == ('gz service -i --service /world/default/scene/info | grep -q "Service providers"'
                   " && test -f /tmp/idsim/ready")
     env = s["gazebo"]["environment"]
-    assert (env["IDSIM_ORIGIN_LAT"], env["IDSIM_ORIGIN_LON"], env["IDSIM_ORIGIN_ALT"]) == ("37.5665", "126.978", "38")
+    assert env["IDSIM_WORLD_NAME"] == "default" and env["IDSIM_WORLD_FILE"] == "/opt/idsim/world/default.sdf"
+    assert not [k for k in env if k.startswith("IDSIM_ORIGIN")]
+    assert [(v["source"], v["target"], v["read_only"]) for v in s["gazebo"]["volumes"]] == [
+        ("/work/idsim/ros_ws/src/idsim_sim", "/opt/idsim/sim", True),
+        ("/work/idsim/artifacts/runs/20261109-090000-k0/world", "/opt/idsim/world", True)]
     assert s["px4-1"]["healthcheck"]["test"][1] == \
         "px4-uxrce_dds_client --instance 1 status | grep -q 'Running, connected'"
     assert s["px4-1"]["depends_on"] == {"xrce-agent": {"condition": "service_healthy"},
@@ -382,14 +400,6 @@ def test_viz_foxglove_and_lichtblick():
                                              for d in x.get("depends_on", {})}
 
 
-def test_origin_absent_gives_no_env_and_null():
-    compose, stack, _ = gen(fleet(world__origin=DELETE))
-    assert not any(k.startswith("IDSIM_ORIGIN") for k in compose["services"]["gazebo"]["environment"])
-    assert stack["world"]["origin"] is None
-    compose, stack, _ = gen(fleet(world__origin=None))
-    assert stack["world"]["origin"] is None
-
-
 def test_embedded_variant():
     compose, stack, warnings = gen(variant="embedded")
     s = compose["services"]
@@ -398,8 +408,10 @@ def test_embedded_variant():
     assert env["HEADLESS"] == "1" and "PX4_GZ_STANDALONE" not in env
     assert s["px4-1"]["depends_on"] == {"xrce-agent": {"condition": "service_healthy"}}
     assert s["runner"]["depends_on"] == {"px4-1": {"condition": "service_healthy"}}
-    assert stack["world"]["origin"] is None
-    assert any("origin" in w for w in warnings)
+    assert stack["world"]["origin"] is None and stack["world"]["file"] is None
+    assert stack["world"]["template"] == FIXTURE_TEMPLATE
+    assert stack["vehicles"][0]["expect_gps"] is None
+    assert any("origin" in w for w in warnings) and any("world.template" in w for w in warnings)
     for role in ("gazebo", "bridge", "gz_gui", "foxglove", "lichtblick"):
         assert role in stack["services"] and stack["services"][role] is None
     # 노드 서비스는 만들지 않는다(embedded에는 /clock bridge가 없다)
@@ -517,7 +529,7 @@ def test_ops_stop_signal_and_grace(kw):
 def test_ops_params_have_identity_only(kw):
     """성질 3: params는 /** 아래 use_sim_time과 vehicle.id, ns, sysid뿐이다. lifecycle. key와 튜닝 값이 없다."""
     compose, stack, _ = gen(**kw)
-    files = gc.render_files(compose, stack)
+    files = gc.render_files(compose, stack, gen_world(kw.get("f")))
     for v in stack["vehicles"]:
         text = files[v["params_file"]]
         doc = gc.load_yaml(text)
@@ -526,7 +538,7 @@ def test_ops_params_have_identity_only(kw):
             "use_sim_time": True, "vehicle.id": v["vehicle_id"], "vehicle.ns": v["ns"], "vehicle.sysid": v["sysid"]}
         assert "lifecycle" not in text.split("\n", 2)[2] and "command_source" not in text.split("\n", 2)[2]
         assert not [ln for ln in text.splitlines() if ln.lstrip().startswith("lifecycle.")]
-    assert set(files) == {"compose.yaml", "stack.json"} | {v["params_file"] for v in stack["vehicles"]}
+    assert set(files) == {"compose.yaml", "stack.json", "world/default.sdf"} | {v["params_file"] for v in stack["vehicles"]}
 
 
 @pytest.mark.parametrize("kw", OPS_CASES)
@@ -570,7 +582,7 @@ def test_ops_service_details():
         assert v["vehicle_id"] == v["ns"][1:] == v["px4_ns"]
         assert v["params_file"] == f"params/ops-{v['id']}.yaml"
     assert stack["run"]["params_dir"] == "params"
-    assert stack["generator"]["version"] == 4
+    assert stack["generator"]["version"] == 5
 
 
 def test_render_dirs():
@@ -621,10 +633,23 @@ REJECT_FLEETS = [
     pytest.param(fleet(px4__params=1), id="unknown-px4-key"),
     pytest.param(fleet(px4__start="random"), id="px4-start"),
     pytest.param(fleet(vehicles__0__airframe="4002_gz_x500_depth"), id="airframe"),
-    pytest.param(fleet(schema=2), id="schema"),
+    pytest.param(fleet(schema=1), id="schema-1"),
+    pytest.param(fleet(schema=3), id="schema-3"),
+    pytest.param(fleet(schema=True), id="schema-bool"),
     pytest.param(fleet(vehicles=[]), id="no-vehicles"),
     pytest.param(fleet(world__name="bad name"), id="world-name"),
-    pytest.param(fleet(world__file="default.sdf"), id="world-file-relative"),
+    pytest.param(fleet(world__file="/opt/px4-gz/worlds/default.sdf"), id="world-file-key"),
+    pytest.param(fleet(world__origin=DELETE), id="origin-missing"),
+    pytest.param(fleet(world__origin=None), id="origin-null"),
+    pytest.param(fleet(world__origin=[1, 2, 3]), id="origin-list"),
+    pytest.param(fleet(world__template=DELETE), id="template-missing"),
+    pytest.param(fleet(world__template=None), id="template-null"),
+    pytest.param(fleet(world__template="/abs/world.sdf"), id="template-absolute"),
+    pytest.param(fleet(world__template="../world.sdf"), id="template-dotdot"),
+    pytest.param(fleet(world__template="a/../../world.sdf"), id="template-dotdot-inner"),
+    pytest.param(fleet(world__template="worlds/base.world"), id="template-not-sdf"),
+    pytest.param(fleet(world__template="worlds//base.sdf"), id="template-empty-component"),
+    pytest.param(fleet(world__template="worlds/ba se.sdf"), id="template-space"),
     pytest.param(fleet(vehicles__0__px4_params={"com_obl_rc_act": 1}), id="param-lowercase"),
     pytest.param(fleet(vehicles__0__px4_params={"A_VERY_LONG_PARAM_X": 1}), id="param-too-long"),
     pytest.param(fleet(vehicles__0__px4_params={"COM_OBL_RC_ACT": True}), id="param-bool"),
@@ -695,7 +720,7 @@ def test_run_dir_must_be_inside_repo():
 
 def test_load_yaml_rejects_duplicate_keys():
     with pytest.raises(gc.FleetError, match="중복"):
-        gc.load_yaml("schema: 1\nschema: 1\n")
+        gc.load_yaml("schema: 2\nschema: 2\n")
 
 
 @pytest.mark.parametrize("text", [
@@ -805,7 +830,8 @@ def test_cli_run_dir_only(tmp_path, capsys):
 def test_cli_writes_params_and_log_dirs(tmp_path):
     rc, out = _cli(tmp_path, "--run-id", "tree")
     assert rc == 0
-    assert sorted(os.listdir(out)) == ["compose.yaml", "params", "px4-1", "ros_log", "stack.json"]
+    assert sorted(os.listdir(out)) == ["compose.yaml", "params", "px4-1", "ros_log", "stack.json", "world"]
+    assert os.listdir(out / "world") == ["default.sdf"]
     assert os.listdir(out / "params") == ["ops-1.yaml"]
     assert sorted(os.listdir(out / "ros_log")) == ["bridge", "foxglove", "ops-1", "runner"]
     assert _read(str(out / "params" / "ops-1.yaml")) == gc.render_ops_params(_stack_of(out)["vehicles"][0])
@@ -853,7 +879,226 @@ def test_cli_inputs_sha256_match_real_files(tmp_path):
     rc, out = _cli(tmp_path, "--run-id", "hash")
     assert rc == 0
     inputs = _stack_of(out)["inputs"]
-    assert set(inputs) >= {"fleet", "versions_env", "px4_params_file", "cyclonedds_xml"}
-    for name in ("fleet", "versions_env", "px4_params_file", "cyclonedds_xml"):
+    assert set(inputs) >= {"fleet", "versions_env", "px4_params_file", "cyclonedds_xml", "world_template"}
+    assert inputs["world_template"]["path"] == _stack_of(out)["world"]["template"] == REAL_TEMPLATE
+    for name in ("fleet", "versions_env", "px4_params_file", "cyclonedds_xml", "world_template"):
         real = hashlib.sha256(open(os.path.join(REPO, inputs[name]["path"]), "rb").read()).hexdigest()
         assert inputs[name]["sha256"] == real, name
+
+
+# ------------------------------------------------------------------ 월드 SDF 생성(decisions.md 쟁점 2)
+SDF_OPEN = '<?xml version="1.0" encoding="UTF-8"?>\n<sdf version="1.9">\n'
+
+
+def _sdf(world_body, world_open='<world name="x">'):
+    return f"{SDF_OPEN}  {world_open}\n{world_body}\n  </world>\n</sdf>\n"
+
+
+def _world_children(text):
+    root = ET.fromstring(text)
+    return root, next(c for c in root if c.tag == "world")
+
+
+def test_world_sdf_has_origin_name_and_keeps_comments():
+    f = fleet(world__name="idsim_world", world__origin={"lat": 37.5665, "lon": 126.978, "alt": 38})
+    text = gen_world(f)
+    root, world = _world_children(text)
+    assert world.get("name") == "idsim_world"
+    scs = [c for c in world if c.tag == "spherical_coordinates"]
+    assert len(scs) == 1 and world[-1] is scs[0]
+    got = {c.tag: c.text for c in scs[0]}
+    assert got == {"surface_model": "EARTH_WGS84", "world_frame_orientation": "ENU", "latitude_deg": "37.5665",
+                   "longitude_deg": "126.978", "elevation": "38", "heading_deg": "0"}
+    assert [c.tag for c in world if c.tag in ("plugin", "actor", "include")] == []
+    assert "주석은 생성 결과에 그대로 남는다" in text and "생성기 golden 전용 월드 템플릿" in text
+    assert text.isascii() is False  # 한글 주석이 그대로 남는다(문자 집합 규칙은 한글과 아스키)
+    assert any(line.startswith('  <world name="idsim_world">') for line in text.splitlines())  # wrapper는 줄 단위로 읽는다
+    assert 'name="fixture_placeholder"' not in text
+    # 같은 입력이면 같은 출력
+    assert gen_world(f) == text
+
+
+def test_world_sdf_values_follow_fleet_origin():
+    f = fleet(world__origin={"lat": -33.8688, "lon": 151.2093, "alt": 12.5})
+    _, world = _world_children(gen_world(f))
+    sc = next(c for c in world if c.tag == "spherical_coordinates")
+    got = {c.tag: c.text for c in sc}
+    assert (float(got["latitude_deg"]), float(got["longitude_deg"]), float(got["elevation"])) == (-33.8688, 151.2093, 12.5)
+    assert got["heading_deg"] == "0" and got["world_frame_orientation"] == "ENU" and got["surface_model"] == "EARTH_WGS84"
+
+
+@pytest.mark.parametrize("body, match", [
+    pytest.param("    <plugin name='a' filename='b'/>", "plugin", id="plugin"),
+    pytest.param("    <spherical_coordinates><latitude_deg>1</latitude_deg></spherical_coordinates>",
+                 "spherical_coordinates", id="spherical"),
+    pytest.param("    <actor name='t1'/>", "actor", id="actor"),
+    pytest.param("    <include><uri>model://x</uri></include>", "include", id="include"),
+])
+def test_template_rejects_forbidden_world_children(body, match):
+    with pytest.raises(gc.FleetError, match=match):
+        gc.parse_world_template(_sdf(body))
+
+
+@pytest.mark.parametrize("text, match", [
+    pytest.param(SDF_OPEN + "</sdf>\n", "정확히 하나", id="no-world"),
+    pytest.param(SDF_OPEN + '  <world name="a"/>\n  <world name="b"/>\n</sdf>\n', "정확히 하나", id="two-worlds"),
+    pytest.param(SDF_OPEN + '  <model name="m"><world name="inner"/></model>\n</sdf>\n', "정확히 하나", id="nested-world"),
+    pytest.param('<?xml version="1.0"?>\n<root><world name="a"/></root>\n', "sdf가 아니다", id="root"),
+    pytest.param("<sdf><world name='a'>", "XML 파싱 실패", id="broken-xml"),
+])
+def test_template_rejects_bad_structure(text, match):
+    with pytest.raises(gc.FleetError, match=match):
+        gc.parse_world_template(text)
+
+
+def test_template_allows_plugin_inside_model_but_not_world_level():
+    """모델 안의 plugin은 월드 직속이 아니므로 거부하지 않는다(월드 직속만 server config를 무시하게 한다)."""
+    gc.parse_world_template(_sdf("    <model name='m'><plugin name='a' filename='b'/></model>"))
+
+
+def test_template_comments_are_preserved_in_output():
+    text = gc.build_world_sdf(gc.validate_fleet(fleet())[0], _sdf("    <!-- 보존 -->\n    <gravity>0 0 -9.8</gravity>"))
+    assert "<!-- 보존 -->" in text and text.count("<spherical_coordinates") == 1
+
+
+def test_build_world_sdf_rejects_comment_with_forbidden_tag_text():
+    """주석 안의 '<spherical_coordinates' 문자열은 wrapper의 줄 단위 grep이 세므로 생성기가 거부한다."""
+    body = "    <!-- <spherical_coordinates> 예 -->\n    <gravity>0 0 -9.8</gravity>"
+    with pytest.raises(gc.FleetError, match="단정 실패"):
+        gc.build_world_sdf(gc.validate_fleet(fleet())[0], _sdf(body))
+
+
+def test_check_world_sdf_catches_tampering():
+    norm, _ = gc.validate_fleet(fleet())
+    good = gc.build_world_sdf(norm, _read(os.path.join(REPO, FIXTURE_TEMPLATE)))
+    gc.check_world_sdf(good, norm)
+    for bad in (
+        good.replace("<heading_deg>0<", "<heading_deg>5<"),
+        good.replace("ENU", "NED"),
+        good.replace("<latitude_deg>37.5665<", "<latitude_deg>37.5<"),
+        good.replace('<world name="default">', '<world name="other">'),
+        good.replace("</world>", "<plugin name='p' filename='f'/></world>"),
+        good.replace("</world>", "<actor name='ghost'/></world>"),
+        good.replace("</world>", "<dynamic_pose/></world>"),
+    ):
+        with pytest.raises(gc.FleetError, match="단정 실패"):
+            gc.check_world_sdf(bad, norm)
+
+
+def test_dynamic_pose_absent_everywhere_and_bridge_topic_set():
+    compose, stack, _ = gen()
+    assert not any("dynamic_pose" in t for t in _all_strings(compose))
+    assert "dynamic_pose" not in gc.dump_compose(compose) and "dynamic_pose" not in gc.dump_stack(stack)
+    assert "dynamic_pose" not in gen_world()
+    cmd = compose["services"]["bridge"]["command"]
+    assert cmd[:4] == ["ros2", "run", "ros_gz_bridge", "parameter_bridge"]
+    assert set(cmd[4:]) == {"/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock"} and len(cmd[4:]) == 1
+    # 인자 집합이 바뀌면 불변식이 잡는다
+    compose["services"]["bridge"]["command"].append("/model/x500_1/pose@geometry_msgs/msg/Pose[gz.msgs.Pose")
+    with pytest.raises(gc.FleetError, match="bridge 토픽"):
+        gc.assert_invariants(compose, stack)
+
+
+def test_no_origin_env_and_invariants_catch_it():
+    compose, stack, _ = gen()
+    compose["services"]["gazebo"]["environment"]["IDSIM_ORIGIN_LAT"] = "37.5665"
+    with pytest.raises(gc.FleetError, match="IDSIM_ORIGIN"):
+        gc.assert_invariants(compose, stack)
+
+
+def test_stack_json_world_and_v5_keys():
+    _, stack, _ = gen()
+    assert stack["generator"]["version"] == 5
+    assert stack["world"] == {"name": "default", "template": FIXTURE_TEMPLATE, "file": "world/default.sdf",
+                              "origin": {"lat": 37.5665, "lon": 126.978, "alt": 38.0}, "speed_factor": None}
+    assert stack["inputs"]["world_template"] == {"path": FIXTURE_TEMPLATE, "sha256": "b" * 64}
+    assert stack["targets"] == [] and stack["services"]["targets"] is None and stack["services"]["sim_oracle"] is None
+    assert stack["vehicles"][0]["expect_gps"] == {"lat": 37.5665, "lon": 126.978, "alt": 38.24}
+
+
+# ------------------------------------------------------------------ 기대 GPS(decisions.md 쟁점 16)
+GZ_ORIGIN = {"lat": 37.5665, "lon": 126.978, "alt": 38}
+# gz-math 7.7.0 SphericalCoordinates(EARTH_WGS84, 위도 37.5665, 경도 126.978, 고도 38, heading 0)의
+# position_transform(LOCAL2 -> SPHERICAL) 값이다. sim-base 이미지(python3-gz-math7 7.7.0)에서 계산해 고정했다.
+#   북 100 m (x 0, y 100):  위도 37.56740099050137, 경도 126.978
+#   동 100 m (x 100, y 0):  위도 37.566499994574045, 경도 126.97913189404852
+#   (6, -3) m:              위도 37.566472970264314, 경도 126.97806791361582
+# 고도는 gz-math의 지구 곡률 때문에 100 m에서 약 0.8 mm 높게 나오는데, 생성기는 고도에 곡률을 넣지 않는다.
+GZ_LOCAL2 = [
+    pytest.param((0.0, 100.0), (37.56740099050137, 126.978), id="북100"),
+    pytest.param((100.0, 0.0), (37.566499994574045, 126.97913189404852), id="동100"),
+    pytest.param((6.0, -3.0), (37.566472970264314, 126.97806791361582), id="6_-3"),
+]
+
+
+@pytest.mark.parametrize("xy, ref", GZ_LOCAL2)
+def test_expect_gps_matches_gz_math_local2(xy, ref):
+    got = gc.expect_gps(GZ_ORIGIN, {"x": xy[0], "y": xy[1], "z": 0.0}, "4001_gz_x500")
+    assert abs(got["lat"] - ref[0]) < 1e-8 and abs(got["lon"] - ref[1]) < 1e-8, (got, ref)
+
+
+def test_expect_gps_altitude_and_yaw_independence():
+    pose = {"x": 6.0, "y": -3.0, "z": 1.5, "yaw": 0.0}
+    a = gc.expect_gps(GZ_ORIGIN, pose, "4001_gz_x500")
+    assert a["alt"] == 38 + 1.5 + 0.24
+    assert gc.expect_gps(GZ_ORIGIN, dict(pose, yaw=1.57), "4001_gz_x500") == a
+    # 원점 pose는 원점 위경도에 센서 높이만 더한다
+    assert gc.expect_gps(GZ_ORIGIN, {"x": 0.0, "y": 0.0, "z": 0.0}, "4001_gz_x500") == {
+        "lat": 37.5665, "lon": 126.978, "alt": 38.24}
+
+
+def test_expect_gps_east_north_and_inversion_distance():
+    """동쪽 x는 경도, 북쪽 y는 위도에 들어간다. 기체 1의 (6, -3) 반전이면 13.4 m(= 2 x hypot(6, 3))."""
+    g = gc.expect_gps(GZ_ORIGIN, {"x": 6.0, "y": -3.0, "z": 0.0}, "4001_gz_x500")
+    assert g["lat"] < GZ_ORIGIN["lat"] and g["lon"] > GZ_ORIGIN["lon"]
+    assert abs(2 * math.hypot(6, 3) - 13.416) < 0.01
+
+
+def test_sensor_z_constants_and_cli(capsys):
+    assert set(gc.AIRFRAME_SENSOR_Z_M) == set(gc.ALLOWED_AIRFRAMES)
+    assert gc.main(["--print-sensor-z", "4001_gz_x500"]) == 0
+    assert capsys.readouterr().out.strip() == "0.24"
+    assert gc.main(["--print-sensor-z", "9999_none"]) == 1
+    assert "센서 높이" in capsys.readouterr().err
+
+
+def test_stack_expect_gps_per_vehicle():
+    _, stack, _ = gen(f=three_vehicles())
+    ys = [v["expect_gps"]["lat"] for v in stack["vehicles"]]
+    assert ys == sorted(ys) and len(set(ys)) == 3
+    assert {v["expect_gps"]["lon"] for v in stack["vehicles"]} == {126.978}
+
+
+# ------------------------------------------------------------------ fleet schema 2
+def test_schema_1_and_world_file_fail_with_new_key_hint():
+    with pytest.raises(gc.FleetError, match="schema: 2"):
+        gc.validate_fleet(fleet(schema=1))
+    f = fleet()
+    f["world"]["file"] = "/opt/px4-gz/worlds/default.sdf"
+    with pytest.raises(gc.FleetError) as e:
+        gc.validate_fleet(f)
+    assert "모르는 key 'file'" in str(e.value) and "world.template" in str(e.value)
+
+
+def test_origin_missing_fails_with_reason():
+    with pytest.raises(gc.FleetError, match="world.origin: 필수"):
+        gc.validate_fleet(fleet(world__origin=DELETE))
+
+
+def test_real_template_and_fleet_generate_and_assert():
+    """실제 템플릿과 config/fleet.yaml이 검증, 생성, 출력 단정까지 통과한다(golden이 아닌 단위 테스트)."""
+    norm, _ = gc.validate_fleet(gc.load_yaml(_read(os.path.join(REPO, "config/fleet.yaml"))))
+    assert norm["world"]["template"] == REAL_TEMPLATE
+    text = gc.build_world_sdf(norm, _read(os.path.join(REPO, REAL_TEMPLATE)))
+    _, world = _world_children(text)
+    assert world.get("name") == norm["world"]["name"]
+    assert len([c for c in world if c.tag == "spherical_coordinates"]) == 1
+    assert not [c for c in world if c.tag in ("plugin", "actor", "include")]
+    assert text.count("<spherical_coordinates") == 1 and "dynamic_pose" not in text
+    # 템플릿 자신에는 월드 직속 금지 요소가 없다
+    gc.parse_world_template(_read(os.path.join(REPO, REAL_TEMPLATE)))
+
+
+def test_print_airframes_lists_registered(capsys):
+    assert gc.main(["--print-airframes"]) == 0
+    assert capsys.readouterr().out.split() == list(gc.AIRFRAME_SENSOR_Z_M)

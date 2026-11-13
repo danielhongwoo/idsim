@@ -4,7 +4,7 @@
     "git_commit": "0000000000000000000000000000000000000000",
     "git_dirty": false,
     "script": "tools/gen_compose.py",
-    "version": 4
+    "version": 5
   },
   "images": {
     "lichtblick": "ghcr.io/lichtblick-suite/lichtblick:1.30.0@sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -20,7 +20,7 @@
     },
     "fleet": {
       "path": "tests/fixtures/gen_compose/1\ub300-k3/fleet.yaml",
-      "sha256": "fa6ef8da59cead6cabd0413fb83ce2b1b208b0af89767767fac53b5261627784"
+      "sha256": "6ccc4dba08782a6e91189ccb695ab013ea21570030fe19f9cd34dff1556972fb"
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",
@@ -29,6 +29,10 @@
     "versions_env": {
       "path": "docker/versions.env",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "world_template": {
+      "path": "tests/fixtures/gen_compose/world_template.sdf",
+      "sha256": "01cd9377d7bec0c14f6cbd195773630a8f46deba75737f38519643f30d7e9d52"
     }
   },
   "px4": {
@@ -65,7 +69,9 @@
     "px4": [
       "px4-1"
     ],
-    "runner": "runner"
+    "runner": "runner",
+    "sim_oracle": null,
+    "targets": null
   },
   "stack": {
     "agent_port": 8891,
@@ -108,6 +114,7 @@
       ]
     ]
   },
+  "targets": [],
   "user": {
     "gid": 1000,
     "uid": 1000
@@ -124,6 +131,11 @@
         "UXRCE_DDS_KEY": "2"
       },
       "executor_node": "/px4_1/mission_executor",
+      "expect_gps": {
+        "alt": 38.24,
+        "lat": 37.5665,
+        "lon": 126.978
+      },
       "expected_params": {
         "COM_DISARM_PRFLT": "-1.0",
         "COM_OBL_RC_ACT": "4",
@@ -162,13 +174,14 @@
     }
   ],
   "world": {
-    "file": "/opt/px4-gz/worlds/default.sdf",
+    "file": "world/default.sdf",
     "name": "default",
     "origin": {
       "alt": 38.0,
       "lat": 37.5665,
       "lon": 126.978
     },
-    "speed_factor": null
+    "speed_factor": null,
+    "template": "tests/fixtures/gen_compose/world_template.sdf"
   }
 }

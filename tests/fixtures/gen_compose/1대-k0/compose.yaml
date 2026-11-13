@@ -29,16 +29,19 @@ services:
       GZ_SIM_SERVER_CONFIG_PATH: /opt/px4-gz/server.idsim.config
       GZ_SIM_RESOURCE_PATH: /opt/px4-gz/models:/opt/px4-gz/worlds
       IDSIM_WORLD_NAME: default
-      IDSIM_WORLD_FILE: /opt/px4-gz/worlds/default.sdf
-      IDSIM_ORIGIN_LAT: '37.5665'
-      IDSIM_ORIGIN_LON: '126.978'
-      IDSIM_ORIGIN_ALT: '38'
+      IDSIM_WORLD_FILE: /opt/idsim/world/default.sdf
     command:
       - /opt/idsim/sim/scripts/gz_server.sh
     volumes:
       - type: bind
         source: /work/idsim/ros_ws/src/idsim_sim
         target: /opt/idsim/sim
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /work/idsim/artifacts/runs/20261109-090000-k0/world
+        target: /opt/idsim/world
         read_only: true
         bind:
           create_host_path: false

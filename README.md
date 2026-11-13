@@ -75,7 +75,7 @@ tests/sitl/run_sitl.sh --stack 0 -- -k test_b          # `--` 뒤는 pytest 인�
 
 ## 화면으로 보기
 
-스택을 `tools/sim_stack.sh up --viz`로 올리면 Gazebo GUI(compose `viz` 프로필의 `gz-gui`)가 함께 뜬다. QGroundControl은 `tools/qgc.sh --stack k`로 호스트에서 띄운다. 기체 출발 위치는 `config/fleet.yaml`의 `world.origin`(기본 서울시청)이다. 자세한 것은 `docker/README.md`의 "시각 도구" 절을 따른다.
+스택을 `tools/sim_stack.sh up --viz`로 올리면 Gazebo GUI(compose `viz` 프로필의 `gz-gui`)가 함께 뜬다. QGroundControl은 `tools/qgc.sh --stack k`로 호스트에서 띄운다. 월드 원점은 `config/fleet.yaml`의 `world.origin`(기본 서울시청)이고 생성기가 월드 SDF에 넣는다. 기체 출발 위치는 `vehicles[].pose`다(기체 1은 원점에서 동쪽 6 m, 남쪽 3 m). 자세한 것은 `docker/README.md`의 "시각 도구" 절을 따른다.
 
 ## 스택과 스택 번호
 

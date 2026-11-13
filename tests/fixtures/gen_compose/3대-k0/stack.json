@@ -4,7 +4,7 @@
     "git_commit": "0000000000000000000000000000000000000000",
     "git_dirty": false,
     "script": "tools/gen_compose.py",
-    "version": 4
+    "version": 5
   },
   "images": {
     "lichtblick": "ghcr.io/lichtblick-suite/lichtblick:1.30.0@sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -20,7 +20,7 @@
     },
     "fleet": {
       "path": "tests/fixtures/gen_compose/3\ub300-k0/fleet.yaml",
-      "sha256": "f3d07c55e376781bb5f2b8ea97dd9ebaeb31ee04f9e9a1b793071136f787a7f8"
+      "sha256": "cff4c5b0770cf03e4eeeaf26cd9e127da76ba454a899482c57e4979f1bc38c12"
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",
@@ -29,6 +29,10 @@
     "versions_env": {
       "path": "docker/versions.env",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "world_template": {
+      "path": "tests/fixtures/gen_compose/world_template.sdf",
+      "sha256": "01cd9377d7bec0c14f6cbd195773630a8f46deba75737f38519643f30d7e9d52"
     }
   },
   "px4": {
@@ -69,7 +73,9 @@
       "px4-2",
       "px4-3"
     ],
-    "runner": "runner"
+    "runner": "runner",
+    "sim_oracle": null,
+    "targets": null
   },
   "stack": {
     "agent_port": 8888,
@@ -116,6 +122,7 @@
       ]
     ]
   },
+  "targets": [],
   "user": {
     "gid": 1000,
     "uid": 1000
@@ -132,6 +139,11 @@
         "UXRCE_DDS_KEY": "2"
       },
       "executor_node": "/px4_1/mission_executor",
+      "expect_gps": {
+        "alt": 38.24,
+        "lat": 37.5665,
+        "lon": 126.978
+      },
       "expected_params": {
         "COM_DISARM_PRFLT": "-1.0",
         "COM_OBL_RC_ACT": "4",
@@ -178,6 +190,11 @@
         "UXRCE_DDS_KEY": "3"
       },
       "executor_node": "/px4_2/mission_executor",
+      "expect_gps": {
+        "alt": 38.24,
+        "lat": 37.56653604,
+        "lon": 126.978
+      },
       "expected_params": {
         "COM_DISARM_PRFLT": "-1.0",
         "COM_OBL_RC_ACT": "4",
@@ -225,6 +242,11 @@
         "UXRCE_DDS_KEY": "4"
       },
       "executor_node": "/px4_3/mission_executor",
+      "expect_gps": {
+        "alt": 38.24,
+        "lat": 37.56657208,
+        "lon": 126.978
+      },
       "expected_params": {
         "COM_DISARM_PRFLT": "-1.0",
         "COM_OBL_RC_ACT": "4",
@@ -263,13 +285,14 @@
     }
   ],
   "world": {
-    "file": "/opt/px4-gz/worlds/default.sdf",
+    "file": "world/default.sdf",
     "name": "default",
     "origin": {
       "alt": 38.0,
       "lat": 37.5665,
       "lon": 126.978
     },
-    "speed_factor": null
+    "speed_factor": null,
+    "template": "tests/fixtures/gen_compose/world_template.sdf"
   }
 }
