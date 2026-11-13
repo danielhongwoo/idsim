@@ -376,10 +376,12 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
   - setpoint 항목의 tick 순서: (감시 표 행, `ITEM_TIMEOUT`), (감시 표 행, 완료 사건), (`ITEM_TIMEOUT`, 완료 사건)을 setpoint 항목 type마다 열거한다. 감시 표 행은 입력 출처별 대표 넷으로 열거한다: 순위 1(`Px4Timestamp`), 순위 3(link), arming 행 하나(순위 4나 5), 모드 행 하나(순위 6-8).
   - 취소와 그 tick의 종료(무시된 취소): 정리로 들어가는 사건과 `CANCEL`의 쌍은 모두 열거한다(정리 원인과 종료 reason이 취소가 이겼을 때와 갈린다). 그 tick에 goal을 바로 끝내는 사건과 `CANCEL`의 쌍은 상태 key마다 대표를 둔다: 실패로 끝내는 사건 하나, 성공으로 끝내는 사건이 있는 상태 key는 그 사건 하나 더. 대표 칸의 테스트는 취소가 이겼다면 나갔을 명령(Hold, disarm)이 그 tick과 그 뒤에 나가지 않음을 함께 단정한다. 무효 미션과 `CANCEL`의 쌍은 호출 지점이 달라 대표에 넣지 않고 따로 열거한다.
   - 대표로 줄인 쌍을 "불가능"으로 옮기지 않는다. "불가능"은 닿을 수 없다는 [소스] 이유가 있는 칸에만 쓴다.
+- "불가능"의 근거는 core 계약 안의 사실이어야 한다. core 계약은 `idsim_mission_core`의 소스와 core 헤더에 적힌 전제다. core 밖 층(노드의 goal 검증과 configure, 어댑터)이 그 입력을 만들지 않는다는 것은 근거가 아니다. 그런 칸은 core 테스트로 덮는다(무효 미션과 `CANCEL`의 쌍이 그 예다).
+- `Timeouts`의 값이 모두 양수라는 것은 core 전제다. `core/config.hpp`에 전제로 적고, 0 이하인 값에서의 상태기 동작은 정의하지 않는다. 칸 목록은 이 전제 아래의 전이 표다. runner는 이 전제를 검사하지 않는다. 전제를 지키는 것은 runner를 만드는 쪽이고, 노드는 configure에서 0 이하를 거부한다. `CLEANUP.*.NONE / CLEANUP_CAP` 다섯 칸은 이 전제로 "불가능"이고, note는 노드가 아니라 `core/config.hpp`의 전제를 근거로 적는다.
 - 측정은 선언이 아니라 관측이다. 방법:
   - 전이를 일으키는 호출 지점(`terminate`, `begin_cleanup`, `start_item`, `complete_item`, `enter_air`, `enter_ground`, `enter_air_land`, `finish`, 준비 단계를 바꾸는 곳)이 첫 인자로 사건 꼬리표 `Event`를 받는다. 꼬리표 없이는 컴파일되지 않는다.
   - from과 to는 손으로 적지 않는다. runner가 꼬리표를 받는 순간의 상태 key(`stage`, `prep`, 현재 항목 type, 정리 원인, 정리 분기)를 from으로, 다음 꼬리표나 그 tick의 끝에서의 상태 key와 종료 reason을 to로 기록한다. 한 tick의 연쇄 전이는 기록이 여럿이다.
-  - 상태 쓰기는 private setter 하나로 모은다. 그 tick에 꼬리표 없이 상태 key가 바뀌면 untagged 기록이 되고 덮음 테스트가 실패한다.
+  - 상태 쓰기는 private setter 하나로 모은다. 꼬리표 하나는 상태 key를 한 번까지만 바꾼다. 꼬리표 없이 상태 key가 바뀌거나, 한 꼬리표의 기록이 열린 동안 상태 key가 두 번째로 바뀌면 그 변경은 untagged 기록이 되고 덮음 테스트가 실패한다. 두 번째 변경은 앞 기록의 to에 넣지 않는다(앞 기록은 그 변경 직전의 상태 key로 닫는다).
   - 겹침 칸: 결정 지점에서 후보 조건을 모두 계산한 뒤 고르고 함께 참이던 사건을 기록에 싣는다. 대상은 감시 표(`evaluate_monitor`가 맞는 행 전부를 함께 돌려준다. 첫 행 선택은 그대로), setpoint 항목의 tick 순서, 취소와 그 tick의 종료다.
   - 주입: `TransitionObserver`(`on_edge` 하나)를 `MissionRunner` 생성자의 마지막 인자로 받고 기본값은 `nullptr`이다. 노드는 넘기지 않는다. `step` 시그니처와 snapshot 헤더는 바꾸지 않는다.
   - 비교: 칸 목록은 데이터 파일 `test/transition_cells.tsv`(from, 사건, to, reason, 부류, 겹침이면 함께 참이던 사건) 하나다. 덮음 테스트는 관측한 칸 집합이 "덮임" 부류와 같고, "불가능" 칸이 관측되지 않았고, 목록에 없는 칸이 관측되지 않았고, `Event` enum의 이름 집합이 목록의 사건 집합과 같음을 단정한다.
@@ -390,12 +392,16 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - 줄과 분기 커버리지는 게이트로 쓰지 않는다. 변이 확인은 일회성 감사로 한다.
 
 근거
-- [소스] 지금 상태기는 상태 변경과 동작(명령 전송, 기한 기록, 발행 켜고 끄기, 계수 초기화)이 한 함수에 섞여 있다(`mission_runner.cpp` 254-273행, 295-325행, 654-669행). 전이를 한 함수로 모으는 표 구동 재작성은 1a 동작 전체를 다시 검증해야 하고, 1b 확장과 같은 시기에 하면 회귀 원인을 가를 수 없다. 꼬리표 계측은 같은 관측을 동작 변경 없이 얻는다.
+- [소스] 지금 상태기는 상태 변경과 동작(명령 전송, 기한 기록, 발행 켜고 끄기, 계수 초기화)이 한 함수에 섞여 있다(`mission_runner.cpp`의 `start_item` 542-561행, `begin_cleanup` 752-771행, `enter_ground` 955-970행). 전이를 한 함수로 모으는 표 구동 재작성은 1a 동작 전체를 다시 검증해야 하고, 1b 확장과 같은 시기에 하면 회귀 원인을 가를 수 없다. 꼬리표 계측은 같은 관측을 동작 변경 없이 얻는다.
 - `RunnerView` 전후 비교만으로는 같은 (from, to, reason)을 내는 서로 다른 사건(P5의 거부 ack와 `mode_confirm_timeout`)을 가르지 못한다. gcov는 겹침 칸을 보지 못한다.
-- [소스] runner 테스트는 지금 파일마다 별도 실행 파일이라(`CMakeLists.txt` 136-150행) 실행 파일을 넘는 집계는 ctest 순서에 묶인다.
-- [소스] 감시 표를 쓰는 상태(P6의 첫 ARMED 뒤, setpoint 항목)는 모두 `monitor_flight` 하나를 거쳐 `evaluate_monitor`의 `row`로 끝낸다(`mission_runner.cpp` 416, 476-503, 610행). 행 사이의 승패는 순수 함수 `evaluate_monitor`의 성질이라 상태 x 쌍으로 열거하면 같은 성질을 상태 수만큼 되풀이하고, 1b에서 감시 표를 쓰는 항목 type이 늘 때마다 곱으로 는다. `test_monitor_table`의 쌍 표는 `kMonitorRankOrder`에서 만들어지므로(`test_monitor_table.cpp` 218-229행) 행이 늘면 쌍이 따라 늘고, 손으로 적은 목록보다 빠뜨릴 길이 적다. 상태마다의 대표 쌍은 그 상태가 이 표를 거치고 `matched`가 기록까지 닿는지를 본다.
+- [소스] runner 상태기 테스트 파일들은 실행 파일 하나 `test_runner`다(`CMakeLists.txt` 147-160행). 파일마다 별도 실행 파일이면 실행 파일을 넘는 집계가 ctest 순서에 묶이므로, 한 process 안에서 기록하고 대조한다.
+- [소스] 감시 표를 쓰는 상태(P6의 첫 ARMED 뒤, setpoint 항목)는 모두 `monitor_flight` 하나를 거쳐 `evaluate_monitor`의 `row`로 끝낸다(`mission_runner.cpp` 416, 476-503, 610행). 행 사이의 승패는 순수 함수 `evaluate_monitor`의 성질이라 상태 x 쌍으로 열거하면 같은 성질을 상태 수만큼 되풀이하고, 1b에서 감시 표를 쓰는 항목 type이 늘 때마다 곱으로 는다. `test_monitor_table`의 쌍 표는 `kMonitorRankOrder`에서 만들어지므로(`test_monitor_table.cpp` 219-230행) 행이 늘면 쌍이 따라 늘고, 손으로 적은 목록보다 빠뜨릴 길이 적다. 상태마다의 대표 쌍은 그 상태가 이 표를 거치고 `matched`가 기록까지 닿는지를 본다.
 - [소스] setpoint 항목은 만료와 완료 조건을 먼저 계산해 `monitor_flight` 한 호출에 넘기고, 그 뒤 만료, 완료 순으로 본다(`mission_runner.cpp` 589-622행). 어느 행이 이겼는지는 이 순서에 들어가지 않으므로 행은 입력 출처(시각 포트, 수신 경과, status 표본의 arming과 모드)별 대표로 충분하다.
 - [소스] 무시된 취소는 단계 처리 뒤 한 곳에서 적는다(`step_tick`, `mission_runner.cpp` 177-182행). 단계 처리가 goal을 바로 끝냈으면 어느 사건이었든 취소는 아무 일도 하지 않는다. 정리로 들어간 경우만 정리 원인이 사건마다 갈린다. 무효 미션은 호출 지점이 따로다(154-161행).
+- "불가능"의 근거를 core 계약 안으로 묶는 이유: 칸 목록은 core 상태기의 전이 표이고 덮음 테스트는 core만 링크한다. core 밖 층의 검사는 그 층이 바뀌면 사라지는데, 그때 칸 목록 diff도 px4-engineer 승인도 생기지 않는다. [소스] 무효 미션은 core가 스스로 검사해 전이로 정의한 입력이라(`mission_runner.cpp` 154-161행) 노드가 먼저 걸러도 core 칸이다.
+- [소스] 정리의 상한은 `hold_confirm_timeout_ns + 3 * mode_confirm_timeout_ns`이고(`core/config.hpp`의 `cleanup_cap_ns`), 정리를 시작한 tick의 시각부터 잰 경과가 상한 이상이면 상한이다(`mission_runner.cpp` 767행, 862-865행). 첫 tick의 경과는 0이므로 상한이 양수이면 `CLEANUP.*.NONE / CLEANUP_CAP`에 닿지 않는다. 양수 전제가 없으면 다섯 칸이 모두 닿는다. `hold_confirm_timeout_ns`가 음수이면 `mode_confirm_timeout_ns`가 양수여도 상한이 0 이하가 되므로, P5를 지났다는 사실로는 `ITEM_TIMEOUT`과 PREPARING 실패의 칸을 막지 못한다. 그래서 일부만 "미덮임"으로 돌리지 않고 전제를 core에 둔다.
+- runner가 전제를 검사하지 않는 이유: `Config`는 tick 입력이 아니라 생성 인자이고, 0 이하인 값은 운용 중에 생기는 상황이 아니라 runner를 만드는 쪽의 결함이다. runner가 검사해 goal을 끝내면 종료 길이 하나 늘어 칸이 생기는 상태기 변경이다. 전제를 주석으로 적는 것은 동작을 바꾸지 않는다.
+- untagged를 한 꼬리표의 두 번째 변경까지 넓히는 이유: [소스] 기록의 to는 다음 꼬리표나 tick 끝의 상태 key라서(`close_record`, `mission_runner.cpp` 1364-1400행), 꼬리표를 단 전이 뒤에 꼬리표 없는 상태 쓰기가 같은 tick에 오면 앞 기록의 to에 섞여 (from, 사건, to) 하나로 보인다. 그 칸을 목록에 더하면 사건 없는 상태 변경이 승인된 칸으로 남는다. 지금 전이 함수는 모두 꼬리표 하나에 상태 쓰기 하나다.
 - 미덮임을 상태기 변경보다 먼저 0으로 만드는 이유: 계측을 동작 변경보다 먼저 넣는 것은 회귀를 칸 목록 diff로 가르기 위해서인데, 관측된 적 없는 1a 칸은 1b 변경 전후를 견줄 기준이 없다. B8 PR에 합치지 않는 이유: 동작 무변경 검토(기존 테스트 본문 무변경)와 테스트 추가 검토를 가르고, B8에 걸린 B9 헤더 PR을 미루지 않는다.
 
 ## 쟁점 14. YAML 로더와 idsim_common 공개
