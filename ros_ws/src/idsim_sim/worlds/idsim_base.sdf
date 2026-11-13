@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sdf version="1.9">
+  <!--
+    idsim 월드 템플릿. 이 파일을 Gazebo로 직접 열지 않는다.
+
+    생성기(tools/gen_compose.py)가 이 템플릿을 읽어 다음을 넣은 뒤
+    artifacts/runs/(실행 id)/world/(월드 이름).sdf로 쓴다.
+    - world 요소의 name 속성: fleet.yaml world.name 값으로 덮어쓴다.
+      아래 값 idsim_base는 자리표시일 뿐이고 어디서도 쓰지 않는다.
+    - spherical_coordinates 요소 하나: fleet.yaml world.origin, heading 0, ENU.
+    - 표적마다 actor 요소 하나.
+    gazebo 서비스는 그 결과 파일을 /opt/idsim/world에 읽기 전용으로 받아
+    IDSIM_WORLD_FILE로 연다(scripts/gz_server.sh 머리 주석).
+
+    출처: PX4-gazebo-models worlds/default.sdf
+          ref b6127f4ec20de867e215fb5f78ae88b80f371909 (docker/versions.env PX4_GZ_MODELS_REF)
+          sim-base 이미지의 /opt/px4-gz/worlds/default.sdf
+    옮긴 것: physics, gravity, magnetic_field, atmosphere, scene, ground_plane 모델,
+          sunUTC light. 값은 원본 그대로다(원본 첫머리의 UTF-8 BOM은 뺐다).
+    뺀 것: 원본의 spherical_coordinates(원점은 생성기가 넣는다).
+
+    이 템플릿에 넣지 않는 것(생성기가 있으면 거부한다)
+    - 월드 직속 plugin. 하나라도 있으면 gz-sim이 server config
+      (GZ_SIM_SERVER_CONFIG_PATH의 server.idsim.config)의 system plugin 목록을 통째로
+      무시한다. Physics, UserCommands, SceneBroadcaster, Imu, AirPressure,
+      Magnetometer, NavSat 등은 server.idsim.config가 싣는다.
+    - spherical_coordinates, actor(생성기가 넣는다).
+    - include. include된 모델의 월드 수준 plugin을 생성기가 볼 수 없다.
+    world 요소는 정확히 하나이고 여는 태그를 한 줄로 쓴다(gz_server.sh가 줄 단위로 읽는다).
+
+    PX4_GZ_MODELS_REF를 올릴 때는 새 default.sdf와 대조해 위 요소를 다시 옮긴다.
+  -->
+  <world name="idsim_base">
+    <physics type="ode">
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>250</real_time_update_rate>
+    </physics>
+    <gravity>0 0 -9.8</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type="adiabatic"/>
+    <scene>
+      <grid>false</grid>
+      <ambient>0.4 0.4 0.4 1</ambient>
+      <background>0.7 0.7 0.7 1</background>
+      <shadows>true</shadows>
+    </scene>
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>1 1</size>
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode/>
+            </friction>
+            <bounce/>
+            <contact/>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>500 500</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <specular>0.8 0.8 0.8 1</specular>
+          </material>
+        </visual>
+        <pose>0 0 0 0 -0 0</pose>
+        <inertial>
+          <pose>0 0 0 0 -0 0</pose>
+          <mass>1</mass>
+          <inertia>
+            <ixx>1</ixx>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyy>1</iyy>
+            <iyz>0</iyz>
+            <izz>1</izz>
+          </inertia>
+        </inertial>
+        <enable_wind>false</enable_wind>
+      </link>
+      <pose>0 0 0 0 -0 0</pose>
+      <self_collide>false</self_collide>
+    </model>
+    <light name="sunUTC" type="directional">
+      <pose>0 0 500 0 -0 0</pose>
+      <cast_shadows>true</cast_shadows>
+      <intensity>1</intensity>
+      <direction>0.001 0.625 -0.78</direction>
+      <diffuse>0.904 0.904 0.904 1</diffuse>
+      <specular>0.271 0.271 0.271 1</specular>
+      <attenuation>
+        <range>2000</range>
+        <linear>0</linear>
+        <constant>1</constant>
+        <quadratic>0</quadratic>
+      </attenuation>
+      <spot>
+        <inner_angle>0</inner_angle>
+        <outer_angle>0</outer_angle>
+        <falloff>0</falloff>
+      </spot>
+    </light>
+  </world>
+</sdf>
