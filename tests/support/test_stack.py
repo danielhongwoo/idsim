@@ -544,7 +544,7 @@ def test_node_keys_absent_in_old_generator_fail_on_access(tmp_path):
             getattr(s, attr)
 
 
-# --- 생성기 판 5: 월드 템플릿, 표적, sim_oracle, expect_gps. 예시 JSON을 판 5 모양으로 고쳐 쓴다 ---
+# --- 생성기 판 5: world template, 표적, sim_oracle, expect_gps. 예시 JSON을 판 5 모양으로 고쳐 쓴다 ---
 
 _TARGET = {"id": "t1", "start_s": 0.0, "loop": True,
            "waypoints": [{"t": 0.0, "x": 1, "y": 2.5, "z": 3.0}, {"t": 10.0, "x": 4.0, "y": 5.0, "z": 3.0}]}
@@ -647,6 +647,7 @@ def test_v4_world_file_null_rejected():
     (lambda d: d["vehicles"][0].__setitem__("expect_gps", []), "expect_gps"),
     (lambda d: d["services"].__setitem__("targets", None), "services.targets"),
     (lambda d: d["world"].__setitem__("file", None), "world.file"),
+    (lambda d: d["vehicles"][0].__setitem__("expect_gps", None), r"vehicles\[0\].expect_gps"),
 ])
 def test_v5_type_errors(mut, match):
     def f(d):
@@ -662,3 +663,69 @@ def test_v5_services_targets_without_targets_rejected():
         d["services"]["targets"] = "targets"
     with pytest.raises(stk.StackError, match="services.targets"):
         stk.loads(_mutate(K0_STANDALONE, f))
+
+
+def test_v5_embedded_with_world_file_rejected():
+    def f(d):
+        _v5(d, standalone=False)
+        d["world"]["file"] = "world/default.sdf"
+    with pytest.raises(stk.StackError, match="world.file"):
+        stk.loads(_mutate(K1_EMBEDDED, f))
+
+
+def test_v5_embedded_with_expect_gps_rejected():
+    def f(d):
+        _v5(d, standalone=False)
+        d["vehicles"][0]["expect_gps"] = {"lat": 1.0, "lon": 2.0, "alt": 3.0}
+    with pytest.raises(stk.StackError, match=r"vehicles\[0\].expect_gps"):
+        stk.loads(_mutate(K1_EMBEDDED, f))
+
+
+def test_v5_standalone_second_vehicle_expect_gps_null_rejected():
+    def f(d):
+        _v5(d)
+        d["vehicles"].append(json.loads(json.dumps(d["vehicles"][0])))
+        d["vehicles"][1]["expect_gps"] = None
+    with pytest.raises(stk.StackError, match=r"vehicles\[1\].expect_gps"):
+        stk.loads(_mutate(K0_STANDALONE, f))
+
+
+# --- 판 5 golden 값 단정(실제 생성기 출력) ---
+
+def test_v5_golden_standalone_one_vehicle():
+    s = _golden("1대-k0")
+    assert s.generator_version == 5
+    assert s.world_template.endswith("world_template.sdf")
+    assert s.world_file == s.dir / "world" / "default.sdf"
+    assert s.targets == [] and s.targets_service is None and s.sim_oracle_service is None
+    assert s.vehicles[0].expect_gps == {"lat": 37.5665, "lon": 126.978, "alt": 38.24}
+
+
+def test_v5_golden_standalone_three_vehicles():
+    s = _golden("3대-k0")
+    gps = [v.expect_gps for v in s.vehicles]
+    assert all(g is not None for g in gps)
+    assert all(g["lon"] == 126.978 for g in gps)
+    assert len({g["lat"] for g in gps}) == 3
+    assert s.world_file == s.dir / "world" / "default.sdf"
+
+
+def test_v5_golden_embedded():
+    s = _golden("embedded")
+    assert s.world_file is None
+    assert s.vehicles[0].expect_gps is None
+    assert isinstance(s.world_template, str)
+    assert s.targets == [] and s.sim_oracle_service is None
+
+
+@pytest.mark.parametrize("name", ["1대-k0", "3대-k0", "embedded"])
+@pytest.mark.parametrize("drop", [("world", "template"), ("targets",), ("services", "sim_oracle"),
+                                  ("vehicles", 0, "expect_gps")])
+def test_v5_golden_key_removed_fails(name, drop):
+    d = json.loads((GOLDEN_DIR / name / "stack.json").read_text(encoding="utf-8"))
+    o = d
+    for k in drop[:-1]:
+        o = o[k]
+    del o[drop[-1]]
+    with pytest.raises(stk.StackError, match="필수 필드 누락"):
+        stk.loads(json.dumps(d), "x/stack.json")

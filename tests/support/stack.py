@@ -24,7 +24,7 @@ SUPPORTED_SCHEMAS = frozenset({1})
 # 생성기 판 3부터 stack.json에 노드 단계 key(vehicle_id, params_file, executor_node, run.params_dir,
 # startup.node_stages, services.ops)가 있다. 판 3 이상이면 필수로 검사하고, 그보다 낮은 판은 읽기만 한다.
 NODE_KEYS_MIN_GENERATOR_VERSION = 3
-# 생성기 판 5부터 월드 템플릿, 표적, 정답 pose 서비스, 기체별 기대 GPS key가 있다(Phase 1b 쟁점 2, 3, 5, 16).
+# 생성기 판 5부터 world template, 표적, 정답 pose 서비스, 기체별 기대 GPS key가 있다(Phase 1b 쟁점 2, 3, 5, 16).
 # 판 5 이상이면 필수로 검사하고, 그보다 낮은 판은 읽기만 한다(접근자는 StackError).
 WORLD_KEYS_MIN_GENERATOR_VERSION = 5
 
@@ -100,7 +100,7 @@ _V3_VEHICLE_SPEC = {"vehicle_id": _STR, "params_file": _NSTR, "executor_node": _
 
 # 생성기 판 5 이상에서 추가로 검사하는 key. world.file은 판 5부터 실행 디렉터리 기준 상대 경로
 # ("world/<name>.sdf")이고 생성한 월드가 없는 embedded는 null이다. targets, services.targets,
-# services.sim_oracle은 키가 항상 있고, 해당 서비스가 없는 구성에서는 null 또는 빈 목록이다.
+# services.sim_oracle은 key가 항상 있고, 해당 서비스가 없는 구성에서는 null 또는 빈 목록이다.
 _V5_SPEC = {
     "inputs": {"world_template": {"path": _STR, "sha256": _STR}},
     "world": {"template": _STR},
@@ -177,8 +177,15 @@ def _validate_v5(data):
         _check(v, _V5_VEHICLE_SPEC, f"vehicles[{i}]")
         if v["expect_gps"] is not None:
             _check(v["expect_gps"], _ORIGIN_SPEC, f"vehicles[{i}].expect_gps")
-    if data["world"]["file"] is None and data["services"]["gazebo"] is not None:
-        raise StackError("world.file: gazebo 서비스가 있는 구성에서는 null일 수 없다")
+    # decisions: embedded(gazebo 서비스 없음)만 world.file과 expect_gps가 null이다(양방향)
+    has_gazebo = data["services"]["gazebo"] is not None
+    if (data["world"]["file"] is None) == has_gazebo:
+        raise StackError("world.file: null은 gazebo 서비스가 없는 구성(embedded)에서만이고, "
+                         "gazebo 서비스가 있으면 값이 있어야 한다")
+    for i, v in enumerate(data["vehicles"]):
+        if (v["expect_gps"] is None) == has_gazebo:
+            raise StackError(f"vehicles[{i}].expect_gps: null은 gazebo 서비스가 없는 구성"
+                             "(embedded)에서만이고, gazebo 서비스가 있으면 값이 있어야 한다")
     for i, t in enumerate(data["targets"]):
         _check(t, _TARGET_SPEC, f"targets[{i}]")
         for j, w in enumerate(t["waypoints"]):
@@ -349,7 +356,7 @@ class Stack:
 
     @property
     def world_template(self):
-        """월드 템플릿의 저장소 기준 상대 경로(world.template)."""
+        """world template의 저장소 기준 상대 경로(world.template)."""
         self._need_world_keys()
         return self.raw["world"]["template"]
 
