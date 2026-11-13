@@ -31,6 +31,7 @@ heading은 0이다(생성기가 월드 SDF에 heading 0으로 쓴다). 값은 re
 """
 
 import math
+import subprocess
 import sys
 
 from gz.math7 import Angle, SphericalCoordinates, Vector3d
@@ -45,11 +46,13 @@ def make(lat_deg, lon_deg, alt_m):
 
 
 def check_version():
-    import gz.math7 as m
-    ver = getattr(m, '__version__', None)
-    print('gz.math7 version:', ver, file=sys.stderr)
-    if ver != EXPECTED_GZ_MATH:
-        raise SystemExit('gz-math %s expected, got %s' % (EXPECTED_GZ_MATH, ver))
+    # 바인딩에는 버전 속성이 없어 패키지 버전으로 확인한다(예: 7.7.0-1~noble).
+    ver = subprocess.run(
+        ['dpkg-query', '-W', '-f=${Version}', 'python3-gz-math7'],
+        capture_output=True, text=True, check=False).stdout.strip()
+    print('python3-gz-math7 version:', ver, file=sys.stderr)
+    if not ver.startswith(EXPECTED_GZ_MATH):
+        raise SystemExit('gz-math %s expected, got %r' % (EXPECTED_GZ_MATH, ver))
 
 
 def main():
