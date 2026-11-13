@@ -1,0 +1,42 @@
+# 표적 궤적 평가의 손 계산 golden. test_trajectory_golden.py가 읽는다.
+# 평가 함수(idsim_sim.trajectory.evaluate)로 만든 값이 아니다. 궤적 정의는 같은 파일 아래 "궤적" 줄에 있고
+# 기대값은 손으로 계산했다(구간 직선 보간, 속도는 구간 기울기). 바꿀 때도 손으로 다시 계산한다.
+# 의미: decisions.md 쟁점 1. start_s 전 정지, waypoint 시각 정확히는 다음 구간, loop true는 마지막 시각의
+# 나머지, loop false는 끝난 뒤 마지막 점에 정지, 정지 구간과 정지 상태의 속도는 0 벡터.
+#
+# 형식(# 줄과 빈 줄은 무시)
+#   traj,<이름>,<start_s>,<loop true|false>,<t0 x0 y0 z0>;<t1 x1 y1 z1>;...
+#   eval,<이름>,<t 초(십진, ns 단위까지)>,<x>,<y>,<z>,<vx>,<vy>,<vz>,<설명>
+#
+# line_delay: start_s 2, (0,0,0) -> (8,4,2) 4 s, loop false. 기울기 (2, 1, 0.5)
+traj,line_delay,2.0,false,0 0 0 0;4 8 4 2
+eval,line_delay,0,0,0,0,0,0,0,시작 전 정지(첫 점)
+eval,line_delay,1.999999999,0,0,0,0,0,0,시작 1 ns 전도 정지
+eval,line_delay,2.0,0,0,0,2,1,0.5,start_s 정확히는 첫 구간
+eval,line_delay,3.0,2,1,0.5,2,1,0.5,tau 1
+eval,line_delay,5.5,7,3.5,1.75,2,1,0.5,tau 3.5
+eval,line_delay,6.0,8,4,2,0,0,0,마지막 시각 정확히는 끝난 뒤(정지)
+eval,line_delay,100.0,8,4,2,0,0,0,끝난 뒤 정지
+#
+# corner_stop: start_s 0, A(0,0,1) -2s-> B(4,0,1), B에서 1 s 정지, B -2s-> C(4,-6,0), loop false
+# 기울기: (2,0,0), (0,0,0), (0,-3,-0.5)
+traj,corner_stop,0.0,false,0 0 0 1;2 4 0 1;3 4 0 1;5 4 -6 0
+eval,corner_stop,0,0,0,1,2,0,0,첫 점(start_s 0 정확히)
+eval,corner_stop,1.0,2,0,1,2,0,0,첫 구간 중간
+eval,corner_stop,2.0,4,0,1,0,0,0,waypoint 시각 정확히는 다음(정지) 구간
+eval,corner_stop,2.5,4,0,1,0,0,0,정지 구간의 속도는 0 벡터
+eval,corner_stop,3.0,4,0,1,0,-3,-0.5,정지 구간 끝 정확히는 다음 구간
+eval,corner_stop,4.0,4,-3,0.5,0,-3,-0.5,셋째 구간 중간
+eval,corner_stop,5.0,4,-6,0,0,0,0,끝(정지)
+#
+# loop_square: start_s 1, 한 변 1 m 사각형 4 s 주기, loop true. 처음과 끝이 같다
+# 기울기: (1,0,0), (0,1,0), (-1,0,0), (0,-1,0)
+traj,loop_square,1.0,true,0 0 0 0;1 1 0 0;2 1 1 0;3 0 1 0;4 0 0 0
+eval,loop_square,0.5,0,0,0,0,0,0,시작 전 정지
+eval,loop_square,1.0,0,0,0,1,0,0,start_s 정확히
+eval,loop_square,1.5,0.5,0,0,1,0,0,첫 변 중간
+eval,loop_square,2.0,1,0,0,0,1,0,waypoint 시각 정확히는 다음 변
+eval,loop_square,4.75,0,0.25,0,0,-1,0,마지막 변
+eval,loop_square,5.0,0,0,0,1,0,0,한 바퀴 끝 정확히는 다음 바퀴의 첫 변
+eval,loop_square,7.25,0.75,1,0,-1,0,0,둘째 바퀴 셋째 변
+eval,loop_square,1001.0,0,0,0,1,0,0,250바퀴 뒤 정확히
