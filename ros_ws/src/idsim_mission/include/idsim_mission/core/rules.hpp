@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "idsim_mission/core/snapshot.hpp"
 #include "idsim_mission/core/types.hpp"
@@ -80,9 +81,12 @@ struct MonitorVerdict
   MonitorRow row{MonitorRow::kTimestampFailure};
   Reason reason{Reason::kInternal};
   std::string detail;
+  // 이 입력에 맞는 행 전부(순위 순서, row 포함). 판정에는 row만 쓴다. 전이 관측의 겹침 칸용이다.
+  std::vector<MonitorRow> matched;
 };
 
-// 순위대로 처음 맞는 행. 어느 행도 맞지 않으면 nullopt(goal을 계속한다). OFFBOARD이고 ARMED인
+// 순위대로 처음 맞는 행. 어느 행도 맞지 않으면 nullopt(goal을 계속한다). 맞는 행 전부를 matched에
+// 함께 싣는다. OFFBOARD이고 ARMED인
 // 채 failsafe가 true인 표본은 어느 행에도 맞지 않는다(decisions.md 쟁점 4 "비행 중 감시" 표 아래
 // 문단).
 std::optional<MonitorVerdict> evaluate_monitor(const MonitorInput & input);

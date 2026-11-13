@@ -30,7 +30,8 @@ add_library(idsim_mission_core SHARED
   src/core/mission_validation.cpp
   src/core/names.cpp
   src/core/rules.cpp
-  src/core/termination.cpp)
+  src/core/termination.cpp
+  src/core/transition.cpp)
 target_include_directories(idsim_mission_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
@@ -136,19 +137,27 @@ if(BUILD_TESTING)
   # ---- core 단위 테스트. gtest와 core만 링크한다(노드와 DDS 참가자를 만들지 않는다) ----
   find_package(ament_cmake_gtest REQUIRED)
   set(_core_tests
-    test_mission_validation
     test_termination
     test_monitor_table
-    test_confirm_rules
-    test_runner_preparing
-    test_runner_items
-    test_runner_land
-    test_runner_cleanup
-    test_runner_conflicts)
+    test_confirm_rules)
   foreach(_test ${_core_tests})
     ament_add_gtest(${_test} test/${_test}.cpp)
     target_link_libraries(${_test} idsim_mission_core)
   endforeach()
+  # 상태기 테스트는 실행 파일 하나로 묶는다. 모든 Harness가 같은 전이 기록기에 기록하고,
+  # test_transition_coverage.cpp의 Environment::TearDown이 test/transition_cells.tsv와 대조한다
+  # (decisions.md 쟁점 13). runner를 쓰는 테스트 파일을 더하면 이 목록에 넣는다.
+  ament_add_gtest(test_runner
+    test/test_mission_validation.cpp
+    test/test_runner_preparing.cpp
+    test/test_runner_items.cpp
+    test/test_runner_land.cpp
+    test/test_runner_cleanup.cpp
+    test/test_runner_conflicts.cpp
+    test/test_transition_coverage.cpp)
+  target_link_libraries(test_runner idsim_mission_core)
+  target_compile_definitions(test_runner PRIVATE
+    IDSIM_TRANSITION_CELLS="${CMAKE_CURRENT_SOURCE_DIR}/test/transition_cells.tsv")
 
   # ---- px4 어댑터 단위 테스트(test/px4/, 소유 px4-engineer). 노드와 DDS 참가자를 만들지 않는다 ----
   set(_px4_tests

@@ -40,6 +40,7 @@
 #include "idsim_mission/core/rules.hpp"
 #include "idsim_mission/core/snapshot.hpp"
 #include "idsim_mission/core/termination.hpp"
+#include "idsim_mission/core/transition.hpp"
 #include "idsim_mission/core/types.hpp"
 
 namespace idsim_mission::core
@@ -77,37 +78,7 @@ struct StepOutput
   std::optional<Termination> termination;
 };
 
-enum class Stage : std::uint8_t
-{
-  kPreparing,
-  kItem,
-  kCleanup,  // 취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패 뒤의 정리
-  kDone,
-};
-
-// PREPARING(첫 항목이 TAKEOFF)의 단계. kWaitReady는 P0-P2, kSignal은 P3-P4.
-enum class PrepStep : std::uint8_t
-{
-  kWaitReady,
-  kSignal,
-  kOffboard,
-  kArm,
-};
-
-enum class CleanupCause : std::uint8_t
-{
-  kCancel,
-  kItemTimeout,
-  kPreparingFailure,
-};
-
-enum class Branch : std::uint8_t
-{
-  kNone,
-  kAir,      // Hold를 보내고 AUTO_LOITER 확인
-  kAirLand,  // Hold가 거부되거나 확인되지 않아 NAV_LAND
-  kGround,   // 지상 setpoint + disarm
-};
+// Stage, PrepStep, CleanupCause, Branch는 transition.hpp에 있다(전이 관측의 상태 key).
 
 // 테스트와 로그용 읽기 전용 상태.
 struct RunnerView
@@ -135,8 +106,11 @@ class MissionRunner
 {
 public:
   // mission은 validate_mission을 통과한 것이어야 한다. 통과하지 않으면 첫 step에서 INTERNAL로
-  // 끝낸다. accept_ns는 goal 접수 ROS 시각(ready_timeout의 기준).
-  MissionRunner(MissionSpec mission, Config config, std::int64_t accept_ns);
+  // 끝낸다. accept_ns는 goal 접수 ROS 시각(ready_timeout의 기준). observer가 있으면 step마다
+  // 그 tick의 전이 기록을 넘긴다(transition.hpp. 테스트가 쓴다). 없으면 기록하지 않고 동작은 같다.
+  MissionRunner(
+    MissionSpec mission, Config config, std::int64_t accept_ns,
+    TransitionObserver * observer = nullptr);
 
   StepOutput step(const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock);
 
@@ -150,6 +124,19 @@ private:
   // 지금 tick에 취소의 정리를 시작한다(step의 단계 처리 없이). MissionRunnerTestAccess만 부른다.
   StepOutput begin_cancel_without_stage(
     const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock);
+  // 전이 관측의 untagged 검출을 시험하려고 둔다(TransitionTestAccess만 부른다). 한 tick 안에서
+  // steps를 차례로(꼬리표 달기 또는 set_state) 한 뒤 그 tick의 기록을 넘긴다. 상태기의 단계 처리는
+  // 하지 않는다.
+  friend class TransitionTestAccess;
+  struct TestStep
+  {
+    bool is_tag{false};
+    Event event{Event::kCancel};  // is_tag일 때
+    StateKey key;                 // is_tag가 아닐 때
+  };
+  StepOutput run_test_steps(
+    const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock,
+    const std::vector<TestStep> & steps);
 
   struct Tick;
   struct AckView
@@ -192,35 +179,41 @@ private:
     kCapAir,     // 정리의 상한에 공중에서 닿음(NAV_LAND 1회)
   };
 
-  // 단계별 처리
+  // 단계별 처리. 전이를 일으키는 함수는 첫 인자로 사건 꼬리표를 받는다(transition.hpp).
+  void step_tick(Tick & t);
   void step_preparing(Tick & t);
   void prepare_wait_ready(Tick & t);
   void prepare_signal(Tick & t);
   void prepare_offboard(Tick & t);
   void prepare_arm(Tick & t);
   void prepare_arm_before_armed(Tick & t);
-  bool monitor_flight(Tick & t, const std::string & label);
+  // later는 감시 표 뒤에 볼 사건 가운데 이 tick에 참인 것(겹침 칸의 기록용. 판정에 쓰지 않는다).
+  bool monitor_flight(Tick & t, const std::string & label, const std::vector<Event> & later);
   const StatusSample * monitored_status(const Tick & t);
-  void end_by_monitor(Tick & t, const MonitorVerdict & verdict, const std::string & label);
-  void start_signal(Tick & t);
-  void start_item(Tick & t, std::uint32_t index);
-  void complete_item(Tick & t);
+  void end_by_monitor(
+    Tick & t, const MonitorVerdict & verdict, const std::string & label,
+    const std::vector<Event> & later);
+  void start_signal(Event event, Tick & t);
+  void enter_prep(Event event, Tick & t, PrepStep prep);
+  void start_item(Event event, Tick & t, std::uint32_t index);
+  void complete_item(Event event, Tick & t);
   void step_item(Tick & t);
   void step_setpoint_item(Tick & t);
   void step_land(Tick & t);
   void land_item_timeout(Tick & t, bool landed);
-  void begin_cleanup(Tick & t, CleanupCause cause, Reason reason, std::string detail);
+  void begin_cleanup(
+    Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail);
   void step_cleanup(Tick & t);
   bool cleanup_cap_reached(const Tick & t) const;
   void end_at_cleanup_cap(Tick & t, bool on_ground);
   void cleanup_with_untrusted_sample(Tick & t);
-  void enter_ground(Tick & t);
+  void enter_ground(Event event, Tick & t);
   void run_ground(Tick & t);
-  void enter_air(Tick & t);
+  void enter_air(Event event, Tick & t);
   void run_air(Tick & t);
-  void enter_air_land(Tick & t, const std::string & why);
+  void enter_air_land(Event event, Tick & t, const std::string & why);
   void run_air_land(Tick & t);
-  void finish(Tick & t, Outcome outcome, const std::string & what);
+  void finish(Event event, Tick & t, Outcome outcome, const std::string & what);
   void finalize(Tick & t);
 
   // 도구
@@ -236,7 +229,21 @@ private:
   bool link_lost(const Tick & t) const;
   std::int64_t elapsed(const Tick & t, std::int64_t since_ns) const;
   bool query_stamp(Tick & t);
-  void terminate(Tick & t, Termination termination);
+  void terminate(Event event, Tick & t, Termination termination);
+
+  // 전이 관측(transition.hpp). observer_가 없으면 아무것도 하지 않는다.
+  StateKey state_key() const;
+  // 상태 key 성분(stage_, prep_, item_index_, cause_, branch_)의 유일한 쓰기 지점. 열린 기록 동안
+  // 상태 key를 두 번째로 바꾸는 쓰기는 untagged가 된다(같은 값 쓰기는 세지 않는다).
+  void set_state(Tick & t, const StateKey & next);
+  // 사건 꼬리표를 단다. 열린 기록을 닫고(to는 지금 상태) from이 지금 상태인 기록을 연다. 같은
+  // 사건의 기록이 열려 있고 그 뒤 상태가 바뀌지 않았으면 새로 열지 않고 also_true만 더한다(전이
+  // 함수가 꼬리표를 넘겨 다른 전이 함수를 부를 때).
+  void tag(Event event, Tick & t, const std::vector<Event> & also_true = {});
+  void close_record(Tick & t);
+  // 단계 처리가 이 tick에 PREPARING이나 ITEM을 떠나 무시된 취소를 떠난 기록의 also_true에 싣는다.
+  void note_ignored_cancel(Tick & t);
+  void flush_records(Tick & t);
   Termination aborted(Reason reason, std::string detail) const;
   Termination canceled(std::string detail) const;
   Termination succeeded() const;
@@ -247,6 +254,7 @@ private:
 
   // 선언 순서는 clang-analyzer의 padding 검사가 권한 순서다(뜻으로 묶지 않았다).
   std::int64_t accept_ns_;  // goal 접수 ROS 시각
+  TransitionObserver * observer_;  // 없으면 nullptr
   std::int64_t item_start_ns_{0};
   std::uint64_t item_start_tick_{0};
   double takeoff_target_z_{0.0};

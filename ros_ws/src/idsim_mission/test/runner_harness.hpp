@@ -22,6 +22,8 @@
 // - auto_px4가 true이면 간단한 가짜 PX4가 명령에 반응한다(다음 tick의 표본에 보인다):
 //   Offboard -> OFFBOARD, Hold -> HOLD, NAV_LAND -> LAND, ARM -> ARMED, DISARM -> landed이면
 //   DISARMED. 반응을 끄고 tick 열(feed)로 표본을 직접 주는 테스트도 있다.
+// - 만드는 MissionRunner에 전이 기록기(transition_recorder.hpp)를 넘긴다. 기록기는 test_runner
+//   실행 파일에서만 켜져 있고, 칸 목록 대조는 test_transition_coverage.cpp가 한다.
 // - 방어 경로(PX4 v1.17.0에서 나오지 않는 조합과 ack)는 합성 표본과 합성 ack로만 시험한다.
 //   해당 테스트에 그렇게 적는다.
 
@@ -43,6 +45,7 @@
 #include "idsim_mission/core/snapshot.hpp"
 #include "idsim_mission/core/termination.hpp"
 #include "idsim_mission/core/types.hpp"
+#include "transition_recorder.hpp"
 
 namespace idsim_mission::core::test
 {
@@ -179,7 +182,8 @@ class Harness
 {
 public:
   explicit Harness(MissionSpec mission, Config config = Config{})
-  : config_(config), runner_(std::move(mission), config, kStartNs)
+  : config_(config),
+    runner_(std::move(mission), config, kStartNs, active_transition_recorder())
   {
   }
 
