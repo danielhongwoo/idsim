@@ -493,10 +493,11 @@ B1(architect)
 B3(B3 PR 안에서. 구현과 M5 결과를 본 뒤)
 - architect: `docs/smoke-test.md`. "서비스별 환경변수"의 `gazebo` 문단(명령이 생성된 월드 `/opt/idsim/world/<월드>.sdf`를 연다, wrapper의 원점 단계), healthcheck 표의 gazebo 행(준비 파일의 조건), px4-out과 "예외 사항과 가정"의 원점 판정 문장(기대값은 `stack.json` `vehicles[0].expect_gps`, base_link 높이 포함, 기체 1은 원점에서 떨어진 스폰), images 단계의 센서 높이 대조(S0). M5가 통과하면 원점은 월드 SDF로만 들어가고 `set_spherical_coordinates` 호출과 `origin_set`이 없다고 적고, 실패해서 `IDSIM_ORIGIN_*` 전달을 되살리면 그 경로를 적는다.
 - architect: `docs/architecture.md` "Docker Compose 실행 환경 설계"의 `gazebo` 서비스 행(wrapper의 런타임 `set_spherical_coordinates` 호출과 "원점 단계가 끝나면 준비 파일" 문장을 M5 결과대로, 여는 월드가 생성된 월드라는 것)과 시작 순서 문단의 gazebo healthcheck 문장. `docs/roadmap.md` Phase 1a 3번의 "원점 설정 완료 표시"와 "wrapper가 월드 로드 직후 한 번 설정" 문장도 같은 결과로 고친다.
+- architect: `docs/interface.md` "SITL 파라미터" 절의 "월드 원점은 gazebo wrapper가 `world.origin`으로 적용한다"(위 (r))를 M5 결과대로, "시간 기준" 절의 "1a는 `/clock`만 브리지한다"(위 (k)의 앞부분)를 "브리지하는 토픽은 `/clock` 하나"로. 둘 다 계약 고정과 무관한 사실 갱신이다. 앞의 것은 B3 구현 뒤에 사실이 되고, 뒤의 것은 같은 파일의 같은 커밋에 묶는다.
 - devops-engineer: `docker/README.md`의 서비스 표(gazebo 행의 원점 문장, `targets`와 `sim-oracle` 행)와 생성 절의 `world.origin` 문장, 저장소 `README.md`의 "기체 출발 위치는 `world.origin`" 문장.
 
 B13(1b 완료 전, architect)
-- `docs/interface.md`: 위 "1a 고정 계약 영향" (a)-(s), "GoToItem과 TrackEntityItem" 절의 확정 문장(쟁점 8, 속도 feedforward 포함), "TargetState" 절의 "고정 전" 해제와 QoS 상태 행 고정, `REASON_TARGET_LOST` 의미, "공중에서 끝나는 미션" 절(쟁점 10, 지면 높이 목표의 경합 문장 포함), 고정 시점 표의 1b 행, 미확인 목록의 1b 항목(K1-K4의 결과).
+- `docs/interface.md`: 위 "1a 고정 계약 영향" (a)-(s)(B3 묶음의 (r)과 (k) 앞부분 제외), "GoToItem과 TrackEntityItem" 절의 확정 문장(쟁점 8, 속도 feedforward 포함), "TargetState" 절의 "고정 전" 해제와 QoS 상태 행 고정, `REASON_TARGET_LOST` 의미, "공중에서 끝나는 미션" 절(쟁점 10, 지면 높이 목표의 경합 문장 포함), 고정 시점 표의 1b 행, 미확인 목록의 1b 항목(K1-K4의 결과).
 - `ros_ws/src/idsim_interfaces/`: `ExecuteMission.action`, `MissionItem.msg`, `YawSetpoint.msg`, `TakeoffItem.msg`, `GoToItem.msg`, `TrackEntityItem.msg`, `TargetState.msg`의 의미 주석. golden 무변경을 단정한다.
 - `docs/architecture.md` 인터페이스 계약 절: 묶음 표의 1b 행, 미션 실행 요지의 재진입 문장(h), 공중 종료 문장, RTL 요지.
 
