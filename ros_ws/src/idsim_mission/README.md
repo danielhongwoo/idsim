@@ -140,10 +140,10 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 | `runner_harness.hpp` | tick 열 헬퍼(20 Hz 흉내, 합성 timestamp, 가짜 PX4 반응, `feed`로 표본 열 주입, 종료 불변식: 정확히 1건, result == 종료 사건, 종료 뒤 빈 출력). 만드는 runner에 전이 기록기를 넘긴다 |
 | `transition_recorder.hpp` | 전이 기록기(관측한 칸과 그 칸을 처음 낸 테스트, untagged 기록) |
 | `transition_cells.tsv` | 1a 전이 칸 목록(covered, impossible과 이유, uncovered, 겹침 칸) |
-| `test_transition_coverage.cpp` | 칸 목록 파일 형식, `Event` 이름 집합 == 목록의 사건 집합, 기록기를 켜고 끈 두 실행의 출력이 같음(시나리오 아홉: 정상, 공중과 지상 취소, Px4Timestamp 실패, ITEM_TIMEOUT 정리의 Land 경로, 감시 표 행끼리 겹침, 감시 표와 완료 겹침, LAND 이탈, `[LAND]` 미션), `Environment::TearDown`의 대조(관측 == covered, impossible 미관측, 목록 밖 칸 미관측, untagged 0). 일부만 돌면(`--gtest_filter`, sharding, `DISABLED_`, `GTEST_SKIP`) 실패한다. 개발자가 일부만 돌릴 때는 `IDSIM_TRANSITION_PARTIAL_OK=1 ./test_runner --gtest_filter=...`로 대조를 건너뛴다. `IDSIM_TRANSITION_CELLS_DUMP=<경로>`이면 관측한 칸을 같은 형식으로 쓴다 |
+| `test_transition_coverage.cpp` | 칸 목록 파일 형식, `Event` 이름 집합 == 목록의 사건 집합, 감시 표 사건 칸을 가진 상태 key마다 대표 행 쌍(순위 4나 5가 6-8을 이김)이 있음, 기록기를 켜고 끈 두 실행의 출력이 같음(시나리오 아홉: 정상, 공중과 지상 취소, Px4Timestamp 실패, ITEM_TIMEOUT 정리의 Land 경로, 감시 표 행끼리 겹침, 감시 표와 완료 겹침, LAND 이탈, `[LAND]` 미션), `Environment::TearDown`의 대조(관측 == covered, impossible 미관측, 목록 밖 칸 미관측, untagged 0). 일부만 돌면(`--gtest_filter`, sharding, `DISABLED_`, `GTEST_SKIP`) 실패한다. 개발자가 일부만 돌릴 때는 `IDSIM_TRANSITION_PARTIAL_OK=1 ./test_runner --gtest_filter=...`로 대조를 건너뛴다. `IDSIM_TRANSITION_CELLS_DUMP=<경로>`이면 관측한 칸을 같은 형식으로 쓴다 |
 | `test_mission_validation.cpp` | 검증 규칙, 1a 제한, `TYPE_*` 분류 전수, `screen_goal` 순서 |
 | `test_termination.cpp` | status와 reason 전수 대응표, reason 값, 종료 결과 == 종료 사건 |
-| `test_monitor_table.cpp` | 감시 표 순위마다 한 건, 같은 tick 동률 24쌍, 순위 5의 가지, 행 수와 parametrize 수, 감시 표로 끝낼 때의 disarm 술어(8행 전수 x 입력 16조합) |
+| `test_monitor_table.cpp` | 감시 표 순위마다 한 건, 같은 tick 동률 24쌍(`row`가 앞 순위이고 `matched`가 두 행을 순위 순서로 담음. 행 쌍의 "전부"는 이 표가 보증한다), 배타 4쌍, 순위 5의 가지, 행 수와 parametrize 수, 감시 표로 끝낼 때의 disarm 술어(8행 전수 x 입력 16조합) |
 | `test_confirm_rules.cpp` | N회 연속 계수, 전송 뒤 표본 기준, 늦은 arm 경합, 정리 분기 고르기(snapshot 5종), yaw 변환 |
 | `test_runner_preparing.cpp` | P0-P6, `[LAND]` 미션, PREPARING 실패의 정리, P6의 첫 ARMED 표본 뒤(감시 표 행마다, 묵은 표본, arm 재전송 중단, 늦은 거부 ack, 확인 기한과 3번째 확인의 같은 tick, P6 최대 길이의 끝 경계, 감시 표의 같은 tick, failsafe 이력의 구간, landed false 이력의 같은 tick 경계), 식별 불일치의 disarm과 `Px4Timestamp` 실패 |
 | `test_runner_items.cpp` | TAKEOFF, LOITER, 상태기 안의 감시 표(순위마다), 엇갈림, 이력의 항목 경계, 분류 고정, 감시 표로 끝낼 때의 disarm 1회(8행 x {P6, TAKEOFF, LOITER} x landed 이력) |
@@ -152,5 +152,14 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 | `test_runner_conflicts.cpp` | 종료의 충돌 규칙, `Px4Timestamp` 공급 실패(지상 disarm 분기 만료의 마지막 disarm 포함) |
 | `node/test_contract_constants.cpp` | core 값과 메시지 상수(REASON_* 13, 14 포함, TYPE_*, MODE_*, PHASE_*, STATUS_*), yaw 식과 idsim_common/frames, 변환의 result == 사건 |
 | `node/test_executor_node.cpp` | 한 프로세스 배선(노드, 가짜 PX4, /clock thread, action client): self_start 대조군 쌍, 직접 configure/activate, configure 실패 둘, 정상 경로 SUCCEEDED와 무효 경로 INVALID_MISSION(사건 ACCEPTED가 앞, 종료 사건 1건, result와 같은 값), goal 중 deactivate 거부와 on_shutdown의 ABORTED INTERNAL, 종료 때 disarm(arm 뒤 1개, arm 전 0개), PREPARING 중 취소의 CANCELED, 두 번째 goal의 BUSY, cancel을 받아들인 goal의 abort 허용(rclcpp_action) |
+
+전이 칸 목록(`test/transition_cells.tsv`)의 부류별 칸 수. 겹침 칸의 열거 범위는 `docs-for-agent/plan-1b-mission-target/decisions.md` 쟁점 13이다(감시 표 행 쌍은 상태 key마다 대표, setpoint 순서는 대표 행 넷, 무시된 취소는 정리로 들어가는 사건 모두와 바로 끝내는 사건의 대표). 미덮임은 B8b에서 0으로 만든다.
+
+| 부류 | 단일 | 겹침 | 합 |
+| --- | --- | --- | --- |
+| covered | 107 | 7 | 114 |
+| impossible | 69 | 0 | 69 |
+| uncovered | 72 | 32 | 104 |
+| 합 | 248 | 39 | 287 |
 
 PX4 v1.17.0에서 나오지 않는 방어 경로(OFFBOARD이고 ARMED인 채 failsafe, 순위 5의 이력, 순위 8, DISARM과 ARM의 그 밖의 거부 ack, 첫 ARMED 표본보다 묵은 표본, timestamp가 늘지 않는 표본)와 실제 PX4로 재현하기 어려운 정리의 상한은 합성 표본과 합성 ack로만 시험하고 테스트 주석에 그렇게 적었다. 단위 테스트는 합성 timestamp만 검사한다. 실제 시계 관계는 재실측 (5)만 확인한다.

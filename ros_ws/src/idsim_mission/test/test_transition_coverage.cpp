@@ -171,6 +171,33 @@ TEST(TransitionCells, EventNamesMatchList)
   }
 }
 
+TEST(TransitionCells, EveryMonitorStateHasRepresentativeRowPair)
+{
+  // 감시 표 행 쌍의 전부는 test_monitor_table이 보증하고, 칸 목록에는 감시 표를 쓰는 상태 key마다
+  // 대표 쌍(DISARMED 행이 모드 행을 이김)이 하나 이상 있다(decisions.md 1b 쟁점 13).
+  const std::set<std::string> disarm_rows = {
+    "MONITOR_DISARMED_IN_AIR", "MONITOR_DISARMED_ON_GROUND"};
+  const std::set<std::string> mode_rows = {
+    "MONITOR_MODE_FAILSAFE", "MONITOR_MODE_EXTERNAL", "MONITOR_MODE_DEFENSIVE"};
+  const CellList list = load_cells();
+  std::set<std::string> monitor_states;
+  std::set<std::string> with_pair;
+  for (const auto & [cell, info] : list.cells) {
+    if (cell.event.rfind("MONITOR_", 0) != 0) {
+      continue;
+    }
+    monitor_states.insert(cell.from);
+    if (disarm_rows.count(cell.event) == 1 && mode_rows.count(cell.also_true) == 1) {
+      with_pair.insert(cell.from);
+    }
+  }
+  EXPECT_FALSE(monitor_states.empty());
+  for (const std::string & state : monitor_states) {
+    EXPECT_EQ(with_pair.count(state), 1U)
+      << state << " has monitor cells but no representative pair (rank 4 or 5 over rank 6-8)";
+  }
+}
+
 TEST(TransitionCells, RecorderIsOnInThisExecutable)
 {
   // 기록기는 Environment가 켠다. 꺼져 있으면 대조가 빈 관측으로 돈다.

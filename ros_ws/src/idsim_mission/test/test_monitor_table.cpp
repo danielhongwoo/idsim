@@ -22,6 +22,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <initializer_list>
 #include <optional>
@@ -244,6 +245,15 @@ TEST_P(MonitorTieTest, HigherRankWins)
   const std::optional<MonitorVerdict> verdict = evaluate_monitor(in);
   ASSERT_TRUE(verdict.has_value());
   EXPECT_EQ(verdict->row, c.higher);
+  // matched는 맞는 행 전부를 순위 순서로 담는다(전이 관측의 겹침 칸. decisions.md 1b 쟁점 13).
+  const std::vector<MonitorRow> & m = verdict->matched;
+  ASSERT_FALSE(m.empty());
+  EXPECT_EQ(m.front(), c.higher);
+  EXPECT_NE(std::find(m.begin(), m.end(), c.higher), m.end());
+  EXPECT_NE(std::find(m.begin(), m.end(), c.lower), m.end());
+  for (std::size_t i = 1; i < m.size(); ++i) {
+    EXPECT_LT(monitor_rank(m[i - 1]), monitor_rank(m[i]));
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(
