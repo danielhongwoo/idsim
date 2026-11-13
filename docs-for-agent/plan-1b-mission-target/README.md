@@ -73,7 +73,7 @@
 | B6 | ros2-engineer(QoS, stamp, 이름 조립, DDS 환경), test-engineer(궤적 평가 golden), devops-engineer | 계약 상태 행 QoS, 같거나 작은 stamp 미발행, params 평탄화, 생성기 거부 조건 |
 | B7 | test-engineer(판정이 쓰는 형식), devops-engineer, px4-engineer(기준점이 PX4 로컬 위치와 같은지, K4) | base_link 오프셋 합성, `dynamic_pose` 금지 단정, 표시 파일 healthcheck |
 | B8 | px4-engineer(필수 승인: 1a 칸 목록과 `Event` 목록), test-engineer(구조 승인) | 동작 무변경(기존 테스트 본문 무변경), untagged 검출, 겹침 칸 |
-| B9 | px4-engineer(필수 승인: snapshot 헤더, 전이 표, 상태기 단위 테스트), test-engineer(칸 목록 diff), architect(계약 문장과 구현의 일치) | 진입 방식 셋, 감시 표 면제 구간, RTL과 Land 폴백, 공중 종료 결과 표, 속도 feedforward 조건, 순서 규칙, core가 `idsim_common`과 px4_msgs에 의존하지 않는지 |
+| B9 | px4-engineer(필수 승인: snapshot 헤더, 전이 표, 상태기 단위 테스트), test-engineer(칸 목록 diff), architect(계약 문장과 구현의 일치) | 진입 방식 셋, 지상 arm 진입의 순서 불변식(쟁점 12), 감시 표 면제 구간, RTL과 Land 폴백, 공중 종료 결과 표, 속도 feedforward 조건, 순서 규칙, core가 `idsim_common`과 px4_msgs에 의존하지 않는지 |
 | B10 | px4-engineer(`px4/` 어댑터와 `FramePort` 연결, 같은 표본에서 기준 읽기, `target_fresh_age` 0.1 s와 `target_timeout` 1.0 s 기본값), test-engineer(로더 출력) | 표적 구독 수명, TARGET_LOST 뒤 Hold 확인까지 발행 유지, `world.origin` 누락 시 configure 실패 |
 | B11 | px4-engineer(판정 필드와 timeout), sim-engineer(정답 pose 경로), devops-engineer(wrapper와 `sitl.yml`), architect(판정이 `decisions.md` 쟁점 5, 15와 같은지) | 계약 판정과 정답 판정의 분리, `ORACLE_ABSENT`, `ORACLE_STALE`, `UPSTREAM_FAILED`, b와 `R_home`의 근거와 모형 검증, 시험 미션 반경과 판정 상수의 대조 테스트, L과 `target_fresh_age`의 대조 테스트, 두 커밋 절차 |
 | B12 | devops-engineer | 서버 생존 기록 |

@@ -309,7 +309,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 
 결정
 - 취소 지상 분기의 DISARMED 확인은 1a 규칙(tick 조건, timestamp 조건, 서로 다른 timestamp 3회 연속)을 그대로 쓴다. ack timestamp 기준은 쓰지 않고, snapshot에 `AckSample.timestamp_us`를 더하지 않는다.
-- 유지 조건: 처리 전 DISARMED 표본이 확인에 들어갈 수 있는 창은 arm이 처리되기 전이고, 그 폭은 W_arm(arm에 실은 timestamp에서 그 arm의 `vehicle_command_ack.timestamp`까지) 이하다. 잘못된 확인에는 이 창 안에 서로 다른 timestamp의 DISARMED `vehicle_status` publish 3개, 즉 publish 간격 두 개가 들어가야 한다. W_arm이 창 안의 publish 간격 두 개보다 좁으면 1a 규칙을 유지한다. 판단은 W의 상한 하나가 아니라 W_arm과 그 창 안의 publish 트리거(처리한 명령, 500 ms 주기, 상태 변화)로 한다.
+- 유지 조건: 처리 전 DISARMED 표본이 확인에 들어갈 수 있는 창은 arm이 처리되기 전이고, 그 폭은 W_arm(arm에 실은 timestamp에서 그 arm의 `vehicle_command_ack.timestamp`까지) 이하다. 잘못된 확인에는 이 창 안에 서로 다른 timestamp의 DISARMED `vehicle_status` publish 3개, 즉 publish 간격 두 개가 들어가야 한다. W_arm이 창 안의 publish 간격 두 개보다 좁으면 1a 규칙을 유지한다. 이 조건은 순서 불변식 "지상 arm 진입에서 arm은 앞서 보낸 Offboard 전환(DO_SET_MODE)의 ack를 받은 뒤에만 보낸다"에 기댄다. 그래야 queue에서 arm 앞에 이 goal의 명령이 없고, 창 안의 트리거에 처리한 명령이 끼지 않는다. 불변식은 core 구조(쟁점 12)가 지킨다. 판단은 W의 상한 하나가 아니라 W_arm과 그 창 안의 publish 트리거(처리한 명령, 500 ms 주기, 상태 변화)로 한다.
 - 이 조건이 깨지는 관측이 나오면 "받아들여진 disarm ack의 PX4 `timestamp` 이상인 DISARMED 표본만 센다. ack가 없으면 1a 규칙"으로 바꾸고, `AckSample.timestamp_us`(`vehicle_command_ack.timestamp`)를 snapshot 헤더에 더한다(px4-engineer 필수 승인). "ack 뒤에 받은 표본만 센다"는 쓰지 않는다(토픽 간 수신 순서가 보장되지 않는다). 다시 볼 시점은 Phase 2 다중 스택 부하다("넘김 목록").
 - 전제: 이 goal 밖의 명령 출처(GCS 등)가 기체를 arm하지 않는다.
 - 같은 확인 함수를 공중 종료 단계의 지상 대기 disarm(쟁점 10)에도 쓴다. PX4 자동 disarm은 Executor가 명령을 보내지 않았으므로 이 창과 무관하다.
@@ -318,8 +318,8 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 근거
 - 위험은 "disarm 처리 전에 publish된 DISARMED 표본이 timestamp 조건을 통과하는 것"이고 그 창은 L이 아니라 명령에서 ack까지다. [소스] Commander는 루프마다 `vehicle_command` 하나를 FIFO로 처리하고, 한 주기에 ack를 먼저, `vehicle_status`를 나중에 publish한다(`Commander.cpp` 1887-1899행, 2674-2680행, 1930-1945행).
 - [소스] 처리 전 DISARMED 표본이 계수에 들어가는 길은 `arm_sent` 경합뿐이다. 정리의 분기 고르기에서 `in_ground_branch`로 들어온 DISARMED는 실제 상태이고(`rules.cpp` 187-197행), 지상 ARMED에서 보낸 disarm의 처리 전 표본은 ARMED라 계수를 0으로 되돌린다(`rules.cpp` 207-216행). arm에 실은 timestamp는 disarm의 것 이하이고 두 명령은 FIFO이므로, 해로운 표본의 timestamp는 (첫 disarm의 timestamp, arm ack timestamp) 안에 있고 이는 (arm의 timestamp, arm ack timestamp]에 들어간다. 그래서 disarm 명령의 W는 판단에 필요하지 않다.
-- [소스] 창 안의 publish 트리거: 처리한 명령마다 즉시(`Commander.cpp` 1897-1899행), 500 ms 주기와 상태 변화(1931-1945행). 처리할 명령이 없으면 루프는 10 ms 잔다(1977-1980행, `Commander.hpp` 217행). 1a 진입 순서에서 arm을 보낼 때 앞의 DO_SET_MODE는 이미 처리되어 queue에서 arm 앞에 명령이 없다.
-- [실측] `run_sitl.sh` 1회(SITL lockstep)의 ULog에서 arm, DO_SET_MODE, NAV_LAND의 W가 모두 16 ms 이하이고 W_arm은 8 ms 이하다. ULog의 `vehicle_command.timestamp`는 실은 값 이하이므로 이 값은 상한이다. 같은 ULog의 지상 DISARMED 구간에서 수십 ms 간격의 publish가 이어진 곳이 있어, W 상한 하나(예: 100 ms)로는 조건이 되지 않는다.
+- [소스] 창 안의 publish 트리거: 처리한 명령마다 즉시(`Commander.cpp` 1897-1899행), 500 ms 주기와 상태 변화(1931-1945행). 처리할 명령이 없으면 루프는 10 ms 잔다(1977-1980행, `Commander.hpp` 217행). 1a 실행에서 arm을 보낼 때 앞의 DO_SET_MODE의 ack가 이미 와 있었고 그 구간에 내부 명령도 없었다. 이것은 관찰이지 보장이 아니므로 유지 조건은 위의 순서 불변식에 기댄다.
+- [실측] `run_sitl.sh` 1회(SITL lockstep)의 ULog에서 arm, DO_SET_MODE, NAV_LAND의 W가 모두 16 ms 이하이고 W_arm은 8 ms 이하다. ULog의 `vehicle_command.timestamp`는 실은 값 이하이므로 이 값은 상한이다. 같은 ULog의 지상 DISARMED 구간에서 명령과 필드 변화 없이 수십 ms 간격의 즉시 publish가 이어진 곳이 있어(원인은 ULog로 정해지지 않는다), W 상한 하나(예: 100 ms)로는 조건이 되지 않는다.
 - 처리 전 표본이 계수에 들어간 기록은 1a 시나리오가 취소 지상 분기를 타지 않아 관찰할 기회가 없다. 새 시나리오를 만들지 않고(U6) 위의 구조 논증과 1a 실측(arm 직후 disarm 10회가 모두 DISARMED)으로 대신한다.
 - gate에 얹은 기록은 별도 실행이 없어 비용이 0이다(U6의 산출물 최소 원칙).
 
@@ -342,6 +342,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - 승인 조건(px4-engineer): (1) `FramePort`의 유효 술어(쟁점 4)를 기준을 읽는 px4 어댑터 함수에 둔다. (2) 기준은 그 tick의 `Snapshot.position`과 같은 표본에서 읽는다. (3) `TargetSample`의 시각 필드 이름이 ROS 시각임을 드러낸다. (4) 헤더 머리 주석의 "어댑터가 채울 것"과 "출력에 할 것" 표를 같은 PR에서 고친다(`NAVIGATION_STATE_AUTO_RTL -> kRtl`, `VEHICLE_CMD_NAV_RETURN_TO_LAUNCH -> kNavRtl`, `timestamp_us <- timestamp`, `xy_valid <- xy_valid`, `kNavRtl -> rtl`, `FramePort`의 기준 필드와 유효 술어, `SetpointOut` 속도 -> `trajectory_setpoint.velocity`).
 - 더하지 않는 것: `ref_timestamp`, `xy_reset_counter`, `z_reset_counter`(원점 변경 WARN은 노드가 기준을 읽을 때 남기고, EKF reset은 프레임이 아니라 추정을 옮긴다), `heading_good_for_control`(1a TAKEOFF와 같은 규칙), world ENU yaw의 기준 의존 변환(축 치환이고 자오선 수렴은 무시한다).
 - core 구조(ros2-engineer): `EntryPlan`(지상 arm, 공중 Offboard, 모드 명령), setpoint 항목의 type별 처리(setpoint, 완료, TARGET_LOST만 내고 감시 표, ITEM_TIMEOUT, 정리 진입은 공통), 모드 명령 항목 처리의 일반화(보낼 명령, 확인할 모드), 공중 종료 단계(쟁점 10). 전이 표는 px4-engineer 필수 승인이다.
+- core 구조가 지킬 불변식(쟁점 11의 유지 조건): 지상 arm 진입에서 arm은 앞서 보낸 Offboard 전환(DO_SET_MODE)의 ack를 받은 뒤에만 보낸다. `EntryPlan`의 지상 arm 경로 단위 테스트가 이를 단정하고, 전이 표 승인 때 px4-engineer가 확인한다.
 - `idsim_mission_core`는 계속 `idsim_common`과 px4_msgs를 모른다(`check_core_purity.cmake` 그대로).
 
 ## 쟁점 13. 상태기 단위 테스트의 "전이 전부를 덮음"
