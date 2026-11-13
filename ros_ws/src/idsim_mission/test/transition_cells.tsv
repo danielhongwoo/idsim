@@ -2,7 +2,7 @@
 # 쟁점 13, 형식은 test/test_transition_coverage.cpp 머리 주석. 바꾸려면 px4-engineer가 필수 승인자다.
 #
 # 상태 이름: PREPARING.<준비 단계>, ITEM.<항목 type>, CLEANUP.<정리 원인>.<정리 분기>, DONE.
-# class: covered(덮임), impossible(불가능. note에 이유), uncovered(미덮임. 1b 완료 전에 0으로).
+# class: covered(덮임), impossible(불가능. note에 이유), uncovered(미덮임. 상태기를 바꾸기 전에 0으로 만든다).
 # also_true: 겹침 칸(같은 tick에 함께 참이던 사건 하나). 겹침 칸의 열거 범위(감시 표 행 쌍은
 # 상태 key마다 대표, setpoint 순서는 대표 행 넷, 무시된 취소는 정리로 들어가는 사건 모두와 바로
 # 끝내는 사건의 대표)는 decisions.md 쟁점 13에 있다. 대표로 줄인 쌍은 목록에 없고, 관측되면
@@ -128,8 +128,8 @@ CLEANUP.CANCEL.NONE	CLEANUP_IDENTITY_MISMATCH	DONE	ABORTED/INTERNAL	covered	-	�
 CLEANUP.CANCEL.NONE	CLEANUP_LINK_LOST	DONE	ABORTED/LINK_LOST	uncovered	-	P3-P5나 첫 ARMED 표본 전 P6의 취소(그 구간은 상태 끊김을 보지 않는다)
 CLEANUP.CANCEL.NONE	CLEANUP_AIR_DISARM	DONE	ABORTED/FAILSAFE	uncovered	-	P3-P6(첫 ARMED 표본 전)의 취소에서 DISARMED이고 landed false
 CLEANUP.CANCEL.NONE	CLEANUP_NOTHING_TO_DO	DONE	CANCELED/NONE	covered	-	-
-CLEANUP.CANCEL.NONE	CLEANUP_CAP	DONE	ABORTED/DISARM_FAILED	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고 상한은 양수다(노드 configure가 timeout 0 이하를 거부한다)
-CLEANUP.CANCEL.NONE	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고 상한은 양수다(노드 configure가 timeout 0 이하를 거부한다)
+CLEANUP.CANCEL.NONE	CLEANUP_CAP	DONE	ABORTED/DISARM_FAILED	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고, core/config.hpp의 Timeouts 양수 전제로 상한(cleanup_cap_ns)은 양수다
+CLEANUP.CANCEL.NONE	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고, core/config.hpp의 Timeouts 양수 전제로 상한(cleanup_cap_ns)은 양수다
 CLEANUP.CANCEL.NONE	ENTER_GROUND	CLEANUP.CANCEL.GROUND	-	covered	-	-
 CLEANUP.CANCEL.NONE	ENTER_AIR	CLEANUP.CANCEL.AIR	-	covered	-	-
 CLEANUP.CANCEL.NONE	ENTER_AIR	CLEANUP.CANCEL.AIR_LAND	-	impossible	-	Hold 실패 표시는 정리를 시작할 때 지운다
@@ -177,7 +177,7 @@ CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_IDENTITY_MISMATCH	DONE	ABORTED/ITEM_TIMEOUT	im
 CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_LINK_LOST	DONE	ABORTED/ITEM_TIMEOUT	impossible	-	같은 tick의 감시 표(순위 3)가 먼저 본다. 감시 표의 표본은 그 tick의 표본보다 늦게 받은 것이 아니므로 정리가 끊김으로 보면 감시 표도 끊김으로 본다
 CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_AIR_DISARM	DONE	ABORTED/ITEM_TIMEOUT	uncovered	-	감시 표가 판정에 쓰지 않는 묵은 표본(timestamp가 첫 ARMED 표본보다 작음)이 DISARMED이고 landed false일 때(README "표에 없어 구현에서 정한 것" 6)
 CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/ITEM_TIMEOUT	impossible	-	ITEM_TIMEOUT 정리는 setpoint 항목에서만 시작하고 그 항목은 P6에서 arm을 보낸 뒤에만 있다
-CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_CAP	DONE	ABORTED/ITEM_TIMEOUT	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고 상한은 양수다(노드 configure가 timeout 0 이하를 거부한다)
+CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_CAP	DONE	ABORTED/ITEM_TIMEOUT	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고, core/config.hpp의 Timeouts 양수 전제로 상한(cleanup_cap_ns)은 양수다
 CLEANUP.ITEM_TIMEOUT.NONE	ENTER_GROUND	CLEANUP.ITEM_TIMEOUT.GROUND	-	covered	-	-
 CLEANUP.ITEM_TIMEOUT.NONE	ENTER_AIR	CLEANUP.ITEM_TIMEOUT.AIR	-	covered	-	-
 CLEANUP.ITEM_TIMEOUT.NONE	ENTER_AIR	CLEANUP.ITEM_TIMEOUT.AIR_LAND	-	impossible	-	Hold 실패 표시는 정리를 시작할 때 지운다
@@ -227,8 +227,8 @@ CLEANUP.PREPARING_FAILURE.NONE	CLEANUP_LINK_LOST	DONE	ABORTED/ARM_REJECTED	uncov
 CLEANUP.PREPARING_FAILURE.NONE	CLEANUP_AIR_DISARM	DONE	ABORTED/ARM_REJECTED	uncovered	-	-
 CLEANUP.PREPARING_FAILURE.NONE	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	-
 CLEANUP.PREPARING_FAILURE.NONE	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/ARM_REJECTED	impossible	-	ARM_REJECTED는 P6 실패라 arm을 보냈다(arm을 보냈으면 지상 DISARMED도 지상 분기를 거친다)
-CLEANUP.PREPARING_FAILURE.NONE	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고 상한은 양수다(노드 configure가 timeout 0 이하를 거부한다)
-CLEANUP.PREPARING_FAILURE.NONE	CLEANUP_CAP	DONE	ABORTED/ARM_REJECTED	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고 상한은 양수다(노드 configure가 timeout 0 이하를 거부한다)
+CLEANUP.PREPARING_FAILURE.NONE	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고, core/config.hpp의 Timeouts 양수 전제로 상한(cleanup_cap_ns)은 양수다
+CLEANUP.PREPARING_FAILURE.NONE	CLEANUP_CAP	DONE	ABORTED/ARM_REJECTED	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고, core/config.hpp의 Timeouts 양수 전제로 상한(cleanup_cap_ns)은 양수다
 CLEANUP.PREPARING_FAILURE.NONE	ENTER_GROUND	CLEANUP.PREPARING_FAILURE.GROUND	-	covered	-	-
 CLEANUP.PREPARING_FAILURE.NONE	ENTER_AIR	CLEANUP.PREPARING_FAILURE.AIR	-	covered	-	-
 CLEANUP.PREPARING_FAILURE.NONE	ENTER_AIR	CLEANUP.PREPARING_FAILURE.AIR_LAND	-	impossible	-	Hold 실패 표시는 정리를 시작할 때 지운다

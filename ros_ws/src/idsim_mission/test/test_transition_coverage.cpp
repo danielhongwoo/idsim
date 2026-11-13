@@ -44,6 +44,28 @@
 #include "runner_harness.hpp"
 #include "transition_recorder.hpp"
 
+namespace idsim_mission::core
+{
+
+// untagged 검출의 시험용(mission_runner.hpp의 friend). 상태기 단계 처리 없이 꼬리표 하나 아래에서
+// 상태 쓰기를 차례로 한다.
+class TransitionTestAccess
+{
+public:
+  static StepOutput write_states(
+    MissionRunner & runner, Event event, const std::vector<StateKey> & writes)
+  {
+    TickInput input;
+    input.tick = 1;
+    input.now_ns = 0;
+    Snapshot snapshot;
+    test::FakeClock clock;
+    return runner.write_states_under_one_tag(input, snapshot, clock, event, writes);
+  }
+};
+
+}  // namespace idsim_mission::core
+
 namespace idsim_mission::core::test
 {
 namespace
@@ -229,6 +251,8 @@ void expect_same_outputs(const Harness & on, const Harness & off)
     if (a.feedback.has_value()) {
       EXPECT_EQ(a.feedback->stamp_ns, b.feedback->stamp_ns) << "tick " << i;
       EXPECT_EQ(a.feedback->item_index, b.feedback->item_index) << "tick " << i;
+      EXPECT_EQ(a.feedback->item_count, b.feedback->item_count) << "tick " << i;
+      EXPECT_EQ(a.feedback->item_type, b.feedback->item_type) << "tick " << i;
       EXPECT_EQ(a.feedback->phase, b.feedback->phase) << "tick " << i;
       EXPECT_EQ(a.feedback->distance_valid, b.feedback->distance_valid) << "tick " << i;
       EXPECT_EQ(a.feedback->distance_remaining_m, b.feedback->distance_remaining_m) << "tick " << i;
@@ -388,6 +412,62 @@ TEST(TransitionObserver, RecorderDoesNotChangeOutputs)
     }
     expect_same_outputs(on, off);
   }
+}
+
+// 기록을 그대로 모으는 observer(untagged 검출 시험용).
+class EdgeLog : public TransitionObserver
+{
+public:
+  void on_edge(const TransitionEdge & edge) override { edges.push_back(edge); }
+  std::vector<TransitionEdge> edges;
+};
+
+StateKey cancel_cleanup(Branch branch)
+{
+  StateKey key;
+  key.stage = Stage::kCleanup;
+  key.cause = CleanupCause::kCancel;
+  key.branch = branch;
+  return key;
+}
+
+TEST(TransitionUntagged, SecondChangeUnderOneTagIsUntagged)
+{
+  // 꼬리표 하나 아래의 두 번째 상태 변경은 앞 기록의 to에 섞이지 않고 untagged 기록이 된다.
+  EdgeLog log;
+  MissionRunner runner(standard_mission(), Config{}, kStartNs, &log);
+  TransitionTestAccess::write_states(
+    runner, Event::kCancel, {cancel_cleanup(Branch::kNone), cancel_cleanup(Branch::kAir)});
+  ASSERT_EQ(log.edges.size(), 2U);
+  EXPECT_TRUE(log.edges[0].tagged);
+  EXPECT_EQ(log.edges[0].event, Event::kCancel);
+  EXPECT_EQ(state_key_name(log.edges[0].from), "PREPARING.WAIT_READY");
+  EXPECT_EQ(state_key_name(log.edges[0].to), "CLEANUP.CANCEL.NONE");
+  EXPECT_FALSE(log.edges[1].tagged);
+  EXPECT_EQ(state_key_name(log.edges[1].from), "CLEANUP.CANCEL.NONE");
+  EXPECT_EQ(state_key_name(log.edges[1].to), "CLEANUP.CANCEL.AIR");
+}
+
+TEST(TransitionUntagged, SameValueWriteIsNotCounted)
+{
+  // 상태 key를 바꾸지 않는 쓰기는 세지 않는다. 그 뒤의 첫 변경은 꼬리표의 기록이다.
+  EdgeLog log;
+  MissionRunner runner(standard_mission(), Config{}, kStartNs, &log);
+  const StateKey start{};  // 새 runner의 상태(PREPARING.WAIT_READY, 항목 0)
+  TransitionTestAccess::write_states(
+    runner, Event::kCancel, {start, start, cancel_cleanup(Branch::kNone)});
+  ASSERT_EQ(log.edges.size(), 1U);
+  EXPECT_TRUE(log.edges[0].tagged);
+  EXPECT_EQ(state_key_name(log.edges[0].to), "CLEANUP.CANCEL.NONE");
+}
+
+TEST(TransitionUntagged, OneChangeUnderOneTagIsTagged)
+{
+  EdgeLog log;
+  MissionRunner runner(standard_mission(), Config{}, kStartNs, &log);
+  TransitionTestAccess::write_states(runner, Event::kCancel, {cancel_cleanup(Branch::kNone)});
+  ASSERT_EQ(log.edges.size(), 1U);
+  EXPECT_TRUE(log.edges[0].tagged);
 }
 
 class CoverageEnvironment : public ::testing::Environment

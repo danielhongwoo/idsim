@@ -19,7 +19,9 @@
 // - 전이를 일으키는 runner의 호출 지점은 첫 인자로 사건 꼬리표 Event를 받는다. 꼬리표를 받는 순간의
 //   상태 key가 from이고, 다음 꼬리표나 그 tick의 끝의 상태 key와 종료 reason이 to다. 한 tick의 연쇄
 //   전이는 기록이 여럿이다.
-// - 그 tick에 꼬리표 없이 상태가 바뀌면 untagged 기록(tagged false)이 된다.
+// - 꼬리표 하나는 상태 key를 한 번까지만 바꾼다. 꼬리표 없이 상태 key가 바뀌거나, 한 꼬리표의
+//   기록이 열린 동안 상태 key가 두 번째로 바뀌면 그 변경은 untagged 기록(tagged false)이 된다.
+//   두 번째 변경은 앞 기록의 to에 넣지 않는다(앞 기록은 그 변경 직전의 상태 key로 닫는다).
 // - 겹침: 결정 지점에서 함께 참이던 사건을 also_true에 싣는다(감시 표의 다른 행, setpoint 항목의
 //   ITEM_TIMEOUT과 완료, 그 tick에 무시된 취소).
 // - observer는 MissionRunner 생성자의 마지막 인자다. 기본값 nullptr이면 아무것도 기록하지 않고

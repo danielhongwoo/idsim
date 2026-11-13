@@ -64,7 +64,7 @@ action 서버(P3d)
 - 정리 중 한 tick의 순서(decisions.md 쟁점 3 M6): (1) 상태 끊김 (2) 공중 DISARMED (3) 정리할 것 없음 (4) 정리의 상한(정리 시작 tick부터 `hold_confirm_timeout + 3 x mode_confirm_timeout`, 기본 12 s) (5) 그 분기의 실행. 상한 tick에는 발행을 멈추고 대기 명령을 지운 뒤 지상이면 disarm, 공중이면 NAV_LAND를 한 번 보내고 끝낸다. 식별이 어긋난 표본의 tick이면 직전 분기로 정한다.
 - 비행 중 감시 표로 끝낼 때는 정리 분기에 들어가지 않는다. 순위 2는 arm을 보냈으면, 순위 3, 6, 7, 8은 arm을 보냈고 첫 ARMED 표본 뒤 landed false를 본 적이 없고 그 tick의 landed가 true이면 강제가 아닌 disarm을 한 번 보낸다(`monitor_sends_disarm`). P6과 setpoint 항목이 같은 종료 함수(`end_by_monitor`)를 쓴다.
 - 시간 경계: 경과가 값 이상(`>=`)이면 만료다.
-- 전이 관측(`docs-for-agent/plan-1b-mission-target/decisions.md` 쟁점 13): 전이를 일으키는 함수(`terminate`, `begin_cleanup`, `start_signal`, `enter_prep`, `start_item`, `complete_item`, `enter_ground`, `enter_air`, `enter_air_land`, `finish`)는 첫 인자로 사건 꼬리표 `Event`를 받는다. 상태 key 성분(`stage_`, `prep_`, `item_index_`, `cause_`, `branch_`)은 `set_state` 한 곳에서만 쓴다. 생성자의 `TransitionObserver`(기본 nullptr. 노드는 넘기지 않는다)가 있으면 tick마다 (from, 사건, to, reason, 함께 참이던 사건) 기록을 넘기고, 꼬리표 없이 상태가 바뀌면 untagged 기록을 넘긴다. 겹침을 실으려고 setpoint 항목은 감시 표, ITEM_TIMEOUT, 완료의 조건을 먼저 계산해 둔다(상태를 바꾸지 않는 식이고 고르는 순서는 그대로다). `evaluate_monitor`는 맞는 행 전부를 `matched`에 함께 싣는다(고르는 행은 그대로 첫 행이다). observer가 없으면 기록을 만들지 않고 출력은 같다.
+- 전이 관측(`docs-for-agent/plan-1b-mission-target/decisions.md` 쟁점 13): 전이를 일으키는 함수(`terminate`, `begin_cleanup`, `start_signal`, `enter_prep`, `start_item`, `complete_item`, `enter_ground`, `enter_air`, `enter_air_land`, `finish`)는 첫 인자로 사건 꼬리표 `Event`를 받는다. 상태 key 성분(`stage_`, `prep_`, `item_index_`, `cause_`, `branch_`)은 `set_state` 한 곳에서만 쓴다. 생성자의 `TransitionObserver`(기본 nullptr. 노드는 넘기지 않는다)가 있으면 tick마다 (from, 사건, to, reason, 함께 참이던 사건) 기록을 넘긴다. 꼬리표 하나는 상태 key를 한 번까지만 바꾼다. 꼬리표 없이 상태 key가 바뀌거나 한 꼬리표의 기록이 열린 동안 두 번째로 바뀌면 그 변경은 untagged 기록이 되고, 앞 기록은 그 변경 직전의 상태 key로 닫는다(같은 값 쓰기는 세지 않는다). 겹침을 실으려고 setpoint 항목은 감시 표, ITEM_TIMEOUT, 완료의 조건을 먼저 계산해 둔다(상태를 바꾸지 않는 식이고 고르는 순서는 그대로다). `evaluate_monitor`는 맞는 행 전부를 `matched`에 함께 싣는다(고르는 행은 그대로 첫 행이다). observer가 없으면 기록을 만들지 않고 출력은 같다.
 - `termination`은 정확히 한 번 나오고, 그 뒤의 step은 빈 출력이다(명령, setpoint, feedback, 종료 없음).
 - "N회 연속"은 서로 다른 vehicle_status 표본 N개다. timestamp가 직전 표본보다 크지 않은 표본은 건너뛴다(`SampleCounter`).
 - 대기 중인 명령은 한 번에 하나다. 분기나 단계가 바뀌는 tick에 이전 명령의 재전송을 지운다(그 tick에 이미 쌓인 재전송도 지운다). ack는 대기 중인 명령의 command 묶음이고 첫 전송 tick 뒤에 받은 것만 본다.
@@ -153,7 +153,7 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 | `node/test_contract_constants.cpp` | core 값과 메시지 상수(REASON_* 13, 14 포함, TYPE_*, MODE_*, PHASE_*, STATUS_*), yaw 식과 idsim_common/frames, 변환의 result == 사건 |
 | `node/test_executor_node.cpp` | 한 프로세스 배선(노드, 가짜 PX4, /clock thread, action client): self_start 대조군 쌍, 직접 configure/activate, configure 실패 둘, 정상 경로 SUCCEEDED와 무효 경로 INVALID_MISSION(사건 ACCEPTED가 앞, 종료 사건 1건, result와 같은 값), goal 중 deactivate 거부와 on_shutdown의 ABORTED INTERNAL, 종료 때 disarm(arm 뒤 1개, arm 전 0개), PREPARING 중 취소의 CANCELED, 두 번째 goal의 BUSY, cancel을 받아들인 goal의 abort 허용(rclcpp_action) |
 
-전이 칸 목록(`test/transition_cells.tsv`)의 부류별 칸 수. 겹침 칸의 열거 범위는 `docs-for-agent/plan-1b-mission-target/decisions.md` 쟁점 13이다(감시 표 행 쌍은 상태 key마다 대표, setpoint 순서는 대표 행 넷, 무시된 취소는 정리로 들어가는 사건 모두와 바로 끝내는 사건의 대표). 미덮임은 B8b에서 0으로 만든다.
+전이 칸 목록(`test/transition_cells.tsv`)의 부류별 칸 수. 겹침 칸의 열거 범위는 `docs-for-agent/plan-1b-mission-target/decisions.md` 쟁점 13이다(감시 표 행 쌍은 상태 key마다 대표, setpoint 순서는 대표 행 넷, 무시된 취소는 정리로 들어가는 사건 모두와 바로 끝내는 사건의 대표). 미덮임은 상태기를 바꾸기 전에 0으로 만든다.
 
 | 부류 | 단일 | 겹침 | 합 |
 | --- | --- | --- | --- |

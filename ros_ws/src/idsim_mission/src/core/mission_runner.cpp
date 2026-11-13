@@ -65,6 +65,7 @@ struct MissionRunner::Tick
   std::vector<TransitionEdge> edges;
   TransitionEdge open_edge;
   bool open{false};
+  int open_changes{0};  // 열린 기록 동안 상태 key를 바꾼 쓰기 수
   StateKey checkpoint;
 };
 
@@ -181,6 +182,21 @@ void MissionRunner::step_tick(Tick & t)
     note_ignored_cancel(t);
   }
   finalize(t);
+}
+
+StepOutput MissionRunner::write_states_under_one_tag(
+  const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock, Event event,
+  const std::vector<StateKey> & writes)
+{
+  StepOutput out;
+  Tick t(input, snapshot, clock, out);
+  t.checkpoint = state_key();
+  tag(event, t);
+  for (const StateKey & next : writes) {
+    set_state(t, next);
+  }
+  flush_records(t);
+  return out;
 }
 
 StepOutput MissionRunner::begin_cancel_without_stage(
@@ -330,7 +346,7 @@ void MissionRunner::enter_prep(Event event, Tick & t, PrepStep prep)
   tag(event, t);
   StateKey next = state_key();
   next.prep = prep;
-  set_state(next);
+  set_state(t, next);
 }
 
 void MissionRunner::prepare_signal(Tick & t)
@@ -545,7 +561,7 @@ void MissionRunner::start_item(Event event, Tick & t, std::uint32_t index)
   StateKey next = state_key();
   next.stage = Stage::kItem;
   next.item_index = index;
-  set_state(next);
+  set_state(t, next);
   item_start_ns_ = t.input.now_ns;
   item_start_tick_ = t.input.tick;
   if (index != 0 || !armed_seen_) {
@@ -761,7 +777,7 @@ void MissionRunner::begin_cleanup(
   next.stage = Stage::kCleanup;
   next.cause = cause;
   next.branch = Branch::kNone;
-  set_state(next);
+  set_state(t, next);
   cleanup_reason_ = reason;
   cleanup_detail_ = std::move(detail);
   cleanup_start_ns_ = t.input.now_ns;
@@ -959,7 +975,7 @@ void MissionRunner::enter_ground(Event event, Tick & t)
   tag(event, t);
   StateKey next = state_key();
   next.branch = Branch::kGround;
-  set_state(next);
+  set_state(t, next);
   if (publishing_) {
     setpoint_ = ground_setpoint(t);
   }
@@ -1007,7 +1023,7 @@ void MissionRunner::enter_air(Event event, Tick & t)
   tag(event, t);
   StateKey next = state_key();
   next.branch = Branch::kAir;
-  set_state(next);
+  set_state(t, next);
   clear_pending();
   counter_.reset();
   send(t, CommandKind::kSetModeHold);
@@ -1045,7 +1061,7 @@ void MissionRunner::enter_air_land(Event event, Tick & t, const std::string & wh
   tag(event, t);
   StateKey next = state_key();
   next.branch = Branch::kAirLand;
-  set_state(next);
+  set_state(t, next);
   if (!hold_failed_) {
     hold_failed_why_ = why;  // 재진입 문구가 쌓이지 않게 처음 실패한 이유만 남긴다
   }
@@ -1312,7 +1328,7 @@ void MissionRunner::terminate(Event event, Tick & t, Termination termination)
   tag(event, t);
   StateKey next = state_key();
   next.stage = Stage::kDone;
-  set_state(next);
+  set_state(t, next);
   publishing_ = false;
   clear_pending();
   t.out.termination = std::move(termination);
@@ -1332,8 +1348,21 @@ StateKey MissionRunner::state_key() const
   return key;
 }
 
-void MissionRunner::set_state(const StateKey & next)
+void MissionRunner::set_state(Tick & t, const StateKey & next)
 {
+  // item_type은 item_index에서 나오므로 쓰는 다섯 성분만 견준다.
+  const bool changes = next.stage != stage_ || next.prep != prep_ || next.cause != cause_ ||
+                       next.branch != branch_ || next.item_index != item_index_;
+  if (observer_ != nullptr && t.open && changes) {
+    // 꼬리표 하나는 상태 key를 한 번까지만 바꾼다. 두 번째 변경은 앞 기록의 to에 넣지 않고(앞
+    // 기록은 이 변경 직전의 상태 key로 닫는다) 꼬리표 없는 변경으로 남긴다(다음 close_record가
+    // untagged로 낸다).
+    if (t.open_changes >= 1) {
+      close_record(t);
+    } else {
+      ++t.open_changes;
+    }
+  }
   stage_ = next.stage;
   prep_ = next.prep;
   cause_ = next.cause;
@@ -1359,6 +1388,7 @@ void MissionRunner::tag(Event event, Tick & t, const std::vector<Event> & also_t
   t.open_edge.also_true = also_true;
   t.open_edge.from = state_key();
   t.open = true;
+  t.open_changes = 0;
 }
 
 void MissionRunner::close_record(Tick & t)

@@ -32,6 +32,9 @@ namespace idsim_mission::core
 
 inline constexpr std::int64_t kNsPerSecond = 1000000000LL;
 
+// 전제: 모든 값은 양수여야 한다. runner는 검사하지 않고 runner를 만드는 쪽이 보장한다(노드는
+// configure에서 0 이하를 거부한다). 0 이하에서의 상태기 동작은 정의하지 않는다. 전이 칸 목록
+// (test/transition_cells.tsv)은 이 전제 아래의 표다.
 struct Timeouts
 {
   // P0과 P2(수신, 식별, EKF gate). goal 접수 시각부터.

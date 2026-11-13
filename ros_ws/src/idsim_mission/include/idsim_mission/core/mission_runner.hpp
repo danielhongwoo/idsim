@@ -124,6 +124,12 @@ private:
   // 지금 tick에 취소의 정리를 시작한다(step의 단계 처리 없이). MissionRunnerTestAccess만 부른다.
   StepOutput begin_cancel_without_stage(
     const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock);
+  // 전이 관측의 untagged 검출을 시험하려고 둔다(TransitionTestAccess만 부른다). 꼬리표 하나를 달고
+  // writes를 차례로 set_state한 뒤 그 tick의 기록을 넘긴다. 상태기의 단계 처리는 하지 않는다.
+  friend class TransitionTestAccess;
+  StepOutput write_states_under_one_tag(
+    const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock, Event event,
+    const std::vector<StateKey> & writes);
 
   struct Tick;
   struct AckView
@@ -220,8 +226,9 @@ private:
 
   // 전이 관측(transition.hpp). observer_가 없으면 아무것도 하지 않는다.
   StateKey state_key() const;
-  // 상태 key 성분(stage_, prep_, item_index_, cause_, branch_)의 유일한 쓰기 지점.
-  void set_state(const StateKey & next);
+  // 상태 key 성분(stage_, prep_, item_index_, cause_, branch_)의 유일한 쓰기 지점. 열린 기록 동안
+  // 상태 key를 두 번째로 바꾸는 쓰기는 untagged가 된다(같은 값 쓰기는 세지 않는다).
+  void set_state(Tick & t, const StateKey & next);
   // 사건 꼬리표를 단다. 열린 기록을 닫고(to는 지금 상태) from이 지금 상태인 기록을 연다. 같은
   // 사건의 기록이 열려 있고 그 뒤 상태가 바뀌지 않았으면 새로 열지 않고 also_true만 더한다(전이
   // 함수가 꼬리표를 넘겨 다른 전이 함수를 부를 때).
