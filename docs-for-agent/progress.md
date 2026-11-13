@@ -7,7 +7,7 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 1a 완료 범위의 계약은 `docs/interface.md`에 고정되어 있다 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1(설계 문서의 범위와 경로) 반영됨 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1, B2, B3(원점과 월드: 생성기 판 5, fleet schema 2, 원점은 월드 SDF로만) 반영됨 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
@@ -67,7 +67,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. 1b: README 진행 순서대로 B3, B4, B5, B8을 시작한다(B2는 끝났다. 1a 규칙 유지, 지상 arm 진입의 arm 순서 불변식은 B9가 구현한다). B3 PR에는 `decisions.md` "문서 반영 목록"의 B3 묶음(architect의 `docs/` 문장 포함)이 함께 들어간다.
+1. 1b: README 진행 순서대로 B4, B5, B8과 B6, B7(B3 뒤)을 시작한다. B4의 머지 조건인 S2-a는 B3에서 통과했다. 지상 arm 진입의 arm 순서 불변식은 B9가 구현한다. B6, B7은 생성기 golden을 바꾸므로 나중에 머지되는 쪽이 rebase 뒤 golden을 다시 만든다.
 
 ## 미해결 사항
 
