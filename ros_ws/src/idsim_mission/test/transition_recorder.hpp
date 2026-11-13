@@ -45,10 +45,7 @@ struct Cell
     return std::tie(from, event, to, reason, also_true) <
            std::tie(other.from, other.event, other.to, other.reason, other.also_true);
   }
-  bool operator==(const Cell & other) const
-  {
-    return !(*this < other) && !(other < *this);
-  }
+  bool operator==(const Cell & other) const { return !(*this < other) && !(other < *this); }
 };
 
 inline std::string cell_text(const Cell & c)
@@ -58,8 +55,7 @@ inline std::string cell_text(const Cell & c)
 
 inline std::string current_test_name()
 {
-  const ::testing::TestInfo * const info =
-    ::testing::UnitTest::GetInstance()->current_test_info();
+  const ::testing::TestInfo * const info = ::testing::UnitTest::GetInstance()->current_test_info();
   if (info == nullptr) {
     return "<outside test>";
   }

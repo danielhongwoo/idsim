@@ -122,7 +122,7 @@ CellList load_cells()
     list.errors.push_back(std::string("cannot open ") + IDSIM_TRANSITION_CELLS);
     return list;
   }
-  const std::vector<std::string> header = {"from", "event", "to", "reason",
+  const std::vector<std::string> header = {"from",  "event",     "to",  "reason",
                                            "class", "also_true", "note"};
   std::string line;
   int line_no = 0;
@@ -401,8 +401,8 @@ void run_scenario(Harness & h, Scenario scenario)
 TEST(TransitionObserver, RecorderDoesNotChangeOutputs)
 {
   for (const Scenario scenario :
-       {Scenario::kSuccess, Scenario::kCancelAir, Scenario::kCancelGround,
-        Scenario::kStampFailure, Scenario::kItemTimeoutLandPath, Scenario::kMonitorRowsOverlap,
+       {Scenario::kSuccess, Scenario::kCancelAir, Scenario::kCancelGround, Scenario::kStampFailure,
+        Scenario::kItemTimeoutLandPath, Scenario::kMonitorRowsOverlap,
         Scenario::kMonitorWithCompletion, Scenario::kLandLeftMode, Scenario::kLandOnly}) {
     SCOPED_TRACE(static_cast<int>(scenario));
     TransitionRecorder * const saved = active_transition_recorder();
@@ -570,7 +570,8 @@ public:
       const auto found = list.cells.find(cell);
       if (found == list.cells.end()) {
         ADD_FAILURE() << "[transition coverage] observed cell not in list (first seen in "
-                      << test_name << "):\n" << cell_text(cell);
+                      << test_name << "):\n"
+                      << cell_text(cell);
         continue;
       }
       if (found->second.cls == "impossible") {
@@ -580,7 +581,8 @@ public:
       } else if (found->second.cls == "uncovered") {
         ADD_FAILURE() << "[transition coverage] cell listed as uncovered is observed (line "
                       << found->second.line << ", first seen in " << test_name
-                      << "); change class to covered:\n" << cell_text(cell);
+                      << "); change class to covered:\n"
+                      << cell_text(cell);
       }
     }
     // (1) covered 칸은 모두 관측되었다
@@ -592,7 +594,8 @@ public:
         ++covered;
         if (recorder_.cells.count(cell) == 0) {
           ADD_FAILURE() << "[transition coverage] covered cell not observed (line " << info.line
-                        << "):\n" << cell_text(cell);
+                        << "):\n"
+                        << cell_text(cell);
         }
       } else if (info.cls == "uncovered") {
         ++uncovered;
@@ -600,10 +603,9 @@ public:
         ++impossible;
       }
     }
-    std::cout << "[transition coverage] cells: covered " << covered << ", impossible "
-              << impossible << ", uncovered " << uncovered << "; observed "
-              << recorder_.cells.size() << ", untagged " << recorder_.untagged.size()
-              << std::endl;
+    std::cout << "[transition coverage] cells: covered " << covered << ", impossible " << impossible
+              << ", uncovered " << uncovered << "; observed " << recorder_.cells.size()
+              << ", untagged " << recorder_.untagged.size() << std::endl;
   }
 
 private:
@@ -620,8 +622,7 @@ private:
     const int not_selected =
       unit.total_test_count() - unit.test_to_run_count() - unit.disabled_test_count();
     if (not_selected > 0) {
-      append(
-        std::to_string(not_selected) + " test(s) not selected (--gtest_filter or sharding)");
+      append(std::to_string(not_selected) + " test(s) not selected (--gtest_filter or sharding)");
     }
     if (unit.skipped_test_count() > 0) {
       append(std::to_string(unit.skipped_test_count()) + " test(s) skipped by GTEST_SKIP");

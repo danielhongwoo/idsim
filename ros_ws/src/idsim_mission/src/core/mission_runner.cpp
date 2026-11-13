@@ -289,8 +289,8 @@ void MissionRunner::prepare_wait_ready(Tick & t)
       terminate(
         Event::kPreconditionFailed, t,
         aborted(
-             Reason::kPreconditionFailed, need + " (landed=" + (landed ? "true" : "false") +
-                                            ", arming=" + arming_name(s->arming) + ")"));
+          Reason::kPreconditionFailed, need + " (landed=" + (landed ? "true" : "false") +
+                                         ", arming=" + arming_name(s->arming) + ")"));
       return;
     }
     // P2: EKF gate. TAKEOFF는 P3이 목표점을 만들 위치 값도 유한해야 한다.
@@ -309,8 +309,8 @@ void MissionRunner::prepare_wait_ready(Tick & t)
     terminate(
       Event::kReadyTimeout, t,
       aborted(
-           Reason::kNotReady,
-           "ready_timeout: waiting for " + (waiting.empty() ? std::string("nothing") : waiting)));
+        Reason::kNotReady,
+        "ready_timeout: waiting for " + (waiting.empty() ? std::string("nothing") : waiting)));
     return;
   }
   if (!waiting.empty()) {
@@ -651,8 +651,8 @@ void MissionRunner::step_land(Tick & t)
     terminate(
       Event::kLandIdentityMismatch, t,
       aborted(
-           Reason::kInternal,
-           item_label() + ": vehicle_status identity mismatch: " + s->identity_detail));
+        Reason::kInternal,
+        item_label() + ": vehicle_status identity mismatch: " + s->identity_detail));
     return;
   }
   if (s == nullptr || link_lost(t)) {
@@ -695,8 +695,8 @@ void MissionRunner::step_land(Tick & t)
         terminate(
           Event::kLandLeftMode, t,
           aborted(
-               s->failsafe ? Reason::kFailsafe : Reason::kExternalModeChange,
-               item_label() + ": left AUTO_LAND while ARMED"));
+            s->failsafe ? Reason::kFailsafe : Reason::kExternalModeChange,
+            item_label() + ": left AUTO_LAND while ARMED"));
         return;
       }
     }
@@ -713,8 +713,8 @@ void MissionRunner::step_land(Tick & t)
     terminate(
       Event::kLandModeTimeout, t,
       aborted(
-           Reason::kModeSwitchFailed,
-           item_label() + ": mode_confirm_timeout: AUTO_LAND not confirmed"));
+        Reason::kModeSwitchFailed,
+        item_label() + ": mode_confirm_timeout: AUTO_LAND not confirmed"));
     return;
   }
   if (elapsed(t, item_start_ns_) >= current_item().timeout.to_ns()) {
@@ -946,8 +946,8 @@ void MissionRunner::cleanup_with_untrusted_sample(Tick & t)
     terminate(
       Event::kCleanupIdentityMismatch, t,
       cause_ == CleanupCause::kCancel
-           ? aborted(Reason::kInternal, "cancel: " + detail)
-           : aborted(cleanup_reason_, cleanup_detail_ + "; cleanup: " + detail));
+        ? aborted(Reason::kInternal, "cancel: " + detail)
+        : aborted(cleanup_reason_, cleanup_detail_ + "; cleanup: " + detail));
     return;
   }
   if (cleanup_cap_reached(t)) {
@@ -1156,7 +1156,7 @@ void MissionRunner::finalize(Tick & t)
       terminate(
         Event::kStampUnavailable, t,
         keep_reason ? aborted(cleanup_reason_, cleanup_detail_ + "; " + what)
-                       : aborted(Reason::kInternal, what));
+                    : aborted(Reason::kInternal, what));
       return;
     }
     t.out.px4_timestamp_us = t.stamp_us;
