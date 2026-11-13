@@ -95,10 +95,16 @@ SOURCE_SYSTEM = 254
 SOURCE_COMPONENT = 1
 
 # 원점 판정 허용 오차. 기대값은 기체별 base_link(GNSS 센서) 위치이므로 오차는 잡음만 남는다.
-# 실측(B3 스모크: 기체 1을 (6, -3)에 스폰, 3D fix 표본 10): 수평 최대 0.051 m, 수직 최대
-# 0.063 m. 잡음은 x500 model.sdf의 navsat에 noise 요소가 없으므로 PX4 gz_bridge 쪽에서
-# 더해지는 것으로 추정한다(소스 미확인). 수평 0.5 m는 실측 최대의 약 10배이면서 원점 소수
-# 다섯째 자리(약 1.1 m) 차이를 잡고, 수직 1.0 m는 실측 최대의 약 16배다.
+# 실측 1(스모크 px4-out, 기체 1을 (6, -3)에 스폰, 3D fix 표본 10): 수평 최대 0.051 m,
+# 수직 최대 0.063 m.
+# 실측 2(같은 구성, 90초 2666개): 수평 최대 0.070 m, 고도 38.098-38.338 m. 기대 고도 38.24 m
+# 기준 수직 최대 약 0.14 m(38.24 - 38.098 = 0.142).
+# 잡음 출처는 Gazebo x500 NavSat가 아니라(model.sdf에 noise 요소 없음) PX4 GZBridge의
+# 1차 Gauss-Markov 잡음이다(PX4 소스 src/modules/simulation/gz_bridge/GZBridge.cpp
+# 680-711행, addGpsNoise).
+# 수평 0.5 m는 실측 2 최대의 약 7배, 수직 1.0 m는 약 7배다(실측 1 기준 약 10배, 약 16배).
+# 원점 소수 다섯째 자리(약 1.1 m) 차이를 잡는다.
+# 기체 1의 (6, -3) 오프셋 때문에 원점 미적용(약 6.7 m)이거나 x/y 반전(약 13 m)이어도 0.5 m를 크게 넘는다.
 # 원점이 아예 적용되지 않으면 기본 월드(취리히, 47.398, 8.546) 값이 나와 수천 km 차이다.
 ORIGIN_TOL_H_M = 0.5
 ORIGIN_TOL_V_M = 1.0
@@ -282,7 +288,7 @@ def collect_gps_fixes(node, topic, n, timeout_s):
 
 
 def run_origin_checks(node, args, deadline, report):
-    """px4-out. vehicle_gps_position이 기대 월드 원점을 보고하는지."""
+    """px4-out. vehicle_gps_position이 기대 GNSS 위치(기체별 base_link)를 보고하는지."""
     gps_topic = find_unique_topic(
         node, topic_regex(args.ns, "out", "vehicle_gps_position"), GPS_TYPE,
         deadline, report, "gps_topic")
