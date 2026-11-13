@@ -20,7 +20,7 @@
     },
     "fleet": {
       "path": "tests/fixtures/gen_compose/embedded/fleet.yaml",
-      "sha256": "cf11616a9d176e5f91bae4038858bfe58aa351af430160da990608082a223919"
+      "sha256": "90a78e70aa36dd8e8d787bd85130e528640fda1dbda756714347121b2e76eeb6"
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",

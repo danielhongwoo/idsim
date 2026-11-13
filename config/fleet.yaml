@@ -8,7 +8,7 @@
 #   - 스택 번호 k(0-9): 생성 인자 --stack, 없으면 IDSIM_STACK_INDEX, 없으면 0.
 #   - px4_params의 식별 파라미터: MAV_SYS_ID, UXRCE_DDS_KEY, UXRCE_DDS_DOM_ID, UXRCE_DDS_AG_IP, SYS_AUTOSTART.
 
-# 파일 형식 번호. 2만 받는다(1의 world.file은 world.template으로 바뀌었다).
+# 파일 형식 번호. 2만 받는다. world.file key는 없고, 월드 템플릿은 world.template이다.
 schema: 2
 
 world:

@@ -281,7 +281,7 @@ def validate_fleet(fleet):
         raise FleetError("\n".join(errors))
 
     if fleet["schema"] != FLEET_SCHEMA or isinstance(fleet["schema"], bool):
-        errors.append(f"schema: {FLEET_SCHEMA}이어야 한다(schema 1의 world.file은 world.template으로 바뀌었다): {fleet['schema']!r}")
+        errors.append(f"schema: {FLEET_SCHEMA}이어야 한다(월드 템플릿은 world.template이다): {fleet['schema']!r}")
 
     # world
     world = fleet["world"]
