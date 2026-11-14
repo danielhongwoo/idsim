@@ -1,155 +1,118 @@
 # idsim 진행 상황
 
-에이전트와 작업자가 세션을 시작할 때 지금 어디에 있는지 파악하기 위한 파일이다. 지금 유효한 것만 적는다. 설계는 `docs/architecture.md`, 계획은 `docs/roadmap.md`, 진행 중인 단계의 계약은 `docs-for-agent/plan-*/decisions.md`에 있다. 무엇이 언제 왜 바뀌었는지는 여기에 적지 않고 git(커밋 메시지, PR 본문)에서 본다.
+세션을 시작할 때 지금 어디에 있는지 파악하는 파일이다. 지금 유효한 것만 적는다. 설계는 `docs/architecture.md`, 계획은 `docs/roadmap.md`, 진행 중인 단계의 계약은 `docs-for-agent/plan-*/decisions.md`에 있다. 경위는 git(커밋 메시지, PR 본문)에서 본다. 담당자 구성, 호출 규칙, 모델 선택은 `CLAUDE.md`에 있다.
 
 ## 현재 상태
 
 | Phase | 상태 |
 | --- | --- |
-| 1a | 완료. 1a 완료 범위의 계약은 `docs/interface.md`에 고정되어 있다 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1, B2, B3(원점과 월드: 생성기 판 5, fleet schema 2, 원점은 월드 SDF로만), B4, B5(RTL과 실패 fallback SITL 파라미터 일곱), B6(표적 어댑터 `targets` 서비스, Actor 생성, 궤적 상한), B7(정답 pose `sim-oracle`, `sim-topic` lint), B8, B8b(1a 칸 목록 미덮임 0), B9 snapshot 헤더(쟁점 12 항목, px4 어댑터 대응과 `px4/frame_port`), B9 S1(지상 arm 진입의 arm 순서 불변식과 ack 대기 상태 `PREPARING.OFFBOARD_ACK`), B9 S2(RTL 모드 명령 항목과 Land fallback, 검증 함수 `validate_mission_1a_goal`/`validate_mission_runnable` 분리, 항목 순서 규칙), B9 S3(공중 종료 단계: 마지막 setpoint 항목 뒤 Hold, Land 경로, 지상 대기. 칸 목록 covered 294, impossible 105), B9 S4(공중 Offboard 진입: 첫 항목 LOITER, AUTO_LOITER 면제, 첫 OFFBOARD 표본까지 재전송. runner가 받는 미션 22종. 칸 목록 covered 350, impossible 108, uncovered 0) 반영됨 |
+| 1a | 완료. 계약은 `docs/interface.md`에 고정 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S4 반영. 칸 목록 covered 350, impossible 108, uncovered 0. runner가 받는 미션 22종 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
-Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
+## 다음 작업
 
-| 단계 | 상태 |
-| --- | --- |
-| 1 환경 스모크 테스트 | 완료. 골든은 `tests/fixtures/px4/v1.17.0/` |
-| 2 CI 골격 | 완료. `lint`, `build`, `unit` job |
-| 2b 시각 도구 준비 | 완료 |
-| 3 `config/fleet.yaml`과 `tools/gen_compose.py` | 완료 |
-| 4 `idsim_common` | 완료 |
-| 5 `idsim_interfaces` | 완료. 계약은 `docs-for-agent/plan-1a-5-idsim-interfaces/decisions.md` |
-| 6 이륙-호버-착륙 노드와 통합 테스트 | 완료. 계획은 `docs-for-agent/plan-1a-6-idsim-mission/README.md`, 계약은 같은 디렉터리 `decisions.md`. P0-P5 완료(P4는 PR #36. 로컬 `run_sitl.sh --repeat 10` 10/10, CI `sitl` 첫 실행 통과. P5는 PR #38). 사용자가 QGC와 Gazebo GUI로 같은 비행을 확인했다. Executor의 feedback stamp는 tick 입력 시각이고 시나리오 A의 LOITER 유지 판정에 시계 양자 허용이 없다 |
-| 7 `docs/interface.md` | 완료. PX4 인터페이스와 `idsim_interfaces` 계약, 정의별 고정 시점 표 |
-
-환경.
-
-- 저장소 원격은 github.com/danielhongwoo/idsim, 이미지 레지스트리는 ghcr.io/danielhongwoo/idsim이다. GHCR 패키지 5개는 Public이고, 이미지 5종의 현재 key와 `buildcache` 태그가 익명으로 조회된다.
-- CI의 `lint`와 `unit`은 `pull_request`와 `push: main`에서 돈다. PR이 없는 브랜치 push에는 CI가 돌지 않는다. `build`는 PR에서 빌드만 하고 main에서만 GHCR에 올린다.
-- 개발 호스트는 x86_64 Ubuntu 24.04 VM(16 vCPU, 31GB, NVIDIA 없음, GNOME Wayland)이다. 이 호스트에서 archive.ubuntu.com이 응답하지 않는 날이 있어 이미지 빌드의 apt 미러 기본값이 kr 미러다.
-- 스모크와 스택의 실행 기록 `artifacts/`는 git에 추적되지 않으므로 다른 PC로 옮겨지지 않는다. 판정에 필요한 golden은 `tests/fixtures/`에 추적된다.
+1. B9 S5(`step()`의 `FramePort`, GOTO, 좌표 상한 1e6 m, `fits_float32` 공개). 이어서 S6(표적, TRACK_ENTITY, TARGET_LOST). 순서와 범위, B9와 B10의 경계는 `decisions.md` 쟁점 12.
+   - 상태기 PR마다 px4-engineer 칸 명세가 먼저이고, 칸 목록 diff의 새 칸을 같은 PR에서 덮는다.
+   - 머지 전에 로컬 `tests/sitl/run_sitl.sh`(1a 시나리오)를 돌리고 1a 미션이 지나는 덮임 칸이 그대로라는 대조를 merge 메시지에 남긴다.
+   - goal 접수가 받는 미션은 B9 동안 1a 그대로이고, 노드는 값 없는 임시 port와 빈 `Snapshot.targets`를 넘긴다.
+2. B10: 진짜 `Px4FramePort`(`to_local_position_input`, 비행 중 `ref_timestamp_us` 변경 WARN, `world.origin` 전달), 표적 구독(goal 접수 때 `Snapshot.targets`를 비우고 노드 테스트에 사례), goal 접수 제한 제거. 같은 PR에서 시나리오 B와 노드 테스트의 무효 미션 사례를 1b 무효 사례로 바꾼다(B의 사례 범위는 test-engineer). 쟁점 12 승인 조건 (2)는 B10 검토 때 본다.
+3. B11, B12, B13은 README 순서대로. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다.
 
 ## 운영 규칙
 
-담당자 구성과 모델 선택의 기본은 `CLAUDE.md`에 있다. 아래는 그 밖에 지금 적용되는 규칙이다.
-
-- 문서에는 지금 유효한 것만 둔다. 이력(누가 언제 무엇을 왜 바꿨는지, 실측 run, 검토 경과)은 커밋 메시지와 PR 본문에 적는다(사용자 결정).
-- px4-engineer의 모델 선택 예외는 `CLAUDE.md` 모델 선택 규칙의 "사용자 예외"를 따른다(읽기 전용 확인과 정형 작업은 sonnet, 안전장치로 중단된 기본 모델 호출은 sonnet으로 다시 부른다).
-- 그림은 계층으로 나눈다. 개요 그림 하나가 묶음과 주요 경로만 보이고 상세 그림이 개요의 상자를 하나씩 펼치며, 상세 그림의 도입 문장에 어느 상자를 펼친 것인지 적는다. 같은 내용을 두 그림에 그리지 않는다. 그림 하나는 node 8개 이하, edge 10개 이하, subgraph 중첩 1단, node label 두 줄 이하(이름과 짧은 구절 하나), edge label은 프로토콜이나 내용의 이름 하나(15자 이하)이고, 넘으면 그림을 나눈다. 포트 식, 환경변수, 마운트 경로, 명령줄 같은 세부는 label에 넣지 않고 그림 아래 표나 문장에 둔다(사용자 결정).
-- 실험용 스택 번호는 px4 5, ros2 6, test 7, devops 8, sim 9이다. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
-- 관련 owner의 승인 없이 머지하지 않는다. `idsim_mission`의 전이 표와 상태기 단위 테스트는 px4-engineer가 필수 승인자다(`file-ownership.md`).
-- 1a는 대표 시나리오(B, C, A, D, T)의 통과를 기준으로 개발한다. 경계 상황은 실측 증명 대신 보수적 기본 동작으로 덮고 계약 문서에 "미확인"으로 적는다. 새 실측은 관찰된 실패나 이상 동작의 원인을 재현할 때만 하고, 문서 분량과 실행 산출물과 기록 항목은 최소로 둔다(U6).
+- 실험용 스택 번호는 px4 5, ros2 6, test 7, devops 8, sim 9. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
+- 로컬 branch는 main에 `--no-ff`로 머지하고, 적절한 시점에 origin main에 push해 CI를 확인한다.
+- `idsim_mission`의 전이 표와 상태기 단위 테스트는 px4-engineer가 필수 승인자다(`file-ownership.md`).
+- 그림은 계층으로 나눈다. 개요 그림은 묶음과 주요 경로만, 상세 그림은 개요의 상자 하나를 펼치고 도입 문장에 어느 상자인지 적는다. 같은 내용을 두 그림에 그리지 않는다. 그림 하나는 node 8개, edge 10개 이하, subgraph 중첩 1단, node label 두 줄, edge label 15자 이하이고 넘으면 나눈다. 포트, 환경변수, 경로, 명령줄은 label에 넣지 않고 그림 아래에 둔다(사용자 결정).
+- 대표 시나리오의 통과를 기준으로 개발한다. 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮고, 새 실측은 관찰된 문제의 재현용으로만 하며, 산출물은 최소로 둔다(U6).
+- 저장소 라이선스는 Apache-2.0. 새 소스와 CMake 파일에 머리말을 넣고 `ament_copyright`와 cpplint `legal/copyright` 검사를 켠 채로 둔다.
+- 이미지 빌드의 apt 미러 기본값은 kr 미러(`docker/versions.env`의 `UBUNTU_APT_MIRROR`), CI는 우분투 기본 미러. ros-ws 이미지에 clang-tidy와 clang-format을 둔다. `tools/qgc.sh`에 설정을 되돌리는 옵션을 두지 않는다(`--stack 0`을 쓴다).
 
 지금 유효한 사용자 결정.
 
-- U1: 공중 취소 시나리오 D와 `[LAND]` 한 항목 미션은 1a 필수다.
-- U2: `sitl` job은 PR 머리 커밋마다(draft와 문서만 바뀐 PR 제외)와 main push에서 돈다. `lint`와 `unit`의 trigger도 `pull_request`와 `push: main`이다.
-- U3: 공중에서 끝나는 미션(마지막 항목이 LAND가 아님)의 종료 동작은 1b에서 정한다. 1a 노드는 그런 미션을 INVALID_MISSION으로 거부한다.
-- U4: replay job의 trigger는 replay job을 만드는 Phase 2에서 정한다.
-- U5: P4는 core 변경을 먼저 머지한다. `decisions.md`의 P4 머지 조건(필수 재실측 (2), (3), (5)와 두 부류의 ARMED 표본 기준)은 `tools/sim_stack.sh up`이 Executor를 띄우게 되는 P4 생성기와 통합 PR에 적용한다.
-- U6: 1a는 대표 시나리오(B, C, A, D, T)의 통과(로컬 3회 연속, CI `sitl`, 육안 확인)를 기준으로 한다. 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮고, 새 실측은 관찰된 문제의 재현용으로만 하며, 재실측 (1), (4), (6), (7), (8)은 하지 않는다. 산출물은 최소로 둔다.
-- U7: 1b 범위에서 반복 이륙(첫 항목이 아닌 TAKEOFF)은 뺀다. Executor는 1b에서도 거부한다.
+- U2: `sitl` job은 PR 머리 커밋마다(draft와 문서만 바뀐 PR 제외)와 main push에서 돈다. `lint`, `unit`도 `pull_request`와 `push: main`.
+- U4: replay job의 trigger는 Phase 2에서 정한다. 그때 `docs/architecture.md` 테스트 층 표의 리플레이 행과 `docs/roadmap.md` Phase 2 완료 기준의 "모든 push"를 고친다.
+- U7: 1b에서 반복 이륙(첫 항목이 아닌 TAKEOFF)은 뺀다.
 - U8: `COM_LOW_BAT_ACT`를 계약 SITL 파라미터 표에 넣어 2(Land)로 고정한다.
-- U9: `RTL_RETURN_ALT`는 미션 고도에 맞춰 정한다(1b는 순항 5 m에 10 m).
-- U10: 표적은 "스크립트 궤적을 따르는 점 표적"이다. 표적 생산자는 교체 가능하며 Gazebo 기반 생산자는 확장 항목이다. `docs/architecture.md` 범위 문구를 이에 맞춘다.
-- U11: CI `sitl` 목표 15분. 1b 비행 시나리오를 모두 PR CI에 두고, 넘으면 U15 순서로 줄인다.
+- U9: `RTL_RETURN_ALT`는 미션 고도에 맞춘다(1b는 순항 5 m에 10 m).
+- U10: 표적은 스크립트 궤적을 따르는 점 표적이다. 생산자는 교체 가능하고 Gazebo 기반 생산자는 확장 항목이다.
+- U11, U15: CI `sitl` 목표 15분. 1b 비행 시나리오를 모두 PR CI에 두고, 넘으면 겹치는 비행 구간 -> waypoint 수 -> Hold 시간 순으로 줄인다. F2의 공중 종료와 F3의 공중 시작은 빼지 않는다.
 - U12: Gazebo 정답 pose(`/sim/`)를 SITL MCAP 기록물에 넣는다(Phase 2부터 효과).
-- U13: roadmap 1b 목표(YAML 미션 하나로 이륙 -> 순회 -> 표적 접근 -> 복귀, 착륙)를 그대로 덮는 합친 미션 시나리오(F4)를 둔다. F1-F3은 경계 상황 검증용으로 남긴다. CI 15분을 넘을 때의 조정은 U15를 따른다.
-- U14: 1b waypoint 판정 반경은 1 m를 유지한다. 시험 미션의 `acceptance_radius_m`은 `1 m - b` 이하로 둔다.
-- U15: CI `sitl`이 15분을 넘으면 겹치는 비행 구간 -> waypoint 수 -> Hold 시간 순으로 줄인다. F2의 공중 종료와 F3의 공중 시작은 빼지 않는다.
-- U16: `docs-for-agent/file-ownership.md`의 소유자는 architect다.
-- 저장소 라이선스는 Apache-2.0이다. 새 소스와 CMake 파일에 머리말을 넣고 `ament_copyright`와 cpplint `legal/copyright` 검사를 켠 채로 둔다.
-- 이미지 빌드의 apt 미러 기본값은 kr 미러(`docker/versions.env`의 `UBUNTU_APT_MIRROR`)이고 CI는 우분투 기본 미러를 쓴다.
-- ros-ws 이미지에 clang-tidy와 clang-format을 그대로 둔다. 별도 도구 이미지로 빼지 않는다.
-- `tools/qgc.sh`에 설정을 되돌리는 옵션을 두지 않는다. 기본 포트로 돌리려면 `--stack 0`을 쓴다.
-
-## 다음 작업
-
-1. 1b: README 진행 순서대로 B9, B12를 진행한다. B4(`idsim_common`의 원점 이동 변환, `TargetId`, 상태 QoS, `position_setpoint` 속도 인자), B5(SITL 파라미터 일곱), B6(표적 어댑터, Actor 생성, 궤적 상한), B7(정답 pose, `/sim/` lint), B8(전이 관측 계측, 1a 칸 목록), B8b(1a 칸 목록 미덮임 0. 덮음 테스트가 uncovered 칸을 거부)는 끝났다. B9 snapshot 헤더, S1, S1 지상 arm 진입의 재전송 수정, S2, S3, S4는 반영됐다. 다음은 B9 상태기 PR S5이다(S5, S6 순서대로). 순서와 범위, B9와 B10의 경계는 `decisions.md` 쟁점 12에 있다. PR마다 px4-engineer의 칸 명세 표가 먼저이고, 칸 목록 diff를 내고 새 칸을 같은 PR에서 덮는다. goal 접수가 받는 미션은 B9 동안 1a 그대로이고, 노드는 S5부터 값 없는 임시 port와 빈 `Snapshot.targets`를 넘긴다. 진짜 `Px4FramePort`(`to_local_position_input` 채택, 비행 중 `ref_timestamp_us` 변경 WARN, `world.origin` 전달), 표적 구독(`Snapshot.targets`는 goal 접수 때 비우고 노드 테스트에 사례를 둔다), goal 접수 제한의 제거는 B10이고, 쟁점 12 승인 조건 (2)의 실제 충족은 B10 검토 때 본다. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다. `target_id` 사례 표의 단일 출처(test-engineer 제안 위치 `idsim_interfaces/test/cases/`, architect)는 `tests/support`에 이름 조립이 들어올 때 정한다. B11 판정 쪽에서 챙길 것(B7 검토, test-engineer): `tests/support`에 `/sim/<vehicle_id>/pose` 조립 순수 함수와 `sim_oracle.py`의 `ORACLE_TOPIC_CASES`, `ORACLE_TOPIC_INVALID`와 같은 사례 표(import로 공유하지 않음), 정답 pose 구독은 첫 `mission_event` 전에 discovery와 `sim-oracle` 준비를 확인하고 depth를 크게(발행은 RELIABLE, VOLATILE, KEEP_LAST 10), `ORACLE_STALE`은 `t_f` 뒤 표본을 `/clock`이 `t_f + 0.1 s`를 지날 때까지 기다린 뒤 판정, 정답 pose QoS를 구독 QoS와 짝으로 `tests/support` 머리말에 적는다. 표시 파일 디렉터리 `/tmp/idsim`이 `gazebo`, `targets`, `sim-oracle`에서 tmpfs(실행 user uid:gid 소유)라 재시작 뒤 옛 표시 파일이 남는 문제는 없다. B11 판정은 start 뒤 health가 starting에서 healthy가 되기를 기다린다(interval 10 s)([실측]: 스택 8, stop/start와 `docker restart` 모두 재시작 직후 표시 파일 없음, 노드가 만든 뒤 healthy. uid 1001은 단일 컨테이너로만 확인했고 스택 전체(CI sitl)는 아직).
-
-2. 1b B9 상태기 PR에서 챙길 것(`decisions.md` 쟁점 7, 8, 12, 15가 정본이다): `decisions.md` 쟁점 12 근거의 "DISARMED에서 DO_SET_MODE 거부는 TERMINATION뿐이다" 인용을 `UserModeIntention.cpp` 73-74행(결과 값은 `Commander.cpp` 927-932행)으로 고친다(architect, 다음 문서 정리 때). S1-S6 모두 머지 전에 로컬 `tests/sitl/run_sitl.sh`(1a 시나리오)를 돌리고 1a 미션이 지나는 덮임 칸이 그대로라는 대조를 남긴다. `EntryPlan`의 공중 Offboard 갈래는 S4, `world_velocity_to_local`의 반환형은 S6이다. S4는 P4에서 먼저 본 OFFBOARD를 MODE_SWITCH_FAILED(정리)로 끝내고, 공중 Offboard 진입의 실패와 취소의 정리는 취소와 같은 분기 고르기를 쓴다(지상 ARMED이면 지상 분기). S5는 GOTO `position`과 TRACK_ENTITY `offset`의 좌표 상한 1e6 m와 `fits_float32` 공개를 넣는다. 재전송 중단의 전제 D(약 0.28 s)는 [추정]이고 F3 trace(D와 P5의 DO_SET_MODE 전송 수)로 본다. 미션 값은 S5의 계약 상한으로 큰 setpoint에 닿지 않고, 표적 위치는 S6 전에 정한다. 좌표 상한 1e6 m는 S5 칸 명세에서 px4-engineer가 값과 EKF/로컬 위치 float32 정밀도, float32 값 간격보다 작은 `acceptance_radius_m`의 도달 판정 안정성을 확인한다. S6 칸 명세 전에 표적 위치의 유효 표본 규칙에도 좌표 상한을 둘지 정한다(px4-engineer, ros2-engineer, sim-engineer, architect). B10은 goal 접수 제한을 지우는 PR에서 시나리오 B와 노드 테스트의 무효 미션 사례를 1b 무효 사례로 바꾼다(B에 넣는 사례의 범위는 test-engineer). 모드 명령 항목에서 모드 3회 확인과 `mode_confirm_timeout`이 같은 tick이면 구현은 확인이 이기는데(1a LAND부터. S2의 RTL도 같다) `docs/interface.md` "종료의 충돌 규칙"은 "만료가 이긴다"고 적는다. 구현을 고칠지(1a 동작 변경, 별도 PR과 칸 명세) 계약 문장에 예외를 둘지를 B10 전에 px4-engineer, ros2-engineer와 정한다(architect. 1a 고정 계약 영향 후보 (u)). 확인 tick의 거부 ack도 같은 검토 범위다(계약은 만료와 확인만 정한다. LAND는 확인이 대기 명령을 지워 그 거부 ack를 보지 않고, `prepare_offboard`는 같은 tick의 거부 ack를 확인보다 먼저 본다). S2는 LAND의 지금 순서를 쓰고 테스트는 이 경계 tick들을 단정하지 않고, S3, S4의 새 확인 지점은 계약 문장(만료가 이긴다)을 따른다.
+- U13: roadmap 1b 목표를 그대로 덮는 합친 미션 시나리오 F4를 둔다. F1-F3은 경계 상황 검증용.
+- U14: 1b waypoint 판정 반경은 1 m. 시험 미션의 `acceptance_radius_m`은 `1 m - b` 이하.
+- U16: `docs-for-agent/file-ownership.md`의 소유자는 architect.
 
 ## 미해결 사항
 
-1a 6단계.
+B10 전에 정할 것.
 
-- SITL 개발 반복(`tools/sim_stack.sh restart-ops`, `docker/README.md` "개발 반복") 후속: `docs/architecture.md`의 `tools/sim_stack.sh` 운영 규칙 문단에 restart-ops 뒤 attach 경로를 적을지(architect). `tests/support/test_px4_topic_names.py::test_argument_checks`에서 SpinThread 종료 순서로 `InvalidHandle` 경고가 나고 restart-ops 판독 로그에도 섞일 수 있다(test-engineer). `tools/vehicle_arming_state.py`의 stack.json 오류 rc 2 사례 테스트는 test-engineer가 정한다.
-- B9 S3 후속(reviewer 최종 검토 비차단):
-  - architect, B10 전: 종료 단계의 정리 상한(`hold_confirm_timeout + 3 x mode_confirm_timeout`, 12 s)이 `land_disarm_fallback_delay`를 포함하지 않는다. 노드는 양수만 검사하므로 지연을 9 s 이상으로 주면 이륙 이력 없는 지상 대기가 늘 상한 ABORTED로 끝난다. 상한에 대비책 지연을 넣을지 파라미터 관계 검사를 둘지 정하고 `config.hpp` 상한 주석의 "가장 긴 정당 경로" 문장도 고친다.
-  - ros2-engineer, test-engineer, px4-engineer: 종료 단계에서 대비책 뒤 지상 DISARMED를 `DisarmConfirm`(전송 tick보다 뒤에 받고 timestamp가 전송 stamp보다 큰 표본만)으로 세는 연결을 가르는 사례가 없다. 대비책 뒤에도 SampleCounter로 세게 바꿔도 전 사례가 통과한다. T10 경로와 G8 뒤 AIR_LAND에서 timestamp가 전송 stamp 이하인 지상 DISARMED 표본 셋으로는 끝나지 않음을 단정하는 사례를 더한다. 6a의 ack 버림 줄은 방어 코드임을 주석에 적거나 지운다.
-  - architect, ros2-engineer: 추적 파일(`mission_runner.cpp`, `mission_runner.hpp`, 패키지 `README.md`, `test_runner_mission_end.cpp`, 새 사례 주석의 "칸 명세 2.2", "D12" 포함)의 "쟁점 10 A1/A2", "칸 명세 6.2절" 같은 저장소 밖 이름표를 `decisions.md` 문구("지상 DISARMED를 보는 동안의 규칙", "지상 DISARMED 3회의 계수")로 바꾸거나 쟁점 10에 이름을 붙인다.
-  - B11 F2 trace: Land 경로 뒤 DISARMED 표본의 `nav_state`, 지상 Hold 뒤 자동 disarm, Hold 3회 소요, "AUTO_LAND 표본 없이 지상 DISARMED는 드물다"를 본다.
-- B9 S1 지상 arm 진입의 재전송 수정(`decisions.md` 쟁점 12 "명령과 ack의 유실")은 반영됐다. CI `sitl` branch 실행 4회는 모두 통과했지만, 통과 run은 ULog를 남기지 않아 CI에서 DO_SET_MODE 전송 수와 P5 소요는 재지 못했다(로컬 [실측] 1회, 1048-1052 ms). main에서 `sitl` 통과가 쌓이는지 본다. 지상 arm 진입 밖의 재전송 다섯 지점(P6 arm, 모드 명령 항목의 NAV_LAND/NAV_RTL/대비책 disarm, 정리의 지상 disarm, Hold, Land 경로)은 "비거부 ack 뒤에도 미확인이면 주기 재전송이 이어진다"를 `idsim_mission/test/test_runner_resend_after_ack.cpp`가 tick 단위로 고정하고, 이 지점들에 지상 arm 진입 helper를 쓰는 변이 다섯은 모두 새 사례만 잡는다. 남은 일:
-  - architect: 유효 ack 뒤 재전송을 멈추는 규칙이 기대는 전제 "ACCEPTED면 모드 전환이 일어난다"(`Commander.cpp` 912-927행, [실측] 17회)를 쟁점 12 근거에 적고, `docs/interface.md` 341행(이 전제를 미확인으로 적는 문장)을 1a 고정 계약 영향 (t)에 넣을지 정한다. `has_valid_offboard_ack`의 `last_send_tick` 비교 표현은 쟁점 11의 ack timestamp 기준을 넣을 때 다시 본다.
-- B9 S4 후속:
-  - architect, B10 전: 첫 OFFBOARD 표본 뒤에도 감시 표본의 하한 timestamp가 P3 표본에 머문다(`monitored_status`). 전환 직전 AUTO_LOITER 표본이 늦게 닿으면 AIR_OFFBOARD_SEEN에서 순위 7로 EXTERNAL_MODE_CHANGE가 되어 발행을 멈추고 기체는 Offboard 손실 Land로 간다. 순서 역전은 관찰하지 못했다. 첫 OFFBOARD 표본 tick에 하한을 올릴지 정한다. 재전송이 운용자 Hold를 한 번 덮는 경우(전환 직후 표본 사이의 Hold)를 쟁점 7 받아들인 위험에 올릴지, `docs/interface.md` 607행 "표본 하나로 정해지는 관측" 목록에 먼저 본 OFFBOARD와 첫 OFFBOARD 표본을 넣을지(B13 대상)도 정한다.
-  - px4-engineer: 쟁점 7의 D [추정](5 Hz 묶음으로 약 200 ms 뒤)이 기존 산출물과 맞지 않는다(안전 쪽). `artifacts/runs/20261114-140437-k6-sitl`의 `raw_status_A.jsonl`에서 지상 Hold -> OFFBOARD와 OFFBOARD -> AUTO_LAND 모두 바뀌기 전 표본 12 ms 뒤에 새 모드 표본이 닿았다. 기존 1a 산출물(A의 LAND, D의 Hold)로 값을 모아 [실측]으로 바꾼다.
-  - 정형: 패키지 `README.md`와 `test_runner_air_entry.cpp` 머리 주석의 "B9 S4 칸 명세(7.1)의 사례 A1-A27" 이름표는 S3 이름표 정리와 함께 바꾼다. `decisions.md` 쟁점 7의 "루프"는 loop로.
-  - B11 F3 trace: 첫 OFFBOARD 표본 뒤 OFFBOARD가 아닌 표본의 timestamp가 첫 OFFBOARD 표본보다 앞인지 본다.
-  - architect, px4-engineer, ros2-engineer, B10 전(공중에서 시작하거나 끝나는 미션이 노드에서 닿기 전): Px4Timestamp를 만들지 못해 끝난 goal의 `detail` 꼬리 "vehicle state unknown, may remain armed on ground"가 기체가 공중인 경로(공중 Offboard 진입, 모드 명령 진입의 `[RTL]`과 `[LAND]`, 공중 종료 단계)에도 붙는다. 그 tick 표본의 `landed`로 문구를 가를지와 공중 문구(Hold로 남거나, Offboard 전환이 처리됐으면 Offboard 손실 Land)를 정하고 별도 PR로 고친다(1a 미션의 지상 문구는 그대로). `COM_FAIL_ACT_T`가 `config/px4/sitl_params.env`에 없어 Offboard 손실 Land 앞에 지연이 끼는지도 함께 본다(px4-engineer).
-- CI `sitl`(1a 시나리오)의 간헐 실패는 원인 둘로 처치했다. 종류 1(시나리오 D의 "D 고도 도달" `TIMEOUT_SIM`): 첫 ARM 직후 PX4의 `battery_status`, `cpuload`, `system_power` 발행이 멈춰 D의 arm이 거부된다. 처치는 `IMU_GYRO_CAL_EN=0`(`config/px4/sitl_params.env`)이고 기전(hrt callout 경합)은 [추정]이다. 종류 2(이정표 순서 위반 "result가 disarmed보다 앞", 4 ms 차): 판정이 노드 간 시계를 섞어 비교한 것이고 수신 시각 비교로 처치했다. 로컬 콜드 27회에서 정지 0건이다. CI에서 연속 통과하는지는 아직 확인하지 못했다.
-  - 후속 (a): ACCEPTED 사건 stamp의 건전성을 SITL 판정이 더는 보지 않는다. `idsim_mission` 노드 테스트로 덮을지 별도 판정으로 덮을지 test-engineer와 ros2-engineer가 정한다.
-  - 후속 (b): trace 이정표에 수신 시각을 남겨 통과 run의 순서 여유를 본다(첫 AUTO_LAND 표본의 recv-timestamp 지연 32-140 ms는 원인 미상).
-  - 아키텍트 결정 대상: `docs/interface.md`의 SITL 파라미터 표에 `IMU_GYRO_CAL_EN`을 넣을지.
-  - 후속 (c)(test-engineer, logging-engineer와 상의): 성공한 sitl run의 summary.md에 ULog의 `battery_status`, `cpuload`, `system_power` 마지막 표본 시각을 한 줄로 남겨, 성공 run에 숨은 발행 정지를 CI에서 셀 수 있게 한다.
-- CI `sitl` job의 기록은 첫 1회뿐이다(PR #36: 전체 5분 43초, 이미지 pull 약 3분 20초, 스택 올리기부터 정리까지 약 2분 13초, runner Docker Engine 28.0.4). 실패 때 `artifacts/runs/`가 job artifact로 올라가는지는 아직 보지 못했다. 판정 상수의 재검토(쟁점 9)는 CI 기록이 쌓이면 한다.
-- 스모크 images 단계(`tests/smoke/run_smoke.sh`의 check_s0)가 `LLVM_MAJOR`와 `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다. `tools/ros_ws.sh`의 대조는 이미지에 있는 ENV만 돌아서 그 ENV가 없는 옛 ros-ws 이미지가 통과한다. 옛 `:local` 이미지로 `sim_stack.sh up --viz`를 하면 foxglove만 죽는다. images 단계에 넣는다(test-engineer). `ros_ws.sh`에 `versions.env`의 이름 기준 존재 검사를 둘지는 devops-engineer와 test-engineer가 정한다.
-- foxglove_bridge의 판은 `FOXGLOVE_BRIDGE_VERSION` 접두 단정까지만 고정된다. ROS sync로 새 판이 오면 ros-ws key가 바뀌는 PR의 빌드가 실패한다(의도한 동작). 같은 판 안의 revision과 의존 패키지는 고정되지 않는다.
-- P5 완료 기준 가운데 setpoint와 `vehicle_local_position`을 Lichtblick의 같은 플롯에 놓는 것은 확인하지 않았다(U6에 따라 6단계를 막지 않는다). 연결, 토픽 목록, Plot 갱신은 확인했다.
-- PX4 버전을 올리면 "ULog의 `vehicle_command` `timestamp`가 측정기의 stamp와 같다"와 "ack 기록 순서가 처리 순서와 같다"를 다시 확인한다(px4-engineer).
-- 실행하지 않고 [미확인]으로 둔 것: `ops-N`의 goal 실행 중 stop에서 종료 사건이 구독자에게 오는지, `vehicle.id` 누락에서 unhealthy까지의 시간(추정 약 54 s, 최악 70 s). 관찰된 문제가 있을 때만 잰다(U6).
+- (u) 모드 명령 항목(LAND, RTL)에서 모드 3회 확인과 `mode_confirm_timeout`이 같은 tick이면 구현은 확인이 이기는데 `docs/interface.md` "종료의 충돌 규칙"은 만료가 이긴다고 적는다. 구현을 고칠지(1a 동작 변경) 계약에 예외를 둘지, 확인 tick의 거부 ack까지 함께 정한다(architect, px4-engineer, ros2-engineer).
+- 공중 종료 단계의 정리 상한(12 s)이 `land_disarm_fallback_delay`를 포함하지 않는다. 지연을 9 s 이상으로 주면 이륙 이력 없는 지상 대기가 늘 상한 ABORTED다. 상한에 넣을지 파라미터 관계 검사를 둘지 정하고 `config.hpp` 상한 주석도 고친다(architect).
+- 공중 Offboard 진입: 첫 OFFBOARD 표본 뒤에도 감시 하한 timestamp가 P3 표본에 머문다(`monitored_status`). 늦은 AUTO_LOITER 표본이 EXTERNAL_MODE_CHANGE를 낼 수 있다(관찰 안 됨). 하한을 올릴지, 재전송이 운용자 Hold를 한 번 덮는 경우를 받아들인 위험에 올릴지, `docs/interface.md` 607행 목록에 먼저 본 OFFBOARD와 첫 OFFBOARD 표본을 넣을지(B13) 정한다(architect).
+- Px4Timestamp를 만들지 못해 끝난 goal의 `detail` 꼬리 "vehicle state unknown, may remain armed on ground"가 공중 경로에도 붙는다. `landed`로 문구를 가를지 정해 별도 PR로 고친다. `COM_FAIL_ACT_T`가 `sitl_params.env`에 없어 Offboard 손실 Land 앞에 지연이 끼는지도 본다(architect, px4-engineer, ros2-engineer).
+
+S6 칸 명세 전에 정할 것.
+
+- 표적 위치의 유효 표본 규칙에 좌표 상한을 둘지(px4-engineer, ros2-engineer, sim-engineer, architect).
+
+문서 정리(정형, 다음 문서 정리 때).
+
+- `decisions.md` 쟁점 12 근거의 "DISARMED에서 DO_SET_MODE 거부는 TERMINATION뿐이다" 인용을 `UserModeIntention.cpp` 73-74행(결과 값은 `Commander.cpp` 927-932행)으로 고친다. 쟁점 7의 "루프"는 loop로.
+- 유효 ack 뒤 재전송을 멈추는 규칙의 전제 "ACCEPTED면 모드 전환이 일어난다"(`Commander.cpp` 912-927행, [실측] 17회)를 쟁점 12 근거에 적고, `docs/interface.md` 341행을 1a 고정 계약 영향 (t)에 넣을지 정한다(architect).
+- 저장소 밖 이름표("쟁점 10 A1/A2", "칸 명세 6.2절", "D12", "B9 S4 칸 명세(7.1)의 사례 A1-A27")를 `mission_runner.cpp/.hpp`, 패키지 `README.md`, `test_runner_mission_end.cpp`, `test_runner_air_entry.cpp`에서 `decisions.md` 문구로 바꾼다(ros2-engineer).
+- `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
+- `docs/architecture.md`의 `tools/sim_stack.sh` 운영 규칙 문단에 restart-ops 뒤 attach 경로를 적을지(architect). `docs/interface.md` SITL 파라미터 표에 `IMU_GYRO_CAL_EN`을 넣을지(architect).
+
+테스트 보강.
+
+- 종료 단계에서 대비책 뒤 지상 DISARMED를 `DisarmConfirm`으로 세는 연결을 가르는 사례가 없다. timestamp가 전송 stamp 이하인 지상 DISARMED 셋으로는 끝나지 않음을 T10 경로와 G8 뒤 AIR_LAND에서 단정한다. 6a의 ack 버림 줄은 주석을 달거나 지운다(ros2-engineer, test-engineer, px4-engineer).
+- 쟁점 7의 D [추정]을 기존 1a 산출물(A의 LAND, D의 Hold)의 모드 표본 간격으로 [실측]으로 바꾼다(px4-engineer).
+- ACCEPTED 사건 stamp의 건전성을 노드 테스트로 덮을지 판정으로 덮을지(test-engineer, ros2-engineer).
+- 성공 sitl run의 summary.md에 ULog `battery_status`, `cpuload`, `system_power` 마지막 표본 시각을 남겨 숨은 발행 정지를 센다. trace 이정표에 수신 시각을 남긴다(test-engineer, logging-engineer).
+- `test_px4_topic_names.py::test_argument_checks`의 SpinThread `InvalidHandle` 경고, `tools/vehicle_arming_state.py`의 rc 2 사례 테스트(test-engineer).
+- 스모크 images 단계가 `LLVM_MAJOR`, `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다(test-engineer). `ros_ws.sh`에 `versions.env` 이름 기준 존재 검사를 둘지(devops-engineer, test-engineer).
+
+B11 판정에서 챙길 것(test-engineer).
+
+- `tests/support`에 `/sim/<vehicle_id>/pose` 조립 순수 함수와 `sim_oracle.py`의 `ORACLE_TOPIC_CASES`, `ORACLE_TOPIC_INVALID`와 같은 사례 표(import로 공유하지 않음). `target_id` 사례 표의 단일 출처는 이때 정한다(architect).
+- 정답 pose 구독은 첫 `mission_event` 전에 discovery와 `sim-oracle` 준비를 확인하고 depth를 크게 둔다(발행은 RELIABLE, VOLATILE, KEEP_LAST 10). QoS 짝을 `tests/support` 머리말에 적는다. `ORACLE_STALE`은 `/clock`이 `t_f + 0.1 s`를 지날 때까지 기다린 뒤 판정한다.
+- start 뒤 health가 healthy가 되기를 기다린다(interval 10 s). uid 1001로 스택 전체가 도는지는 CI sitl에서 본다.
+- F2 trace: Land 경로 뒤 DISARMED 표본의 `nav_state`, 지상 Hold 뒤 자동 disarm, Hold 3회 소요. F3 trace: D와 P5의 DO_SET_MODE 전송 수, 첫 OFFBOARD 표본 뒤 OFFBOARD가 아닌 표본의 timestamp 순서.
 
 빌드와 CI.
 
-- `sitl.yml`은 GHCR에서 이미지 key로 pull하는데, PR에서는 새 key가 아직 없고 main push에서는 `build`의 publish와 동시에 돌아 이미지 key가 바뀌는 PR은 PR과 머지 직후 main 양쪽에서 pull 단계가 실패한다. 지금은 로컬 `tests/sitl/run_sitl.sh`로 대신하고 publish 뒤 main에서 `sitl`을 다시 돌린다. 대안: `sitl`을 build 완료의 `workflow_run`으로 묶기, key가 없으면 실패 원인을 명시해 보고하기(조용한 skip은 쓰지 않는다). devops-engineer와 architect가 정한다.
+- `sitl.yml`은 GHCR에서 이미지 key로 pull하므로 이미지 key가 바뀌는 PR은 PR과 머지 직후 main 양쪽에서 pull이 실패한다. 지금은 로컬 `run_sitl.sh`로 대신하고 publish 뒤 main에서 `sitl`을 다시 돌린다. `workflow_run`으로 묶을지 등은 devops-engineer와 architect가 정한다.
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
-- 비결정 빌드 요소: ros.key와 gazebo.gpg는 URL이 고정되어 있지 않다. 받은 key의 지문은 `ROS_APT_KEY_FPR`, `GZ_APT_KEY_FPR`와 대조한다. apt 저장소 상태, pip 인덱스, 대조하지 않는 apt 패키지 판은 이미지 key에 들어가지 않는다(`docs/architecture.md` 이미지 key 문단).
-- apt 미러: 지정 미러가 막히면 콜드 빌드가 실패한다. apt `Acquire::Retries` 미적용. CI에서는 Canonical 노드의 동기화 시차로 apt 단계가 간헐적으로 실패할 수 있다(대안: apt 단계 재시도, CI 미러 변경).
-- clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다(`src/`의 소스가 include하는 헤더만 검사된다). 헤더 전용 검사를 둘지, `test/`를 tidy 대상에 넣을지 정한다(ros2-engineer, devops-engineer).
-- `tools/ros_ws.sh tidy`는 대상이 0개이면 PASS-NO-TARGETS로 통과한다. `ci`에서는 경고나 실패로 바꿀지 검토한다(devops-engineer).
-- 이미지 ENV와 `versions.env`의 대조는 스모크 images 단계와 `tools/ros_ws.sh`에서만 일어난다. 다른 스모크 단계를 단독 실행하면 대조가 없다.
-- compose healthcheck `start_interval`의 Docker 하한은 실측하지 않았다(Docker 29.1.3, Compose 2.40.3에서 동작). `check_host.sh`는 Engine 25 미만이면 WARN만 낸다.
-- `tools/check_host.sh`의 셸 단위 테스트(가짜 ss, df, docker)는 두지 않았다(test-engineer 판단).
+- clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다. `tools/ros_ws.sh tidy`의 대상 0개 통과를 `ci`에서 바꿀지(ros2-engineer, devops-engineer).
+- 비결정 빌드 요소(ros.key, gazebo.gpg URL, apt 저장소 상태, pip 인덱스)는 이미지 key에 들어가지 않는다. apt `Acquire::Retries` 미적용이라 미러 장애나 동기화 시차로 apt 단계가 실패할 수 있다.
+- 실패 run의 `artifacts/runs/`가 job artifact로 올라가는지 확인하고, 판정 상수를 재검토한다(1a 쟁점 9).
 
 시뮬레이션과 화면 도구.
 
-- `idsim_common/vehicle_command.hpp` 주석의 "`from_external=false`면 MAVLink로 재송출"에 소스 행(PX4 v1.17.0 `COMMAND_LONG.hpp` 82-96행, 조건은 90행)을 다음 수정 때 적는다(ros2-engineer).
-- QGC가 기체에 연결된 상태에서 `qgc.sh`의 TERM 종료 동작은 실측하지 않았다.
-- Gazebo GUI 깜빡임(VMware 3D 가속을 켠 상태). `QSG_RENDER_LOOP=basic`과 `vblank_mode=1`의 효과는 확인되지 않았다. 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
-- `ros_ws/src/idsim_sim/scripts/gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"는 표현이 부정확하다(sim-engineer).
-- `qgc.sh`의 sha256 불일치 시 종료 코드 1 경로는 실행으로 확인하지 않았다.
-- 실측하지 않은 것: `GZ_IP=127.0.0.1`을 뺐을 때의 gz-transport 디스커버리, GPS 잡음의 출처, bridge healthcheck의 `ROS_LOG_DIR=/tmp/hc`가 run 디렉터리에 로그를 남기지 않는지, 에이전트의 Fast DDS 멀티캐스트가 같은 LAN의 다른 호스트와 섞이는지, MAVLink bind에 실패한 PX4의 동작, passwd에 없는 uid 1001로 지금 스택 전체(runner, `ops-N`, `targets`)가 도는지(`sim-oracle`은 sim-base 이미지에서 uid 1001로 import, 모델 해석, 구독, 표시 파일, 발행까지 B7에서 확인했다).
+- Gazebo GUI 깜빡임(VMware 3D 가속). 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
 - 이 호스트의 포트 5900과 8090은 다른 프로젝트가 쓴다. VNC를 도입하면 피한다.
+- PX4 버전을 올리면 "ULog `vehicle_command` `timestamp`가 측정기 stamp와 같다"와 "ack 기록 순서가 처리 순서와 같다"를 다시 확인한다(px4-engineer).
+- [미확인]으로 둔 것(관찰된 문제가 있을 때만 잰다, U6): QGC 연결 중 `qgc.sh` TERM 종료와 sha256 불일치 경로, `GZ_IP` 없는 디스커버리, `ops-N` goal 실행 중 stop의 종료 사건, `vehicle.id` 누락에서 unhealthy까지의 시간, 에이전트 Fast DDS 멀티캐스트의 LAN 섞임, MAVLink bind 실패 시 PX4 동작, compose `start_interval`의 Docker 하한.
 
 Phase 2와 3 전에 정할 것.
 
-- Phase 2 착수 전 설계 토론(ops-service-engineer, logging-engineer, architect): `VehicleState`에서 ROS 시각이 역행할 때의 레지스트리 처리(replay 일시정지와 배속 포함), 소비자 미수신 timeout의 배수, stamp 단조성 규칙, WebSocket JSON의 중첩과 enum 표현, gRPC `StreamMissionEvents`와 ROS `MissionEvent`의 관계(ops 권고는 별도 메시지), 기록기의 구독 확인 순서.
-- Phase 3: Fleet 재시작 복구 경로. 전체 취소 뒤에는 result를 받을 handle이 없으므로 기체 상태로만 확인한다. 이탈 기체 goal의 재배분은 한 번(Fleet 정책).
-
-- replay job의 trigger(U4). `docs/architecture.md` 테스트 층 표의 리플레이 행과 `docs/roadmap.md` Phase 2 완료 기준의 "모든 push"를 그때 고친다.
-- ULog가 `compose down`에서 정상 종료되는지 확인한다. 기록량은 약 285 KiB/s, 기체당 약 1 GB/h다(logging-engineer, Phase 2 전).
-- Phase 3에서 주기 하한 계약이 필요한 토픽 목록(px4-engineer).
-- lockstep의 반대 방향(PX4가 느릴 때 Gazebo가 기다리는지)은 실측하지 않았다. Phase 3 CPU 포화 해석의 전제다.
+- Phase 2 착수 전 설계 토론(ops-service-engineer, logging-engineer, architect): `VehicleState`의 ROS 시각 역행 처리(replay 일시정지와 배속 포함), 소비자 미수신 timeout 배수, stamp 단조성, WebSocket JSON 표현, gRPC `StreamMissionEvents`와 ROS `MissionEvent`의 관계, 기록기의 구독 확인 순서.
+- ULog가 `compose down`에서 정상 종료되는지(기체당 약 1 GB/h, logging-engineer).
+- Phase 3: Fleet 재시작 복구 경로, 이탈 기체 goal 재배분 한 번, 주기 하한 계약이 필요한 토픽 목록(px4-engineer), lockstep 반대 방향(PX4가 느릴 때 Gazebo가 기다리는지).
 
 ## 새 개발 PC에서 시작할 때
 
-1. 저장소를 받는다(`git clone https://github.com/danielhongwoo/idsim.git`). 작업은 main에서 브랜치를 만들어 한다. 열린 브랜치와 PR은 `gh pr list`로 본다.
-2. 호스트 조건과 환경 구성 순서는 저장소 루트 `README.md`의 "호스트 조건"과 "빠른 시작"을 따른다(`tools/check_host.sh`, 이미지, 스모크 images, px4-out, px4-in, clock). 이어서 `tools/ci/lint.sh all`과 `tools/ros_ws.sh ci`가 통과해야 한다.
-3. 이미지는 로컬 빌드(`python3 tools/ci/build_images.py --mode load`, 콜드 약 22분) 대신 GHCR에서 받아 쓸 수 있다. `python3 tools/ci/build_images.py --mode pull`이 받아서 태그한다. key는 `python3 tools/ci/image_keys.py`가 보여 주고, main build가 그 key를 올린 뒤에만 받을 수 있다.
-4. 같은 호스트에 다른 ROS 2 스택, Gazebo, compose 프로젝트가 있는지 먼저 본다(`docker ps`, `docker compose ls`). 겹치면 스택 번호 k(`--stack k` 또는 `IDSIM_STACK_INDEX`)를 바꾼다.
-5. PR을 올리려면 gh(GitHub CLI)에 로그인한다(`gh auth login`). `gh pr edit`는 이 저장소에서 GraphQL Projects(classic) 오류로 실패하므로 PR 본문은 `gh api -X PATCH repos/danielhongwoo/idsim/pulls/<번호> -F body=@<파일>`로 고친다.
-6. 저장소 밖에 있던 것.
-   - 사용자 전역 규칙 `~/.claude/CLAUDE.md`: 커밋 메시지와 PR 본문에 Co-Authored-By 같은 공동 저자 줄이나 생성 도구 표기를 넣지 않는다. 새 PC에도 같은 파일을 둔다.
-   - Claude Code 메모리(`~/.claude/projects/<저장소>/memory/`)는 옮겨지지 않는다. 거기 있던 규칙(공동 저자 줄 금지, 기술 용어 영문 표기, 문서는 현재 상태만, px4-engineer의 sonnet 예외)은 모두 `CLAUDE.md`와 이 파일의 "운영 규칙"에 있다.
-   - 담당자 검토 보고는 저장소 파일로 두지 않는다. 지난 검토 내용은 PR 본문에 있다(P3은 PR #27).
-   - 로컬 `artifacts/`(스모크와 실측 기록)는 옮겨지지 않는다. 필요한 값은 PR 본문과 `tests/fixtures/`에 있다.
+1. `git clone https://github.com/danielhongwoo/idsim.git`. 열린 브랜치와 PR은 `gh pr list`로 본다.
+2. 호스트 조건과 환경 구성은 루트 `README.md`의 "호스트 조건"과 "빠른 시작"을 따른다. 이어서 `tools/ci/lint.sh all`과 `tools/ros_ws.sh ci`가 통과해야 한다.
+3. 이미지는 `python3 tools/ci/build_images.py --mode pull`로 GHCR에서 받을 수 있다(key는 `python3 tools/ci/image_keys.py`, main build가 올린 뒤에만).
+4. 같은 호스트의 다른 ROS 2 스택, Gazebo, compose 프로젝트를 먼저 보고(`docker ps`, `docker compose ls`) 겹치면 스택 번호를 바꾼다.
+5. `gh pr edit`는 이 저장소에서 GraphQL Projects(classic) 오류로 실패한다. PR 본문은 `gh api -X PATCH repos/danielhongwoo/idsim/pulls/<번호> -F body=@<파일>`로 고친다.
+6. 사용자 전역 규칙 `~/.claude/CLAUDE.md`(커밋 메시지에 도구 트레일러 금지)를 새 PC에도 둔다. 로컬 `artifacts/`는 옮겨지지 않는다.
 
 ## 갱신 규칙
 
-- 이 파일에는 지금 유효한 것만 둔다. 작업 단위가 끝나면 "현재 상태"의 해당 칸을 고쳐 쓰고, 끝난 "다음 작업"과 닫힌 "미해결 사항"은 지운다. 완료 표시나 날짜를 붙여 남기지 않는다.
-- 결정은 이 파일에 기록으로 쌓지 않는다. 설계 규칙이면 `docs/architecture.md`(환경 스모크는 `docs/smoke-test.md`, 계약 문장은 `docs/interface.md`)를, 진행 중인 단계의 계약이면 그 단계의 `decisions.md`를 현재형으로 고치고, 근거와 경위는 그 변경의 커밋 메시지와 PR 본문에 적는다.
-- 사용자 결정과 담당자 운용 규칙처럼 설계 문서에 자리가 없는 규칙은 "운영 규칙"에 현재형으로 적는다. 바뀌면 고쳐 쓰고 옛 문장을 남기지 않는다.
+- 작업 단위가 끝나면 "현재 상태"를 고쳐 쓰고, 끝난 "다음 작업"과 닫힌 "미해결 사항"은 지운다. 완료 표시, 날짜, 경위를 남기지 않는다.
+- 항목은 한두 줄로 쓴다. 근거, 실측값, run id, 검토 경과는 커밋 메시지와 PR 본문에, 계약은 `decisions.md`나 `docs/`에 둔다.
 - 사용자만 정할 수 있는 사항(범위, 언어 선택, 비용)은 "미해결 사항"의 첫 묶음에 올린다.
-- 실측값, run id, 검토 경과는 PR 본문에 적는다. 설계 문서에는 규칙의 근거가 되는 사실만 남긴다.
