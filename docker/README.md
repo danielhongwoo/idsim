@@ -162,6 +162,7 @@ tools/sim_stack.sh up --infra-only    # Executor(ops-N), 표적 어댑터(target
 tools/sim_stack.sh ps
 tools/sim_stack.sh logs px4-1
 tools/sim_stack.sh down               # docker compose -p idsim-0 down
+tools/sim_stack.sh restart-ops        # ops-N만 새 ros_ws/install로 다시 만든다(아래 "개발 반복")
 ```
 
 생성만 하려면 `tools/gen_compose.sh --stack k`를 쓴다. 생성기는 ros-ws 컨테이너 안에서 돌므로(호스트에 PyYAML이 필요 없다) ros-ws 이미지가 있어야 한다. 기체, 월드(`world.name`, 월드 템플릿 `world.template`), 원점(`world.origin`), SITL 파라미터는 `config/fleet.yaml`에서 고친다(`schema`는 2). 생성기는 템플릿에 월드 이름과 `<spherical_coordinates>`(`world.origin`, heading 0, ENU)를 넣어 실행 디렉터리의 `world/<월드>.sdf`로 쓰고, 기체별 기대 GPS(`stack.json`의 `vehicles[].expect_gps`, 스폰 pose와 센서 높이 반영)를 계산한다. 템플릿에 월드 직속 `<plugin>`, `<spherical_coordinates>`, `<actor>`, `<include>`가 있거나 `world.origin`이 없으면 생성이 실패한다.
@@ -183,11 +184,36 @@ tests/smoke/run_smoke.sh --update-golden golden   # 골든이 없을 때 처음 
 
 ```
 tests/sitl/run_sitl.sh --stack 0                 # 시나리오 B, C, A, D, T
-tests/sitl/run_sitl.sh --stack 0 --repeat 3      # 회마다 down 뒤 콜드 up. 첫 실패에서 멈춘다
+tests/sitl/run_sitl.sh --stack 0 --repeat 3      # 회마다 down 뒤 cold up. 첫 실패에서 멈춘다
 tests/sitl/run_sitl.sh --attach <실행 디렉터리>   # 떠 있는 스택에 붙어 pytest와 수집만 한다
 ```
 
 `--attach`는 사용자가 `tools/sim_stack.sh up --viz`로 스택을 올리고 QGC와 Gazebo GUI로 눈으로 확인할 때 쓴다(스택을 올리지도 내리지도 않는다). 산출물은 `<실행 디렉터리>/sitl/`(attach는 `sitl-attach-<시각>/`)에 남고 실패한 CI 실행은 이 디렉터리 전체를 아티팩트로 올린다. 옵션과 판정은 `tests/sitl/README.md`를 본다.
+
+### 개발 반복 (ops-N만 다시 띄우기)
+
+`idsim_mission` 같은 ros_ws 코드를 고치며 SITL을 반복할 때, 스택 전체를 cold up(`sim_stack.sh up`만 이 호스트에서 약 48초)하고 내리는 것을 매번 하지 않는 절차다. merge 전 확인은 이 절차가 아니라 cold `tests/sitl/run_sitl.sh` 1회로 한다. 시뮬레이션 속도(RTF)는 바뀌지 않는다.
+
+`ops-N`은 이미지에 코드를 굽지 않고 저장소 전체를 bind mount해 `ros_ws/install`을 그대로 쓴다. 그래서 `tools/ros_ws.sh build` 뒤 `ops-N` 컨테이너만 다시 만들면 새 코드가 돈다. gazebo, px4-N, bridge, targets, sim-oracle은 그대로 둔다.
+
+```
+tools/sim_stack.sh up --stack 8                       # 한 번만. 마지막 줄이 실행 디렉터리
+tests/sitl/run_sitl.sh --stack 8 --attach DIR -- -k test_b   # 시나리오 하나
+# 코드 수정
+tools/ros_ws.sh build
+tools/sim_stack.sh restart-ops --stack 8              # 또는 --build로 빌드까지, --vehicle N으로 기체 하나만
+tests/sitl/run_sitl.sh --stack 8 --attach DIR -- -k test_b
+tools/sim_stack.sh down --stack 8                     # 끝나면
+```
+
+`restart-ops`는 대상 기체의 `vehicle_status`가 DISARMED(`arming_state`만 본다)인지 먼저 보고 아니면 거부한다(공중에서 Executor를 다시 띄우면 기체 상태가 새 노드와 어긋난다). 이 판정은 `--build`보다 먼저이므로 거부되면 빌드도 하지 않는다(비행 중 build가 bind mount된 `install`의 `.so`를 덮어 돌고 있는 Executor를 깨뜨릴 수 있다). `--force`로 판정을 건너뛴다. 통과하면 읽은 `arming_state`를 한 줄 찍는다. 실행 디렉터리는 떠 있는 컨테이너에서 찾으므로 `--stack`만 주면 되고, `--run-dir`을 주면 떠 있는 컨테이너의 디렉터리와 같아야 한다. 빌드가 실패하면 `ops`를 다시 띄우지 않지만 `ros_ws/install`은 일부만 갱신됐을 수 있으므로 돌고 있는 `ops`가 그 상태의 코드를 쓸 수 있다. 판독 실패의 stderr는 `<실행 디렉터리>/restart-ops-probe-<N>.log`에 남는다.
+
+제약.
+
+- 기체 상태가 이월된다. attach 실행은 스택을 새로 만들지 않으므로 앞 시나리오가 끝난 상태(착륙 뒤 DISARMED, PX4가 쌓은 EKF 상태와 위치)에서 다음이 시작한다. 시나리오의 사전조건 단정(지상 DISARMED 3회 연속)이 어긋나면 `PRECONDITION`으로 실패하며, 그때는 스택을 새로 올린다.
+- `Preflight Fail: Battery unhealthy`처럼 px4 쪽 상태 때문에 arm이 거부되면 `tools/sim_stack.sh up`으로 새로 올린다. `restart-ops`는 px4를 초기화하지 않는다.
+- `-- -k`로 일부 시나리오만 돌리면 pytest는 통과해도 wrapper 종료 코드가 1이고 summary의 전체 결과가 "실패"다(다섯 시나리오가 모두 passed여야 통과로 세기 때문이다). 판정은 pytest 요약 줄과 summary.md의 시나리오 표로 한다.
+- px4, bridge, 월드, 파라미터, 생성기 출력(`compose.yaml`, `params/ops-N.yaml`), targets와 sim-oracle 코드(`idsim_sim`)가 바뀌는 수정은 이 절차로 반영되지 않는다(`ops-N`만 다시 만들기 때문이다). `tools/sim_stack.sh up`으로 새로 올린다.
 
 ## 시각 도구
 
