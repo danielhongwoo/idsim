@@ -192,7 +192,7 @@ tests/sitl/run_sitl.sh --attach <실행 디렉터리>   # 떠 있는 스택에 �
 
 ### 개발 반복 (ops-N만 다시 띄우기)
 
-`idsim_mission` 같은 ros_ws 코드를 고치며 SITL을 반복할 때, 스택 전체를 cold up(`sim_stack.sh up`만 이 호스트에서 약 44초)하고 내리는 것을 매번 하지 않는 절차다. merge 전 확인은 이 절차가 아니라 cold `tests/sitl/run_sitl.sh` 1회로 한다. 시뮬레이션 속도(RTF)는 바뀌지 않는다.
+`idsim_mission` 같은 ros_ws 코드를 고치며 SITL을 반복할 때, 스택 전체를 cold up(`sim_stack.sh up`만 이 호스트에서 약 48초)하고 내리는 것을 매번 하지 않는 절차다. merge 전 확인은 이 절차가 아니라 cold `tests/sitl/run_sitl.sh` 1회로 한다. 시뮬레이션 속도(RTF)는 바뀌지 않는다.
 
 `ops-N`은 이미지에 코드를 굽지 않고 저장소 전체를 bind mount해 `ros_ws/install`을 그대로 쓴다. 그래서 `tools/ros_ws.sh build` 뒤 `ops-N` 컨테이너만 다시 만들면 새 코드가 돈다. gazebo, px4-N, bridge, targets, sim-oracle은 그대로 둔다.
 

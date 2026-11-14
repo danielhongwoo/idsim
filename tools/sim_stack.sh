@@ -313,7 +313,7 @@ find_run_dir() {
 
 # 기체 하나가 DISARMED인지 본다(runner 1회성 컨테이너에서 tools/vehicle_arming_state.py가 vehicle_status 한 표본을 읽는다).
 # stderr는 실행 디렉터리의 restart-ops-probe-<N>.log에 남긴다.
-vehicle_on_ground() { # compose파일 기체번호(ops-N의 N) 실행디렉터리
+vehicle_disarmed() { # compose파일 기체번호(ops-N의 N) 실행디렉터리
   local f="$1" n="$2" rd="$3" out="" first
   out="$(docker compose -f "$f" run --rm --no-deps -T runner bash -c \
     ". /opt/ros/\${ROS_DISTRO}/setup.sh; . /opt/idsim/ros_ws/install/setup.bash; \
@@ -354,7 +354,7 @@ do_restart_ops() {
   [ -z "$bad" ] || { say "running이 아닌 서비스:${bad}. 스택이 온전하지 않다. tools/sim_stack.sh up --stack ${stack}"; exit 1; }
   if [ "$force" -eq 0 ]; then
     for s in "${svcs[@]}"; do
-      vehicle_on_ground "$f" "${s#ops-}" "$rd" || { say "거부: ${s}를 다시 띄우지 않았다(기체를 착륙시키고 DISARMED를 기다리거나 --force. --build도 하지 않았다)"; exit 1; }
+      vehicle_disarmed "$f" "${s#ops-}" "$rd" || { say "거부: ${s}를 다시 띄우지 않았다(기체를 착륙시키고 DISARMED를 기다리거나 --force. --build도 하지 않았다)"; exit 1; }
     done
   fi
   if [ "$do_build" -eq 1 ]; then
