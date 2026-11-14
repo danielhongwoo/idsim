@@ -27,7 +27,11 @@
 //   항목 timeout)은 차지 않는다.
 // - 이 경로들에 지상 arm 진입 helper(유효 ack면 재전송 억제)를 잘못 쓰면 S+10부터 재전송이
 //   나가지 않아 실패한다.
-// - ack는 합성이다(가짜 PX4 반응을 끄고 테스트가 직접 준다). 기체 상태는 world로 고정한다.
+// - ack는 합성이다. 가짜 PX4 반응을 끈 직후 snapshot의 ack를 지워 테스트가 준 ack만 남긴다.
+//   기체 상태는 world로 고정한다.
+// - IN_PROGRESS는 PX4 v1.17.0 기본 설정에서 이 명령들에 오지 않는다([소스] IN_PROGRESS는
+//   ArmAuthorization.cpp 235행, COM_ARM_AUTH_REQ를 켠 arm에만). 비거부 ack 전체가 재전송을 끄지
+//   않음을 고정하는 방어 입력이다.
 
 #include <gtest/gtest.h>
 
@@ -99,6 +103,7 @@ TEST(ResendAfterAck, ArmBeforeFirstArmed)
     ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }, 400));
     const std::uint64_t s = sent_tick(h, CommandKind::kArm);
     h.auto_px4 = false;
+    h.snapshot.ack.reset();
     h.world.arming = Arming::kDisarmed;  // 가짜 PX4가 S의 arm에 반응한 것을 되돌린다
     expect_resends_after_ack(h, s, CommandKind::kArm, AckCommand::kArmDisarm, result);
     EXPECT_EQ(h.view().prep, PrepStep::kArm);
@@ -115,6 +120,7 @@ TEST(ResendAfterAck, LandItemNavLandBeforeConfirm)
     h.drive_to_land();
     const std::uint64_t s = sent_tick(h, CommandKind::kNavLand);
     h.auto_px4 = false;
+    h.snapshot.ack.reset();
     h.world.nav = NavMode::kOffboard;  // AUTO_LAND 표본이 오지 않는다
     h.world.intention = NavMode::kOffboard;
     expect_resends_after_ack(h, s, CommandKind::kNavLand, AckCommand::kNavLand, result);
@@ -131,6 +137,7 @@ TEST(ResendAfterAck, RtlItemNavRtlBeforeConfirm)
     h.drive_to_land();
     const std::uint64_t s = sent_tick(h, CommandKind::kNavRtl);
     h.auto_px4 = false;
+    h.snapshot.ack.reset();
     expect_resends_after_ack(h, s, CommandKind::kNavRtl, AckCommand::kNavRtl, result);
     EXPECT_FALSE(h.view().land_confirmed);
   }
@@ -147,9 +154,12 @@ TEST(ResendAfterAck, LandItemFallbackDisarm)
     ASSERT_TRUE(h.run_until([&h] { return h.view().land_confirmed; }, 5));
     h.world.landed = true;
     h.auto_px4 = false;  // DISARMED 표본이 오지 않는다
+    h.snapshot.ack.reset();
     ASSERT_TRUE(h.run_until([&h] { return h.count_command(CommandKind::kDisarm) == 1; }, 200));
     const std::uint64_t s = sent_tick(h, CommandKind::kDisarm);
     expect_resends_after_ack(h, s, CommandKind::kDisarm, AckCommand::kArmDisarm, result);
+    EXPECT_TRUE(h.view().land_confirmed);
+    EXPECT_EQ(h.view().item_index, 2U);
   }
 }
 
@@ -162,6 +172,7 @@ TEST(ResendAfterAck, CleanupGroundDisarm)
     Harness h(standard_mission());
     ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }, 400));
     h.auto_px4 = false;
+    h.snapshot.ack.reset();
     h.world.arming = Arming::kArmed;  // DISARMED 표본이 오지 않는다
     h.tick(true);
     ASSERT_EQ(h.view().branch, Branch::kGround);
@@ -180,6 +191,7 @@ TEST(ResendAfterAck, CleanupAirHold)
     Harness h(standard_mission());
     h.drive_to_loiter();
     h.auto_px4 = false;  // AUTO_LOITER 표본이 오지 않는다
+    h.snapshot.ack.reset();
     h.tick(true);
     ASSERT_EQ(h.view().branch, Branch::kAir);
     const std::uint64_t s = sent_tick(h, CommandKind::kSetModeHold);
@@ -197,6 +209,7 @@ TEST(ResendAfterAck, CleanupAirLandPath)
     Harness h(standard_mission());
     h.drive_to_loiter();
     h.auto_px4 = false;  // AUTO_LAND 표본이 오지 않는다
+    h.snapshot.ack.reset();
     h.tick(true);
     h.push_ack(AckCommand::kSetMode, AckResult::kDenied);
     h.tick();
