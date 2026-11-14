@@ -91,10 +91,11 @@ TEST(FlowCells, InvalidMissionWithCancelSendsNothing)
   m.items = {loiter_item()};
   Harness h(m);
   h.cancel_sticky = true;
+  const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
-    h, "PREPARING.WAIT_READY", Event::kInvalidMission, "DONE", "ABORTED/INTERNAL",
-    {Event::kCancel});
+    h, "PREPARING.WAIT_READY", Event::kInvalidMission, "DONE", "ABORTED/INTERNAL", {Event::kCancel},
+    before);
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
   EXPECT_TRUE(h.commands().empty());
 }
@@ -109,9 +110,11 @@ TEST(FlowCells, ReadyTimeoutWithCancelEndsNotReadyWithoutHoldOrDisarm)
   h.now_ns = kStartNs + h.config().timeouts.ready_timeout_ns;
   h.cancel_sticky = true;
   const std::size_t end = h.outputs().size();
+  const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
-    h, "PREPARING.WAIT_READY", Event::kReadyTimeout, "DONE", "ABORTED/NOT_READY", {Event::kCancel});
+    h, "PREPARING.WAIT_READY", Event::kReadyTimeout, "DONE", "ABORTED/NOT_READY", {Event::kCancel},
+    before);
   expect_terminated_once_as(h, "ABORTED/NOT_READY");
   expect_no_cancel_commands(h, end);
   EXPECT_TRUE(h.commands().empty());
@@ -127,8 +130,11 @@ TEST(FlowCells, SignalIdentityMismatchEndsInternal)
   Harness h(standard_mission());
   ASSERT_NO_FATAL_FAILURE(reach_signal(h));
   h.world.identity = IdentityCheck::kMismatch;
+  const std::size_t before = h.edges().size();
   h.tick();
-  expect_cell(h, "PREPARING.SIGNAL", Event::kPreparingIdentityMismatch, "DONE", "ABORTED/INTERNAL");
+  expect_cell(
+    h, "PREPARING.SIGNAL", Event::kPreparingIdentityMismatch, "DONE", "ABORTED/INTERNAL", {},
+    before);
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);  // arm을 보내기 전
 }
@@ -140,10 +146,11 @@ TEST(FlowCells, SignalIdentityMismatchWithCancelSendsNoHoldOrDisarm)
   h.world.identity = IdentityCheck::kMismatch;
   h.cancel_sticky = true;
   const std::size_t end = h.outputs().size();
+  const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
     h, "PREPARING.SIGNAL", Event::kPreparingIdentityMismatch, "DONE", "ABORTED/INTERNAL",
-    {Event::kCancel});
+    {Event::kCancel}, before);
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
   expect_no_cancel_commands(h, end);
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);  // arm을 보내기 전
@@ -153,8 +160,9 @@ TEST(FlowCells, SignalCancelStartsCleanup)
 {
   Harness h(standard_mission());
   ASSERT_NO_FATAL_FAILURE(reach_signal(h));
+  const std::size_t before = h.edges().size();
   h.tick(true);
-  expect_cell(h, "PREPARING.SIGNAL", Event::kCancel, "CLEANUP.CANCEL.NONE", "-");
+  expect_cell(h, "PREPARING.SIGNAL", Event::kCancel, "CLEANUP.CANCEL.NONE", "-", {}, before);
   // 지상 DISARMED이고 arm을 보낸 적이 없어 정리할 것이 없다.
   expect_terminated_once_as(h, "CANCELED/NONE");
 }
@@ -169,10 +177,11 @@ TEST(FlowCells, SignalTimeoutWithCancelIsPreparingFailure)
   while (h.now_ns < timeout_at) {
     h.tick();
   }
+  const std::size_t before = h.edges().size();
   h.tick(true);
   expect_cell(
     h, "PREPARING.SIGNAL", Event::kSignalTimeout, "CLEANUP.PREPARING_FAILURE.NONE", "-",
-    {Event::kCancel});
+    {Event::kCancel}, before);
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
 
@@ -182,8 +191,9 @@ TEST(FlowCells, OffboardCancelStartsCleanup)
 {
   Harness h(standard_mission());
   ASSERT_NO_FATAL_FAILURE(reach_offboard(h));
+  const std::size_t before = h.edges().size();
   h.tick(true);
-  expect_cell(h, "PREPARING.OFFBOARD", Event::kCancel, "CLEANUP.CANCEL.NONE", "-");
+  expect_cell(h, "PREPARING.OFFBOARD", Event::kCancel, "CLEANUP.CANCEL.NONE", "-", {}, before);
   expect_terminated_once_as(h, "CANCELED/NONE");
 }
 
@@ -193,8 +203,10 @@ TEST(FlowCells, OffboardStampFailureEndsInternal)
   ASSERT_NO_FATAL_FAILURE(reach_offboard(h));
   h.clock.fail = true;
   const std::size_t end = h.outputs().size();
+  const std::size_t before = h.edges().size();
   h.tick();
-  expect_cell(h, "PREPARING.OFFBOARD", Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL");
+  expect_cell(
+    h, "PREPARING.OFFBOARD", Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL", {}, before);
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
   EXPECT_TRUE(h.outputs()[end].commands.empty());
   EXPECT_FALSE(h.outputs()[end].setpoint.has_value());
@@ -205,10 +217,11 @@ TEST(FlowCells, OffboardRejectedWithCancelIsPreparingFailure)
   Harness h(standard_mission());
   ASSERT_NO_FATAL_FAILURE(reach_offboard(h));
   h.push_ack(AckCommand::kSetMode, AckResult::kDenied);
+  const std::size_t before = h.edges().size();
   h.tick(true);
   expect_cell(
     h, "PREPARING.OFFBOARD", Event::kOffboardRejected, "CLEANUP.PREPARING_FAILURE.NONE", "-",
-    {Event::kCancel});
+    {Event::kCancel}, before);
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
 
@@ -221,10 +234,11 @@ TEST(FlowCells, OffboardTimeoutWithCancelIsPreparingFailure)
   while (h.now_ns < timeout_at) {
     h.tick();
   }
+  const std::size_t before = h.edges().size();
   h.tick(true);
   expect_cell(
     h, "PREPARING.OFFBOARD", Event::kOffboardTimeout, "CLEANUP.PREPARING_FAILURE.NONE", "-",
-    {Event::kCancel});
+    {Event::kCancel}, before);
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
 
@@ -235,10 +249,11 @@ TEST(FlowCells, OffboardIdentityMismatchWithCancelSendsNoHoldOrDisarm)
   h.world.identity = IdentityCheck::kMismatch;
   h.cancel_sticky = true;
   const std::size_t end = h.outputs().size();
+  const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
     h, "PREPARING.OFFBOARD", Event::kPreparingIdentityMismatch, "DONE", "ABORTED/INTERNAL",
-    {Event::kCancel});
+    {Event::kCancel}, before);
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
   expect_no_cancel_commands(h, end);
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);  // arm을 보내기 전
@@ -253,8 +268,9 @@ TEST(FlowCells, ArmStampFailureBeforeArmedEndsInternal)
   ASSERT_NO_FATAL_FAILURE(reach_arm(h));
   h.clock.fail = true;
   const std::size_t end = h.outputs().size();
+  const std::size_t before = h.edges().size();
   h.tick();
-  expect_cell(h, "PREPARING.ARM", Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL");
+  expect_cell(h, "PREPARING.ARM", Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL", {}, before);
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
   // 그 tick의 arm 재전송과 setpoint는 버린다. disarm도 보내지 않는다(명령에 실을 시각이 없다).
   EXPECT_TRUE(h.outputs()[end].commands.empty());
@@ -267,10 +283,11 @@ TEST(FlowCells, ArmRejectedWithCancelIsPreparingFailure)
   Harness h(standard_mission());
   ASSERT_NO_FATAL_FAILURE(reach_arm(h));
   h.push_ack(AckCommand::kArmDisarm, AckResult::kDenied);
+  const std::size_t before = h.edges().size();
   h.tick(true);
   expect_cell(
     h, "PREPARING.ARM", Event::kArmRejected, "CLEANUP.PREPARING_FAILURE.NONE", "-",
-    {Event::kCancel});
+    {Event::kCancel}, before);
   EXPECT_EQ(h.view().cleanup_cause, CleanupCause::kPreparingFailure);
 }
 
@@ -282,10 +299,11 @@ TEST(FlowCells, ArmTimeoutWithCancelIsPreparingFailure)
   while (h.now_ns < timeout_at) {
     h.tick();
   }
+  const std::size_t before = h.edges().size();
   h.tick(true);
   expect_cell(
-    h, "PREPARING.ARM", Event::kArmTimeout, "CLEANUP.PREPARING_FAILURE.NONE", "-",
-    {Event::kCancel});
+    h, "PREPARING.ARM", Event::kArmTimeout, "CLEANUP.PREPARING_FAILURE.NONE", "-", {Event::kCancel},
+    before);
   EXPECT_EQ(h.view().cleanup_cause, CleanupCause::kPreparingFailure);
 }
 
@@ -304,10 +322,11 @@ TEST(FlowCells, ArmConfirmTimeoutWithCancelIsPreparingFailure)
   while (h.now_ns < timeout_at) {
     h.feed({repeat});
   }
+  const std::size_t before = h.edges().size();
   h.feed({repeat}, true);
   expect_cell(
     h, "PREPARING.ARM", Event::kArmConfirmTimeout, "CLEANUP.PREPARING_FAILURE.NONE", "-",
-    {Event::kCancel});
+    {Event::kCancel}, before);
   EXPECT_EQ(h.view().cleanup_cause, CleanupCause::kPreparingFailure);
 }
 
@@ -318,8 +337,10 @@ TEST(FlowCells, ArmDisarmedOnGroundWithFailsafeIsFailsafe)
   ASSERT_NO_FATAL_FAILURE(reach_first_armed(h));
   h.world.arming = Arming::kDisarmed;
   h.world.failsafe = true;
+  const std::size_t before = h.edges().size();
   h.tick();
-  expect_cell(h, "PREPARING.ARM", Event::kMonitorDisarmedOnGround, "DONE", "ABORTED/FAILSAFE");
+  expect_cell(
+    h, "PREPARING.ARM", Event::kMonitorDisarmedOnGround, "DONE", "ABORTED/FAILSAFE", {}, before);
   expect_terminated_once_as(h, "ABORTED/FAILSAFE");
 }
 
@@ -331,10 +352,11 @@ TEST(FlowCells, ArmDisarmedOnGroundBeatsModeExternal)
   h.world.arming = Arming::kDisarmed;
   h.world.nav = NavMode::kHold;
   h.world.intention = NavMode::kHold;
+  const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
     h, "PREPARING.ARM", Event::kMonitorDisarmedOnGround, "DONE", "ABORTED/EXTERNAL_DISARM",
-    {Event::kMonitorModeExternal});
+    {Event::kMonitorModeExternal}, before);
   expect_terminated_once_as(h, "ABORTED/EXTERNAL_DISARM");
 }
 
@@ -351,9 +373,11 @@ TEST(FlowCells, ArmModeFailsafeWithCancelSendsDisarmOnce)
   h.world.failsafe = true;
   h.cancel_sticky = true;
   const std::size_t end = h.outputs().size();
+  const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
-    h, "PREPARING.ARM", Event::kMonitorModeFailsafe, "DONE", "ABORTED/FAILSAFE", {Event::kCancel});
+    h, "PREPARING.ARM", Event::kMonitorModeFailsafe, "DONE", "ABORTED/FAILSAFE", {Event::kCancel},
+    before);
   expect_terminated_once_as(h, "ABORTED/FAILSAFE");
   EXPECT_EQ(h.outputs()[end].commands, std::vector<CommandKind>{CommandKind::kDisarm});
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 1);
@@ -371,8 +395,9 @@ TEST(FlowCells, TakeoffReachedStartsLand)
   ASSERT_NO_FATAL_FAILURE(h.drive_to_takeoff());
   h.world.landed = false;
   h.world.z = h.view().setpoint.z;
+  const std::size_t before = h.edges().size();
   h.tick();
-  expect_cell(h, "ITEM.TAKEOFF", Event::kTakeoffReached, "ITEM.LAND", "-");
+  expect_cell(h, "ITEM.TAKEOFF", Event::kTakeoffReached, "ITEM.LAND", "-", {}, before);
   EXPECT_EQ(h.view().item_index, 1U);
 }
 
@@ -382,9 +407,11 @@ TEST(FlowCells, TakeoffTimeoutWithCancelIsItemTimeout)
   ASSERT_NO_FATAL_FAILURE(h.drive_to_takeoff());
   h.auto_px4 = false;
   h.now_ns = h.now_ns - kTickNs + h.runner().mission().items[0].timeout.to_ns();
+  const std::size_t before = h.edges().size();
   h.tick(true);
   expect_cell(
-    h, "ITEM.TAKEOFF", Event::kItemTimeout, "CLEANUP.ITEM_TIMEOUT.NONE", "-", {Event::kCancel});
+    h, "ITEM.TAKEOFF", Event::kItemTimeout, "CLEANUP.ITEM_TIMEOUT.NONE", "-", {Event::kCancel},
+    before);
   EXPECT_EQ(h.view().cleanup_cause, CleanupCause::kItemTimeout);
 }
 
@@ -398,10 +425,11 @@ TEST(FlowCells, TakeoffDisarmedInAirBeatsModeFailsafe)
   h.world.landed = false;
   h.world.nav = NavMode::kHold;
   h.world.failsafe = true;
+  const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
     h, "ITEM.TAKEOFF", Event::kMonitorDisarmedInAir, "DONE", "ABORTED/FAILSAFE",
-    {Event::kMonitorModeFailsafe});
+    {Event::kMonitorModeFailsafe}, before);
   expect_terminated_once_as(h, "ABORTED/FAILSAFE");
 }
 
@@ -419,10 +447,11 @@ TEST(FlowCells, TakeoffModeExternalWithCancelSendsNoHoldOrDisarm)
   h.world.intention = NavMode::kHold;
   h.cancel_sticky = true;
   const std::size_t end = h.outputs().size();
+  const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
     h, "ITEM.TAKEOFF", Event::kMonitorModeExternal, "DONE", "ABORTED/EXTERNAL_MODE_CHANGE",
-    {Event::kCancel});
+    {Event::kCancel}, before);
   expect_terminated_once_as(h, "ABORTED/EXTERNAL_MODE_CHANGE");
   expect_no_cancel_commands(h, end);
 }
@@ -436,8 +465,9 @@ TEST(FlowCells, LoiterElapsedStartsNextLoiter)
   m.items = {takeoff_item(), loiter_item(), loiter_item(), land_item()};
   Harness h(m);
   ASSERT_NO_FATAL_FAILURE(h.drive_to_loiter());
+  const std::size_t before = h.edges().size();
   ASSERT_TRUE(h.run_until([&h] { return h.view().item_index == 2U; }, 200));
-  expect_cell(h, "ITEM.LOITER", Event::kLoiterElapsed, "ITEM.LOITER", "-");
+  expect_cell(h, "ITEM.LOITER", Event::kLoiterElapsed, "ITEM.LOITER", "-", {}, before);
 }
 
 TEST(FlowCells, LoiterTimeoutWithElapsedIsItemTimeout)
@@ -448,10 +478,11 @@ TEST(FlowCells, LoiterTimeoutWithElapsedIsItemTimeout)
   ASSERT_NO_FATAL_FAILURE(h.drive_to_loiter());
   h.auto_px4 = false;
   h.now_ns = h.now_ns - kTickNs + h.runner().mission().items[1].timeout.to_ns();
+  const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
     h, "ITEM.LOITER", Event::kItemTimeout, "CLEANUP.ITEM_TIMEOUT.NONE", "-",
-    {Event::kLoiterElapsed});
+    {Event::kLoiterElapsed}, before);
   EXPECT_EQ(h.view().cleanup_cause, CleanupCause::kItemTimeout);
 }
 
@@ -461,10 +492,11 @@ TEST(FlowCells, LoiterTimeoutWithCancelIsItemTimeout)
   ASSERT_NO_FATAL_FAILURE(h.drive_to_loiter());
   h.auto_px4 = false;
   h.now_ns = h.now_ns - kTickNs + h.runner().mission().items[1].timeout.to_ns();
+  const std::size_t before = h.edges().size();
   h.tick(true);
   expect_cell(
     h, "ITEM.LOITER", Event::kItemTimeout, "CLEANUP.ITEM_TIMEOUT.NONE", "-",
-    {Event::kLoiterElapsed, Event::kCancel});
+    {Event::kLoiterElapsed, Event::kCancel}, before);
   EXPECT_EQ(h.view().cleanup_cause, CleanupCause::kItemTimeout);
 }
 
@@ -478,8 +510,9 @@ TEST(FlowCells, LandStampFailureEndsInternal)
   h.world.landed = false;
   h.world.z = -5.0;
   h.clock.fail = true;
+  const std::size_t before = h.edges().size();
   h.tick();
-  expect_cell(h, "ITEM.LAND", Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL");
+  expect_cell(h, "ITEM.LAND", Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL", {}, before);
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
   EXPECT_TRUE(h.commands().empty());
 }
@@ -495,9 +528,11 @@ TEST(FlowCells, LandLeftModeWithCancelSendsNoHoldOrDisarm)
   h.world.intention = NavMode::kHold;
   h.cancel_sticky = true;
   const std::size_t end = h.outputs().size();
+  const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
-    h, "ITEM.LAND", Event::kLandLeftMode, "DONE", "ABORTED/EXTERNAL_MODE_CHANGE", {Event::kCancel});
+    h, "ITEM.LAND", Event::kLandLeftMode, "DONE", "ABORTED/EXTERNAL_MODE_CHANGE", {Event::kCancel},
+    before);
   expect_terminated_once_as(h, "ABORTED/EXTERNAL_MODE_CHANGE");
   expect_no_cancel_commands(h, end);
 }
@@ -598,13 +633,14 @@ TEST_P(SetpointOrderCells, MonitorRowBeatsTimeoutAndCompletion)
     default:
       FAIL() << "unsupported row " << event_name(c.row);
   }
+  const std::size_t before = h.edges().size();
   h.step_only();
   std::vector<Event> also = {c.condition};
   if (!takeoff && c.condition == Event::kItemTimeout) {
     also.push_back(Event::kLoiterElapsed);  // duration < timeout이라 완료도 참이다
   }
   const std::string from = std::string("ITEM.") + item_type_name(c.item);
-  expect_cell(h, from, c.row, "DONE", row_reason(c.row), also);
+  expect_cell(h, from, c.row, "DONE", row_reason(c.row), also, before);
   expect_terminated_once_as(h, row_reason(c.row));
 }
 
