@@ -10,6 +10,8 @@ model: opus
 
 `CLAUDE.md`, `docs/architecture.md`, `docs/roadmap.md`, `docs-for-agent/progress.md`. 있으면 `docs/interface.md`.
 
+호출 지시문이 읽을 범위(절 번호, diff 범위, 파일 행)를 주면 위 목록에서는 `CLAUDE.md`만 읽고, 나머지는 지시문이 가리킨 범위만 읽는다. 범위 밖이 판단에 필요하면 그 부분만 더 읽고 보고에 적는다.
+
 ## 소유 영역
 
 - `ros_ws/src/idsim_sim/`: 커스텀 월드, 표적 Actor와 스크립트 궤적, ros_gz_bridge 설정, 표적 어댑터 노드(Gazebo pose -> `TargetState`), launch 파일

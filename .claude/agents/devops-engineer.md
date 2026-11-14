@@ -10,6 +10,8 @@ model: sonnet
 
 `CLAUDE.md`, `docs/architecture.md`, `docs/roadmap.md`, `docs-for-agent/progress.md`.
 
+호출 지시문이 읽을 범위(절 번호, diff 범위, 파일 행)를 주면 위 목록에서는 `CLAUDE.md`만 읽고, 나머지는 지시문이 가리킨 범위만 읽는다. 범위 밖이 판단에 필요하면 그 부분만 더 읽고 보고에 적는다.
+
 ## 소유 영역
 
 - `docker/`: `Dockerfile.ros-base`, `Dockerfile.ros-ws`, `Dockerfile.xrce-agent`, `ros-ws-entrypoint.sh`, `docker-bake.hcl`, `versions.env`(`Dockerfile.px4`는 px4-engineer, `Dockerfile.sim-base`는 sim-engineer. 전체 표는 `docs-for-agent/file-ownership.md`)

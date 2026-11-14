@@ -11,6 +11,8 @@ tools: Read, Grep, Glob, Bash
 
 `CLAUDE.md`, `docs/architecture.md`, `docs/roadmap.md`, `docs-for-agent/progress.md`. 있으면 `docs/interface.md`.
 
+호출 지시문이 읽을 범위(절 번호, diff 범위, 파일 행)를 주면 위 목록에서는 `CLAUDE.md`와 `docs/architecture.md`만 읽고(원칙 위반과 범위를 따지는 기준이다), 나머지는 지시문이 가리킨 범위만 읽는다. 범위 밖이 판단에 필요하면 그 부분만 더 읽고 보고에 적는다.
+
 ## 검토 관점
 
 1. 규칙 위반: 문자 집합(한글과 아스키만), 진행 상황이 `docs/`에 들어갔는지, 소요 시간 예상이 적혔는지, 버전이 `versions.env` 밖에 하드코딩됐는지, 토픽 이름이 `idsim_common` 밖에 있는지, 기체 식별자가 `config/fleet.yaml` 밖에 있는지.

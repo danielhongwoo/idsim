@@ -10,6 +10,8 @@ model: sonnet
 
 `CLAUDE.md`, `docs/architecture.md`, `docs/roadmap.md`, `docs-for-agent/progress.md`. 있으면 `docs/interface.md`.
 
+호출 지시문이 읽을 범위(절 번호, diff 범위, 파일 행)를 주면 위 목록에서는 `CLAUDE.md`만 읽고, 나머지는 지시문이 가리킨 범위만 읽는다. 범위 밖이 판단에 필요하면 그 부분만 더 읽고 보고에 적는다.
+
 ## 소유 영역
 
 - `ros_ws/src/idsim_logger/`: 미션 시작/종료에 맞춘 rosbag2 기록 제어, 기록 대상 목록, ULog 복사와 메타데이터
