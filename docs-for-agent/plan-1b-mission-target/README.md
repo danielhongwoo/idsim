@@ -47,7 +47,7 @@
 | B13. 계약 고정 문서 | architect | `decisions.md` "1a 고정 계약 영향" (a)-(t)((r)과 (k) 앞부분은 B3)와 "문서 반영 목록"의 B13 항목. `idsim_interfaces` 의미 주석 | B11의 완료 기준 충족 |
 
 커밋은 담당자 소유 단위로 나눈다. PR은 단위마다 하나이고, 담당이 여럿인 단위는 담당자별 커밋으로 나눈다. 생성기 golden을 바꾸는 PR(B3, B5, B6, B7)은 나중에 머지되는 쪽이 main에 rebase한 뒤 golden을 생성기로 다시 만든다(손으로 합치지 않는다. 재생성은 devops-engineer). 예외 둘:
-- B9의 snapshot 헤더 변경(`SetpointOut` 속도 포함)은 한 PR로 묶는다(쟁점 12). 상태기 변경은 B8b로 1a 칸 목록의 미덮임이 0이 된 뒤 PR마다 칸 목록 diff를 함께 내고, 새 칸은 그 PR에서 덮는다.
+- B9의 snapshot 헤더 변경(`SetpointOut` 속도 포함)은 한 PR로 묶는다(쟁점 12). 상태기 변경은 px4-engineer가 먼저 바뀌는 칸과 칸마다 기대 명령의 표를 쓰고 ros2-engineer가 그 표대로 테스트와 구현을 한 뒤 px4-engineer가 대조한다. 상태기 변경은 B8b로 1a 칸 목록의 미덮임이 0이 된 뒤 PR마다 칸 목록 diff를 함께 내고, 새 칸은 그 PR에서 덮는다.
 - B11은 한 PR 안에서 커밋 둘로 나눈다. (가) F1-F4의 trace에 R2와 R4를 기록하는 커밋. b와 `R_home`이 빈 보정 상태(`decisions.md` 쟁점 5)이고 시험 미션의 `acceptance_radius_m`은 보정 값 0.5 m다. 보정 상태에서는 `R_home`에 기대는 단정만 `recorded_only`이고 나머지 판정은 그대로 실패로 세므로, F1이 통과하면 F2-F4가 돌아 표본이 모인다. 로컬 `run_sitl.sh --repeat 30`으로만 돌리고 CI 시나리오 목록에는 F1-F4를 모두 넣지 않는다. (가)는 머지되지 않는 중간 상태다. (나) b와 `R_home`을 근거(`decisions.md` 쟁점 5의 항목)와 함께 `tests/support/sitl_judge.py` 머리말에 적고, 시험 미션 YAML의 `acceptance_radius_m`을 `1.0 - b`로 바꾸고, F1-F4를 CI 목록에 넣는 커밋. (나)의 상태로 로컬 부팅 10회 이상의 확인 실행을 한다. 머지되는 상태는 (나)뿐이다. 이렇게 해서 CI가 상수 없는 판정으로 시작하지 않고, 상수를 통과와 실패를 보고 정하지 않는다.
 
 실험용 스택 번호: px4 5, ros2 6, test 7, devops 8, sim 9. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
