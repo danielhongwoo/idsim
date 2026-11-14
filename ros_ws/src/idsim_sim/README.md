@@ -16,11 +16,11 @@ Phase 1b에서 더 생기는 것(아직 없다).
 
 - params(평탄화 형식, 형식은 `idsim_sim/params.py` 머리 주석): `use_sim_time: true`, `target_ids`(문자열 배열), 표적마다 `targets.<id>.start_s`(double), `targets.<id>.loop`(bool), `targets.<id>.t`, `.x`, `.y`, `.z`(같은 길이의 double 배열). 선택 `publish_rate_hz`(double, 기본 20.0). 노드는 params 전부를 override에서 자동 선언하고 형까지 검사한다. 실수를 정수로 적으면 INTEGER로 읽혀 거부된다. `targets.` 아래의 모르는 이름도 거부한다.
 - 토픽: 절대 이름 `/targets/<target_id>/state`(`TargetState.TOPIC_PREFIX`, `TOPIC_SUFFIX`로 조립, `idsim_sim/naming.py`). `target_id` 규칙은 `^[a-z][a-z0-9_]{0,31}$`.
-- QoS: RELIABLE, VOLATILE, KEEP_LAST 5.
+- QoS: RELIABLE, VOLATILE, KEEP_LAST 5, liveliness AUTOMATIC.
 - stamp: timer 콜백의 노드 시계 시각 t이고 위치와 속도를 같은 t에서 계산한다. 표적마다 직전 stamp보다 큰 t에서만 발행하고 0은 내지 않는다. 역행하면 오류 로그를 남기고 직전 stamp를 넘을 때까지 발행하지 않는다.
 - 궤적: 구간 직선 보간, 속도는 구간 기울기(`velocity_valid` true). `start_s` 전에는 첫 점에 정지, waypoint 시각 정확히는 다음 구간, loop true는 마지막 시각의 나머지, loop false는 끝난 뒤 마지막 점에 정지. 평가와 stamp 규칙은 rclpy를 import하지 않는 `idsim_sim/trajectory.py`에 있다.
 - 준비 표시 파일 `/tmp/idsim/targets_ready`: 시작 때 지우고, 모든 표적이 stamp > 0으로 한 번 이상 발행되면 임시 파일에 쓴 뒤 rename으로 만든다. 내용은 표적마다 `<id> <첫 stamp 초.ns>` 한 줄. healthcheck는 `test -f /tmp/idsim/targets_ready`다.
-- 종료 코드: 설정 오류(`use_sim_time` false, params 누락, 형 불일치, 길이 불일치, id 형식과 중복, t가 0에서 시작해 엄격히 증가하지 않음, loop인데 처음과 끝이 다름)는 2, SIGINT 정상 종료는 0.
+- 종료 코드: 설정 오류(`use_sim_time` false, params 누락, 형 불일치, 길이 불일치, id 형식과 중복, t가 0에서 시작해 엄격히 증가하지 않음, loop인데 처음과 끝이 다름, 빈 배열처럼 rclpy가 선언하지 못하는 값)는 2, SIGINT 정상 종료는 0. 시작 뒤 `use_sim_time`, `target_ids`, `publish_rate_hz`, `targets.*`의 변경은 거부한다(`use_sim_time`을 false로 바꾸면 stamp가 벽시계로 뛰어도 단조 규칙을 통과하고, 나머지는 시작 때만 읽는다).
 
 Gazebo 화면의 Actor 위치는 참고용이다. 표적 위치의 원천은 Actor가 아니라 fleet 파일의 궤적 정의이고 정본은 `TargetState`다. Actor는 생성기가 같은 정의에서 촘촘히 샘플한 waypoint를 Gazebo가 spline으로 보간해 그리므로 waypoint 사이와 꺾이는 점 근처에서 `TargetState`와 조금 어긋난다.
 

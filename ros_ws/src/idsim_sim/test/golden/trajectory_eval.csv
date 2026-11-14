@@ -40,3 +40,15 @@ eval,loop_square,4.75,0,0.25,0,0,-1,0,마지막 변
 eval,loop_square,5.0,0,0,0,1,0,0,한 바퀴 끝 정확히는 다음 바퀴의 첫 변
 eval,loop_square,7.25,0.75,1,0,-1,0,0,둘째 바퀴 셋째 변
 eval,loop_square,1001.0,0,0,0,1,0,0,250바퀴 뒤 정확히
+#
+# frac_loop: start_s 0.75, A(0,0,0) -0.25s-> B(1,0,2) -1.0s-> A, loop true(주기 1.25 s). waypoint 시각이 정수가 아니다
+# 기울기: (4,0,8), (-1,0,-2)
+traj,frac_loop,0.75,true,0 0 0 0;0.25 1 0 2;1.25 0 0 0
+eval,frac_loop,0,0,0,0,0,0,0,loop true 표적의 시작 전 정지(t 0)
+eval,frac_loop,0.5,0,0,0,0,0,0,loop true 표적의 시작 전 정지
+eval,frac_loop,0.75,0,0,0,4,0,8,start_s 정확히
+eval,frac_loop,0.875,0.5,0,1,4,0,8,tau 0.125(첫 구간 중간)
+eval,frac_loop,1.0,1,0,2,-1,0,-2,비정수 waypoint 시각 0.25 정확히는 다음 구간
+eval,frac_loop,1.5,0.5,0,1,-1,0,-2,tau 0.75(둘째 구간 중간)
+eval,frac_loop,2.0,0,0,0,4,0,8,tau 1.25 = 주기 정확히는 다음 바퀴 첫 구간
+eval,frac_loop,2.1,0.4,0,0.8,4,0,8,tau 1.35 -> 0.1

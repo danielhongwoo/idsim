@@ -22,7 +22,10 @@
 - timer 콜백에서 읽은 노드 시계 시각 t를 stamp로 쓰고 위치와 속도를 같은 t에서 계산한다. 직전 stamp보다
   큰 t에서만 발행하고 0은 내지 않는다. 역행은 오류 로그를 남긴다(역행 상태에 들어갈 때 한 번).
 - 준비 표시 파일 /tmp/idsim/targets_ready(ready.py). 시작 때 지운다.
-- 설정 오류(use_sim_time false, params 누락, 길이 불일치, id 형식 등)는 종료 코드 2로 끝낸다.
+- 설정 오류(use_sim_time false, params 누락, 길이 불일치, id 형식, 빈 배열처럼 rclpy가 선언하지 못하는 값 등)는
+  종료 코드 2로 끝낸다.
+- 시작 뒤 파라미터 변경은 거부한다. use_sim_time을 false로 바꾸면 stamp가 벽시계로 뛰어도 단조 규칙을
+  통과하고, 표적 params는 시작 때만 읽으므로 바꿔도 반영되지 않는다.
 """
 
 import sys
@@ -31,25 +34,32 @@ from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Point, Vector3
 from idsim_interfaces.msg import TargetState
 import rclpy
+from rcl_interfaces.msg import SetParametersResult
+from rclpy.exceptions import ParameterException
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, LivelinessPolicy, QoSProfile, ReliabilityPolicy
 
 from idsim_sim.naming import target_state_topic
-from idsim_sim.params import ConfigError, parse_params
+from idsim_sim.params import TARGETS_PREFIX, ConfigError, parse_params
 from idsim_sim.ready import READY_PATH, ReadyTracker, remove_ready_file, write_ready_file
 from idsim_sim.trajectory import NS_PER_S, StampDecision, evaluate, stamp_decision
 
 NODE_NAME = "target_adapter"
 EXIT_CONFIG_ERROR = 2
 
-# 계약 상태 행(docs/interface.md, idsim_common contract_qos.hpp): 발행 RELIABLE, VOLATILE. 구현 값 KEEP_LAST 5
+# 계약 상태 행(docs/interface.md, idsim_common contract_qos.hpp): 발행 RELIABLE, VOLATILE. 구현 값 KEEP_LAST 5,
+# liveliness AUTOMATIC(C++ 쪽과 같은 값을 명시한다)
 STATE_QOS = QoSProfile(
     reliability=ReliabilityPolicy.RELIABLE,
     durability=DurabilityPolicy.VOLATILE,
     history=HistoryPolicy.KEEP_LAST,
     depth=5,
+    liveliness=LivelinessPolicy.AUTOMATIC,
 )
+
+# 시작 때만 읽는 파라미터. 시작 뒤 변경을 거부한다
+READ_ONCE_PARAMS = ("use_sim_time", "target_ids", "publish_rate_hz")
 
 
 def stamp_msg(stamp_ns):
@@ -66,8 +76,8 @@ class _Target:
 
 
 class TargetAdapter(Node):
-    def __init__(self, ready_path=READY_PATH):
-        super().__init__(NODE_NAME, automatically_declare_parameters_from_overrides=True)
+    def __init__(self, ready_path=READY_PATH, context=None):
+        super().__init__(NODE_NAME, context=context, automatically_declare_parameters_from_overrides=True)
         raw = {name: (p.type_.name, p.value) for name, p in self.get_parameters_by_prefix("").items()}
         config = parse_params(raw)  # ConfigError는 main이 종료 코드로 바꾼다
         self._ready_path = ready_path
@@ -78,8 +88,18 @@ class TargetAdapter(Node):
             self.get_logger().info(
                 f"표적 {traj.target_id}: {topic}, waypoint {len(traj.times_ns)}개, loop {traj.loop}")
         self._ready = ReadyTracker([t.trajectory.target_id for t in self._targets])
+        self.add_on_set_parameters_callback(self._reject_param_change)
         self._timer = self.create_timer(1.0 / config.publish_rate_hz, self._tick)
         self.get_logger().info(f"표적 {len(self._targets)}개, 주기 {config.publish_rate_hz} Hz")
+
+    def _reject_param_change(self, params):
+        """시작 때 읽은 파라미터(use_sim_time, target_ids, publish_rate_hz, targets.*)의 변경을 거부한다."""
+        names = [p.name for p in params if p.name in READ_ONCE_PARAMS or p.name.startswith(TARGETS_PREFIX)]
+        if names:
+            reason = f"{', '.join(names)}: 시작 뒤에는 바꿀 수 없다(노드를 다시 시작한다)"
+            self.get_logger().error(reason)
+            return SetParametersResult(successful=False, reason=reason)
+        return SetParametersResult(successful=True)
 
     def _tick(self):
         now_ns = self.get_clock().now().nanoseconds
@@ -118,8 +138,11 @@ def main(argv=None):
     try:
         try:
             node = TargetAdapter()
-        except ConfigError as e:
-            rclpy.logging.get_logger(NODE_NAME).fatal(f"params 오류로 시작하지 않는다:\n{e}")
+        except (ConfigError, ParameterException, ValueError) as e:
+            # ValueError, ParameterException: rclpy가 params를 선언하지 못한 경우(예: 빈 배열 []은 rcl이
+            # NOT_SET으로 넘겨 자동 선언에서 ValueError가 난다). 모두 설정 오류로 본다
+            rclpy.logging.get_logger(NODE_NAME).fatal(
+                f"params 오류로 시작하지 않는다({type(e).__name__}):\n{e}")
             return EXIT_CONFIG_ERROR
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
