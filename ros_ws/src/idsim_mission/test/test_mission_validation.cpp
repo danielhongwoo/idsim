@@ -475,8 +475,10 @@ TEST(ScreenGoal, AirEndingMissionIsInvalidMission)
 
 TEST(MissionRunner, UnvalidatedMissionEndsInternalOnFirstStep)
 {
-  MissionSpec m = standard_mission();
-  m.items.pop_back();
+  // [TAKEOFF, LOITER]는 S3부터 runner가 받으므로 runner가 아직 받지 않는 type(GOTO)으로 본다.
+  MissionSpec m;
+  m.mission_id = "goto";
+  m.items = {takeoff_item(), goto_item(), land_item()};
   Harness h(m);
   h.tick();
   ASSERT_TRUE(h.termination().has_value());
@@ -486,7 +488,9 @@ TEST(MissionRunner, UnvalidatedMissionEndsInternalOnFirstStep)
     h.termination()->detail, "mission did not pass validate_mission_runnable: " + check.detail);
   EXPECT_EQ(
     h.termination()->detail.rfind(
-      "mission did not pass validate_mission_runnable: last item must be LAND or RTL", 0),
+      "mission did not pass validate_mission_runnable: items[1].type GOTO is not supported by the "
+      "runner yet (TAKEOFF, LOITER, LAND, RTL only)",
+      0),
     0U)
     << h.termination()->detail;
   expect_terminated_once(h, Status::kAborted, Reason::kInternal);
@@ -540,8 +544,10 @@ TEST(ValidateMission, OneAGoalAcceptsOnlyWhatRunnerAccepts)
   }
   // goal 접수: [LAND], [TAKEOFF, LAND], [TAKEOFF, LOITER, LAND], [TAKEOFF, LOITER, LOITER, LAND].
   EXPECT_EQ(goal_valid, 4);
-  // runner: 위 넷과 [RTL], [TAKEOFF, RTL], [TAKEOFF, LOITER, RTL], [TAKEOFF, LOITER, LOITER, RTL].
-  EXPECT_EQ(runnable_valid, 8);
+  // runner: 위 넷과 [RTL], [TAKEOFF, RTL], [TAKEOFF, LOITER, RTL], [TAKEOFF, LOITER, LOITER, RTL],
+  // 마지막이 setpoint 항목인 [TAKEOFF], [TAKEOFF, LOITER], [TAKEOFF, LOITER, LOITER],
+  // [TAKEOFF, LOITER, LOITER, LOITER](B9 S3 공중 종료 단계).
+  EXPECT_EQ(runnable_valid, 12);
 }
 
 // 1b decisions.md 쟁점 12 "미션 제한의 두 자리"의 단위 테스트 (1). B9 동안 goal 접수는 1a
@@ -565,6 +571,44 @@ TEST(ScreenGoal, MissionsNewToRunnerStayInvalidMission)
     EXPECT_EQ(term->reason, Reason::kInvalidMission) << order_name(m);
     EXPECT_NE(term->detail.find("RTL is not supported in 1a"), std::string::npos)
       << order_name(m) << ": " << term->detail;
+  }
+}
+
+// 같은 단위 테스트 (1)의 S3 몫. 마지막이 setpoint 항목인 미션은 runner가 받고 goal 접수는 1a
+// 그대로 INVALID_MISSION으로 끝낸다(종료 단계는 노드와 SITL에서 닿지 않는다).
+TEST(ScreenGoal, AirEndingMissionsNewToRunnerStayInvalidMission)
+{
+  const std::vector<std::vector<ItemSpec>> cases = {
+    {takeoff_item()},
+    {takeoff_item(), loiter_item()},
+    {takeoff_item(), loiter_item(), loiter_item()},
+  };
+  for (const auto & items : cases) {
+    MissionSpec m;
+    m.mission_id = "air";
+    m.items = items;
+    EXPECT_TRUE(validate_mission_runnable(m).valid)
+      << order_name(m) << ": " << validate_mission_runnable(m).detail;
+    const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
+    ASSERT_TRUE(term.has_value()) << order_name(m);
+    EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
+    EXPECT_EQ(term->reason, Reason::kInvalidMission) << order_name(m);
+    EXPECT_NE(term->detail.find("last item must be LAND in 1a"), std::string::npos)
+      << order_name(m) << ": " << term->detail;
+  }
+}
+
+// 첫 항목 LOITER는 S4까지 runner가 받지 않는다. 마지막 항목 검사가 없어져 첫 항목 문구가 나온다.
+TEST(ValidateMission, LoiterFirstStaysNotRunnable)
+{
+  for (const auto & items :
+       std::vector<std::vector<ItemSpec>>{{loiter_item()}, {loiter_item(), land_item()}}) {
+    MissionSpec m;
+    m.mission_id = "lf";
+    m.items = items;
+    const MissionCheck check = validate_mission_runnable(m);
+    EXPECT_FALSE(check.valid) << order_name(m);
+    EXPECT_EQ(check.detail, "first item must be TAKEOFF, LAND or RTL") << order_name(m);
   }
 }
 

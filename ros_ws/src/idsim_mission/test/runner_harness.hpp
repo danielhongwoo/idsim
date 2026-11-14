@@ -20,10 +20,10 @@
 // - 표본의 timestamp는 합성 값이다. 기본은 "수신 시각 - 1 ms"(us)라 명령에 실린 Px4Timestamp(그
 //   tick의 시각)보다 다음 tick의 표본이 늘 뒤다. 실제 시계 관계는 재실측 (5)만 확인한다.
 // - auto_px4가 true이면 간단한 가짜 PX4가 명령에 반응한다(다음 tick의 표본에 보인다):
-//   Offboard -> OFFBOARD, Hold -> HOLD, NAV_LAND -> LAND, NAV_RTL -> RTL(rtl_response),
-//   ARM -> ARMED, DISARM -> landed이면 DISARMED. 반응을 끄고 tick 열(feed)로 표본을 직접 주는
-//   테스트도 있다. RTL이 고도를 올리고 돌아와 착지하는 것은 흉내 내지 않는다(착지와 disarm은
-//   테스트가 world를 직접 바꾼다).
+//   Offboard -> OFFBOARD, Hold -> HOLD(hold_response), NAV_LAND -> LAND(land_response),
+//   NAV_RTL -> RTL(rtl_response), ARM -> ARMED, DISARM -> landed이면 DISARMED(disarm_response).
+//   반응을 끄고 tick 열(feed)로 표본을 직접 주는 테스트도 있다. RTL이 고도를 올리고 돌아와
+//   착지하는 것은 흉내 내지 않는다(착지와 disarm은 테스트가 world를 직접 바꾼다).
 // - auto_px4와 auto_offboard_ack가 둘 다 true이면 가짜 PX4가 Offboard 전환(DO_SET_MODE)마다
 //   ACCEPTED ack를 낸다(명령을 낸 tick의 다음 tick에 받은 것으로 snapshot.ack에 둔다). 지상 arm
 //   진입은 이 ack가 있어야 P6으로 간다(1b decisions.md 쟁점 12). 다른 명령에는 ack를 내지 않는다.
@@ -237,6 +237,24 @@ enum class RtlResponse : std::uint8_t
 {
   kAccept,
   kReject,
+  kIgnore,
+};
+
+// 가짜 PX4의 Hold(DO_SET_MODE AUTO_LOITER) 반응. kAccept는 nav와 intention을 Hold로 바꾼다(landed는
+// 바꾸지 않는다. 지상 Hold는 테스트가 world.landed로 만든다). kReject는 nav를 바꾸지 않고
+// TEMPORARILY_REJECTED ack를 다음 tick에 받은 것으로 둔다([소스] v1.17.0의 DO_SET_MODE ack는
+// ACCEPTED 아니면 TEMPORARILY_REJECTED다). kIgnore는 아무것도 하지 않는다.
+enum class HoldResponse : std::uint8_t
+{
+  kAccept,
+  kReject,
+  kIgnore,
+};
+
+// 가짜 PX4의 NAV_LAND, DISARM 반응을 켜고 끄는 값. kIgnore는 아무것도 하지 않는다.
+enum class CommandResponse : std::uint8_t
+{
+  kAccept,
   kIgnore,
 };
 
@@ -474,6 +492,9 @@ public:
   bool auto_offboard_ack{true};
   bool cancel_sticky{false};
   RtlResponse rtl_response{RtlResponse::kAccept};
+  HoldResponse hold_response{HoldResponse::kAccept};
+  CommandResponse land_response{CommandResponse::kAccept};
+  CommandResponse disarm_response{CommandResponse::kAccept};
 
 private:
   void record(const StepOutput & out)
@@ -509,12 +530,22 @@ private:
           }
           break;
         case CommandKind::kSetModeHold:
-          world.nav = NavMode::kHold;
-          world.intention = NavMode::kHold;
+          if (hold_response == HoldResponse::kAccept) {
+            world.nav = NavMode::kHold;
+            world.intention = NavMode::kHold;
+          } else if (hold_response == HoldResponse::kReject) {
+            AckSample ack;
+            ack.command = AckCommand::kSetMode;
+            ack.result = AckResult::kTemporarilyRejected;
+            ack.received_tick = tick_no + 1;
+            snapshot.ack = ack;
+          }
           break;
         case CommandKind::kNavLand:
-          world.nav = NavMode::kLand;
-          world.intention = NavMode::kLand;
+          if (land_response == CommandResponse::kAccept) {
+            world.nav = NavMode::kLand;
+            world.intention = NavMode::kLand;
+          }
           break;
         case CommandKind::kNavRtl:
           if (rtl_response == RtlResponse::kAccept) {
@@ -532,7 +563,7 @@ private:
           world.arming = Arming::kArmed;
           break;
         case CommandKind::kDisarm:
-          if (world.landed) {
+          if (disarm_response == CommandResponse::kAccept && world.landed) {
             world.arming = Arming::kDisarmed;
           }
           break;

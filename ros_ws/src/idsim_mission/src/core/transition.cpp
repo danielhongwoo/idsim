@@ -53,6 +53,8 @@ const char * cause_name(CleanupCause cause)
       return "PREPARING_FAILURE";
     case CleanupCause::kRtlFailure:
       return "RTL_FAILURE";
+    case CleanupCause::kMissionEnd:
+      return "MISSION_END";
   }
   return "UNKNOWN";
 }
@@ -68,6 +70,8 @@ const char * branch_name(Branch branch)
       return "AIR_LAND";
     case Branch::kGround:
       return "GROUND";
+    case Branch::kGroundWait:
+      return "GROUND_WAIT";
   }
   return "UNKNOWN";
 }

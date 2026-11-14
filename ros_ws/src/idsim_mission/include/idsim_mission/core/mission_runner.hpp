@@ -172,7 +172,7 @@ private:
   };
   enum class Outcome : std::uint8_t
   {
-    kSuccess,     // Hold 확인, disarm 확인, 정리할 것 없음
+    kSuccess,  // Hold 확인, disarm 확인, 정리할 것 없음, 종료 단계의 지상 DISARMED 3회
     kHoldFailed,  // Hold가 안 되어 Land 경로로 끝남
     kDisarmFailed,
     kLinkLost,
@@ -223,6 +223,15 @@ private:
   void run_air(Tick & t);
   void enter_air_land(Event event, Tick & t, const std::string & why);
   void run_air_land(Tick & t);
+  // 공중 종료 단계(원인 kMissionEnd. 1b decisions.md 쟁점 10). 취소, ITEM_TIMEOUT, PREPARING 실패,
+  // RTL 실패의 정리와 분기 고르기를 따로 둔다.
+  void step_mission_end(Tick & t);
+  // s는 그 tick의 신뢰 표본(식별 불일치 tick이면 nullptr).
+  void mission_end_hold_failed(
+    Event event, Tick & t, const StatusSample * s, const std::string & why);
+  void mission_end_enter_air_land(Event event, Tick & t, const std::string & why);
+  void mission_end_enter_ground_wait(Event event, Tick & t, const StatusSample * s);
+  int mission_end_ground_disarm_count() const;
   void finish(Event event, Tick & t, Outcome outcome, const std::string & what);
   void finalize(Tick & t);
 
@@ -285,6 +294,9 @@ private:
   std::uint64_t history_after_tick_{0};
   std::optional<StatusSample> trusted_status_;  // 감시 구간에서 판정에 쓰는 최신 vehicle_status
   SampleCounter counter_;                       // OFFBOARD, ARMED, AUTO_LOITER 확인
+  // 종료 단계의 지상 DISARMED 계수(대비책 disarm 전. 뒤는 disarm_confirm_. 쟁점 10 A1, 쟁점 11)
+  SampleCounter ground_disarm_counter_;
+  LandedArmedFallback ground_wait_fallback_;  // 종료 단계 지상 대기의 대비책 disarm
   std::string cleanup_detail_;
   std::string land_path_why_;
   std::string hold_failed_why_;  // 이 정리에서 Hold가 처음 실패한 이유

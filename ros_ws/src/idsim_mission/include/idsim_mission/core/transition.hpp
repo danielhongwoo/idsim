@@ -49,7 +49,8 @@ enum class Stage : std::uint8_t
 {
   kPreparing,
   kItem,
-  kCleanup,  // 취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패, RTL 실패 뒤의 정리
+  // 취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패, RTL 실패 뒤의 정리와 공중 종료 단계
+  kCleanup,
   kDone,
 };
 
@@ -71,6 +72,9 @@ enum class CleanupCause : std::uint8_t
   kItemTimeout,
   kPreparingFailure,
   kRtlFailure,  // RTL 항목의 거부 ack나 mode_confirm_timeout. 공중이면 Hold 없이 Land 경로
+  // 마지막 setpoint 항목(TAKEOFF, LOITER)의 완료 뒤의 공중 종료 단계(1b decisions.md 쟁점 10).
+  // 분기 고르기는 다른 원인과 따로 둔다(AIR -> AIR_LAND 또는 GROUND_WAIT, GROUND_WAIT -> AIR_LAND).
+  kMissionEnd,
 };
 
 enum class Branch : std::uint8_t
@@ -79,6 +83,9 @@ enum class Branch : std::uint8_t
   kAir,      // Hold를 보내고 AUTO_LOITER 확인
   kAirLand,  // Hold가 거부되거나 확인되지 않아(원인이 RTL 실패이면 바로) NAV_LAND
   kGround,  // 지상 setpoint + disarm
+  // 공중 종료 단계에서 Hold 실패가 지상에서 온 뒤의 지상 대기. NAV_LAND를 보내지 않고 PX4 자동
+  // disarm을 기다리며, landed이고 ARMED인 채 land_disarm_fallback_delay가 지나면 대비책 disarm.
+  kGroundWait,
 };
 
 // 사건 꼬리표. 값은 0부터 빈틈없이 늘어난다(kAllEvents의 순서와 같다).
@@ -140,8 +147,12 @@ enum class Event : std::uint8_t
   kCleanupNothingToDo,  // 지상 DISARMED이고 arm을 보낸 적이 없다
   kCleanupCap,          // 정리의 상한
   kEnterGround,
-  kEnterAir,  // Hold 분기(Hold가 이미 실패했거나 원인이 RTL 실패이면 Land 경로)
+  // Hold 분기(Hold가 이미 실패했거나 원인이 RTL 실패이면 Land 경로). 공중 종료 단계에서는 첫
+  // tick의 Hold 분기와 지상 대기에서 공중으로 돌아간 Land 경로
+  kEnterAir,
   kGroundDisarmTimeout,
+  // 지상 DISARMED 3회. 지상 disarm 분기에서는 disarm 전송 뒤의 확인이고, 공중 종료 단계에서는
+  // PX4 자동 disarm(대비책 disarm 전)이나 대비책 disarm 뒤의 확인이다(분기 무관, 단계 전체에 하나)
   kGroundDisarmConfirmed,
   kHoldRejected,
   kHoldTimeout,
