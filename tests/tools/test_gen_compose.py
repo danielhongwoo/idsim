@@ -1164,7 +1164,7 @@ TARGET_REJECTS = [
     pytest.param(tgt(loop=True, waypoints=[wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 10.0)]), "loop가 true", id="loop-끝-다름"),
     pytest.param(tgt(loop=True, waypoints=[wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 10.0), wp(20.0, 20.0, 0.0, 4.0)]),
                  "loop가 true", id="loop-z만-다름"),
-    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0, 0.0), wp(10.0, 20.0, 10.0, -0.5)]), "0 이상이어야", id="z-음수"),
+    pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0, 0.0), wp(10.0, 20.0, 10.0, -0.5)]), "0 이상.*이하여야", id="z-음수"),
     pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0), wp(1.0, 20.0, 5.5)]), "수평 속도 5.500", id="수평-속도-초과"),
     pytest.param(tgt(waypoints=[wp(0.0, 20.0, 0.0, 1.0), wp(2.0, 20.0, 0.0, 3.5)]), "수직 속도 1.250", id="수직-속도-초과"),
     pytest.param(tgt(waypoints=[wp(0.0, 1.0, 1.0), wp(10.0, 20.0, 20.0)]), "스폰 지점의 수평 거리", id="스폰-근처"),
@@ -1385,7 +1385,146 @@ def test_targets_stack_json_loads_with_support_loader(tmp_path):
     assert s.node_stages == [["ops-1", "targets"]]
 
 
-# ------------------------------------------------------------------ targets의 Actor(월드 SDF)
+# ------------------------------------------------------------------ targets의 시간 규칙과 상한
+def long_t(last, id="target_a", loop=False, x=20.0):
+    """궤적 길이가 last(s)인 표적(느리게 움직인다). loop true이면 처음 위치로 돌아온다."""
+    mid = [wp(last / 2, x, 1.0)] if loop else []
+    return tgt(id=id, loop=loop, waypoints=[wp(0.0, x, 0.0), *mid, wp(last, x, 0.0 if loop else 1.0)])
+
+
+def _sum_ok(*items):
+    return gc.validate_fleet(with_targets(*items))[0]["targets"]
+
+
+def test_length_sum_boundaries():
+    assert len(_sum_ok(*[long_t(600, id=f"t{i}") for i in range(4)])) == 4
+    assert len(_sum_ok(long_t(2400))) == 1
+    assert len(_sum_ok(long_t(1200), long_t(1200.0, id="t2"))) == 2
+    assert len(_sum_ok(long_t(1200), long_t(1200, id="t2", loop=True))) == 2  # 정수와 실수, loop 혼합
+    with pytest.raises(gc.FleetError, match="합 2400.001 s가 상한"):
+        _sum_ok(long_t(1200), long_t(1200.001, id="t2"))
+    with pytest.raises(gc.FleetError, match="2400 s를 넘는다: 2400.001"):
+        _sum_ok(long_t(2400.001))
+
+
+def test_length_sum_ranges_and_inclusions():
+    with pytest.raises(gc.FleetError, match="합 2500.000 s"):
+        _sum_ok(*[long_t(500, id=f"t{i}", loop=i % 2 == 0) for i in range(5)])
+    # start_s는 합에 넣지 않는다
+    assert len(_sum_ok(tgt(start_s=86400, waypoints=[wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 10.0)]))) == 1
+    # 첫 t가 0이 아닌 표적도 마지막 t로 센다(그 표적은 자기 오류도 낸다)
+    first_nonzero = tgt(id="t1", waypoints=[wp(100.0, 20.0, 0.0), wp(1500.0, 20.0, 1.0)])
+    with pytest.raises(gc.FleetError) as e:
+        _sum_ok(first_nonzero, long_t(1000, id="t2"))
+    assert "첫 t는 0" in str(e.value) and "합 2500.000 s" in str(e.value) and "targets[0] 1500.000 s" in str(e.value)
+    # 합에는 속도 등 다른 규칙으로 거부된 표적과 id가 무효인 표적도 넣는다
+    fast = tgt(id="t1", waypoints=[wp(0.0, 20.0, 0.0), wp(1500.0, 20.0, 1.0)])
+    fast["waypoints"][1]["x"] = 9000.0
+    with pytest.raises(gc.FleetError) as e:
+        _sum_ok(fast, long_t(1000, id="t2"))
+    assert "합 2500.000 s" in str(e.value)
+    with pytest.raises(gc.FleetError) as e:
+        _sum_ok(dict(long_t(1500), id="Bad"), long_t(1000, id="t2"))
+    assert "targets[0].id" in str(e.value) and "합 2500.000 s" in str(e.value)
+    # 형식이 틀린 표적은 합에서 빠진다
+    broken = tgt(id="t1", waypoints=[wp(0.0, 20.0, 0.0), {"t": 2000.0, "x": 20.0, "y": 0.0}])
+    with pytest.raises(gc.FleetError) as e:
+        _sum_ok(broken, long_t(1000, id="t2"))
+    assert "합" not in str(e.value)
+
+
+def test_length_sum_message_is_full_and_not_truncated():
+    with pytest.raises(gc.FleetError) as e:
+        _sum_ok(*[long_t(1000, id=f"t{i}") for i in range(3)])
+    assert str(e.value) == ("targets: 궤적 길이(마지막 waypoint의 t)의 합 3000.000 s가 상한 2400.000 s를 넘는다. "
+                            "표적별 길이: targets[0] 1000.000 s, targets[1] 1000.000 s, targets[2] 1000.000 s")
+    many = [long_t(100, id=f"t{i}", x=20.0 + i) for i in range(gc.TARGETS_MAX)]
+    with pytest.raises(gc.FleetError) as e:
+        _sum_ok(*many)
+    text = str(e.value)
+    assert "합 3200.000 s" in text and all(f"targets[{i}] 100.000 s" in text for i in range(gc.TARGETS_MAX))
+
+
+def test_ms_gap_rule_uses_rounded_milliseconds():
+    def two(t1, t2=None):
+        w = [wp(0.0, 20.0, 0.0), wp(t1, 20.0, 0.0)] + ([wp(t2, 20.0, 0.0)] if t2 is not None else [])
+        return tgt(waypoints=w)
+
+    with pytest.raises(gc.FleetError, match="시간 차 99 ms"):
+        gc.validate_fleet(with_targets(tgt(waypoints=[wp(0.0, 20.0, 0.0), wp(1046.3465, 20.0, 0.0),
+                                                      wp(1046.4465, 20.0, 0.0)])))
+    gc.validate_fleet(with_targets(tgt(waypoints=[wp(0.0, 20.0, 0.0), wp(0.2, 20.0, 0.0), wp(0.3, 20.0, 0.0)])))
+    gc.validate_fleet(with_targets(two(0.1)))
+    for bad in (0.05, 0.099, 0.0994):
+        with pytest.raises(gc.FleetError, match="시간 차"):
+            gc.validate_fleet(with_targets(two(bad)))
+
+
+def test_nonincreasing_t_does_not_also_report_gap():
+    with pytest.raises(gc.FleetError) as e:
+        gc.validate_fleet(with_targets(tgt(waypoints=[wp(0.0, 20.0, 0.0), wp(5.0, 20.0, 0.0), wp(5.0, 20.0, 0.0)])))
+    assert "엄격히 증가" in str(e.value) and "시간 차" not in str(e.value)
+
+
+def test_huge_values_are_rejected_before_ms_conversion(monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("actor_samples가 불렸다")
+
+    monkeypatch.setattr(gc, "actor_samples", boom)
+    for waypoints in ([wp(0.0, 20.0, 0.0), wp(1e308, 20.0, 0.0)],
+                      [wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 1.0), wp(1e9, 20.0, 2.0)],
+                      [wp(0.0, 20.0, 0.0), wp(-1e308, 20.0, 0.0)]):
+        for variant in ("standalone", "embedded"):
+            with pytest.raises(gc.FleetError, match="2400 s를 넘는다"):
+                gen(f=with_targets(tgt(waypoints=waypoints)), variant=variant)
+
+
+def test_huge_integers_are_not_numbers_in_every_numeric_field():
+    huge = 10 ** 400
+    cases = [
+        ("targets", lambda f: f["targets"].append(tgt(start_s=huge))),
+        ("targets", lambda f: f["targets"].append(tgt(waypoints=[wp(0.0, huge, 0.0), wp(10.0, 20.0, 5.0)]))),
+        ("targets", lambda f: f["targets"].append(tgt(waypoints=[wp(0.0, 20.0, huge), wp(10.0, 20.0, 5.0)]))),
+        ("targets", lambda f: f["targets"].append(tgt(waypoints=[wp(0.0, 20.0, 0.0, huge), wp(10.0, 20.0, 5.0)]))),
+        ("targets", lambda f: f["targets"].append(tgt(waypoints=[wp(0.0, 20.0, 0.0), wp(huge, 20.0, 5.0)]))),
+        ("vehicle", lambda f: f["vehicles"][0]["pose"].update(x=huge)),
+        ("vehicle", lambda f: f["vehicles"][0]["pose"].update(yaw=huge)),
+        ("origin", lambda f: f["world"]["origin"].update(lat=huge)),
+        ("origin", lambda f: f["world"]["origin"].update(alt=huge)),
+    ]
+    for _, mutate in cases:
+        f = copy.deepcopy(BASE_FLEET)
+        mutate(f)
+        with pytest.raises(gc.FleetError, match="숫자"):
+            gen(f=f)
+        with pytest.raises(gc.FleetError, match="숫자"):
+            gen(f=f, variant="embedded")
+    assert gc._is_number(5) and not gc._is_number(huge) and not gc._is_number(True)
+
+
+def test_coordinate_and_start_s_limits():
+    def far(**kw):
+        w = [wp(0.0, 20.0, 0.0), wp(2400.0, kw.get("x", 20.0), kw.get("y", 0.0), kw.get("z", 0.0))]
+        return gc.validate_fleet(with_targets(tgt(waypoints=w)))
+
+    far(x=10000.0), far(x=-10000.0), far(y=10000.0), far(y=-10000.0)
+    for kw in (dict(x=10000.001), dict(x=-10000.001), dict(y=10000.001), dict(y=-10000.001)):
+        with pytest.raises(gc.FleetError, match="10000 m를 넘는다"):
+            far(**kw)
+    w1 = [wp(0.0, 20.0, 0.0), wp(1500.0, 20.0, 0.0, 1000.0)]
+    assert gc.validate_fleet(with_targets(tgt(waypoints=w1)))
+    w1[1]["z"] = 1000.001
+    with pytest.raises(gc.FleetError, match="1000 m 이하"):
+        gc.validate_fleet(with_targets(tgt(waypoints=w1)))
+    # 첫 점이 아닌 waypoint(둘째 점)에서도 거부한다(위 far가 둘째 점이다). 첫 점은 스폰 검사와 겹치지 않게 따로 본다
+    with pytest.raises(gc.FleetError, match="waypoints\\[0\\].x"):
+        gc.validate_fleet(with_targets(tgt(waypoints=[wp(0.0, 10001.0, 0.0), wp(2400.0, 20.0, 0.0)])))
+    assert gc.validate_fleet(with_targets(tgt(start_s=86400)))
+    with pytest.raises(gc.FleetError, match="start_s"):
+        gc.validate_fleet(with_targets(tgt(start_s=86400.001)))
+
+
+# ------------------------------------------------------------------ targets의 Actor(월드 SDF, 명세 판 2)
 def _actors(text):
     _, world = _world_children(text)
     return [c for c in world if c.tag == "actor"]
@@ -1395,57 +1534,80 @@ def _actor_points(actor):
     return [(w.findtext("time"), w.findtext("pose")) for w in actor.iter("waypoint")]
 
 
+def _world_for(*items):
+    norm, _ = gc.validate_fleet(with_targets(*items))
+    return norm, gc.build_world_sdf(norm, _read(os.path.join(REPO, FIXTURE_TEMPLATE)))
+
+
 def test_actor_samples_by_hand():
     t = {"waypoints": [{"t": 0.0, "x": 0.0, "y": 0.0, "z": 0.0}, {"t": 1.0, "x": 4.0, "y": 2.0, "z": 1.0},
                        {"t": 1.1, "x": 4.0, "y": 2.0, "z": 1.0}]}
-    # 구간 1(1.0 s)은 0.25 s씩 4개, 구간 2(0.1 s, 정지)는 1개, 마지막 점 하나
+    # 구간 1(1000 ms)은 250 ms씩 4개, 구간 2(100 ms, 정지)는 1개, 마지막 점 하나
     assert gc.actor_samples(t) == [
-        (0.0, 0.0, 0.0, 0.0), (0.25, 1.0, 0.5, 0.25), (0.5, 2.0, 1.0, 0.5), (0.75, 3.0, 1.5, 0.75),
-        (1.0, 4.0, 2.0, 1.0), (1.1, 4.0, 2.0, 1.0)]
+        (0, 0.0, 0.0, 0.0), (250, 1.0, 0.5, 0.25), (500, 2.0, 1.0, 0.5), (750, 3.0, 1.5, 0.75),
+        (1000, 4.0, 2.0, 1.0), (1100, 4.0, 2.0, 1.0)]
 
 
-def test_actor_samples_include_every_waypoint_and_respect_dt():
-    t = {"waypoints": [{"t": 0.0, "x": 0.0, "y": 0.0, "z": 0.0}, {"t": 0.3, "x": 1.0, "y": 0.0, "z": 0.0},
-                       {"t": 2.0, "x": 1.0, "y": 5.0, "z": 0.0}]}
+def test_actor_samples_integer_ms_and_uneven_span():
+    t = {"waypoints": [{"t": 0.0, "x": 0.0, "y": 0.0, "z": 0.0}, {"t": 0.7, "x": 7.0, "y": 0.0, "z": 0.0},
+                       {"t": 2.0, "x": 7.0, "y": 5.2, "z": 0.0}]}
     samples = gc.actor_samples(t)
     times = [s[0] for s in samples]
-    assert 0.3 in times and times[0] == 0.0 and times[-1] == 2.0
-    assert all(b - a <= gc.ACTOR_SAMPLE_DT_S + 1e-9 and b > a for a, b in zip(times, times[1:]))
-    # 정확히 0.25의 배수인 구간은 올림 오차로 한 개 더 나뉘지 않는다
+    assert all(isinstance(x, int) for x in times)
+    assert times[:4] == [0, 233, 466, 700] and times[-1] == 2000  # 700 ms는 3등분의 floor
+    assert all(100 <= b - a <= gc.ACTOR_SAMPLE_DT_MS for a, b in zip(times, times[1:]))
+    assert samples[1][1] == pytest.approx(7.0 * 233 / 700)
     exact = gc.actor_samples({"waypoints": [{"t": 0.0, "x": 0.0, "y": 0.0, "z": 0.0},
                                             {"t": 0.5, "x": 1.0, "y": 0.0, "z": 0.0}]})
-    assert [s[0] for s in exact] == [0.0, 0.25, 0.5]
+    assert [s[0] for s in exact] == [0, 250, 500]
+
+
+def test_actor_tail_two_points_only_for_loop_false():
+    t = {"loop": False, "waypoints": [{"t": 0.0, "x": 0.0, "y": 0.0, "z": 0.0}, {"t": 1.0, "x": 4.0, "y": 2.0, "z": 1.0}]}
+    assert gc.actor_tail(t) == [(1250, 4.0, 2.0, 1.0), (1000 + 86400000, 4.0, 2.0, 1.0)]
+    assert gc.actor_tail(dict(t, loop=True)) == []
 
 
 def test_actor_element_shape_and_number_format():
-    norm, _ = gc.validate_fleet(with_targets(
-        tgt(id="target_a", start_s=2, loop=True,
-            waypoints=[{"t": 0, "x": 20, "y": 0, "z": 3}, wp(0.5, 20.0, 1.0), wp(1.0, 20.0, 0.0)])))
-    text = gc.build_world_sdf(norm, _read(os.path.join(REPO, FIXTURE_TEMPLATE)))
+    norm, text = _world_for(tgt(id="target_a", start_s=2, loop=True,
+                                waypoints=[{"t": 0, "x": 20, "y": 0, "z": 3}, wp(0.5, 20.0, 1.0), wp(1.0, 20.0, 0.0)]))
     (actor,) = _actors(text)
     assert actor.get("name") == "target_a" and [c.tag for c in actor] == ["pose", "link", "script"]
     assert actor.findtext("pose") == "0.000000 0.000000 0.000000 0.000000 0.000000 0.000000"
     link = actor.find("link")
     assert [c.tag for c in link] == ["visual"] and link.find("visual/geometry/sphere/radius").text == "0.3"
+    assert [c.tag for c in link.find("visual/material")] == ["ambient", "diffuse", "emissive"]
+    assert link.findtext("visual/material/emissive") == "0.6 0 0 1"
     assert [c.tag for c in actor.find("script")] == ["loop", "delay_start", "auto_start", "trajectory"]
-    assert actor.findtext("script/loop") == "true" and actor.findtext("script/delay_start") == "2.000000"
-    traj = actor.find("script/trajectory")
-    assert traj.attrib == {"id": "0", "type": "idsim_target", "tension": "0.0"}
+    assert actor.findtext("script/loop") == "true" and actor.findtext("script/delay_start") == "2.000"
+    assert actor.find("script/trajectory").attrib == {"id": "0", "type": "idsim_target", "tension": "0.0"}
     pts = _actor_points(actor)
-    assert pts[0] == ("0.000000", "20.000000 0.000000 3.000000 0.000000 0.000000 0.000000")  # 정수 입력도 6자리
-    assert pts[-1][0] == "1.000000"
+    assert pts[0] == ("0.000", "20.000000 0.000000 3.000000 0.000000 0.000000 0.000000")  # 정수 입력도 6자리
+    assert pts[1][0] == "0.250" and pts[-1][0] == "1.000"
     assert not {el.tag for el in actor.iter()} & set(gc.ACTOR_FORBIDDEN_DESCENDANTS)
-    assert "-0.000000" not in text
-    assert text.count("<spherical_coordinates") == 1 and "dynamic_pose" not in text
+    assert "-0.000000" not in text and text.count("<spherical_coordinates") == 1 and "dynamic_pose" not in text
 
 
-def test_actor_negative_zero_is_written_as_zero():
+def test_actor_loop_is_always_true_and_loop_false_has_tail():
+    norm, text = _world_for(long_t(10, id="stopper"), long_t(10, id="looper", loop=True))
+    by = {a.get("name"): a for a in _actors(text)}
+    for a in by.values():
+        assert a.findtext("script/loop") == "true" and a.find("script") is not None
+    assert "<loop>false</loop>" not in text
+    stopper, looper = (_actor_points(by[n]) for n in ("stopper", "looper"))
+    body = len(gc.actor_samples(norm["targets"][0]))
+    assert len(stopper) == body + 2 and stopper[-2][0] == "10.250" and stopper[-1][0] == "86410.000"
+    assert len({p for _, p in stopper[-3:]}) == 1
+    assert len(looper) == len(gc.actor_samples(norm["targets"][1])) and looper[-1][0] == "10.000"
+
+
+def test_negative_zero_is_written_as_zero():
     assert gc._f6(-0.0) == "0.000000" and gc._f6(-1e-9) == "0.000000" and gc._f6(-0.5) == "-0.500000"
+    assert gc._ms_str(250) == "0.250" and gc._ms_str(86410000) == "86410.000" and gc._ms_str(-1500) == "-1.500"
 
 
 def test_actors_follow_fleet_order_after_spherical_coordinates_and_keep_indent():
-    norm, _ = gc.validate_fleet(with_targets(tgt(id="zeta"), tgt(id="alpha", waypoints=[wp(0.0, 30.0, 0.0), wp(4.0, 30.0, 4.0)])))
-    text = gc.build_world_sdf(norm, _read(os.path.join(REPO, FIXTURE_TEMPLATE)))
+    norm, text = _world_for(tgt(id="zeta"), tgt(id="alpha", waypoints=[wp(0.0, 30.0, 0.0), wp(4.0, 30.0, 4.0)]))
     _, world = _world_children(text)
     tags = [c.tag for c in world]
     assert [c.get("name") for c in world if c.tag == "actor"] == ["zeta", "alpha"]
@@ -1459,18 +1621,68 @@ def test_actor_free_world_when_no_targets():
 
 
 def test_check_world_sdf_catches_actor_tampering():
-    norm, _ = gc.validate_fleet(with_targets(tgt(id="target_a", loop=True,
-                                                 waypoints=[wp(0.0, 20.0, 0.0), wp(2.0, 20.0, 10.0), wp(4.0, 20.0, 0.0)])))
-    good = gc.build_world_sdf(norm, _read(os.path.join(REPO, FIXTURE_TEMPLATE)))
-    for old, new, match in (
-        ("<link name=\"link\">", "<link name=\"link\"><collision name=\"c\"/>", "금지 요소"),
-        ("</script>", "<plugin name=\"p\" filename=\"f\"/></script>", "금지 요소"),
-        ("<time>0.250000</time>", "<time>0.000000</time>", "엄격히 증가"),
-        ("<time>0.250000</time>", "<time>0.900000</time>", "엄격히 증가|넘는다"),
-        ("<loop>true</loop>", "<loop>false</loop>", "loop"),
-        ("<delay_start>0.000000</delay_start>", "<delay_start>1.000000</delay_start>", "delay_start"),
-        ("<pose>20.000000 10.000000 3.000000", "<pose>20.000000 10.000001 3.000000", "원래 waypoint"),
-    ):
-        assert old in good, old
+    norm, good = _world_for(tgt(id="target_a", loop=True,
+                                waypoints=[wp(0.0, 20.0, 0.0), wp(2.0, 20.0, 10.0), wp(4.0, 20.0, 0.0)]))
+    norm_f, good_f = _world_for(tgt(id="target_a", loop=False, waypoints=[wp(0.0, 20.0, 0.0), wp(2.0, 20.0, 10.0)]))
+    cases = (
+        (good, norm, "<link name=\"link\">", "<link name=\"link\"><collision name=\"c\"/>", "금지 요소"),
+        (good, norm, "</script>", "<plugin name=\"p\" filename=\"f\"/></script>", "금지 요소"),
+        (good, norm, "<time>0.250</time>", "<time>0.000</time>", "엄격히 증가"),
+        (good, norm, "<time>0.250</time>", "<time>0.900</time>", "엄격히 증가|밖이다"),
+        (good, norm, "<time>0.250</time>", "<time>0.100</time>", "밖이다"),
+        (good, norm, "<loop>true</loop>", "<loop>false</loop>", "loop"),
+        (good, norm, "<delay_start>0.000</delay_start>", "<delay_start>1.000</delay_start>", "delay_start"),
+        (good, norm, "<pose>20.000000 10.000000 3.000000", "<pose>20.000000 10.000001 3.000000", "원래 waypoint"),
+        # 꼬리 변조
+        (good_f, norm_f, "<time>86402.000</time>", "<time>86401.000</time>", "마지막 시각"),
+        (good_f, norm_f, "<time>2.250</time>", "<time>2.200</time>", "꼬리 첫 점"),
+    )
+    for text, n, old, new, match in cases:
+        assert old in text, old
         with pytest.raises(gc.FleetError, match=match):
-            gc.check_world_sdf(good.replace(old, new, 1), norm)
+            gc.check_world_sdf(text.replace(old, new, 1), n)
+    with pytest.raises(gc.FleetError, match="<script>가 없다"):
+        gc.check_world_sdf(good.replace("script>", "scripx>"), norm)
+    # 꼬리의 마지막 점을 지우면 개수와 마지막 시각이 어긋난다
+    root_text = good_f
+    tail_start = root_text.rindex("<waypoint>")
+    tail_end = root_text.index("</waypoint>", tail_start) + len("</waypoint>")
+    with pytest.raises(gc.FleetError, match="개수|waypoint가"):
+        gc.check_world_sdf(root_text[:tail_start] + root_text[tail_end:], norm_f)
+    # 꼬리 위치가 다르면 마지막 세 점의 위치 단정이 잡는다
+    assert "마지막 세 점" in _expect_fail(root_text, norm_f, "<pose>20.000000 10.000000 3.000000", "<pose>20.000000 11.000000 3.000000", last=True)
+
+
+def _expect_fail(text, norm, old, new, last=False):
+    idx = text.rindex(old) if last else text.index(old)
+    tampered = text[:idx] + new + text[idx + len(old):]
+    with pytest.raises(gc.FleetError) as e:
+        gc.check_world_sdf(tampered, norm)
+    return str(e.value)
+
+
+def test_build_world_sdf_rechecks_length_sum():
+    norm, _ = gc.validate_fleet(with_targets(long_t(1200), long_t(1200, id="t2")))
+    norm["targets"][1]["waypoints"][-1]["t"] = 1200.001  # 검증을 우회한 변조
+    with pytest.raises(gc.FleetError, match="궤적 길이의 합"):
+        gc.build_world_sdf(norm, _read(os.path.join(REPO, FIXTURE_TEMPLATE)))
+
+
+def test_actor_budget_constants():
+    waypoints_max = gc.TARGETS_LENGTH_SUM_MAX_MS // gc.ACTOR_SAMPLE_DT_MS + gc.TARGETS_MAX * gc.WAYPOINTS_MAX + 2 * gc.TARGETS_MAX
+    assert waypoints_max == 17856 <= 20000
+    assert gc.ACTOR_SAMPLE_DT_MS >= 200
+    assert (gc.TARGET_T_MAX_S + gc.ACTOR_HOLD_MS // 1000) * 1000 < 2 ** 31
+    assert gc.ACTOR_HOLD_MS < 2 ** 31 and gc.TARGET_START_S_MAX * 1000 < 2 ** 31
+
+
+def test_worst_case_fleet_stays_within_waypoint_budget():
+    items = []
+    for i in range(gc.TARGETS_MAX):
+        wps = [wp(round(j * 0.251, 3), 20.0 + i, 0.001 * j, 0.0) for j in range(gc.WAYPOINTS_MAX)]
+        items.append(tgt(id=f"t{i}", loop=False, waypoints=wps))
+    norm, text = _world_for(*items)
+    count = text.count("<waypoint>")
+    bound = gc.TARGETS_LENGTH_SUM_MAX_MS // gc.ACTOR_SAMPLE_DT_MS + gc.TARGETS_MAX * gc.WAYPOINTS_MAX + 2 * gc.TARGETS_MAX
+    assert count <= bound
+    assert len(text.encode()) < 16 * 1024 * 1024
