@@ -79,6 +79,8 @@ xrce-agent --> gazebo --> px4-1..N --> bridge --> ops-1..N, targets, sim-oracle 
 
 호스트에 쓰는 서비스는 호스트 사용자의 uid:gid로 돌고 `HOME`은 컨테이너 안 `/tmp`, ROS 로그는 `artifacts/runs/<실행 id>/ros_log/<서비스>/`다. 그래서 `artifacts/runs/`에는 root 소유 파일이 생기지 않는다. 바인드 마운트는 중첩하지 않는다(중첩하면 마운트 지점이 root 소유로 생긴다).
 
+표시 파일 디렉터리 `/tmp/idsim`은 `gazebo`, `targets`, `sim-oracle`에서 tmpfs다(compose `tmpfs: /tmp/idsim:uid=<uid>,gid=<gid>,mode=0755`). 같은 컨테이너를 stop/start하거나 `docker restart`해도 옛 `ready`, `targets_ready`, `oracle_ready`가 남지 않아 healthcheck는 새 노드가 표시 파일을 만든 뒤에만 통과한다. `targets`와 `sim-oracle`은 실행 user의 uid:gid(숫자 옵션이라 passwd에 없는 CI의 1001도 된다)가 소유하고, root로 도는 `gazebo`는 root 소유다. tmpfs는 `noexec`다(표시 파일만 둔다). `HOME=/tmp`는 컨테이너 레이어 그대로이며 `/tmp/idsim`만 덮는다.
+
 ## 격리 규칙
 
 같은 호스트에 다른 ROS 2 스택이나 Gazebo, 또는 idsim 스택이 여럿 돌 수 있으므로, 스택 번호 k(0-9, 기본 0) 하나에서 아래 값을 파생한다. 기준값은 `tools/gen_compose.py`의 상수다.
