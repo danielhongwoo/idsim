@@ -265,10 +265,10 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 
 | 파라미터 | 값 | 이유 |
 | --- | --- | --- |
-| `RTL_TYPE` | 0 | home 직선 복귀. 2와 4는 MAVLink 미션 경로를 따른다 |
+| `RTL_TYPE` | 0 | 기본값과 같다. home이나 rally point 가운데 가까운 곳으로 직선 복귀한다. idsim은 rally point와 MAVLink 미션을 올리지 않으므로 목적지는 home이다. 2와 4는 MAVLink 미션 경로를 따른다 |
 | `RTL_CONE_ANG` | 0 | 귀환 고도가 `max(현재 고도, home 고도 + RTL_RETURN_ALT)` 하나로 정해진다 |
-| `RTL_RETURN_ALT` | 10 m | 1b 시험 미션 고도 5 m보다 높은 한 값. x500 기본 30 m는 시험 시간을 늘린다(U9) |
-| `RTL_LAND_DELAY` | 0 | 멀티콥터는 home 위에서 바로 착륙한다(MOVE_TO_LOITER -> LAND). 그래서 `RTL_DESCEND_ALT`가 쓰이는 상태를 지나지 않아 그 값은 계약 표에 넣지 않는다. -1이면 착륙하지 않아 완료 조건이 오지 않는다 |
+| `RTL_RETURN_ALT` | 10 m | 1b 시험 미션 고도 5 m보다 높은 한 값. x500 기본 30 m(`rc.mc_defaults` 20행의 set-default이고 펌웨어 기본값은 60 m)는 시험 시간을 늘린다(U9) |
+| `RTL_LAND_DELAY` | 0 | 기본값과 같다. 멀티콥터는 home 위에서 바로 착륙한다(MOVE_TO_LOITER -> LAND). 그래서 `RTL_DESCEND_ALT`가 쓰이는 상태를 지나지 않아 그 값은 계약 표에 넣지 않는다. -1이면 착륙하지 않아 완료 조건이 오지 않는다 |
 | `COM_DISARM_LAND` | 2 s | 기본값과 같지만 RTL과 LAND 완료, 공중 종료 단계의 지상 판정의 근거라 명시한다 |
 | `COM_LOW_BAT_ACT` | 2(Land) | U8. 실패 폴백은 Land라는 원칙과 맞춘다. SITL 배터리는 50%에서 멈춰 닿지 않는다 |
 | `EKF2_HGT_REF` | 1 | 기본값과 같다. 높이 기준이 GNSS여야 EKF 원점의 초기 고도 잡음이 도착점에서 상쇄된다(쟁점 4, 5). 0(기압계)이면 초기 GNSS 고도 오차가 bias로 남는다 |
@@ -279,7 +279,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - 기체별 `px4_params`로 `RTL_RETURN_ALT`를 덮어도 계약 안으로 두는 예외는 1b에 넣지 않는다(넘김 목록).
 
 근거
-- [소스] 귀환 고도: `rtl.cpp` 471-478행. 멀티콥터에서 `RTL_LAND_DELAY` 0이면 MOVE_TO_LOITER 다음이 LAND이고(`rtl_direct.cpp` 164-183행) `RTL_DESCEND_ALT`의 유일한 사용처(587행)는 지나지 않는 상태의 것이다. RTL은 착륙까지 AUTO_RTL이고, disarm 때 사용자 의도 모드가 arm을 막지 않는 마지막 사용자 의도 모드(`_nav_state_after_disarming`)로 돌아간다(`UserModeIntention.cpp`의 `onDisarm` 94-102행, 그 값을 저장하는 77-84행). 그래서 완료에서 `nav_state`를 보지 않는다.
+- [소스] 귀환 고도: `rtl.cpp` 471-478행. 멀티콥터에서 `RTL_LAND_DELAY` 0이면 MOVE_TO_LOITER 다음이 LAND이고(`rtl_direct.cpp` 163-184행, `_updateRtlState` 머리 163행과 MOVE_TO_LOITER 분기 `break` 184행). `RTL_DESCEND_ALT`의 직접 참조는 587행(`sanitizeLandApproach`) 하나지만, 거기서 만든 값을 233행 `loiter_altitude = min(_land_approach.height_m, _rtl_alt)`이 받아 LOITER_DOWN과 LOITER_HOLD 상태에서 쓰고 452-454행 시간 추정에서도 쓴다. 우리 경로(CLIMBING -> MOVE_TO_LOITER -> LAND)는 이 상태들을 지나지 않고 MOVE_TO_LOITER는 `_rtl_alt`만 쓰므로 결론은 같다. RTL은 착륙까지 AUTO_RTL이고, disarm 때 사용자 의도 모드가 arm을 막지 않는 마지막 사용자 의도 모드(`_nav_state_after_disarming`)로 돌아간다(`UserModeIntention.cpp`의 `onDisarm` 94-102행, 그 값을 저장하는 77-84행). 그래서 완료에서 `nav_state`를 보지 않는다.
 - RTL을 실패 폴백으로 쓰면 다대에서 같은 귀환 고도의 경로가 교차한다(`COM_OBL_RC_ACT=4`의 이유와 같다).
 
 ## 쟁점 10. 공중에서 끝나는 미션(U3)
