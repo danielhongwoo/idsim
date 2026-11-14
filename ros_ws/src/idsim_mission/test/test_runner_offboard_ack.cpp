@@ -96,6 +96,8 @@ void expect_resends_only_at(
   for (std::uint64_t tick = first; tick <= last; ++tick) {
     const StepOutput * const out = output_of_tick(h, tick);
     if (out == nullptr) {
+      // 구간 first..last는 모두 이미 먹인 tick이어야 한다.
+      ADD_FAILURE() << "no output at tick " << tick;
       return;
     }
     const bool due =
@@ -534,7 +536,10 @@ TEST_P(ValidAckBeforeLongConfirm, ValidAckStopsResendAndArmsOnConfirmTick)
 
 INSTANTIATE_TEST_SUITE_P(
   OffboardAck, ValidAckBeforeLongConfirm,
-  ::testing::Values(AckResult::kAccepted, AckResult::kInProgress));
+  ::testing::Values(AckResult::kAccepted, AckResult::kInProgress),
+  [](const ::testing::TestParamInfo<AckResult> & info) {
+    return info.param == AckResult::kAccepted ? std::string("Accepted") : std::string("InProgress");
+  });
 
 TEST(OffboardAck, ConfirmOnResendDueTickWithoutAckResendsOnly)
 {
@@ -652,7 +657,22 @@ INSTANTIATE_TEST_SUITE_P(
   OffboardAck, WaitingEndOnResendDueTick,
   ::testing::Values(
     WaitingEnd::kLeft, WaitingEnd::kCancel, WaitingEnd::kIdentityMismatch,
-    WaitingEnd::kStampFailure, WaitingEnd::kRejectedAck));
+    WaitingEnd::kStampFailure, WaitingEnd::kRejectedAck),
+  [](const ::testing::TestParamInfo<WaitingEnd> & info) {
+    switch (info.param) {
+      case WaitingEnd::kLeft:
+        return std::string("Left");
+      case WaitingEnd::kCancel:
+        return std::string("Cancel");
+      case WaitingEnd::kIdentityMismatch:
+        return std::string("IdentityMismatch");
+      case WaitingEnd::kStampFailure:
+        return std::string("StampFailure");
+      case WaitingEnd::kRejectedAck:
+        return std::string("RejectedAck");
+    }
+    return std::string("Unknown");
+  });
 
 TEST(OffboardAck, ConfirmTickCancelOnResendDueTickSendsNothing)
 {
@@ -699,7 +719,8 @@ TEST(OffboardAck, LateAckOfEarlierSendIsReadAsValid)
   // 알려진 열화. S+12의 ack는 S 전송의 것이고 지연이 12 tick(0.6 s, 주기와 두 배 사이)이다. core는
   // 이것을 S+10 재전송의 ack와 가르지 못해 유효로 읽고 arm한다. PX4 queue에서 arm 앞에 S+10의
   // DO_SET_MODE 하나가 남을 수 있다(decisions.md 쟁점 12가 허용한 열화). 단정하는 것은 현재
-  // 동작이지 바람직한 동작이 아니다.
+  // 동작이지 바람직한 동작이 아니다. 이 테스트가 깨지면 열화가 해소된 것이므로 기대를
+  // 뒤집는다.
   Harness h(standard_mission());
   const std::uint64_t s = reach_offboard_ack(h);
   feed_through(h, offboard_ground(), s + 11);
