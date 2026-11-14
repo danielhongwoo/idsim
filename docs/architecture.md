@@ -269,9 +269,6 @@ flowchart LR
   DDS1 -->|"/clock"| TA
   TA -->|"TargetState"| DDS1
   ORP -->|"/sim/*/pose"| DDS1
-
-  classDef later stroke-dasharray: 6 4
-  class TA later
 ```
 
 | 경로 | 프로토콜 | 싣는 것 | 포트 또는 격리값 |
