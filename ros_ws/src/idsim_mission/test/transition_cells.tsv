@@ -176,7 +176,7 @@ CLEANUP.CANCEL.GROUND	GROUND_DISARM_TIMEOUT	DONE	ABORTED/DISARM_FAILED	covered	-
 CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_NO_SAMPLE	DONE	ABORTED/ITEM_TIMEOUT	impossible	-	Snapshot의 표본은 한 번 받으면 비우지 않고(snapshot.hpp), P0에서 status와 land를 받았고 발행을 시작했다(acted)
 CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_IDENTITY_MISMATCH	DONE	ABORTED/ITEM_TIMEOUT	impossible	-	같은 tick의 감시 표(순위 2)가 같은 표본의 식별 불일치로 먼저 끝낸다
 CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_LINK_LOST	DONE	ABORTED/ITEM_TIMEOUT	impossible	-	같은 tick의 감시 표(순위 3)가 먼저 본다. 감시 표의 표본은 그 tick의 표본보다 늦게 받은 것이 아니므로 정리가 끊김으로 보면 감시 표도 끊김으로 본다
-CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_AIR_DISARM	DONE	ABORTED/ITEM_TIMEOUT	covered	-	감시 표가 판정에 쓰지 않는 묵은 표본(timestamp가 첫 ARMED 표본보다 작음)이 DISARMED이고 landed false일 때(README "표에 없어 구현에서 정한 것" 6). PX4의 vehicle_status timestamp는 단조라 실제로는 나오지 않지만 core는 단조를 전제로 두지 않고 이 표본을 정리에서 쓰는 동작을 정의하므로 impossible이 아니라 방어 경로로 덮는다
+CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_AIR_DISARM	DONE	ABORTED/ITEM_TIMEOUT	covered	-	감시 표가 판정에 쓰지 않는 묵은 표본(timestamp가 첫 ARMED 표본보다 작음)이 DISARMED이고 landed false일 때(README "표에 없어 구현에서 정한 것" 6). PX4의 vehicle_status timestamp는 한 번의 PX4 부팅 안에서는 단조라 그 안에서는 나오지 않지만 core는 단조를 전제로 두지 않고 이 표본을 정리에서 쓰는 동작을 정의하므로 impossible이 아니라 방어 경로로 덮는다
 CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/ITEM_TIMEOUT	impossible	-	ITEM_TIMEOUT 정리는 setpoint 항목에서만 시작하고 그 항목은 P6에서 arm을 보낸 뒤에만 있다
 CLEANUP.ITEM_TIMEOUT.NONE	CLEANUP_CAP	DONE	ABORTED/ITEM_TIMEOUT	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고, core/config.hpp의 Timeouts 양수 전제로 상한(cleanup_cap_ns)은 양수다
 CLEANUP.ITEM_TIMEOUT.NONE	ENTER_GROUND	CLEANUP.ITEM_TIMEOUT.GROUND	-	covered	-	-

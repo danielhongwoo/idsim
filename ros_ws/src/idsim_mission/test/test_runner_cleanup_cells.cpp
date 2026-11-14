@@ -50,9 +50,10 @@
 //   DISARMED, 거부 ack, 첫 ARMED 표본보다 묵은 표본은 PX4 v1.17.0에서 재현하기 어려운 방어 경로라
 //   합성 표본과 합성 ack로만 시험한다.
 // - 묵은 표본 칸(CLEANUP.ITEM_TIMEOUT.NONE CLEANUP_AIR_DISARM): PX4의 vehicle_status timestamp는
-//   단조라 실제로는 나오지 않는다. 그래도 impossible이 아니다. core는 vehicle_status timestamp의
-//   단조를 전제로 두지 않고, 첫 ARMED 표본보다 작은 timestamp의 표본을 감시 구간에서만 거르고
-//   정리에서는 그대로 쓰는 동작을 스스로 정의한다(mission_runner.cpp의 monitored_status, README
+//   한 번의 PX4 부팅 안에서는 단조라 그 안에서는 나오지 않는다. 그래도 impossible이 아니다.
+//   core는 vehicle_status timestamp의 단조를 전제로 두지 않고, 첫 ARMED 표본보다 작은 timestamp의
+//   표본을 감시 구간에서만 거르고 정리에서는 그대로 쓰는 동작을 스스로 정의한다
+//   (mission_runner.cpp의 monitored_status, README
 //   "표에 없어 구현에서 정한 것" 6). 단조는 core 밖(PX4)의 사실이라 "불가능"의 근거가 아니므로
 //   방어 경로로 덮는다.
 
