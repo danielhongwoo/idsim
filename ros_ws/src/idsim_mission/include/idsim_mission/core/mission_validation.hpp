@@ -22,7 +22,8 @@
 //   LAND만, 마지막은 LAND, 첫 항목은 TAKEOFF 또는 LAND(계약 순서 규칙과 합쳐 LAND로 시작하면
 //   길이 1). goal 접수(screen_goal)가 쓴다. B9 동안 받는 미션 집합은 1a 그대로다.
 // - validate_mission_runnable: 계약 + runner가 아직 실행하지 못하는 미션의 제한. type은
-//   TAKEOFF, LOITER, LAND, RTL만, 마지막은 LAND나 RTL, 첫 항목은 TAKEOFF, LAND, RTL.
+//   TAKEOFF, LOITER, LAND, RTL만, 첫 항목은 TAKEOFF, LAND, RTL. 마지막 항목은 계약 순서 규칙
+//   말고는 제한하지 않는다(마지막이 setpoint 항목이면 공중 종료 단계로 끝난다).
 //   MissionRunner 생성자가 쓴다. validate_mission_1a_goal이 받는 미션은 이것도 받는다. 문구는
 //   사용자에게 닿지 않는다(노드는 screen_goal이 먼저 끝낸다).
 
