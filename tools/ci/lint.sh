@@ -229,14 +229,13 @@ check_px4_api() {
   # 다른 패키지가 문자열을 직접 쓰면 공개 API의 발행 허용 목록을 우회한다. 실수 방지 수준이며 보안 경계가 아니다.
   # 대상은 ros_ws/src 아래 idsim_common 밖의 C++ 파일, .py 파일(launch 포함), yaml 파일(params, remap)과
   # 생성기 golden의 params 파일, tests/sitl/과 tests/support/ 아래의 .py, yaml 파일이다(decisions 쟁점 8).
-  # tests/ 쪽 예외는 파일 이름으로만 둔다: tests/support/px4_raw.py,
-  # px4_topic.py, test_px4_topic_names.py 둘(정확한 경로, 패턴이 아니다). 토픽 이름을 다른 모듈에서 얻어 검사에 안 걸린다는 사실에는 기대지 않는다.
+  # tests/ 쪽 예외는 파일 이름으로만 둔다: tests/support/px4_topic.py,
+  # test_px4_topic_names.py 둘(정확한 경로, 패턴이 아니다). 토픽 이름을 다른 모듈에서 얻어 검사에 안 걸린다는 사실에는 기대지 않는다.
   # 예외 파일이 하나라도 사라지면 목록이 낡은 것이므로 실패시킨다.
-  local files=() f exc_raw=0 exc_topic=0 exc_tnames=0
+  local files=() f exc_topic=0 exc_tnames=0
   while IFS= read -r f; do
     case "$f" in
       ros_ws/src/idsim_common/*) ;;
-      tests/support/px4_raw.py) exc_raw=1 ;;
       tests/support/px4_topic.py) exc_topic=1 ;;
       tests/support/test_px4_topic_names.py) exc_tnames=1 ;;
       *) files+=("$f") ;;
@@ -244,8 +243,8 @@ check_px4_api() {
   done < <(list_files 'ros_ws/src/*.py' 'ros_ws/src/*.yaml' 'ros_ws/src/*.yml' 'tests/fixtures/gen_compose/*/params/*.yaml' \
     'tests/sitl/*.py' 'tests/sitl/*.yaml' 'tests/sitl/*.yml' 'tests/support/*.py' 'tests/support/*.yaml' 'tests/support/*.yml' \
     "${cpp_specs[@]/#/ros_ws/src/}")
-  if [ $((exc_raw + exc_topic + exc_tnames)) -ne 3 ]; then
-    result px4-api FAIL "예외 파일이 없다(px4_raw.py=${exc_raw}, px4_topic.py=${exc_topic}, test_px4_topic_names.py=${exc_tnames}). lint.sh의 예외 목록을 고친다"
+  if [ $((exc_topic + exc_tnames)) -ne 2 ]; then
+    result px4-api FAIL "예외 파일이 없다(px4_topic.py=${exc_topic}, test_px4_topic_names.py=${exc_tnames}). lint.sh의 예외 목록을 고친다"
     return 1
   fi
   if [ "${#files[@]}" -eq 0 ]; then result px4-api PASS-NO-TARGETS "(0 files)"; return 0; fi
