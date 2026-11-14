@@ -35,7 +35,7 @@ import sys
 
 CMD_TIMEOUT_S = 15.0
 
-DEFAULT_EXPECT = ["COM_OBL_RC_ACT=4", "COM_RC_IN_MODE=4", "UXRCE_DDS_SYNCT=0"]
+DEFAULT_EXPECT = ["COM_OBL_RC_ACT=4", "COM_RC_IN_MODE=4", "UXRCE_DDS_SYNCT=0", "IMU_GYRO_CAL_EN=0"]
 
 # gz_bridge 오류로 보는 줄. PX4 v1.17.0 px4-rc.gzsim과 gz_bridge 모듈의 오류 출력.
 GZ_ERROR_PATTERNS = [
