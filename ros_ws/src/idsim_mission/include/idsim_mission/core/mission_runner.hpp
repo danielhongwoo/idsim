@@ -201,8 +201,7 @@ private:
   void step_setpoint_item(Tick & t);
   void step_land(Tick & t);
   void land_item_timeout(Tick & t, bool landed);
-  void begin_cleanup(
-    Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail);
+  void begin_cleanup(Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail);
   void step_cleanup(Tick & t);
   bool cleanup_cap_reached(const Tick & t) const;
   void end_at_cleanup_cap(Tick & t, bool on_ground);
@@ -253,7 +252,7 @@ private:
   std::string item_label() const;
 
   // 선언 순서는 clang-analyzer의 padding 검사가 권한 순서다(뜻으로 묶지 않았다).
-  std::int64_t accept_ns_;  // goal 접수 ROS 시각
+  std::int64_t accept_ns_;         // goal 접수 ROS 시각
   TransitionObserver * observer_;  // 없으면 nullptr
   std::int64_t item_start_ns_{0};
   std::uint64_t item_start_tick_{0};

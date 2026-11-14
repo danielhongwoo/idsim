@@ -182,8 +182,7 @@ class Harness
 {
 public:
   explicit Harness(MissionSpec mission, Config config = Config{})
-  : config_(config),
-    runner_(std::move(mission), config, kStartNs, active_transition_recorder())
+  : config_(config), runner_(std::move(mission), config, kStartNs, active_transition_recorder())
   {
   }
 
