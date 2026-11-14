@@ -1142,6 +1142,7 @@ TEST(MissionEnd, T29CapOnMismatchedTickWhileClassifiedGround)
 // D12. 칸은 기존 칸(A13r, G8, G10, Y11)만 쓴다.
 
 // T10 경로(지상 Hold 수락, Hold 기한으로 S+60에 지상 대기)를 S+60까지 돈다.
+// drive_ground_wait와 달리 S+60 tick까지 실행해 A13r를 단정하고, disarm 반응을 끄지 않는다.
 EndStart drive_into_ground_wait(Harness & h)
 {
   const EndStart st = start_ground_end(h);
@@ -1182,6 +1183,7 @@ TEST(MissionEnd, GroundDisarmedSamplesRestartFallbackBase)
   expect_cell(h, kGroundWait, Event::kGroundDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {}, before);
   EXPECT_TRUE(terminated_at(h, st.s + 205));
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 1);
+  EXPECT_EQ(h.count_command(CommandKind::kNavLand), 0);
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
@@ -1197,6 +1199,7 @@ TEST(MissionEnd, GroundDisarmedCountRestartsAfterArmed)
   run_to(h, st.s + 102);
   h.world.arming = Arming::kArmed;  // S+102
   h.tick();
+  EXPECT_EQ(h.view().disarm_class, DisarmClass::kUnknown);
   h.world.arming = Arming::kDisarmed;  // S+103
   h.tick();
   EXPECT_EQ(h.view().disarm_class, DisarmClass::kGround);
@@ -1208,6 +1211,7 @@ TEST(MissionEnd, GroundDisarmedCountRestartsAfterArmed)
   EXPECT_EQ(
     ticks_sending(h, CommandKind::kDisarm, st.s, st.s + 204),
     std::vector<std::uint64_t>{st.s + 204});
+  EXPECT_FALSE(h.runner().done());
 }
 
 TEST(MissionEnd, FallbackDisarmConfirmKeptOnLandPath)
@@ -1265,6 +1269,7 @@ TEST(MissionEnd, GroundWaitEnteredOnMismatchedTick)
   run_to(h, st.s + 164);
   before = tick_marked(h);
   expect_cell(h, kGroundWait, Event::kGroundDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {}, before);
+  EXPECT_TRUE(terminated_at(h, st.s + 164));
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 1);
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
