@@ -146,6 +146,7 @@ TEST(FlowCells, SignalIdentityMismatchWithCancelSendsNoHoldOrDisarm)
     {Event::kCancel});
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
   expect_no_cancel_commands(h, end);
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);  // arm을 보내기 전
 }
 
 TEST(FlowCells, SignalCancelStartsCleanup)
@@ -240,6 +241,7 @@ TEST(FlowCells, OffboardIdentityMismatchWithCancelSendsNoHoldOrDisarm)
     {Event::kCancel});
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
   expect_no_cancel_commands(h, end);
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);  // arm을 보내기 전
 }
 
 // ---- P6 ----
@@ -250,9 +252,14 @@ TEST(FlowCells, ArmStampFailureBeforeArmedEndsInternal)
   Harness h(standard_mission());
   ASSERT_NO_FATAL_FAILURE(reach_arm(h));
   h.clock.fail = true;
+  const std::size_t end = h.outputs().size();
   h.tick();
   expect_cell(h, "PREPARING.ARM", Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL");
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
+  // 그 tick의 arm 재전송과 setpoint는 버린다. disarm도 보내지 않는다(명령에 실을 시각이 없다).
+  EXPECT_TRUE(h.outputs()[end].commands.empty());
+  EXPECT_FALSE(h.outputs()[end].setpoint.has_value());
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);
 }
 
 TEST(FlowCells, ArmRejectedWithCancelIsPreparingFailure)

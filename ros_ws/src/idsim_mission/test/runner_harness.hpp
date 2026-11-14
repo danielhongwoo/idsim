@@ -35,6 +35,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -525,16 +526,19 @@ inline const Termination & termination_or_empty(const Harness & h)
   return h.termination().has_value() ? *h.termination() : empty;
 }
 
-// 이 Harness의 기록에 칸 (from, event, to, reason, also_true)이 있다. from과 event가 같은 꼬리표
-// 기록을 찾아 to, 종료 reason(칸 목록의 reason 열 표기), 함께 참이던 사건 집합을 단정한다. also가
-// 비어 있으면 겹침이 없는 칸이다. 같은 (from, event) 기록이 여럿이면 하나라도 맞으면 된다.
-inline void expect_cell(
+// 이 Harness의 기록 중 from_index번째부터에 칸 (from, event, to, reason, also_true)이 있다. from과
+// event가 같은 꼬리표 기록을 찾아 to, 종료 reason(칸 목록의 reason 열 표기), 함께 참이던 사건
+// 집합을 단정한다. also가 비어 있으면 겹침이 없는 칸이다. 시나리오가 칸을 일으키기 직전의
+// edges().size()를 from_index로 주면 그 앞의 같은 칸으로 통과하지 않는다. 맞는 기록을 돌려준다
+// (없으면 nullptr. 기록의 tick으로 그 tick의 출력을 볼 수 있다: output_of_tick).
+inline const TransitionEdge * expect_cell(
   const Harness & h, const std::string & from, Event event, const std::string & to,
-  const std::string & reason, std::vector<Event> also = {})
+  const std::string & reason, std::vector<Event> also = {}, std::size_t from_index = 0)
 {
   std::sort(also.begin(), also.end());
   std::string seen;
-  for (const TransitionEdge & edge : h.edges()) {
+  for (std::size_t i = from_index; i < h.edges().size(); ++i) {
+    const TransitionEdge & edge = h.edges()[i];
     if (!edge.tagged) {
       continue;
     }
@@ -550,14 +554,26 @@ inline void expect_cell(
     std::vector<Event> edge_also = edge.also_true;
     std::sort(edge_also.begin(), edge_also.end());
     if (state_key_name(edge.to) == to && edge_reason_name(edge) == reason && edge_also == also) {
-      return;
+      return &edge;
     }
   }
   std::string want = from + " " + event_name(event) + " -> " + to + " " + reason;
   for (const Event e : also) {
     want += std::string(" +") + event_name(e);
   }
-  ADD_FAILURE() << "cell not observed: " << want << "\nedges of this harness:" << seen;
+  ADD_FAILURE() << "cell not observed: " << want << "\nedges of this harness from index "
+                << from_index << ":" << seen;
+  return nullptr;
+}
+
+// tick 번호의 출력. Harness의 tick 번호는 1부터 하나씩 늘고 step마다 출력 하나를 남긴다.
+inline const StepOutput * output_of_tick(const Harness & h, std::uint64_t tick)
+{
+  if (tick == 0 || tick > h.outputs().size()) {
+    ADD_FAILURE() << "no output for tick " << tick;
+    return nullptr;
+  }
+  return &h.outputs()[tick - 1];
 }
 
 // 종료 결과를 칸 목록의 reason 열 표기(<status>/<reason>)로 단정하고 expect_terminated_once의
