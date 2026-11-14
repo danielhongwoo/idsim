@@ -6,6 +6,7 @@
 #   tools/sim_stack.sh down [--stack k]
 #   tools/sim_stack.sh logs [--stack k] [docker compose logs 인자...]
 #   tools/sim_stack.sh ps   [--stack k]
+#   tools/sim_stack.sh restart-ops [--stack k] [--vehicle N] [--build] [--force] [--run-dir 경로]
 #   k는 --stack, 없으면 IDSIM_STACK_INDEX, 없으면 0. compose 프로젝트 이름은 idsim-<k>.
 #
 # up이 하는 일(인자 없는 up 한 번이 사용자 진입점이다)
@@ -30,6 +31,17 @@
 #      스택은 조사할 수 있게 그대로 두며 `tools/sim_stack.sh down`으로 내린다.
 #   성공하면 실행 디렉터리의 절대 경로 한 줄을 stdout에 쓴다(안내는 stderr).
 #
+# restart-ops가 하는 일(개발 반복용. 떠 있는 스택은 그대로 두고 Mission Executor 컨테이너만 새 ros_ws/install로 다시 만든다)
+#   ops-N은 저장소 전체를 bind mount하므로 ros_ws/install이 곧 코드다. 이미지는 바뀌지 않는다.
+#   1. 실행 디렉터리를 --run-dir, 없으면 떠 있는 idsim-<k> 컨테이너의 compose 파일 label에서 찾는다.
+#   2. --build면 tools/ros_ws.sh build를 먼저 한다(없으면 이미 빌드했다고 본다).
+#   3. gazebo, px4-N, bridge가 running이어야 한다. 아니면 up을 먼저 하라고 하고 끝낸다.
+#   4. 대상 기체(--vehicle N, 없으면 전부)가 지상 DISARMED(vehicle_status arming_state)인지 runner 1회성 컨테이너로 본다.
+#      아니면 거부한다(공중이나 ARMED에서 Executor를 다시 띄우면 기체 상태가 새 노드와 어긋난다). --force면 건너뛴다.
+#   5. `up -d --force-recreate --no-deps --wait ops-N`. healthcheck(lifecycle active)가 healthy가 될 때까지 기다린다.
+#   그 뒤 tests/sitl/run_sitl.sh --attach <실행 디렉터리> -- -k <시나리오>로 시나리오를 돌린다.
+#   스택에 있는 다른 서비스(px4, bridge, targets, sim-oracle)와 compose 파일은 건드리지 않으므로 생성기 출력과 무관하다.
+#
 # 환경변수: STACK_UP_TIMEOUT (단계별 up --wait 제한 초, 기본 240)
 
 set -euo pipefail
@@ -44,7 +56,7 @@ cmd="$1"; shift
 _expanded=()
 for _a in "$@"; do
   case "$_a" in
-    --stack=*|--fleet=*|--variant=*|--run-dir=*) _expanded+=("${_a%%=*}" "${_a#*=}") ;;
+    --stack=*|--fleet=*|--variant=*|--run-dir=*|--vehicle=*) _expanded+=("${_a%%=*}" "${_a#*=}") ;;
     *) _expanded+=("$_a") ;;
   esac
 done
@@ -53,6 +65,9 @@ stack="${IDSIM_STACK_INDEX:-0}"
 fleet=""
 viz=0
 infra_only=0
+vehicle=""
+do_build=0
+force=0
 variant="standalone"
 run_dir=""
 rest=()
@@ -62,6 +77,9 @@ while [ "$#" -gt 0 ]; do
     --fleet) fleet="${2:?--fleet 값}"; shift 2 ;;
     --variant) variant="${2:?--variant 값}"; shift 2 ;;
     --run-dir) run_dir="${2:?--run-dir 값}"; shift 2 ;;
+    --vehicle) vehicle="${2:?--vehicle 값}"; shift 2 ;;
+    --build) do_build=1; shift ;;
+    --force) force=1; shift ;;
     --viz) viz=1; shift ;;
     --infra-only) infra_only=1; shift ;;
     -h|--help) usage ;;
@@ -281,8 +299,74 @@ do_up() {
   printf '%s\n' "$run_dir"
 }
 
+# 떠 있는 스택의 실행 디렉터리를 찾는다(--run-dir이 없을 때). compose 파일 label에서 얻는다.
+find_run_dir() {
+  local cid cf
+  cid="$(docker ps -a -q --filter "label=com.docker.compose.project=${project}" | head -n 1)"
+  [ -n "$cid" ] || return 1
+  cf="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$cid")"
+  [ -n "$cf" ] || return 1
+  dirname "${cf%%,*}"
+}
+
+# 기체 하나가 지상 DISARMED인지 본다(runner 1회성 컨테이너로 vehicle_status 한 표본을 읽는다)
+vehicle_on_ground() { # compose파일 기체이름(ops-N의 N)
+  local f="$1" n="$2" out
+  out="$(docker compose -f "$f" run --rm --no-deps -T runner bash -c \
+    ". /opt/ros/\${ROS_DISTRO}/setup.sh; . /opt/idsim/ros_ws/install/setup.bash; \
+     ROS_LOG_DIR=/tmp/hc timeout 15 ros2 topic echo --once --no-daemon --field arming_state /px4_${n}/fmu/out/vehicle_status_v1" 2>/dev/null | head -n 1 | tr -d '[:space:]')" || out=""
+  case "$out" in
+    1) return 0 ;;
+    "") say "기체 ${n}: vehicle_status를 읽지 못했다(--force로 건너뛸 수 있다)"; return 1 ;;
+    *) say "기체 ${n}: arming_state=${out}(1이 DISARMED). 지상 DISARMED가 아니다"; return 1 ;;
+  esac
+}
+
+do_restart_ops() {
+  local rd sf f svcs n s running bad=""
+  if [ -n "$run_dir" ]; then rd="$run_dir"; else rd="$(find_run_dir)" || { say "떠 있는 ${project}를 찾지 못했다. 먼저 tools/sim_stack.sh up --stack ${stack}"; exit 1; }; fi
+  sf="${rd}/stack.json"
+  [ -f "$sf" ] || { say "${rd}에 stack.json이 없다"; exit 1; }
+  f="${rd}/$(sj "$sf" run.compose_file)"
+  [ "$(sj "$sf" stack.compose_project)" = "$project" ] || { say "stack.json 프로젝트가 ${project}가 아니다"; exit 1; }
+  # shellcheck disable=SC2207
+  svcs=($(sj "$sf" services.ops))
+  [ "${#svcs[@]}" -gt 0 ] || { say "이 스택에는 ops 서비스가 없다(variant ${variant}나 --infra-only)"; exit 1; }
+  if [ -n "$vehicle" ]; then
+    case "$vehicle" in ''|*[!0-9]*) say "--vehicle은 기체 번호(정수): '${vehicle}'"; exit 2 ;; esac
+    [[ " ${svcs[*]} " == *" ops-${vehicle} "* ]] || { say "ops-${vehicle}가 없다(있는 것: ${svcs[*]})"; exit 1; }
+    svcs=("ops-${vehicle}")
+  fi
+  if [ "$do_build" -eq 1 ]; then
+    say "tools/ros_ws.sh build"
+    "${repo_root}/tools/ros_ws.sh" build >&2 || { say "빌드 실패. ops를 다시 띄우지 않았다"; exit 1; }
+  fi
+  [ -d "${repo_root}/ros_ws/install/idsim_mission" ] || { say "ros_ws/install/idsim_mission/이 없다. tools/ros_ws.sh build를 하라"; exit 1; }
+  running="$(docker compose -f "$f" ps --status running --format '{{.Service}}')"
+  for s in $(sj "$sf" services.gazebo) $(sj "$sf" services.px4) $(sj "$sf" services.bridge); do
+    printf '%s\n' "$running" | grep -qx "$s" || bad="${bad} ${s}"
+  done
+  [ -z "$bad" ] || { say "running이 아닌 서비스:${bad}. 스택이 온전하지 않다. tools/sim_stack.sh up --stack ${stack}"; exit 1; }
+  if [ "$force" -eq 0 ]; then
+    for s in "${svcs[@]}"; do
+      vehicle_on_ground "$f" "${s#ops-}" || { say "거부: ${s}를 다시 띄우지 않았다(기체를 착륙시키고 DISARMED를 기다리거나 --force)"; exit 1; }
+    done
+  fi
+  say "다시 만든다: ${svcs[*]}"
+  if ! docker compose -f "$f" up -d --force-recreate --no-deps --wait --wait-timeout "$up_timeout" "${svcs[@]}" >&2; then
+    say "ops 재시작 실패"
+    report_bad_services "$f"
+    report_node_failure "$f" "$sf"
+    exit 1
+  fi
+  say "준비됨: ${svcs[*]}"
+  say "다음: tests/sitl/run_sitl.sh --stack ${stack} --attach ${rd} -- -k <시나리오>"
+  printf '%s\n' "$rd"
+}
+
 case "$cmd" in
   up) do_up ;;
+  restart-ops) do_restart_ops ;;
   down) stack_down "$project" ;;
   logs) docker compose -p "$project" logs "${rest[@]}" ;;
   ps) docker compose -p "$project" ps -a ;;
