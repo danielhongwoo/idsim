@@ -641,6 +641,10 @@ REJECT_FLEETS = [
     pytest.param(fleet(schema=True), id="schema-bool"),
     pytest.param(fleet(vehicles=[]), id="no-vehicles"),
     pytest.param(fleet(world__name="bad name"), id="world-name"),
+    pytest.param(fleet(world__name="default\n"), id="world-name-trailing-newline"),
+    pytest.param(fleet(world__template="worlds/base.sdf\n"), id="template-trailing-newline"),
+    pytest.param(fleet(vehicles__0__px4_params={"COM_OBL_RC_ACT\n": 1}), id="param-name-trailing-newline"),
+    pytest.param(fleet(vehicles__0__px4_params={"COM_OBL_RC_ACT": "5\n"}), id="param-value-trailing-newline"),
     pytest.param(fleet(world__file="/opt/px4-gz/worlds/default.sdf"), id="world-file-key"),
     pytest.param(fleet(world__origin=DELETE), id="origin-missing"),
     pytest.param(fleet(world__origin=None), id="origin-null"),
@@ -1150,6 +1154,8 @@ def test_targets_empty_list_and_non_list():
 STATIONARY_END = [wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 10.0), wp(20.0, 20.0, 0.0)]
 TARGET_REJECTS = [
     pytest.param(tgt(id="Target"), "id: ", id="id-대문자"),
+    pytest.param(tgt(id="car\n"), "id: ", id="id-끝-줄바꿈"),
+    pytest.param(tgt(id="car_1\n"), "id: ", id="id-숫자-끝-줄바꿈"),
     pytest.param(tgt(id="1abc"), "id: ", id="id-숫자로-시작"),
     pytest.param(tgt(id="a" * 33), "id: ", id="id-33자"),
     pytest.param(tgt(id=5), "id: ", id="id-문자열-아님"),
@@ -1696,3 +1702,26 @@ def test_worst_case_fleet_stays_within_waypoint_budget():
     bound = gc.TARGETS_LENGTH_SUM_MAX_MS // gc.ACTOR_SAMPLE_DT_MS + gc.TARGETS_MAX * gc.WAYPOINTS_MAX + 2 * gc.TARGETS_MAX
     assert count <= bound
     assert len(text.encode()) < 16 * 1024 * 1024
+
+
+def test_regexes_do_not_accept_trailing_newline():
+    """파이썬의 $는 끝 줄바꿈 앞에서도 맞는다. 생성기의 형식 정규식은 모두 \\Z로 끝나야 한다."""
+    for name in ("TARGET_ID_RE", "TEMPLATE_PATH_RE", "PARAM_NAME_RE", "PARAM_VALUE_RE", "WORLD_NAME_RE", "RUN_ID_RE",
+                 "PATH_SAFE_RE", "TIME_TEXT_RE"):
+        assert getattr(gc, name).pattern.endswith("\\Z"), name
+    ok = {"TARGET_ID_RE": "car_1", "TEMPLATE_PATH_RE": "worlds/a.sdf", "PARAM_NAME_RE": "COM_X", "PARAM_VALUE_RE": "5",
+          "WORLD_NAME_RE": "default", "RUN_ID_RE": "run-1", "PATH_SAFE_RE": "/work/idsim", "TIME_TEXT_RE": "0.250"}
+    for name, text in ok.items():
+        assert getattr(gc, name).match(text), name
+        assert not getattr(gc, name).match(text + "\n"), name
+    assert gc._vehicle_model_name_re().match("x500_1") and not gc._vehicle_model_name_re().match("x500_1\n")
+
+
+def test_run_id_and_host_paths_reject_trailing_newline():
+    for kw in (dict(run_id="abc\n"),):
+        with pytest.raises(gc.FleetError, match="run id 형식"):
+            gc.build(gc.validate_fleet(copy.deepcopy(BASE_FLEET))[0], dict(make_ctx(), **kw))
+    ctx = make_ctx()
+    ctx["host_repo_root"] = HOST_REPO + "\n"
+    with pytest.raises(gc.FleetError, match="정규화된 절대 경로"):
+        gc.build(gc.validate_fleet(copy.deepcopy(BASE_FLEET))[0], ctx)

@@ -91,7 +91,7 @@ TARGET_ADAPTER_PKG = "idsim_sim"
 TARGET_ADAPTER_EXEC = "target_adapter"
 TARGETS_PARAMS_FILE = f"{PARAMS_DIR}/targets.yaml"
 TARGETS_READY_FILE = "/tmp/idsim/targets_ready"
-TARGET_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+TARGET_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}\Z")
 TARGET_KEYS = ("id", "start_s", "loop", "waypoints")
 WAYPOINT_KEYS = ("t", "x", "y", "z")
 TARGETS_MAX = 32
@@ -150,14 +150,14 @@ BRIDGE_TOPIC_ARGS = ("/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",)
 WORLD_FORBIDDEN_CHILDREN = ("plugin", "spherical_coordinates", "actor", "include")
 # 템플릿 world 직속에서 이름(name 속성)이 Gazebo 엔티티 이름이 되는 요소. 표적 id와 겹치면 거부한다
 TEMPLATE_NAMED_CHILDREN = ("model", "actor", "light")
-TEMPLATE_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+\.sdf$")
+TEMPLATE_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+\.sdf\Z")
 # fleet.yaml에서 거부하는 식별 파라미터. PX4가 -i N과 환경에서 스스로 정한다.
 FORBIDDEN_PARAMS = ("MAV_SYS_ID", "UXRCE_DDS_KEY", "UXRCE_DDS_DOM_ID", "UXRCE_DDS_AG_IP", "SYS_AUTOSTART")
-PARAM_NAME_RE = re.compile(r"^[A-Z0-9_]{1,16}$")
-PARAM_VALUE_RE = re.compile(r"^[^\s'\"#]+$")
-WORLD_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-PATH_SAFE_RE = re.compile(r"^/[A-Za-z0-9_./@+-]*$")
+PARAM_NAME_RE = re.compile(r"^[A-Z0-9_]{1,16}\Z")
+PARAM_VALUE_RE = re.compile(r"^[^\s'\"#]+\Z")
+WORLD_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}\Z")
+RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
+PATH_SAFE_RE = re.compile(r"^/[A-Za-z0-9_./@+-]*\Z")
 
 # viz 서비스에만 허용하는 compose 보간. 이 밖의 ${...}와 $는 출력에 남으면 안 된다.
 ALLOWED_INTERPOLATIONS = ("${DISPLAY:-}", "${XAUTHORITY:-/dev/null}")
@@ -307,7 +307,7 @@ def _unknown_keys(obj, allowed, where, errors):
 def _vehicle_model_name_re():
     """허용 airframe의 기체 모델 이름 형식(x500_N). 표적 id가 같으면 Actor와 기체 모델의 이름이 겹친다."""
     models = sorted({split_airframe(af)[2] for af in ALLOWED_AIRFRAMES})
-    return re.compile(r"^(%s)_[0-9]+$" % "|".join(re.escape(m) for m in models))
+    return re.compile(r"^(%s)_[0-9]+\Z" % "|".join(re.escape(m) for m in models))
 
 
 def _validate_targets(raw, posed_vehicles, errors):
@@ -649,7 +649,7 @@ def parse_params_env(text, where="px4.params_file"):
         s = line.strip()
         if not s or s.startswith("#"):
             continue
-        m = re.match(r"^PX4_PARAM_([^=]*)=(.*)$", s)
+        m = re.match(r"^PX4_PARAM_([^=]*)=(.*)\Z", s)
         if not m:
             errors.append(f"{where}:{lineno}: PX4_PARAM_<이름>=<값> 형식이 아니다: {s!r}")
             continue
@@ -853,7 +853,7 @@ def build_world_sdf(fleet_norm, template_text):
     return text
 
 
-TIME_TEXT_RE = re.compile(r"^[0-9]+\.[0-9]{3}$")
+TIME_TEXT_RE = re.compile(r"^[0-9]+\.[0-9]{3}\Z")
 
 
 def _check_actor(actor, target):
