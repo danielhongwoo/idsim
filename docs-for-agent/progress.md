@@ -75,6 +75,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 1a 6단계.
 
+- SITL 개발 반복(`tools/sim_stack.sh restart-ops`, `docker/README.md` "개발 반복") 후속: `docs/architecture.md`의 `tools/sim_stack.sh` 운영 규칙 문단에 restart-ops 뒤 attach 경로를 적을지(architect). `tests/support/test_px4_topic_names.py::test_argument_checks`에서 SpinThread 종료 순서로 `InvalidHandle` 경고가 나고 restart-ops 판독 로그에도 섞일 수 있다(test-engineer). `tools/vehicle_arming_state.py`의 stack.json 오류 rc 2 사례 테스트는 test-engineer가 정한다.
 - B9 S3 후속(reviewer 최종 검토 비차단):
   - architect, B10 전: 종료 단계의 정리 상한(`hold_confirm_timeout + 3 x mode_confirm_timeout`, 12 s)이 `land_disarm_fallback_delay`를 포함하지 않는다. 노드는 양수만 검사하므로 지연을 9 s 이상으로 주면 이륙 이력 없는 지상 대기가 늘 상한 ABORTED로 끝난다. 상한에 대비책 지연을 넣을지 파라미터 관계 검사를 둘지 정하고 `config.hpp` 상한 주석의 "가장 긴 정당 경로" 문장도 고친다.
   - ros2-engineer, test-engineer, px4-engineer: 종료 단계에서 대비책 뒤 지상 DISARMED를 `DisarmConfirm`(전송 tick보다 뒤에 받고 timestamp가 전송 stamp보다 큰 표본만)으로 세는 연결을 가르는 사례가 없다. 대비책 뒤에도 SampleCounter로 세게 바꿔도 전 사례가 통과한다. T10 경로와 G8 뒤 AIR_LAND에서 timestamp가 전송 stamp 이하인 지상 DISARMED 표본 셋으로는 끝나지 않음을 단정하는 사례를 더한다. 6a의 ack 버림 줄은 방어 코드임을 주석에 적거나 지운다.
