@@ -666,8 +666,8 @@ void MissionRunner::step_setpoint_item(Tick & t)
   bool completed = false;
   Event completion = Event::kLoiterElapsed;
   if (item.type == item_type::kTakeoff) {
-    // validate_mission_runnable이 TAKEOFF를 첫 항목에만 두므로 takeoff_target_z_는 이 항목의
-    // 목표다.
+    // validate_mission_runnable이 부르는 계약 순서 규칙이 TAKEOFF를 첫 항목에만 두므로
+    // takeoff_target_z_는 이 항목의 목표다.
     const PositionSample * const p = t.position;
     completed = p != nullptr && p->z_valid && std::isfinite(p->z) &&
                 std::abs(p->z - takeoff_target_z_) < item.takeoff.acceptance_m;

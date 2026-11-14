@@ -209,13 +209,6 @@ MissionCheck check_1a_limits(const MissionSpec & mission)
         field(i, "type") + " " + item_type_name(type) +
         " is not supported in 1a (TAKEOFF, LOITER, LAND only)");
     }
-    if (type == item_type::kLand && i + 1 != count) {
-      return invalid(field(i, "type") + " LAND is allowed only as the last item in 1a");
-    }
-    if (type == item_type::kTakeoff && i != 0) {
-      // 첫 항목이 아닌 TAKEOFF의 기준 위치, heading, timeout 기준 시각은 1b에서 정한다.
-      return invalid(field(i, "type") + " TAKEOFF is allowed only as the first item in 1a");
-    }
   }
   if (mission.items.back().type != item_type::kLand) {
     return invalid("last item must be LAND in 1a (missions ending in the air are 1b)");
@@ -255,10 +248,22 @@ MissionCheck validate_mission_contract(const MissionSpec & mission)
   if (mission.items.empty()) {
     return invalid("mission has no items");
   }
-  for (std::size_t i = 0; i < mission.items.size(); ++i) {
+  const std::size_t count = mission.items.size();
+  for (std::size_t i = 0; i < count; ++i) {
     std::string error = check_item(mission.items[i], i);
     if (!error.empty()) {
       return invalid(std::move(error));
+    }
+  }
+  // 순서 규칙(1b decisions.md 쟁점 6). 필드 검사 뒤에 보므로 필드 오류의 detail은 그대로다.
+  for (std::size_t i = 0; i < count; ++i) {
+    const std::uint8_t type = mission.items[i].type;
+    if (type == item_type::kTakeoff && i != 0) {
+      return invalid(field(i, "type") + " TAKEOFF is allowed only as the first item");
+    }
+    if ((type == item_type::kLand || type == item_type::kRtl) && i + 1 != count) {
+      return invalid(
+        field(i, "type") + " " + item_type_name(type) + " is allowed only as the last item");
     }
   }
   MissionCheck ok;

@@ -70,7 +70,7 @@ PREPARING.ARM	MONITOR_MODE_FAILSAFE	DONE	ABORTED/FAILSAFE	covered	CANCEL	바로 
 ITEM.TAKEOFF	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	-	-
 ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.LOITER	-	covered	-	-
 ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.LAND	-	covered	-	미션 [TAKEOFF, LAND]
-ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.TAKEOFF	-	impossible	-	validate_mission_runnable이 TAKEOFF를 첫 항목에만 둔다
+ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.TAKEOFF	-	impossible	-	validate_mission_runnable이 부르는 계약 순서 규칙이 TAKEOFF를 첫 항목에만 둔다
 ITEM.TAKEOFF	TAKEOFF_REACHED	DONE	SUCCEEDED/NONE	impossible	-	validate_mission_runnable이 마지막 항목을 LAND로 둔다
 ITEM.TAKEOFF	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 ITEM.TAKEOFF	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	setpoint 항목은 감시 표가 판정 맨 앞에서 Px4Timestamp를 묻고 실패하면 MONITOR_TIMESTAMP_FAILURE로 끝난다. finalize는 같은 tick의 값을 다시 쓴다

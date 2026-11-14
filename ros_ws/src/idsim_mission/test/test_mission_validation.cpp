@@ -286,11 +286,18 @@ TEST(ValidateMission, FirstItemTakeoffOrLand)
 
 TEST(ValidateMission, TakeoffOnlyAsFirst)
 {
-  // 1a 임시 제한: TAKEOFF는 첫 항목에만 온다. 첫 항목이 아닌 TAKEOFF의 의미는 1b에서 정한다.
+  // 계약: TAKEOFF는 첫 항목에만 온다(쟁점 6).
   MissionSpec m;
   m.mission_id = "tf";
   m.items = {takeoff_item(), loiter_item(), takeoff_item(), land_item()};
-  EXPECT_TRUE(validate_mission_contract(m).valid) << validate_mission_contract(m).detail;
+  EXPECT_FALSE(validate_mission_contract(m).valid);
+  EXPECT_NE(
+    validate_mission_contract(m).detail.find(
+      "items[2].type TAKEOFF is allowed only as the first item"),
+    std::string::npos)
+    << validate_mission_contract(m).detail;
+  EXPECT_EQ(validate_mission_contract(m).detail.find(" in 1a"), std::string::npos)
+    << validate_mission_contract(m).detail;
   MissionCheck check = validate_mission_1a_goal(m);
   EXPECT_FALSE(check.valid);
   EXPECT_NE(check.detail.find("items[2].type"), std::string::npos) << check.detail;
@@ -298,7 +305,14 @@ TEST(ValidateMission, TakeoffOnlyAsFirst)
     << check.detail;
 
   m.items = {takeoff_item(), takeoff_item(), land_item()};
-  EXPECT_TRUE(validate_mission_contract(m).valid) << validate_mission_contract(m).detail;
+  EXPECT_FALSE(validate_mission_contract(m).valid);
+  EXPECT_NE(
+    validate_mission_contract(m).detail.find(
+      "items[1].type TAKEOFF is allowed only as the first item"),
+    std::string::npos)
+    << validate_mission_contract(m).detail;
+  EXPECT_EQ(validate_mission_contract(m).detail.find(" in 1a"), std::string::npos)
+    << validate_mission_contract(m).detail;
   check = validate_mission_1a_goal(m);
   EXPECT_FALSE(check.valid);
   EXPECT_NE(check.detail.find("items[1].type"), std::string::npos) << check.detail;
@@ -322,6 +336,100 @@ TEST(ScreenGoal, NonFirstTakeoffIsInvalidMission)
   EXPECT_NE(
     termination->detail.find("TAKEOFF is allowed only as the first item"), std::string::npos)
     << termination->detail;
+}
+
+std::string order_name(const MissionSpec & m)
+{
+  std::string name;
+  for (const ItemSpec & item : m.items) {
+    name += name.empty() ? "" : ",";
+    name += item_type_name(item.type);
+  }
+  return name;
+}
+
+MissionSpec mission_of(std::vector<ItemSpec> items)
+{
+  MissionSpec m;
+  m.mission_id = "order";
+  m.items = std::move(items);
+  return m;
+}
+
+TEST(ValidateMissionContract, OrderRule)
+{
+  // 1b decisions.md 쟁점 6, 12. 문구는 1a 임시 제한 문구에서 끝의 " in 1a"만 뺀 것이다.
+  struct Case
+  {
+    std::vector<ItemSpec> items;
+    const char * detail;
+  };
+  const std::vector<Case> rejects = {
+    {{takeoff_item(), takeoff_item(), land_item()},
+     "items[1].type TAKEOFF is allowed only as the first item"},
+    {{takeoff_item(), loiter_item(), takeoff_item(), land_item()},
+     "items[2].type TAKEOFF is allowed only as the first item"},
+    {{land_item(), loiter_item()}, "items[0].type LAND is allowed only as the last item"},
+    {{rtl_item(), land_item()}, "items[0].type RTL is allowed only as the last item"},
+    {{takeoff_item(), rtl_item(), loiter_item()},
+     "items[1].type RTL is allowed only as the last item"},
+  };
+  for (const Case & c : rejects) {
+    const MissionSpec m = mission_of(c.items);
+    const MissionCheck check = validate_mission_contract(m);
+    EXPECT_FALSE(check.valid) << order_name(m);
+    EXPECT_EQ(check.detail, c.detail) << order_name(m);
+  }
+  const std::vector<std::vector<ItemSpec>> accepts = {
+    {rtl_item()},
+    {takeoff_item(), rtl_item()},
+    {takeoff_item(), goto_item(), track_item(), rtl_item()},
+  };
+  for (const auto & items : accepts) {
+    const MissionSpec m = mission_of(items);
+    const MissionCheck check = validate_mission_contract(m);
+    EXPECT_TRUE(check.valid) << order_name(m) << ": " << check.detail;
+  }
+}
+
+TEST(ValidateMissionContract, FieldErrorWinsOverOrderViolation)
+{
+  // 순서 규칙은 모든 항목의 필드 검사 뒤에 본다.
+  MissionSpec m = mission_of({land_item(), takeoff_item()});
+  m.items[1].takeoff.height_m = 0.0;
+  const MissionCheck check = validate_mission_contract(m);
+  EXPECT_FALSE(check.valid);
+  EXPECT_EQ(check.detail, "items[1].takeoff.height_m must be finite and > 0");
+}
+
+TEST(ScreenGoal, OrderViolationDetailIsContractWording)
+{
+  // goal 접수에서 바뀌는 것은 순서를 어긴 미션의 detail뿐이다(status, reason은 그대로).
+  struct Case
+  {
+    std::vector<ItemSpec> items;
+    const char * detail;
+  };
+  const std::vector<Case> cases = {
+    {{takeoff_item(), loiter_item(), takeoff_item(), land_item()},
+     "items[2].type TAKEOFF is allowed only as the first item"},
+    {{takeoff_item(), land_item(), loiter_item(), land_item()},
+     "items[1].type LAND is allowed only as the last item"},
+    {{goto_item(), takeoff_item(), land_item()},
+     "items[1].type TAKEOFF is allowed only as the first item"},
+    {{rtl_item(), land_item()}, "items[0].type RTL is allowed only as the last item"},
+    {{takeoff_item(), rtl_item(), land_item()},
+     "items[1].type RTL is allowed only as the last item"},
+    {{land_item(), takeoff_item()}, "items[0].type LAND is allowed only as the last item"},
+  };
+  for (const Case & c : cases) {
+    const MissionSpec m = mission_of(c.items);
+    const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
+    ASSERT_TRUE(term.has_value()) << order_name(m);
+    EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
+    EXPECT_EQ(term->reason, Reason::kInvalidMission) << order_name(m);
+    EXPECT_EQ(term->detail, c.detail) << order_name(m);
+  }
 }
 
 TEST(ValidateMission, LandFirstMeansLengthOne)
@@ -414,16 +522,6 @@ std::vector<MissionSpec> all_orders_up_to_four()
     layer = std::move(next);
   }
   return missions;
-}
-
-std::string order_name(const MissionSpec & m)
-{
-  std::string name;
-  for (const ItemSpec & item : m.items) {
-    name += name.empty() ? "" : ",";
-    name += item_type_name(item.type);
-  }
-  return name;
 }
 
 TEST(ValidateMission, OneAGoalAcceptsOnlyWhatRunnerAccepts)

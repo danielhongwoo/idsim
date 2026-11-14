@@ -15,11 +15,12 @@
 // 미션의 정적 검증과 goal 접수 직후의 즉시 판정(decisions.md 쟁점 3 M1, 쟁점 4).
 //
 // 검증은 두 층이다.
-// - validate_mission_contract: 계약(Mission, MissionItem 주석)의 규칙. Phase 3에 Fleet이 같이
+// - validate_mission_contract: 계약(Mission, MissionItem 주석)의 규칙. 필드 검사 뒤에 순서
+//   규칙(TAKEOFF는 첫 항목에만, LAND와 RTL은 마지막 항목에만)을 본다. Phase 3에 Fleet이 같이
 //   쓸 수 있게 1a 제한을 넣지 않는다.
 // - validate_mission_1a_goal: 계약 + 1a 임시 제한(계약 문장이 아니다). type은 TAKEOFF, LOITER,
-//   LAND만, 마지막은 LAND이고 LAND는 마지막에만, 첫 항목은 TAKEOFF 또는 LAND(그래서 LAND로
-//   시작하면 길이 1). goal 접수(screen_goal)가 쓴다.
+//   LAND만, 마지막은 LAND, 첫 항목은 TAKEOFF 또는 LAND(계약 순서 규칙과 합쳐 LAND로 시작하면
+//   길이 1). goal 접수(screen_goal)가 쓴다.
 // - validate_mission_runnable: 계약 + runner가 아직 실행하지 못하는 미션의 제한. MissionRunner
 //   생성자가 쓴다. validate_mission_1a_goal이 받는 미션은 이것도 받는다.
 
