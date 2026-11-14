@@ -139,7 +139,8 @@ if(BUILD_TESTING)
   set(_core_tests
     test_termination
     test_monitor_table
-    test_confirm_rules)
+    test_confirm_rules
+    test_snapshot)
   foreach(_test ${_core_tests})
     ament_add_gtest(${_test} test/${_test}.cpp)
     target_link_libraries(${_test} idsim_mission_core)

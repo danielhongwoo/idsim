@@ -454,6 +454,10 @@ private:
           world.nav = NavMode::kLand;
           world.intention = NavMode::kLand;
           break;
+        case CommandKind::kNavRtl:
+          world.nav = NavMode::kRtl;
+          world.intention = NavMode::kRtl;
+          break;
         case CommandKind::kArm:
           world.arming = Arming::kArmed;
           break;
