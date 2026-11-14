@@ -77,3 +77,5 @@ def test_rejects_param_change_after_start(adapter, param):
     assert not result.successful
     assert adapter.get_parameter(param.name).value == before
     assert adapter.get_parameter("use_sim_time").value is True
+    # 값만이 아니라 시계도 시뮬레이션 시간에 머문다(callback 순서가 바뀌어 TimeSource만 바뀌는 경우를 잡는다)
+    assert adapter.get_clock().ros_time_is_active
