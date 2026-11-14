@@ -84,7 +84,7 @@ flowchart TB
 | `/px4_N/fmu/out` | PX4 (Agent 경유) | Mission Executor, Telemetry Collector, 판정 노드 |
 | `/clock` | ros_gz_bridge | 모든 ROS 2 노드 |
 | `/targets/*/state` | 표적 어댑터 (시뮬레이션), 추적기 (실기체) | Mission Executor, 판정 노드 |
-| `/sim/<vehicle_id>/pose` | 정답 pose 노드 (1b, SITL 전용) | 판정 노드, Logger (Phase 2, SITL 실행의 기록만). 운용 패키지(테스트 절의 목록)는 읽지 않는다 |
+| `/sim/<vehicle_id>/pose` | 정답 pose 노드 (SITL 전용) | 판정 노드, Logger (Phase 2, SITL 실행의 기록만). 운용 패키지(테스트 절의 목록)는 읽지 않는다 |
 | `/px4_N/execute_mission` (action) | 판정 노드, Fleet Manager (Phase 3) | Mission Executor |
 | `/px4_N/vehicle_state` | Telemetry Collector (Phase 2) | Fleet Manager, 판정 노드 |
 | `/px4_N/mission_event` | Mission Executor | Logger, 판정 노드 |
@@ -220,7 +220,7 @@ flowchart TB
 ```
 
 - 스택은 호스트의 `tools/sim_stack.sh`가 올리고 내린다. 이 스크립트가 `tools/gen_compose.sh`로 compose 파일을 만든 뒤 `docker compose up --wait`를 단계별로 부르며, 그림에는 넣지 않았다.
-- N이 붙은 컨테이너(`px4-N`, `ops-N`)는 fleet 파일의 기체마다 하나씩 생기고, `xrce-agent`, `gazebo`, `bridge`, `sim-oracle`(1b)은 스택에 하나씩이다. `targets`는 fleet 파일에 표적이 있을 때만 하나 생긴다. `runner`는 `tools` 프로필이라 상주하지 않는다.
+- N이 붙은 컨테이너(`px4-N`, `ops-N`)는 fleet 파일의 기체마다 하나씩 생기고, `xrce-agent`, `gazebo`, `bridge`, `sim-oracle`은 스택에 하나씩이다. `targets`는 fleet 파일에 표적이 있을 때만 하나 생긴다. `runner`는 `tools` 프로필이라 상주하지 않는다.
 - 본 스택의 컨테이너 사이 경로는 셋이다. PX4와 Agent 사이의 uXRCE-DDS(UDP), PX4, Gazebo, `bridge`, `sim-oracle` 사이의 gz-transport, 그리고 Agent와 ROS 2 프로세스가 함께 올라가는 DDS 도메인이다. 운용 노드와 판정 코드는 DDS 도메인만 본다.
 - "DDS 도메인"은 프로세스가 아니라 참가자들이 만나는 버스다. Agent는 Fast DDS(기본 설정)로, ROS 2 프로세스는 CycloneDDS로 참가한다. 멀티캐스트를 끄고 유니캐스트 피어 127.0.0.1로 디스커버리하는 것은 `config/cyclonedds.xml`을 읽는 CycloneDDS 쪽의 설정이다.
 - 모든 컨테이너는 `network_mode: host`이고 compose 프로젝트 이름은 `idsim-k`다. 같은 호스트의 다른 스택은 k에서 파생한 값으로만 갈리며 네트워크 네임스페이스로는 격리되지 않는다.
@@ -256,7 +256,7 @@ flowchart LR
     TA["표적 어댑터"]
   end
   subgraph ORC["sim-oracle"]
-    ORP["정답 pose 노드<br/>1b"]
+    ORP["정답 pose 노드"]
   end
   DDS1(["DDS 도메인"])
 
@@ -269,9 +269,6 @@ flowchart LR
   DDS1 -->|"/clock"| TA
   TA -->|"TargetState"| DDS1
   ORP -->|"/sim/*/pose"| DDS1
-
-  classDef later stroke-dasharray: 6 4
-  class TA,ORP later
 ```
 
 | 경로 | 프로토콜 | 싣는 것 | 포트 또는 격리값 |
@@ -279,17 +276,17 @@ flowchart LR
 | `px4-N` <-> `xrce-agent` | uXRCE-DDS (UDP) | uORB 토픽 | 8888 + k |
 | `px4-N` <-> `gazebo` | gz-transport | 모터 명령, 센서 | `GZ_PARTITION` `idsim-k` |
 | `gazebo` -> `bridge` | gz-transport | clock | `GZ_PARTITION` `idsim-k` |
-| `gazebo` -> `sim-oracle` (1b) | gz-transport | `/world/<월드>/pose/info` | `GZ_PARTITION` `idsim-k` |
+| `gazebo` -> `sim-oracle` | gz-transport | `/world/<월드>/pose/info` | `GZ_PARTITION` `idsim-k` |
 | `xrce-agent` <-> DDS 도메인 | RTPS (Fast DDS) | `/px4_N/fmu/in`, `/px4_N/fmu/out` | 도메인 20 + k |
 | `bridge` -> DDS 도메인 | RTPS (CycloneDDS) | `/clock` | 도메인 20 + k |
 | `targets` <-> DDS 도메인 | RTPS (CycloneDDS) | `/clock` 수신, `/targets/*/state` 발행 | 도메인 20 + k |
-| `sim-oracle` -> DDS 도메인 (1b) | RTPS (CycloneDDS) | `/sim/<vehicle_id>/pose` | 도메인 20 + k |
+| `sim-oracle` -> DDS 도메인 | RTPS (CycloneDDS) | `/sim/<vehicle_id>/pose` | 도메인 20 + k |
 
 - `px4-N`의 프로세스는 `px4 -d -i N` 하나이고 uxrce_dds_client, gz_bridge, mavlink는 그 안의 모듈이다. ULog도 이 프로세스가 기록한다.
 - `gazebo`에서는 `idsim_sim`의 `gz_server.sh`가 `gz sim -r -s`를 띄운다. 서버 하나가 월드, 기체 모델 N개, 표적 Actor를 모두 담는다.
 - `bridge`의 ros_gz_bridge는 `parameter_bridge` 프로세스이고 명령행 인자로 `/clock` 하나만 넘긴다. 표적 상태와 정답 pose는 bridge를 거치지 않으므로 bridge 설정 파일은 두지 않는다.
 - `targets`의 표적 어댑터는 `idsim_sim`의 rclpy 노드다. 입력은 생성된 params의 궤적 정의와 노드 시계(`/clock`)뿐이고 Gazebo에 붙지 않는다.
-- `sim-oracle`(1b)의 정답 pose 노드는 `idsim_sim`의 rclpy 스크립트이고, gz-transport Python 바인딩으로 `pose/info`를 직접 구독해 기체 model pose에 base_link 오프셋(모델 SDF에서 읽는다)을 합성해 낸다. 그래서 sim-base 이미지에서 돈다. Actor 월드에서 서버를 죽이는 `dynamic_pose/info`는 bridge, `sim-oracle`, `gz-gui` 어디서도 구독하지 않게 하고, 생성 스크립트와 `idsim_sim`의 단위 테스트가 그 문자열이 없음을 검사한다.
+- `sim-oracle`의 정답 pose 노드는 `idsim_sim`의 rclpy 스크립트이고, gz-transport Python 바인딩으로 `pose/info`를 직접 구독해 기체 model pose에 base_link 오프셋(모델 SDF에서 읽는다)을 합성해 낸다. 그래서 sim-base 이미지에서 돈다. Actor 월드에서 서버를 죽이는 `dynamic_pose/info`는 bridge, `sim-oracle`, `gz-gui` 어디서도 구독하지 않게 하고, 생성 스크립트와 `idsim_sim`의 단위 테스트가 그 문자열이 없음을 검사한다.
 
 상세 2: 운용 노드와 판정. 개요의 "운용과 판정" 상자를 펼친 것이다. 무엇을 주고받는지는 "전체 아키텍처" 절의 운용 서비스 레이어 그림과 그 아래 표에 있고, 여기서는 어느 컨테이너의 어느 프로세스인지만 보인다.
 
@@ -377,7 +374,7 @@ flowchart LR
 | `gazebo` | sim-base | `PX4_GZ_STANDALONE=1` 모드의 Gazebo 서버. `gz sim -r -s`로 월드를 직접 띄운다(`simulation-gazebo` 스크립트는 첫 실행 때 모델을 내려받으므로 쓰지 않는다). PX4-gazebo-models(모델, 월드, `server.config`)는 sim-base의 `/opt/px4-gz`에 한 벌만 두고 `GZ_SIM_SERVER_CONFIG_PATH`(PX4 전용 카메라, 광류 plugin 두 줄을 뺀 `server.idsim.config`), `GZ_SIM_RESOURCE_PATH`로 가리킨다. 월드 이름은 `config/fleet.yaml`의 `world.name`(모든 px4의 `PX4_GZ_WORLD`와 healthcheck 경로가 여기서 나온다). 헤드리스는 `gz sim -s`(서버만)로 얻는다. `HEADLESS`와 `PX4_GZ_SIM_RENDER_ENGINE`은 PX4 rcS 전용 변수라 이 서비스에는 주지 않는다. 여는 월드는 생성 스크립트가 만든 월드 SDF(`/opt/idsim/world/<월드>.sdf`. 실행 디렉터리의 `world/`를 읽기 전용으로 마운트)다. 명령은 `idsim_sim`의 wrapper 스크립트로, 서버를 띄우기 전에 그 SDF의 `<world name>`이 `world.name`과 같은지, `<spherical_coordinates>`가 정확히 하나인지 검사하고, 서버 기동 뒤 `scene/info`가 응답하면 준비 파일을 남긴다. 원점은 이 SDF로만 들어가고 wrapper는 런타임에 원점을 설정하지 않는다. 원점의 실제 적용은 px4 쪽 `sensor_gps` 좌표로 판정한다. px4 서비스에는 `PX4_HOME_*`를 주지 않는다(gz 경로에서 이 변수의 소비자는 `px4-rc.gzsim`의 원점 호출뿐이다. SIH 경로 `px4-rc.sihsim`도 이 변수를 읽으므로 SIH 변형을 추가하면 다시 본다) | 1a |
 | `px4-1` ... `px4-N` | px4 | 빌드된 `px4` 바이너리를 `px4 -d -i N`으로 직접 실행(`make`가 아님. `-d`는 데몬 모드로, 컨테이너 stdin이 닫힌 상태에서 대화형 셸이 프롬프트를 끝없이 출력해 로그가 부푸는 것을 막는다. `build/px4_sitl_default/bin`이 PATH에 있고 작업 디렉터리는 `rootfs`). `PX4_SIM_MODEL=gz_x500`, `PX4_GZ_MODELS`, `PX4_GZ_MODEL_POSE`, `PX4_UXRCE_DDS_NS`, `GZ_IP`, `COM_OBL_RC_ACT` 등은 생성 스크립트가 넣는다. 인스턴스마다 환경변수가 달라 compose `scale`로는 부족하므로 `config/fleet.yaml`에서 N개 서비스를 생성. 작업 디렉터리 `rootfs/N`은 `artifacts/runs/<실행 id>/px4-N/`의 바인드 마운트이며 실행마다 새로 만든다(이전 `parameters.bson`을 읽지 않고 ULog, dataman이 산출물로 남는다). 호스트 uid:gid로 실행하고 `HOME`은 컨테이너 안 `/tmp`다. MAVLink 포트는 생성 스크립트가 넘기는 `IDSIM_MAVLINK_OFFSET`(1000k)을 px4 이미지의 idsim용 `px4-rc.mavlink`가 읽어 정한다 | 1a (1대), 3 (N대) |
 | `xrce-agent` | xrce-agent (Micro XRCE-DDS Agent v2.4.3) | `MicroXRCEAgent udp4 -p <Agent 포트>`. 포트는 기준값 8888 + 스택 번호 k이며 PX4의 `PX4_UXRCE_DDS_PORT`와 같다. 모든 PX4가 여기로 접속 | 1a |
-| `runner` (`tools` 프로필) | ros-ws | 상주하지 않는 판정용 컨테이너. 스모크 스크립트와 통합 테스트가 `compose run`으로 판정 명령(check 스크립트, pytest)을 실행한다. 호스트 uid:gid, 저장소 마운트와 `IDSIM_STACK_FILE`(실행 디렉터리의 `stack.json`)을 `bridge`와 같은 방식으로 받는다. 본 스택의 `up --wait` 대상이 아니다. `depends_on`은 standalone에서 `ops-N` 전부와 `targets`(표적이 있을 때), 그리고 1b부터 `sim-oracle`의 healthy이고, 판정 스크립트는 스택을 먼저 올린 뒤 `compose run --no-deps`로 부른다 | 1a |
+| `runner` (`tools` 프로필) | ros-ws | 상주하지 않는 판정용 컨테이너. 스모크 스크립트와 통합 테스트가 `compose run`으로 판정 명령(check 스크립트, pytest)을 실행한다. 호스트 uid:gid, 저장소 마운트와 `IDSIM_STACK_FILE`(실행 디렉터리의 `stack.json`)을 `bridge`와 같은 방식으로 받는다. 본 스택의 `up --wait` 대상이 아니다. `depends_on`은 standalone에서 `ops-N` 전부와 `targets`(표적이 있을 때), `sim-oracle`의 healthy이고, 판정 스크립트는 스택을 먼저 올린 뒤 `compose run --no-deps`로 부른다 | 1a |
 | `ops-1` ... `ops-N` | ros-ws | 기체별 운용 노드. 정적 launch(`idsim_mission`의 `vehicle_ops.launch.py`)로 기체당 컴포넌트 컨테이너(`component_container_isolated`) 하나에 Executor(1a)와 Collector(Phase 2)를 올려 프로세스와 DDS 참가자 수를 줄인다. 네임스페이스와 노드 이름은 launch 인자, 식별값은 생성된 `params/ops-N.yaml`로 받는다. 저장소를 `/opt/idsim`에 마운트하고 `tools/ros_ws.sh build`의 결과(`ros_ws/install`)를 쓴다. `init: true`, `stop_signal: SIGINT`, `stop_grace_period: 10s`, healthcheck는 Executor의 lifecycle 상태. `depends_on`은 `bridge`와 그 기체의 `px4-N` | 1a (Executor), 2 (Collector) |
 | `bridge` | ros-ws | ros_gz_bridge. 시계를 `/clock`으로만 노출한다(명령행 인자 하나. 표적은 `targets` 서비스가 맡는다). ros-ws 안의 vendor gz-transport와 sim-base의 OSRF gz-transport가 와이어로 호환되는지는 스모크 테스트가 실측하며, 실패하면 이 서비스만 sim-base 계열 이미지로 옮긴다 | 1a |
 | `targets` | ros-ws | `idsim_sim`의 표적 어댑터. 생성된 `params/targets.yaml`의 궤적 정의를 노드 시계(ROS 시각)에서 평가해 표적마다 `/targets/<target_id>/state`를 발행한다. fleet 파일에 표적이 없으면 만들지 않는다. 다른 ros-ws 서비스와 같은 공통값(host 네트워크, rmw, 도메인, 호스트 uid:gid, 저장소 마운트), `init: true`, `stop_signal: SIGINT`. `depends_on`은 `bridge`, healthcheck는 모든 표적을 한 번 이상 발행한 뒤 노드가 남기는 표시 파일. 노드 단계에서 `ops-N`과 함께 올라가고 `ops-N`은 이 서비스를 기다리지 않는다 | 1b |
@@ -388,9 +385,9 @@ flowchart LR
 | QGroundControl (compose 서비스 아님) | 호스트의 AppImage | `tools/qgc.sh`가 `versions.env`의 버전과 sha256으로 내려받아 캐시하고 호스트에서 실행. MAVLink GCS 포트 14550 + 1000k로 접속해 화면 확인(한 스택의 모든 인스턴스가 같은 포트로 보내므로 QGC 하나로 그 스택의 N대 표시. `qgc.sh --stack k`로 스택을 고르며, `MAV_SYS_ID`가 스택 간에 같아 한 번에 한 스택만 본다). 호스트 화면 앱이고 host 네트워크라 컨테이너가 필요 없다 | 1a |
 | `gateway` | gateway (Rust, 정적 바이너리) | Fleet Manager gRPC를 브라우저용 WebSocket과 HTTP JSON으로 중계하고 Fleet 페이지를 서빙. ROS 2 비의존이라 `ros-ws`와 무관하게 빌드 | 3 |
 
-시작 순서와 healthcheck. Agent -> gazebo -> px4 -> bridge -> ops-N 순으로 `depends_on`에 `condition: service_healthy`를 건다. gazebo가 월드를 올리기 전에 px4가 모델 스폰을 시도하면 실패하기 때문이다. healthcheck는 Agent는 포트 열림(16진수 포트는 생성 스크립트가 계산해 넣는다), gazebo는 월드 서비스(`/world/<월드>/scene/info`) 응답과 wrapper가 그 응답 직후에 남기는 준비 파일, px4는 컨테이너 안에서 `px4-uxrce_dds_client --instance N status` 출력의 연결 상태 문자열, bridge는 `/clock` 수신(interval 30초, `start_period` 동안 `start_interval` 5초로 디스커버리 소음을 줄인다), ops-N은 Executor의 lifecycle 상태(`ros2 lifecycle get --no-daemon <노드 FQN>`의 출력이 `active`로 시작하는지. FQN은 `stack.json`의 `executor_node`와 같다), `targets`와 `sim-oracle`은 노드가 준비 조건을 만족한 뒤 원자적으로 만드는 표시 파일로 판정한다. lifecycle 전이를 거는 주체는 노드 자신이다. Executor는 생성자에서 만든 벽시계 일회 timer로 configure와 activate를 한 번씩 부르고(`lifecycle.self_start`, 기본 true. launch_ros 0.26.13에서 컨테이너 autostart는 동작하지 않는다), compose, launch, 테스트는 전이를 걸지 않는다. px4의 `gz_bridge status`는 연결 상태를 출력하지 않고 Gazebo가 멈춰도 성공하므로 healthcheck에 쓰지 않는다(실측). 같은 이름의 옛 모델이 남은 Gazebo에 px4가 다시 붙는 조용한 실패는 healthcheck로 잡히지 않으므로 운영 규칙으로 막는다: `restart`는 모두 `no`, 운영 스크립트(`tools/sim_stack.sh`, `run_smoke.sh`)는 `up` 전에 `down`을 하고, `up --wait`를 세 단계(Agent와 gazebo, px4-N, bridge)로 나눠 1단계 뒤 `gz model --list`에 `<모델>_N`이 없음을 확인하는 모델 사전 검사를 하고 나머지를 차례로 `up --wait`하며, 스택이 healthy가 된 뒤 모델이 정확히 하나인지 판정한다. 그 뒤 노드 단계(`stack.json`의 `startup.node_stages`. `ops-N`, `targets`(표적이 있을 때), 그리고 1b부터 `sim-oracle`을 한 단계에서 함께)를 `up --wait`한다. `--infra-only`는 노드 단계를 건너뛴다(Executor, 표적 어댑터, 정답 pose 노드 없이 인프라만. 스모크와 PX4 측정 스크립트가 쓴다). standalone이면 생성된 월드 파일이 없거나 그 안의 `<spherical_coordinates>`가 정확히 하나가 아닐 때, 그리고 노드 단계를 올릴 때 `ros_ws/install/idsim_mission/`이 없으면 아무것도 올리기 전에 실패하고, 노드 단계가 실패하면 `ops-N`의 로그 끝과 healthcheck 기록을 함께 보인다. 사용자 진입점은 `tools/sim_stack.sh up` 한 번이고 단계들은 그 안에 있다. Agent는 포트 bind에 실패해도 종료 코드 0으로 끝나므로 운영 스크립트는 `up --wait` 실패 시 Agent 로그의 `bind error`를 찾아 보고하고, px4 로그에 `WARN  [mavlink] bind failed`가 없음을 판정한다. px4 컨테이너에는 px4_msgs가 없고 healthcheck마다 DDS 참가자를 만들면 디스커버리 소음이 되므로 토픽 수신으로 판정하지 않는다. 토픽 수신은 `runner`의 판정 코드가 확인한다. 자동 재시작(`restart`)은 쓰지 않는다. flaky를 가리고 standalone에서 남은 모델 때문에 재스폰이 반복 실패할 수 있다. 통합 테스트는 `tools/sim_stack.sh up`이 노드 단계까지 healthy로 올린 뒤에만 미션을 보낸다. PID 1이 신호를 버리지 않도록 `xrce-agent`, `bridge`, `ops-N`, `targets`, `sim-oracle`(1b), `runner`는 `init: true`다. `ops-N`은 SIGINT로 멈춰 rclcpp의 종료 경로를 탄다. 정지 뒤의 종료 코드는 판정에 쓰지 않고, 테스트 wrapper가 정지 전에 `ops-N`이 running인지를 기록해 판정한다.
+시작 순서와 healthcheck. Agent -> gazebo -> px4 -> bridge -> ops-N 순으로 `depends_on`에 `condition: service_healthy`를 건다. gazebo가 월드를 올리기 전에 px4가 모델 스폰을 시도하면 실패하기 때문이다. healthcheck는 Agent는 포트 열림(16진수 포트는 생성 스크립트가 계산해 넣는다), gazebo는 월드 서비스(`/world/<월드>/scene/info`) 응답과 wrapper가 그 응답 직후에 남기는 준비 파일, px4는 컨테이너 안에서 `px4-uxrce_dds_client --instance N status` 출력의 연결 상태 문자열, bridge는 `/clock` 수신(interval 30초, `start_period` 동안 `start_interval` 5초로 디스커버리 소음을 줄인다), ops-N은 Executor의 lifecycle 상태(`ros2 lifecycle get --no-daemon <노드 FQN>`의 출력이 `active`로 시작하는지. FQN은 `stack.json`의 `executor_node`와 같다), `targets`와 `sim-oracle`은 노드가 준비 조건을 만족한 뒤 원자적으로 만드는 표시 파일로 판정한다. lifecycle 전이를 거는 주체는 노드 자신이다. Executor는 생성자에서 만든 벽시계 일회 timer로 configure와 activate를 한 번씩 부르고(`lifecycle.self_start`, 기본 true. launch_ros 0.26.13에서 컨테이너 autostart는 동작하지 않는다), compose, launch, 테스트는 전이를 걸지 않는다. px4의 `gz_bridge status`는 연결 상태를 출력하지 않고 Gazebo가 멈춰도 성공하므로 healthcheck에 쓰지 않는다(실측). 같은 이름의 옛 모델이 남은 Gazebo에 px4가 다시 붙는 조용한 실패는 healthcheck로 잡히지 않으므로 운영 규칙으로 막는다: `restart`는 모두 `no`, 운영 스크립트(`tools/sim_stack.sh`, `run_smoke.sh`)는 `up` 전에 `down`을 하고, `up --wait`를 세 단계(Agent와 gazebo, px4-N, bridge)로 나눠 1단계 뒤 `gz model --list`에 `<모델>_N`이 없음을 확인하는 모델 사전 검사를 하고 나머지를 차례로 `up --wait`하며, 스택이 healthy가 된 뒤 모델이 정확히 하나인지 판정한다. 그 뒤 노드 단계(`stack.json`의 `startup.node_stages`. `ops-N`, `targets`(표적이 있을 때), `sim-oracle`을 한 단계에서 함께)를 `up --wait`한다. `--infra-only`는 노드 단계를 건너뛴다(Executor, 표적 어댑터, 정답 pose 노드 없이 인프라만. 스모크와 PX4 측정 스크립트가 쓴다). standalone이면 생성된 월드 파일이 없거나 그 안의 `<spherical_coordinates>`가 정확히 하나가 아닐 때, 그리고 노드 단계를 올릴 때 `ros_ws/install/idsim_mission/`(표적이 있으면 `ros_ws/install/idsim_sim/`도), `sim-oracle`이 있으면 `ros_ws/src/idsim_sim/scripts/sim_oracle.py`가 없으면 아무것도 올리기 전에 실패하고, 노드 단계가 실패하면 `ops-N`, `targets`, `sim-oracle`의 로그 끝과 healthcheck 기록을 함께 보인다. 사용자 진입점은 `tools/sim_stack.sh up` 한 번이고 단계들은 그 안에 있다. Agent는 포트 bind에 실패해도 종료 코드 0으로 끝나므로 운영 스크립트는 `up --wait` 실패 시 Agent 로그의 `bind error`를 찾아 보고하고, px4 로그에 `WARN  [mavlink] bind failed`가 없음을 판정한다. px4 컨테이너에는 px4_msgs가 없고 healthcheck마다 DDS 참가자를 만들면 디스커버리 소음이 되므로 토픽 수신으로 판정하지 않는다. 토픽 수신은 `runner`의 판정 코드가 확인한다. 자동 재시작(`restart`)은 쓰지 않는다. flaky를 가리고 standalone에서 남은 모델 때문에 재스폰이 반복 실패할 수 있다. 통합 테스트는 `tools/sim_stack.sh up`이 노드 단계까지 healthy로 올린 뒤에만 미션을 보낸다. PID 1이 신호를 버리지 않도록 `xrce-agent`, `bridge`, `ops-N`, `targets`, `sim-oracle`, `runner`는 `init: true`다. `ops-N`은 SIGINT로 멈춰 rclcpp의 종료 경로를 탄다. 정지 뒤의 종료 코드는 판정에 쓰지 않고, 테스트 wrapper가 정지 전에 `ops-N`이 running인지를 기록해 판정한다.
 
-컨테이너 사용자. 호스트에 쓰는 바인드 마운트가 있는 서비스(`px4-N`, `bridge`, `ops-N`, `targets`, `sim-oracle`(1b), 테스트 runner, `gz-gui`)는 생성 시 구운 호스트 사용자의 uid:gid로 실행하고 `HOME`을 컨테이너 안 `/tmp` 아래로, ROS 로그는 `ROS_LOG_DIR`로 `artifacts/runs/<실행 id>/ros_log/<서비스>/`에 둔다. `xrce-agent`와 `gazebo`는 root로 둔다(호스트에 쓰지 않는다). 그 uid가 이미지의 passwd에 없어도(CI runner는 1001) ros2 CLI, rclpy, px4, gz CLI는 동작함이 실측되었고 깨지는 것은 `whoami`, `pwd.getpwuid`, `getpass.getuser`뿐이다. 그래서 저장소 코드는 사용자 이름을 조회하지 않고(`getpass`, `pwd` 호출 금지) uid 숫자만 쓴다. 바인드 마운트 안에 또 바인드 마운트를 두면 마운트 지점이 root 소유가 되므로 생성 스크립트는 중첩 마운트를 만들지 않고 단위 테스트가 이를 검사한다. 생성 스크립트를 돌리는 runner는 `--network none`이고 `CYCLONEDDS_URI`를 비운다(설정 파일을 마운트하지 않은 채 두면 rmw가 파일을 못 열어 CLI가 실패한다).
+컨테이너 사용자. 호스트에 쓰는 바인드 마운트가 있는 서비스(`px4-N`, `bridge`, `ops-N`, `targets`, `sim-oracle`, 테스트 runner, `gz-gui`)는 생성 시 구운 호스트 사용자의 uid:gid로 실행하고 `HOME`을 컨테이너 안 `/tmp` 아래로, ROS 로그는 `ROS_LOG_DIR`로 `artifacts/runs/<실행 id>/ros_log/<서비스>/`에 둔다. `xrce-agent`와 `gazebo`는 root로 둔다(호스트에 쓰지 않는다). 그 uid가 이미지의 passwd에 없어도(CI runner는 1001) ros2 CLI, rclpy, px4, gz CLI는 동작함이 실측되었고 깨지는 것은 `whoami`, `pwd.getpwuid`, `getpass.getuser`뿐이다. 그래서 저장소 코드는 사용자 이름을 조회하지 않고(`getpass`, `pwd` 호출 금지) uid 숫자만 쓴다. 바인드 마운트 안에 또 바인드 마운트를 두면 마운트 지점이 root 소유가 되므로 생성 스크립트는 중첩 마운트를 만들지 않고 단위 테스트가 이를 검사한다. 생성 스크립트를 돌리는 runner는 `--network none`이고 `CYCLONEDDS_URI`를 비운다(설정 파일을 마운트하지 않은 채 두면 rmw가 파일을 못 열어 CLI가 실패한다).
 
 생성된 compose. 스택은 `tools/sim_stack.sh`(또는 생성만 하는 `tools/gen_compose.sh`)가 `artifacts/runs/<실행 id>/compose.yaml`과 `stack.json`, standalone이면 월드 SDF `world/<월드>.sdf`를 만들고 그 compose로 올린다. 실행 id의 기본값은 `<UTC 시각>-k<k>`이고 스모크는 단계 이름을 붙인다. `stack.json`의 `inputs`에는 fleet.yaml, versions.env, PX4 파라미터 파일, cyclonedds.xml, 월드 템플릿의 sha256이 기록되고, 판정 스크립트는 스택 기동 뒤 저장소의 cyclonedds.xml 해시를 이 값과 대조한다. 값(도메인, 포트, 경로, uid:gid, 이미지 태그)은 모두 구체값으로 박고 보간 변수를 쓰지 않으므로 실행 디렉터리만 보면 무엇으로 돌았는지 재현된다. 식별자의 단일 출처는 `stack.json`이며 스크립트, 판정 코드, 테스트는 이를 다시 계산하지 않고 읽는다(생성기와 `tests/support/`의 로더가 같은 스키마를 공유하고, golden `stack.json`을 로더로 읽는 교차 테스트가 어긋남을 잡는다). 규칙 네 가지. (1) compose 파일이 저장소 밖 실행 디렉터리에 놓이므로 compose 안의 경로는 호스트 저장소 루트 기준 절대 경로이고, 바인드 마운트는 원본이 없을 때 만들지 않는 긴 형식이다. (2) 저장소는 `bridge`와 `runner`에 `/opt/idsim`으로 읽기/쓰기 하나만 마운트하고 `cyclonedds.xml` 같은 하위 파일을 따로 겹쳐 마운트하지 않는다(중첩 마운트 금지 규칙). (3) 서비스 사이 공통 환경변수는 YAML 앵커로 묶지 않고 서비스마다 풀어 쓴다. 생성기가 쓰는 PyYAML은 병합 key를 출력하지 못하고 출력 순서를 고정해야 golden이 안정되기 때문이다. (4) 변형은 `standalone`(기본)과 `embedded`(진단용. 기체 1대, `gazebo`와 `bridge` 없이 PX4가 Gazebo를 직접 띄움)이고, 호스트 Docker Engine은 healthcheck `start_interval` 때문에 25.0 이상이어야 한다.
 
@@ -438,10 +435,10 @@ flowchart TB
 
 | 호스트 원본 (저장소 기준) | 컨테이너 안 경로 | 받는 서비스 | 모드 |
 | --- | --- | --- | --- |
-| `ros_ws/src/idsim_sim` | `/opt/idsim/sim` | `gazebo`, `gz-gui`, `sim-oracle` (1b) | 읽기 전용 |
+| `ros_ws/src/idsim_sim` | `/opt/idsim/sim` | `gazebo`, `gz-gui`, `sim-oracle` | 읽기 전용 |
 | `artifacts/runs/<실행 id>/world` (생성된 월드 SDF) | `/opt/idsim/world` | `gazebo` | 읽기 전용 |
-| `config/cyclonedds.xml` (파일 하나, 1b) | `CYCLONEDDS_URI`가 가리키는 경로 | `sim-oracle` | 읽기 전용 |
-| `artifacts/runs/<실행 id>/ros_log/sim-oracle` (1b) | `ROS_LOG_DIR` | `sim-oracle` | 읽기/쓰기 |
+| `config/cyclonedds.xml` (파일 하나) | `CYCLONEDDS_URI`가 가리키는 경로 | `sim-oracle` | 읽기 전용 |
+| `artifacts/runs/<실행 id>/ros_log/sim-oracle` | `ROS_LOG_DIR` | `sim-oracle` | 읽기/쓰기 |
 | `artifacts/runs/<실행 id>/px4-N` | PX4 `rootfs/N` | `px4-N` | 읽기/쓰기 |
 | 저장소 전체 | `/opt/idsim` | `bridge`, `ops-N`, `targets`, `runner`, `foxglove` | 읽기/쓰기 |
 
@@ -506,7 +503,7 @@ idsim/
     idsim_logger/     # rosbag2 기록/리플레이 제어
     idsim_fleet/      # Fleet Manager + gRPC 서버 + msg/proto 변환
     idsim_sim/        # ament_python 패키지. 월드 템플릿(worlds/idsim_base.sdf. 원점과 Actor는 생성 스크립트가 넣는다), 표적 어댑터 노드,
-                      # 정답 pose 스크립트(sim_oracle.py. 1b), gui.config (GUI 설정), gazebo와 gz-gui wrapper 스크립트
+                      # 정답 pose 스크립트(sim_oracle.py), gui.config (GUI 설정), gazebo와 gz-gui wrapper 스크립트
   proto/             # gRPC/Protobuf 정의 (C++, Python, Rust가 같은 파일에서 생성)
   gateway/           # Rust 크레이트: gRPC -> WebSocket/HTTP 게이트웨이, Fleet 페이지
   missions/          # YAML 미션, 시나리오 정의
@@ -537,11 +534,11 @@ idsim/
 
 통합 테스트 구조. launch_testing은 ROS launch 파일용이라 compose 스택과 맞지 않으므로 쓰지 않는다. 호스트 wrapper `tests/sitl/run_sitl.sh`가 `tools/sim_stack.sh`로 스택을 올리고 내리며, pytest는 `runner`(ros-ws) 컨테이너 안에서 돌고 fixture는 이미 뜬 스택에 붙어 준비 상태를 검증만 한다(검증 실패는 skip이 아니라 오류다). `runner`에는 docker 소켓을 주지 않는다. 테스트 프로세스 안의 rclpy 노드가 토픽을 구독해 판정한다. Executor와 Collector는 lifecycle 노드이고 compose healthcheck가 active를 확인한다. 로컬과 CI는 같은 wrapper 명령을 쓰고, `--repeat N`은 회마다 콜드 스택으로 N번 돈다(자동 재시도 없음). 시나리오는 B(무효 미션), C(`vehicle_id` 불일치), A(이륙-호버-착륙), D(공중 취소 뒤 `[LAND]`), F1(waypoint 순회 뒤 착륙), F2(표적 접근 뒤 공중 Hold로 끝나는 미션), F3(F2의 Hold에서 시작해 RTL), F4(이륙, waypoint 순회, 표적 접근, RTL을 한 미션으로), T(묵은 timestamp의 Offboard 신호 판정)를 한 스택에서 이 순서로 돈다. B는 1b의 무효 사례(항목 순서 규칙 위반, 형식이 틀린 `target_id` 등)를 비행 없이 확인하고, F1-F4는 1b에서 더한다. F4가 Phase 1b 목표의 미션 하나를 그대로 돌고, F1-F3은 공중에서 끝나는 미션과 공중에서 시작하는 미션 같은 경계 상황을 본다. 비행 시나리오 하나가 실패하면 뒤의 비행 시나리오는 돌리지 않고 실패로 센다. 1b부터 SITL 통합 테스트는 개발용 `config/fleet.yaml`이 아니라 전용 `tests/sitl/fleet.yaml`(F2와 F4의 표적 포함)로 스택을 올린다. CI `sitl` job의 시간 목표는 15분이다. 넘으면 판정 기준을 느슨하게 하지 않고 두 비행이 같은 판정을 보는 겹치는 구간, 순회 waypoint 수, Hold 유지 시간 순으로 줄이며, 공중 종료(F2)와 공중 시작(F3)은 빼지 않는다.
 
-파이프라인 구성. (1) `lint`: clang-format, ruff, shellcheck, hadolint, actionlint, yamllint, 문자 집합 검사, 생성기 단위 테스트와 `compose config`, `idsim_common` 밖에서 /fmu 토픽 문자열을 쓰는지 보는 검사(`px4-api`. 대상은 `ros_ws/src`의 C++, `.py`, `.yaml`, 생성기 golden의 params, `tests/sitl/`과 `tests/support/`이고, 예외는 통합 테스트와 측정의 발행 모듈과 토픽 이름 함수 파일을 이름으로 적은 것뿐이다), 운용 패키지가 `/sim/` 토픽을 쓰는지 보는 검사(1b. 아래 판정 입력 문단), cargo fmt와 clippy(Phase 3). ROS 환경이 필요 없는 검사만 둔다. (2) `build`: `ros-base` -> `sim-base` -> `px4`, `ros-ws`와 독립적인 `xrce-agent` 이미지를 GitHub Container Registry에 푸시하고 레이어 캐시. 이미지 key(이미지 구성 절)가 레지스트리에 있으면 그 이미지의 빌드를 건너뛰므로, PX4는 `px4` key의 재료나 베이스 key가 바뀔 때만 다시 빌드한다. (3) `unit` + `replay`: `ros-ws` 이미지 안에서 `tools/ros_ws.sh ci`가 colcon build, colcon test(GoogleTest, `idsim_interfaces`의 pytest 계약 테스트, ament_lint의 xmllint, lint_cmake, cpplint), clang-tidy를 차례로 돌린다. clang-tidy와 ament_lint는 compile_commands.json과 ROS 헤더가 필요해 `lint`가 아니라 여기에 둔다. 테스트가 실패하거나 테스트 결과가 0건인 패키지가 있으면 실패한다. 로컬에서도 같은 명령을 쓴다. `replay`의 pytest는 Phase 2에서 더한다. (4) `sitl`: GHCR의 이미지를 받고(`tools/ci/build_images.py --mode pull`) `tools/ros_ws.sh build` 뒤 `tests/sitl/run_sitl.sh`로 시나리오를 돌린다. 실패 시 실행 디렉터리 전체(ULog, compose logs, ros_log, 판정 trace, junit)를 artifact로 올린다. MCAP 기록물의 업로드는 recorder가 생기는 Phase 2부터다.
+파이프라인 구성. (1) `lint`: clang-format, ruff, shellcheck, hadolint, actionlint, yamllint, 문자 집합 검사, 생성기 단위 테스트와 `compose config`, `idsim_common` 밖에서 /fmu 토픽 문자열을 쓰는지 보는 검사(`px4-api`. 대상은 `ros_ws/src`의 C++, `.py`, `.yaml`, 생성기 golden의 params, `tests/sitl/`과 `tests/support/`이고, 예외는 통합 테스트와 측정의 발행 모듈과 토픽 이름 함수 파일을 이름으로 적은 것뿐이다), 운용 패키지가 `/sim/` 토픽을 쓰는지 보는 검사(`sim-topic`. 아래 판정 입력 문단), cargo fmt와 clippy(Phase 3). ROS 환경이 필요 없는 검사만 둔다. (2) `build`: `ros-base` -> `sim-base` -> `px4`, `ros-ws`와 독립적인 `xrce-agent` 이미지를 GitHub Container Registry에 푸시하고 레이어 캐시. 이미지 key(이미지 구성 절)가 레지스트리에 있으면 그 이미지의 빌드를 건너뛰므로, PX4는 `px4` key의 재료나 베이스 key가 바뀔 때만 다시 빌드한다. (3) `unit` + `replay`: `ros-ws` 이미지 안에서 `tools/ros_ws.sh ci`가 colcon build, colcon test(GoogleTest, `idsim_interfaces`의 pytest 계약 테스트, ament_lint의 xmllint, lint_cmake, cpplint), clang-tidy를 차례로 돌린다. clang-tidy와 ament_lint는 compile_commands.json과 ROS 헤더가 필요해 `lint`가 아니라 여기에 둔다. 테스트가 실패하거나 테스트 결과가 0건인 패키지가 있으면 실패한다. 로컬에서도 같은 명령을 쓴다. `replay`의 pytest는 Phase 2에서 더한다. (4) `sitl`: GHCR의 이미지를 받고(`tools/ci/build_images.py --mode pull`) `tools/ros_ws.sh build` 뒤 `tests/sitl/run_sitl.sh`로 시나리오를 돌린다. 실패 시 실행 디렉터리 전체(ULog, compose logs, ros_log, 판정 trace, junit)를 artifact로 올린다. MCAP 기록물의 업로드는 recorder가 생기는 Phase 2부터다.
 
 테스트 판정 기준은 토픽에서만 읽고, 판정 입력은 두 부분으로 나눈다. 계약 판정은 계약 토픽과 PX4 토픽(`mission_event`, action의 feedback과 result, `vehicle_status`, `vehicle_land_detected`, `vehicle_local_position`, `TargetState`)만 쓴다. "arm/disarm"은 `vehicle_status.arming_state`, "미션 완료"는 `ExecuteMission` 액션 결과다. 정답 판정(1b)은 SITL 전용 정답 pose(`/sim/<vehicle_id>/pose`. Gazebo가 아는 기체 base_link의 world 위치)를 쓴다. "waypoint 도달"과 "표적 접근"은 정답 판정이다. waypoint 도달은 Executor가 항목을 완료로 넘긴 시각의 정답 위치와 world 목표의 거리로, 표적 접근은 정답 위치와 수신한 `TargetState`의 위치에 항목의 `offset`을 더한 점의 거리로 본다. Executor도 EKF 위치로 도달을 판정하므로 테스트가 `vehicle_local_position`으로 판정하면 EKF 오차와 원점 변환 오류가 양쪽에 같이 실려 보이지 않기 때문이다(노드가 낸 setpoint도 같은 이유로 판정 입력으로 쓰지 않는다). 판정 코드는 두 부분을 함수 수준에서 나누고, 정답 pose가 있어야 하는 실행에서 없으면 건너뛰지 않고 실패한다. 타임아웃은 `/clock` 기준. 이렇게 해야 라이브와 리플레이가 같은 판정 코드를 공유한다. 정답 pose는 SITL 실행의 기록물(MCAP)에 함께 들어가므로 SITL 기록물의 리플레이는 두 부분을 모두 돌고, 정답 pose가 없는 실기체 기록물에서는 계약 부분만 돈다.
 
-1b부터 시뮬레이터 전용 토픽은 접두 `/sim/`을 쓰고 `idsim_interfaces`의 계약이 아니다. 운용 패키지(`idsim_common`, `idsim_mission`, 그리고 앞으로의 `idsim_telemetry`, `idsim_fleet`, `gateway/`)는 `/sim/`을 쓰지 않고, lint가 그 소스, launch 파일, params YAML을 검사한다. 운용 서비스가 시뮬레이터를 모른다는 원칙을 토픽 이름으로 지키는 장치다.
+시뮬레이터 전용 토픽은 접두 `/sim/`을 쓰고 `idsim_interfaces`의 계약이 아니다. 운용 패키지(`idsim_common`, `idsim_mission`, 그리고 앞으로의 `idsim_telemetry`, `idsim_fleet`, `gateway/`)는 `/sim/`을 쓰지 않고, lint 항목 `sim-topic`이 그 소스, launch 파일, params YAML과 생성기 golden의 `params/ops-N.yaml`에서 `/sim/` 문자열을 찾는다(디렉터리 이름이 `test`나 `tests`인 곳은 이 문자열이 없음을 단정하느라 쓸 수 있어 제외한다). 운용 서비스가 시뮬레이터를 모른다는 원칙을 토픽 이름으로 지키는 장치다.
 
 저장소는 공개이며 CI는 GitHub Actions 무료 runner의 한도 안에서만 쓴다. 공개 저장소의 기본 Linux runner는 4 vCPU, 16 GB 메모리이고, 더 큰 runner는 쓰지 않는다. 이 사양에서 Gazebo + PX4 1대 + 노드는 실시간에 가깝게 돌지만 3대는 실시간보다 느리다. 그래서 3대 시나리오는 처음부터 nightly 전용이고, PR에서는 단일 기체만 돌린다. `PX4_SIM_SPEED_FACTOR`를 1 이하로 내리는 옵션과 시뮬레이션 시간 기준 타임아웃으로 대응한다. 월 사용 시간 한도를 넘지 않도록 `sitl` job은 PR 머리 커밋당 1회만 돌리고(같은 PR의 옛 실행은 취소한다) 자동 재시도 없이 재시도는 수동으로 한다.
 

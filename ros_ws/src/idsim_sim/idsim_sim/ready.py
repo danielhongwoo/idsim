@@ -16,6 +16,7 @@
 healthcheck는 `test -f /tmp/idsim/targets_ready`다(decisions.md 쟁점 3). 노드는 시작 때 파일을 지우고,
 모든 표적이 stamp > 0으로 한 번 이상 발행된 순간 임시 파일에 쓴 뒤 rename으로 원자적으로 만든다.
 내용은 표적마다 한 줄 "<target_id> <첫 stamp 초>.<ns 9자리>"이고 target_ids 순서다.
+정답 pose 노드(scripts/sim_oracle.py)도 같은 함수로 /tmp/idsim/oracle_ready를 만든다(id 자리에 vehicle_id).
 """
 
 import os

@@ -7,7 +7,7 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 1a 완료 범위의 계약은 `docs/interface.md`에 고정되어 있다 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1, B2, B3(원점과 월드: 생성기 판 5, fleet schema 2, 원점은 월드 SDF로만), B4, B5(RTL과 실패 폴백 SITL 파라미터 일곱), B6(표적 어댑터 `targets` 서비스, Actor 생성, 궤적 상한), B8, B8b(1a 칸 목록 미덮임 0) 반영됨 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1, B2, B3(원점과 월드: 생성기 판 5, fleet schema 2, 원점은 월드 SDF로만), B4, B5(RTL과 실패 폴백 SITL 파라미터 일곱), B6(표적 어댑터 `targets` 서비스, Actor 생성, 궤적 상한), B7(정답 pose `sim-oracle`, `sim-topic` lint), B8, B8b(1a 칸 목록 미덮임 0) 반영됨 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
@@ -67,7 +67,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. 1b: README 진행 순서대로 B7, B9, B12를 진행한다. B4(`idsim_common`의 원점 이동 변환, `TargetId`, 상태 QoS, `position_setpoint` 속도 인자), B5(SITL 파라미터 일곱), B6(표적 어댑터, Actor 생성, 궤적 상한), B8(전이 관측 계측, 1a 칸 목록), B8b(1a 칸 목록 covered 218, impossible 69, uncovered 0. 덮음 테스트가 uncovered 칸을 거부)는 끝났다. B9는 헤더 PR부터이고, 상태기 변경마다 칸 목록 diff를 내고 새 칸을 같은 변경에서 덮는다. B9에서 함께 고칠 테스트(B8b 검토의 넘김): flow 칸 테스트(`test_runner_flow_cells.cpp`)의 `expect_cell`에 사건 직전 `edges().size()`를 시작 인덱스로 넘긴다, `test_runner_conflicts.cpp`의 기존 대표 취소 칸 두 테스트에 `expect_cell`을 더한다. 지상 arm 진입의 arm 순서 불변식은 B9가 구현한다. B7은 생성기 golden을 바꾸므로 main에 rebase한 뒤 golden을 생성기로 다시 만든다. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다. `target_id` 사례 표의 단일 출처(test-engineer 제안 위치 `idsim_interfaces/test/cases/`, architect)는 `tests/support`에 이름 조립이 들어올 때 정한다. B11 표적 소실 시험은 같은 `targets` 컨테이너를 stop/start하면 컨테이너 레이어의 `/tmp/idsim/targets_ready`가 남아 healthcheck가 새 노드 기동 전에 통과할 수 있으므로([추정]) `/tmp/idsim`을 tmpfs로 두거나 재시작 뒤 stamp로 판정한다.
+1. 1b: README 진행 순서대로 B9, B12를 진행한다. B4(`idsim_common`의 원점 이동 변환, `TargetId`, 상태 QoS, `position_setpoint` 속도 인자), B5(SITL 파라미터 일곱), B6(표적 어댑터, Actor 생성, 궤적 상한), B7(정답 pose, `/sim/` lint), B8(전이 관측 계측, 1a 칸 목록), B8b(1a 칸 목록 covered 218, impossible 69, uncovered 0. 덮음 테스트가 uncovered 칸을 거부)는 끝났다. B9는 헤더 PR부터이고, 상태기 변경마다 칸 목록 diff를 내고 새 칸을 같은 변경에서 덮는다. B9에서 함께 고칠 테스트(B8b 검토의 넘김): flow 칸 테스트(`test_runner_flow_cells.cpp`)의 `expect_cell`에 사건 직전 `edges().size()`를 시작 인덱스로 넘긴다, `test_runner_conflicts.cpp`의 기존 대표 취소 칸 두 테스트에 `expect_cell`을 더한다. 지상 arm 진입의 arm 순서 불변식은 B9가 구현한다. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다. `target_id` 사례 표의 단일 출처(test-engineer 제안 위치 `idsim_interfaces/test/cases/`, architect)는 `tests/support`에 이름 조립이 들어올 때 정한다. B11 판정 쪽에서 챙길 것(B7 검토, test-engineer): `tests/support`에 `/sim/<vehicle_id>/pose` 조립 순수 함수와 `sim_oracle.py`의 `ORACLE_TOPIC_CASES`, `ORACLE_TOPIC_INVALID`와 같은 사례 표(import로 공유하지 않음), 정답 pose 구독은 첫 `mission_event` 전에 discovery와 `sim-oracle` 준비를 확인하고 depth를 크게(발행은 RELIABLE, VOLATILE, KEEP_LAST 10), `ORACLE_STALE`은 `t_f` 뒤 표본을 `/clock`이 `t_f + 0.1 s`를 지날 때까지 기다린 뒤 판정, 정답 pose QoS를 구독 QoS와 짝으로 `tests/support` 머리말에 적는다. B11 표적 소실 시험은 같은 `targets` 컨테이너를 stop/start하면 컨테이너 레이어의 `/tmp/idsim/targets_ready`가 남아 healthcheck가 새 노드 기동 전에 통과할 수 있다. `sim-oracle`도 `docker restart`하면 옛 `oracle_ready`가 0.5-1 s 남는 것을 B7 실측에서 관측했다([실측]). 대응은 `/tmp/idsim`을 tmpfs로 두는 것(uid 지정이 필요하다) 또는 재시작 뒤 stamp로 판정하는 것이다.
 
 ## 미해결 사항
 
@@ -100,7 +100,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 - Gazebo GUI 깜빡임(VMware 3D 가속을 켠 상태). `QSG_RENDER_LOOP=basic`과 `vblank_mode=1`의 효과는 확인되지 않았다. 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
 - `ros_ws/src/idsim_sim/scripts/gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"는 표현이 부정확하다(sim-engineer).
 - `qgc.sh`의 sha256 불일치 시 종료 코드 1 경로는 실행으로 확인하지 않았다.
-- 실측하지 않은 것: `GZ_IP=127.0.0.1`을 뺐을 때의 gz-transport 디스커버리, GPS 잡음의 출처, bridge healthcheck의 `ROS_LOG_DIR=/tmp/hc`가 run 디렉터리에 로그를 남기지 않는지, 에이전트의 Fast DDS 멀티캐스트가 같은 LAN의 다른 호스트와 섞이는지, MAVLink bind에 실패한 PX4의 동작, passwd에 없는 uid 1001로 지금 스택이 도는지.
+- 실측하지 않은 것: `GZ_IP=127.0.0.1`을 뺐을 때의 gz-transport 디스커버리, GPS 잡음의 출처, bridge healthcheck의 `ROS_LOG_DIR=/tmp/hc`가 run 디렉터리에 로그를 남기지 않는지, 에이전트의 Fast DDS 멀티캐스트가 같은 LAN의 다른 호스트와 섞이는지, MAVLink bind에 실패한 PX4의 동작, passwd에 없는 uid 1001로 지금 스택 전체(runner, `ops-N`, `targets`)가 도는지(`sim-oracle`은 sim-base 이미지에서 uid 1001로 import, 모델 해석, 구독, 표시 파일, 발행까지 B7에서 확인했다).
 - 이 호스트의 포트 5900과 8090은 다른 프로젝트가 쓴다. VNC를 도입하면 피한다.
 
 Phase 2와 3 전에 정할 것.

@@ -188,6 +188,60 @@ services:
         condition: service_healthy
       px4-1:
         condition: service_healthy
+  sim-oracle:
+    image: idsim/sim-base:local
+    network_mode: host
+    restart: 'no'
+    user: 1000:1000
+    environment:
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      CYCLONEDDS_URI: file:///opt/idsim/config/cyclonedds.xml
+      ROS_DOMAIN_ID: '23'
+      PYTHONDONTWRITEBYTECODE: '1'
+      HOME: /tmp
+      GZ_PARTITION: idsim-3
+      GZ_IP: 127.0.0.1
+      ROS_LOG_DIR: /opt/idsim/artifacts/runs/20261109-090000-k3/ros_log/sim-oracle
+      IDSIM_WORLD_NAME: default
+      IDSIM_ORACLE_VEHICLES: px4_1=x500_1
+    command:
+      - bash
+      - -c
+      - . /opt/ros/$${ROS_DISTRO}/setup.sh && exec python3 /opt/idsim/sim/scripts/sim_oracle.py
+    init: true
+    volumes:
+      - type: bind
+        source: /work/idsim/ros_ws/src/idsim_sim
+        target: /opt/idsim/sim
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /work/idsim/config/cyclonedds.xml
+        target: /opt/idsim/config/cyclonedds.xml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /work/idsim/artifacts/runs/20261109-090000-k3/ros_log/sim-oracle
+        target: /opt/idsim/artifacts/runs/20261109-090000-k3/ros_log/sim-oracle
+        read_only: false
+        bind:
+          create_host_path: false
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -f /tmp/idsim/oracle_ready
+      interval: 10s
+      timeout: 5s
+      retries: 2
+      start_period: 20s
+      start_interval: 2s
+    depends_on:
+      gazebo:
+        condition: service_healthy
+      px4-1:
+        condition: service_healthy
   runner:
     image: idsim/ros-ws:local
     network_mode: host
@@ -216,6 +270,8 @@ services:
       - 'true'
     depends_on:
       ops-1:
+        condition: service_healthy
+      sim-oracle:
         condition: service_healthy
   gz-gui:
     image: idsim/sim-base:local

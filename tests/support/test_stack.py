@@ -495,7 +495,7 @@ def test_node_keys_standalone_golden():
     assert v.executor_node == "/px4_1/mission_executor"
     assert v.params_file == "params/ops-1.yaml"
     assert s.ops_services == ["ops-1"]
-    assert s.node_stages == [["ops-1"]]
+    assert s.node_stages == [["ops-1", "sim-oracle"]]
     assert s.params_dir == s.dir / "params"
     assert s.params_path(v) == s.dir / "params" / "ops-1.yaml"
     assert s.vehicle_by_vehicle_id("px4_1") is v
@@ -697,7 +697,7 @@ def test_v5_golden_standalone_one_vehicle():
     assert s.generator_version == 5
     assert s.world_template.endswith("world_template.sdf")
     assert s.world_file == s.dir / "world" / "default.sdf"
-    assert s.targets == [] and s.targets_service is None and s.sim_oracle_service is None
+    assert s.targets == [] and s.targets_service is None and s.sim_oracle_service == "sim-oracle"
     assert s.vehicles[0].expect_gps == {"lat": 37.5665, "lon": 126.978, "alt": 38.24}
 
 

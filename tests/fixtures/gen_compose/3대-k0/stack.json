@@ -74,7 +74,7 @@
       "px4-3"
     ],
     "runner": "runner",
-    "sim_oracle": null,
+    "sim_oracle": "sim-oracle",
     "targets": "targets"
   },
   "stack": {
@@ -105,7 +105,8 @@
         "ops-1",
         "ops-2",
         "ops-3",
-        "targets"
+        "targets",
+        "sim-oracle"
       ]
     ],
     "stages": [
