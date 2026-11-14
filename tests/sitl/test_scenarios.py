@@ -187,10 +187,11 @@ def test_a_normal_flight(session):
                       ("disarmed", seq_ts.get("disarmed_ts")), ("result", run.result.recv_us)):
         s.mark("A", name, val)
     findings = list(seq)
-    # 순서 비교는 모두 ROS 시계(PX4 표본은 수신 시각)로 한다. 위 표의 armed, auto_land, disarmed 값은 PX4 timestamp다
+    # 순서 비교는 모두 이 테스트 노드의 ROS 시계(수신 시각)로 한다. Executor stamp(accepted, feedback)와 PX4
+    # timestamp는 다른 시계라 노드 사이에서 /clock 한 step(4 ms)까지 어긋나므로 섞지 않는다. 위 표의 값은 stamp다
     findings += sj.milestones_ordered([
-        ("goal_sent", t_goal), ("accepted", acc.stamp_us), ("armed", seq_ts.get("armed_recv_us")),
-        ("takeoff_start", fb_take.stamp_us), ("reached", reached), ("land_start", fb_land.stamp_us),
+        ("goal_sent", t_goal), ("accepted", acc.recv_us), ("armed", seq_ts.get("armed_recv_us")),
+        ("takeoff_start", fb_take.recv_us), ("reached", reached), ("land_start", fb_land.recv_us),
         ("auto_land", seq_ts.get("land_recv_us")), ("disarmed", seq_ts.get("disarmed_recv_us")),
         ("result", run.result.recv_us)])
     if fb_loiter.stamp_us < fb_take.stamp_us:

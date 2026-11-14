@@ -13,6 +13,8 @@
 # limitations under the License.
 
 """sitl_judge 단위 테스트. 합성 표본으로 각 판정의 통과와 실패를 고정한다."""
+import dataclasses
+
 from tests.support import measure_judge as mj
 from tests.support import sitl_judge as sj
 from tests.support import sitl_wait as sw
@@ -204,6 +206,15 @@ def test_milestones_same_clock_tolerates_px4_ts_skew():
     # 실제 순서 위반(result가 3회 확인 수신보다 앞)은 여전히 잡는다
     bad = sj.milestones_ordered([("disarmed", m["disarmed_recv_us"]), ("result", 595)])
     assert len(bad) == 1 and "순서 위반" in bad[0][1]
+
+
+def test_milestones_use_receiver_clock_for_executor_stamps():
+    # Executor stamp(다른 노드 시계)가 테스트 노드의 goal_sent보다 4 ms 앞서 보여도 수신 시각끼리는 순서가 맞는다
+    acc = dataclasses.replace(ev(sj.STATUS_ACCEPTED), recv_us=1004, stamp_us=996)
+    goal_sent = 1000
+    assert acc.stamp_us < goal_sent < acc.recv_us
+    assert "순서 위반" in sj.milestones_ordered([("goal_sent", goal_sent), ("accepted", acc.stamp_us)])[0][1]
+    assert sj.milestones_ordered([("goal_sent", goal_sent), ("accepted", acc.recv_us)]) == []
 
 
 def test_unreached_description():
