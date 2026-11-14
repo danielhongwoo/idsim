@@ -283,8 +283,9 @@ def armed_window(status, from_us, to_us):
 def flight_window_findings(status, from_us, to_us):
     """TAKEOFF와 LOITER 동안(PX4 timestamp 기준 [from_us, to_us]) failsafe가 한 번도 true가 아니고 OFFBOARD인가.
 
-    구간 경계는 Executor의 stamp다. 노드 시계는 PX4 hrt보다 늦기만 하므로(docs/interface.md) 경계가
-    PX4 축에서 실제보다 늦게 잡히는 한쪽 방향 skew뿐이라, 구간 밖 표본이 안으로 들어와 생기는 오탐은 없다.
+    구간 경계는 Executor의 stamp다. 같은 순간에 PX4 hrt는 노드 ROS 시각보다 8-20 ms 크므로
+    (docs/interface.md) 경계는 PX4 축에서 실제보다 최대 수십 ms 이르다. 시작 쪽에 들어오는 표본은
+    ARMED 확인 뒤의 OFFBOARD 표본이라 오탐이 되지 않고, 끝 쪽은 LAND 시작 직전 표본이 빠질 뿐이다.
     """
     inside = [s for s in status if from_us <= s.ts_us <= to_us]
     if not inside:
