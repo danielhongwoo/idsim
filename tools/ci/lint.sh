@@ -267,16 +267,17 @@ check_sim_topic() {
   local files
   mapfile -t files < <(list_files 'ros_ws/src/idsim_common/*' 'ros_ws/src/idsim_mission/*' 'ros_ws/src/idsim_telemetry/*' \
     'ros_ws/src/idsim_fleet/*' 'gateway/*' 'tests/fixtures/gen_compose/*/params/ops-*.yaml')
-  if [ "${#files[@]}" -eq 0 ]; then result sim-topic PASS-NO-TARGETS "(0 files)"; return 0; fi
+  # 운용 패키지(idsim_common, idsim_mission)가 이미 있으므로 대상 0개는 선별이 깨졌다는 뜻이다. 통과로 두지 않는다
+  if [ "${#files[@]}" -eq 0 ]; then result sim-topic FAIL "대상 후보가 0개다(운용 패키지가 있어야 한다)"; return 1; fi
   local out rc=0 n
   out="$(drun "$LINT_PYTHON_IMAGE" -e PYTHONDONTWRITEBYTECODE=1 --network none -- python3 tools/ci/check_sim_topic.py "${files[@]}")" || rc=$?
   n="$(printf '%s\n' "$out" | sed -n 's/^scanned=//p' | tail -n 1)"
   if [ "$rc" -eq 0 ]; then
-    if [ "${n:-0}" -eq 0 ]; then result sim-topic PASS-NO-TARGETS "(0 files)"; else result sim-topic PASS "(${n} files)"; fi
+    result sim-topic PASS "(${n} files)"
     return 0
   fi
   printf '%s\n' "$out"
-  result sim-topic FAIL "운용 패키지에 /sim/ 토픽 문자열이 있다 (exit ${rc})"
+  result sim-topic FAIL "/sim/ 토픽 문자열이 있거나 검사 대상이 0개다 (exit ${rc})"
   return 1
 }
 

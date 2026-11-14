@@ -15,6 +15,7 @@
 
 사용법: check_sim_topic.py <파일>...
   대상이 아닌 경로는 건너뛴다. 마지막 줄에 `scanned=<N>`을 stdout에 쓴다. 위반이 있으면 `경로:줄:내용`을 찍고 종료 코드 1.
+  검사한 파일이 0개여도 종료 코드 1이다(운용 패키지가 이미 있으므로 0은 대상 선별이 깨졌다는 뜻이다).
 """
 import os
 import re
@@ -59,6 +60,9 @@ def main(argv):
                 print(f"{rel}:{no}:{line}")
                 bad += 1
     print(f"scanned={scanned}")
+    if scanned == 0:
+        print("검사 대상이 0개다. 대상 선별(is_target, lint.sh의 후보 경로)이 깨졌다")
+        return 1
     return 1 if bad else 0
 
 

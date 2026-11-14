@@ -109,11 +109,14 @@ def test_main_passes_clean_files_and_skips_excluded_ones(tmp_path, monkeypatch, 
     }
     rc, out = _run(tmp_path, monkeypatch, files, capsys)
     assert rc == 0 and out == ["scanned=1"]
+    assert "PASS-NO-TARGETS" not in _read("tools/ci/lint.sh").split("check_sim_topic() {")[1].split("\n}\n")[0]
 
 
-def test_main_with_no_targets_reports_zero(tmp_path, monkeypatch, capsys):
+def test_main_with_no_targets_fails(tmp_path, monkeypatch, capsys):
     rc, out = _run(tmp_path, monkeypatch, {"tests/sitl/a.py": "x = '/sim/a'\n"}, capsys)
-    assert rc == 0 and out == ["scanned=0"]
+    assert rc == 1 and out[0] == "scanned=0" and "0개" in out[1]
+    rc, out = _run(tmp_path, monkeypatch, {}, capsys)
+    assert rc == 1 and out[0] == "scanned=0"
 
 
 def test_repository_operational_packages_are_clean():
