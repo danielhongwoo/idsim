@@ -44,7 +44,7 @@
 | B10. 노드 껍질과 YAML 로더 | ros2-engineer(노드, 표적 구독과 변환, 로더, CLI, 노드 테스트의 무효 미션 사례), devops-engineer(`ops-N` params의 `world.origin`), test-engineer(시나리오 B의 사례 교체) | 쟁점 4의 노드 쪽, 8의 표적 구독, 14. 경계: 노드가 진짜 `Px4FramePort`를 넘기고(`to_local_position_input` 채택, 원점 변경 WARN, `world.origin`) 표적을 구독하며, goal 접수의 1a 미션 제한을 지워 계약 검증만 남긴다. 같은 PR에서 시나리오 B와 노드 테스트의 무효 미션 사례를 1b 무효 사례로 바꾼다(쟁점 15) | B9 |
 | B11. 통합 테스트 | test-engineer(판정, 시나리오 F1-F4, 미션 YAML, gate 기록, 비행 단위 fixture), sim-engineer(정답 pose 경로 확인), devops-engineer(compose와 `sitl.yml`) | 쟁점 5, 11의 gate 기록, 15. R1-R4, 공중 시작, RTL 실측 | B5, B6, B7, B10 |
 | B12. viz 확인 | sim-engineer | 쟁점 17. M4 | B6 |
-| B13. 계약 고정 문서 | architect | `decisions.md` "1a 고정 계약 영향" (a)-(t)((r)과 (k) 앞부분은 B3)와 "문서 반영 목록"의 B13 항목. `idsim_interfaces` 의미 주석 | B11의 완료 기준 충족 |
+| B13. 계약 고정 문서 | architect | `decisions.md` "1a 고정 계약 영향" (a)-(t)와 후보 (u)((r)과 (k) 앞부분은 B3)와 "문서 반영 목록"의 B13 항목. `idsim_interfaces` 의미 주석 | B11의 완료 기준 충족 |
 
 커밋은 담당자 소유 단위로 나눈다. PR은 단위마다 하나이고, 담당이 여럿인 단위는 담당자별 커밋으로 나눈다. 생성기 golden을 바꾸는 PR(B3, B5, B6, B7)은 나중에 머지되는 쪽이 main에 rebase한 뒤 golden을 생성기로 다시 만든다(손으로 합치지 않는다. 재생성은 devops-engineer). 예외 둘:
 - B9의 snapshot 헤더 변경(`SetpointOut` 속도 포함)은 한 PR로 묶는다(쟁점 12). 상태기 변경은 px4-engineer가 먼저 바뀌는 칸과 칸마다 기대 명령의 표를 쓰고 ros2-engineer가 그 표대로 테스트와 구현을 한 뒤 px4-engineer가 대조한다. 상태기 변경은 B8b로 1a 칸 목록의 미덮임이 0이 된 뒤 PR마다 칸 목록 diff를 함께 내고, 새 칸은 그 PR에서 덮는다. 상태기 PR은 S1-S6 여섯이고 순서대로 하나씩 머지한다(`decisions.md` 쟁점 12). 로컬 branch로 진행하고 PR마다 reviewer 최종 검토를 받는다. 로컬 branch에서는 CI `sitl`이 돌지 않으므로 S1-S6 모두 머지 전에 로컬 `tests/sitl/run_sitl.sh`(1a 시나리오)를 돌린다.
