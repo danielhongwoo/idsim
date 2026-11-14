@@ -47,12 +47,18 @@
 namespace idsim_common::px4
 {
 
+// double 값이 trajectory_setpoint(float32)에 실릴 수 있는가: 유한하고 절댓값이
+// static_cast<double>(FLT_MAX) 이하. 벡터는 세 성분 모두. position_setpoint의 수용 조건과 같다.
+// 범위 밖 double의 float 변환은 미정의 동작이라 변환 전에 비교한다.
+bool fits_float32(double value);
+bool fits_float32(const Eigen::Vector3d & v);
+
 // position만 true인 offboard_control_mode.
 px4_msgs::msg::OffboardControlMode offboard_position_mode(Px4Timestamp timestamp);
 
-// position_ned(m)와 yaw_ned(rad)가 유한하고 float 범위(절댓값 FLT_MAX 이하) 안일 때만 값을
-// 돌려준다. yaw는 wrap하지 않는다. 호출자(상태기)가 frames::wrap_pi로 [-pi, pi)에 넣는다.
-// velocity_ned(m/s)가 없으면 velocity는 NaN이다. 있으면 세 성분 모두 같은 검사(유한, float 범위)를
+// position_ned(m)와 yaw_ned(rad)가 fits_float32일 때만 값을 돌려준다. yaw는 wrap하지 않는다.
+// 호출자(상태기)가 frames::wrap_pi로 [-pi, pi)에 넣는다.
+// velocity_ned(m/s)가 없으면 velocity는 NaN이다. 있으면 세 성분 모두 같은 검사(fits_float32)를
 // 통과해야 하고, 하나라도 어긋나면 setpoint 전체가 nullopt다(일부 축만 NaN으로 보내지 않는다).
 // acceleration, jerk, yawspeed는 NaN.
 std::optional<px4_msgs::msg::TrajectorySetpoint> position_setpoint(
