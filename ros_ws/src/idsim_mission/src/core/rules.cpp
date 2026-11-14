@@ -70,6 +70,8 @@ bool monitor_row_matches(MonitorRow row, const MonitorInput & input)
   const bool have = s != nullptr;
   const bool disarmed = have && s->arming == Arming::kDisarmed;
   const bool off_mode = have && s->nav != NavMode::kOffboard;
+  // AUTO_LOITER 면제는 순위 7, 8에만 건다(MonitorInput::hold_exempt).
+  const bool exempt = input.hold_exempt && have && s->nav == NavMode::kHold;
   switch (row) {
     case MonitorRow::kTimestampFailure:
       return !input.timestamp_ok;
@@ -84,9 +86,9 @@ bool monitor_row_matches(MonitorRow row, const MonitorInput & input)
     case MonitorRow::kModeFailsafe:
       return off_mode && s->failsafe;
     case MonitorRow::kModeExternal:
-      return off_mode && !s->failsafe && s->nav_user_intention != NavMode::kOffboard;
+      return off_mode && !exempt && !s->failsafe && s->nav_user_intention != NavMode::kOffboard;
     case MonitorRow::kModeDefensive:
-      return off_mode && !s->failsafe && s->nav_user_intention == NavMode::kOffboard;
+      return off_mode && !exempt && !s->failsafe && s->nav_user_intention == NavMode::kOffboard;
   }
   return false;
 }
@@ -184,9 +186,28 @@ std::optional<EntryPlan> entry_plan(std::uint8_t first_item_type)
     case item_type::kLand:
     case item_type::kRtl:
       return EntryPlan::kModeCommand;
+    case item_type::kLoiter:
+      return EntryPlan::kAirOffboard;
     default:
       return std::nullopt;
   }
+}
+
+const char * nav_mode_name(NavMode mode)
+{
+  switch (mode) {
+    case NavMode::kOffboard:
+      return "OFFBOARD";
+    case NavMode::kHold:
+      return "AUTO_LOITER";
+    case NavMode::kLand:
+      return "AUTO_LAND";
+    case NavMode::kRtl:
+      return "AUTO_RTL";
+    case NavMode::kOther:
+      return "OTHER";
+  }
+  return "UNKNOWN";
 }
 
 std::optional<ModeItemSpec> mode_item_spec(std::uint8_t type)

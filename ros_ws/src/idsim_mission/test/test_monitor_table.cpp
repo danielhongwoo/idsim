@@ -18,6 +18,8 @@
 // - 순위 5의 failsafe 가지와 nav_state를 보지 않는다는 것.
 // - OFFBOARD이고 ARMED인 채 failsafe가 true인 표본은 어느 행에도 맞지 않는다.
 // - 감시 표로 끝낼 때의 disarm 1회 술어(8행 전수 x 입력 조합 전수).
+// - AUTO_LOITER 면제(hold_exempt. 공중 Offboard 진입의 첫 OFFBOARD 표본 전, 1b decisions.md
+//   쟁점 7)는 순위 7, 8에만 걸린다(M1-M5).
 // 상태기 안에서의 같은 판정(엇갈림, 이력의 항목 경계)은 test_runner_items.cpp에 있다.
 
 #include <gtest/gtest.h>
@@ -286,6 +288,89 @@ TEST(MonitorTable, ExclusiveRowsNeverMatchTogether)
         << monitor_row_name(a) << " " << monitor_row_name(b);
     }
   }
+}
+
+// ---- AUTO_LOITER 면제(hold_exempt) ----
+
+TEST(MonitorHoldExempt, M1_HoldIsExemptFromRank7And8)
+{
+  for (const MonitorRow row : {MonitorRow::kModeExternal, MonitorRow::kModeDefensive}) {
+    SCOPED_TRACE(monitor_row_name(row));
+    Probe p;
+    p.apply(row);
+    ASSERT_EQ(p.status.nav, NavMode::kHold);
+    p.input.hold_exempt = true;
+    const MonitorInput in = p.get();
+    EXPECT_FALSE(monitor_row_matches(row, in));
+    EXPECT_FALSE(evaluate_monitor(in).has_value());
+  }
+}
+
+TEST(MonitorHoldExempt, M2_Rank6IsNotExempt)
+{
+  Probe p;
+  p.status.nav = NavMode::kHold;
+  p.status.nav_user_intention = NavMode::kHold;
+  p.status.failsafe = true;
+  p.input.hold_exempt = true;
+  const std::optional<MonitorVerdict> verdict = evaluate_monitor(p.get());
+  ASSERT_TRUE(verdict.has_value());
+  EXPECT_EQ(verdict->row, MonitorRow::kModeFailsafe);
+}
+
+TEST(MonitorHoldExempt, M3_OtherModesStillMatchRank7And8)
+{
+  for (const NavMode nav : {NavMode::kRtl, NavMode::kLand, NavMode::kOther}) {
+    for (const MonitorRow row : {MonitorRow::kModeExternal, MonitorRow::kModeDefensive}) {
+      SCOPED_TRACE(std::string(nav_mode_name(nav)) + " " + monitor_row_name(row));
+      Probe p;
+      p.apply(row);
+      p.status.nav = nav;
+      p.input.hold_exempt = true;
+      const std::optional<MonitorVerdict> verdict = evaluate_monitor(p.get());
+      ASSERT_TRUE(verdict.has_value());
+      EXPECT_EQ(verdict->row, row);
+    }
+  }
+}
+
+TEST(MonitorHoldExempt, M4_DisarmedRowsAreUnchanged)
+{
+  for (const MonitorRow row : {MonitorRow::kDisarmedInAir, MonitorRow::kDisarmedOnGround}) {
+    for (const NavMode intention : {NavMode::kHold, NavMode::kOffboard}) {
+      SCOPED_TRACE(monitor_row_name(row));
+      Probe p;
+      p.apply(row);
+      p.status.nav = NavMode::kHold;
+      p.status.nav_user_intention = intention;
+      p.input.hold_exempt = true;
+      const std::optional<MonitorVerdict> verdict = evaluate_monitor(p.get());
+      ASSERT_TRUE(verdict.has_value());
+      EXPECT_EQ(verdict->row, row);
+      for (const MonitorRow m : verdict->matched) {
+        EXPECT_NE(m, MonitorRow::kModeExternal);
+        EXPECT_NE(m, MonitorRow::kModeDefensive);
+      }
+    }
+  }
+}
+
+TEST(MonitorHoldExempt, M5_DefaultIsNotExempt)
+{
+  EXPECT_FALSE(MonitorInput{}.hold_exempt);
+  EXPECT_FALSE(Probe{}.get().hold_exempt);
+  // 기본 입력의 쌍 표(동률 24쌍, 배타 4쌍)는 그대로다.
+  EXPECT_EQ(tie_table().size(), 24U);
+  int exclusive_pairs = 0;
+  for (std::size_t i = 0; i < kMonitorRankOrder.size(); ++i) {
+    for (std::size_t j = i + 1; j < kMonitorRankOrder.size(); ++j) {
+      exclusive_pairs += exclusive(kMonitorRankOrder[i], kMonitorRankOrder[j]) ? 1 : 0;
+    }
+  }
+  EXPECT_EQ(exclusive_pairs, 4);
+  Probe p;
+  p.apply(MonitorRow::kModeExternal);
+  EXPECT_TRUE(monitor_row_matches(MonitorRow::kModeExternal, p.get()));
 }
 
 // ---- 순위 5 ----

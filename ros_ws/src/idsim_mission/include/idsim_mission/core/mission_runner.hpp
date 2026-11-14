@@ -97,7 +97,9 @@ struct RunnerView
   DisarmClass disarm_class{DisarmClass::kUnknown};
   bool land_confirmed{false};  // 모드 명령 항목(LAND, RTL)의 확인 대상 모드를 확인했다
   bool failsafe_history{false};
-  bool armed_seen{false};         // P6에서 첫 ARMED 표본을 봤다
+  bool armed_seen{false};  // P6에서 첫 ARMED 표본을 봤다
+  // 감시 구간이 시작됐다(지상 arm 진입은 P6의 첫 ARMED 표본, 공중 Offboard 진입은 P3 tick)
+  bool monitor_active{false};
   bool landed_false_seen{false};  // 첫 ARMED 표본 뒤에 landed false를 받은 적이 있다
   bool hold_failed{false};  // 이 정리에서 Hold가 한 번 실패했다(RTL 실패의 정리는 늘 false)
 };
@@ -198,8 +200,20 @@ private:
   void resend_offboard_until_acked(Tick & t);
   void prepare_arm(Tick & t);
   void prepare_arm_before_armed(Tick & t);
+  // 공중 Offboard 진입(1b decisions.md 쟁점 7). P3 진입 setpoint와 감시 시작, P4, P5의 첫 OFFBOARD
+  // 표본 전과 뒤.
+  void start_air_signal(Event event, Tick & t);
+  void prepare_air_signal(Tick & t);
+  void prepare_air_offboard(Tick & t);
+  void prepare_air_offboard_seen(Tick & t);
+  // AIR_OFFBOARD_SEEN의 감시 표와 거부 ack 뒤 판정(mode_confirm_timeout -> OFFBOARD 3회). 첫
+  // OFFBOARD 표본의 tick에도 이어서 부른다.
+  void air_offboard_seen_checks(Tick & t);
   // later는 감시 표 뒤에 볼 사건 가운데 이 tick에 참인 것(겹침 칸의 기록용. 판정에 쓰지 않는다).
-  bool monitor_flight(Tick & t, const std::string & label, const std::vector<Event> & later);
+  // hold_exempt는 순위 7, 8의 AUTO_LOITER 면제(공중 Offboard 진입의 첫 OFFBOARD 표본 전).
+  bool monitor_flight(
+    Tick & t, const std::string & label, const std::vector<Event> & later,
+    bool hold_exempt = false);
   const StatusSample * monitored_status(const Tick & t);
   void end_by_monitor(
     Tick & t, const MonitorVerdict & verdict, const std::string & label,
@@ -320,6 +334,10 @@ private:
   bool arm_sent_{false};
   bool failsafe_history_{false};
   bool armed_seen_{false};
+  // 감시 구간이 시작됐다(지상 arm 진입은 P6의 첫 ARMED 표본, 공중 Offboard 진입은 P3 tick에 켜고
+  // goal 동안 끄지 않는다). step_preparing 머리의 식별 검사와 start_item(0)의 이력 지우기가
+  // 이것으로 가른다.
+  bool monitor_active_{false};
   bool landed_false_seen_{false};
   bool hold_failed_{false};
   bool hold_observed_{false};  // 정리 중 AUTO_LOITER 표본을 본 적이 있다

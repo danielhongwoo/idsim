@@ -297,10 +297,7 @@ MissionCheck validate_mission_runnable(const MissionSpec & mission)
         " is not supported by the runner yet (TAKEOFF, LOITER, LAND, RTL only)");
     }
   }
-  const std::uint8_t first = mission.items.front().type;
-  if (first != item_type::kTakeoff && first != item_type::kLand && first != item_type::kRtl) {
-    return invalid("first item must be TAKEOFF, LAND or RTL");
-  }
+  // 첫 항목 type은 모두 진입 방식이 있다(TAKEOFF, LOITER, LAND, RTL. rules.hpp entry_plan).
   return check;
 }
 

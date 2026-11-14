@@ -17,9 +17,11 @@
 // 진행 조건인 상태는 지상 arm 진입 하나뿐이고, 나머지는 재전송하면서 주기 표본으로 진행한다).
 //
 // - 대상: mission_runner.cpp의 resend_due 호출 지점 중 지상 arm 진입(P5, P5a) 전용 helper를 거치지
-//   않는 다섯 곳. P6 arm(prepare_arm_before_armed), 모드 명령 항목(step_mode_item. NAV_LAND,
+//   않는 여섯 곳. P6 arm(prepare_arm_before_armed), 모드 명령 항목(step_mode_item. NAV_LAND,
 //   NAV_RTL, 대비책 disarm), 정리의 지상 disarm(run_ground), 공중 Hold(run_air), Land 경로
-//   (run_air_land).
+//   (run_air_land), 공중 Offboard 진입의 P5(첫 OFFBOARD 표본 전. prepare_air_offboard). 마지막은
+//   수락 ack가 아니라 첫 OFFBOARD 표본이 재전송을 멈춘다(decisions.md 쟁점 7). 그 짝 사례(첫
+//   OFFBOARD 표본에서 재전송이 멈춤)는 test_runner_air_entry.cpp의 A16이다.
 // - 사례마다 명령을 처음 보낸 tick을 S라 한다. S+1, S+11, S+21(전송 다음 tick)에 그 명령 묶음의
 //   비거부 ack(ACCEPTED, IN_PROGRESS)를 주고, 확인 표본은 주지 않는다. S+1..S+30의 출력에서 명령은
 //   S+10, S+20, S+30에만 있고 그것은 같은 명령 하나다(command_resend_period 0.5 s = 10 tick).
@@ -217,6 +219,26 @@ TEST(ResendAfterAck, CleanupAirLandPath)
     const std::uint64_t s = sent_tick(h, CommandKind::kNavLand);
     expect_resends_after_ack(h, s, CommandKind::kNavLand, AckCommand::kNavLand, result);
     EXPECT_EQ(h.view().branch, Branch::kAirLand);
+  }
+}
+
+// ---- 공중 Offboard 진입의 P5: 첫 OFFBOARD 표본 전 DO_SET_MODE ----
+
+TEST(ResendAfterAck, AirOffboardSetModeBeforeFirstOffboardSample)
+{
+  for (const AckResult result : non_rejecting_results()) {
+    SCOPED_TRACE(result_label(result));
+    Harness h(air_loiter_mission());
+    h.drive_to_air_offboard();
+    const std::uint64_t s = sent_tick(h, CommandKind::kSetModeOffboard);
+    h.auto_px4 = false;
+    h.snapshot.ack.reset();
+    // 가짜 PX4가 S의 DO_SET_MODE에 반응한 것을 되돌린다. AUTO_LOITER는 첫 OFFBOARD 표본 전의 면제로
+    // 끝나지 않는다.
+    h.world.nav = NavMode::kHold;
+    h.world.intention = NavMode::kHold;
+    expect_resends_after_ack(h, s, CommandKind::kSetModeOffboard, AckCommand::kSetMode, result);
+    EXPECT_EQ(h.view().prep, PrepStep::kAirOffboard);
   }
 }
 

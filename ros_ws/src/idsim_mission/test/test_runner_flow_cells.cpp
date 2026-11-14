@@ -98,10 +98,11 @@ void reach_first_armed(Harness & h)
 TEST(FlowCells, InvalidMissionWithCancelSendsNothing)
 {
   // 무효 미션의 첫 step(step_tick의 따로 된 호출 지점)과 취소. 취소는 무시되고 아무것도
-  // 보내지 않는다.
+  // 보내지 않는다. 미션은 계약상 무효인 것(TAKEOFF가 첫 항목이 아니다)을 쓴다. runner가 받는
+  // 미션의 범위는 B9 동안 넓어지지만 이 미션은 그 뒤에도 무효로 남는다.
   MissionSpec m;
   m.mission_id = "bad";
-  m.items = {loiter_item()};
+  m.items = {loiter_item(), takeoff_item()};
   Harness h(m);
   h.cancel_sticky = true;
   const std::size_t before = h.edges().size();

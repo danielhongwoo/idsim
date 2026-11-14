@@ -54,9 +54,15 @@ enum class Stage : std::uint8_t
   kDone,
 };
 
-// PREPARING(첫 항목이 TAKEOFF)의 단계. kWaitReady는 P0-P2, kSignal은 P3-P4. kOffboardAck는 P5 안의
-// ack 대기 구간(OFFBOARD 3회 확인 뒤 마지막 DO_SET_MODE 전송 뒤의 ack를 기다린다. 1b decisions.md
-// 쟁점 12).
+// PREPARING의 단계. kWaitReady는 P0-P2이고 진입 방식 셋이 같이 쓴다.
+// - 지상 arm 진입(첫 항목 TAKEOFF): kSignal은 P3-P4, kOffboard는 P5, kOffboardAck는 P5 안의 ack
+//   대기 구간(OFFBOARD 3회 확인 뒤 마지막 DO_SET_MODE 전송 뒤의 ack를 기다린다. 1b decisions.md
+//   쟁점 12), kArm은 P6.
+// - 공중 Offboard 진입(첫 항목 LOITER. 1b decisions.md 쟁점 7): kAirSignal은 P3-P4(진입 setpoint
+//   발행, 명령 없음), kAirOffboard는 P5의 첫 OFFBOARD 표본 전(DO_SET_MODE 주기 재전송),
+//   kAirOffboardSeen은 P5의 첫 OFFBOARD 표본 뒤(재전송 없음, OFFBOARD 3회 계수). 세 단계 모두 P3
+//   tick 뒤부터 감시 표를 보고, 앞의 둘은 AUTO_LOITER 면제(순위 7, 8)를 켠다. P6은 없다.
+// - 모드 명령 진입(첫 항목 LAND, RTL)은 kWaitReady 뒤 바로 항목이다.
 enum class PrepStep : std::uint8_t
 {
   kWaitReady,
@@ -64,6 +70,9 @@ enum class PrepStep : std::uint8_t
   kOffboard,
   kOffboardAck,
   kArm,
+  kAirSignal,
+  kAirOffboard,
+  kAirOffboardSeen,
 };
 
 enum class CleanupCause : std::uint8_t
@@ -92,29 +101,42 @@ enum class Branch : std::uint8_t
 enum class Event : std::uint8_t
 {
   // PREPARING 전체
-  kInvalidMission,             // validate_mission_runnable 미통과 미션의 첫 step
-  kPreparingIdentityMismatch,  // 발행 시작 뒤, 첫 ARMED 표본 전의 식별 불일치
+  kInvalidMission,  // validate_mission_runnable 미통과 미션의 첫 step
+  // 지상 arm 진입의 발행 시작 뒤, 첫 ARMED 표본 전의 식별 불일치(공중 Offboard 진입은 감시 표
+  // 순위 2)
+  kPreparingIdentityMismatch,
   // P0-P2
   kReadyIdentityMismatch,  // P0 식별 불일치
   kPreconditionFailed,     // P1 시작 조건
   kReadyTimeout,           // ready_timeout
   kReadyTakeoff,           // 첫 항목 TAKEOFF: P3 발행 시작
   kReadyModeItem,          // 첫 항목이 모드 명령 항목(LAND, RTL): 항목 시작
-  // P3-P4
+  kReadyAirOffboard,  // 첫 항목 LOITER: P3 진입 setpoint로 발행 시작(공중 Offboard 진입)
+  // P3-P4. 두 사건은 지상 arm 진입(SIGNAL -> OFFBOARD)과 공중 Offboard 진입(AIR_SIGNAL ->
+  // AIR_OFFBOARD)이 같이 쓴다.
   kSignalTimeout,
   kSignalConfirmed,
-  // P5와 ack 대기(P5a)
+  // 공중 Offboard 진입의 P4에서 이 goal이 DO_SET_MODE를 보내기 전에 본 OFFBOARD 표본(다른 주체의
+  // 전환). MODE_SWITCH_FAILED로 정리한다(1b decisions.md 쟁점 7)
+  kOffboardBeforeSetMode,
+  // P5와 ack 대기(P5a). 거부와 기한은 공중 Offboard 진입의 AIR_OFFBOARD(거부, 기한)와
+  // AIR_OFFBOARD_SEEN(기한)도 같이 쓴다.
   kOffboardRejected,
   kOffboardTimeout,
-  kOffboardConfirmed,    // OFFBOARD 3회 연속 확인. 확인을 고정하고 ack 대기로
+  // OFFBOARD 3회 연속 확인. 지상 arm 진입은 확인을 고정하고 ack 대기로, 공중 Offboard 진입은 첫
+  // 항목을 시작한다(AIR_OFFBOARD_SEEN -> ITEM).
+  kOffboardConfirmed,
   kOffboardAckAccepted,  // ack 대기에서 arm 조건의 ack를 가짐. arm을 보내고 P6
   kOffboardLeft,         // ack 대기에서 OFFBOARD 이탈
+  // 공중 Offboard 진입의 P5에서 감시를 지난 첫 OFFBOARD 표본. 재전송과 AUTO_LOITER 면제가 끝난다
+  kOffboardFirstSample,
   // P6
   kArmRejected,        // 첫 ARMED 표본 전의 거부 ack(TEMPORARILY_REJECTED 밖)
   kArmTimeout,         // 첫 ARMED 표본 전의 arm_timeout
   kArmConfirmTimeout,  // 첫 ARMED 표본 뒤 확인 기한
   kArmConfirmed,       // ARMED이고 OFFBOARD 3회: 첫 항목 시작
-  // 비행 중 감시 표(P6의 첫 ARMED 표본부터 setpoint 항목 끝까지). 행마다 하나(rules.hpp MonitorRow)
+  // 비행 중 감시 표(지상 arm 진입은 P6의 첫 ARMED 표본부터, 공중 Offboard 진입은 P3 다음 tick부터
+  // setpoint 항목 끝까지). 행마다 하나(rules.hpp MonitorRow)
   kMonitorTimestampFailure,
   kMonitorIdentityMismatch,
   kMonitorLinkLost,
@@ -163,7 +185,7 @@ enum class Event : std::uint8_t
   kStampUnavailable,  // Px4Timestamp 공급 실패
 };
 
-inline constexpr std::array<Event, 54> kAllEvents = {
+inline constexpr std::array<Event, 57> kAllEvents = {
   Event::kInvalidMission,
   Event::kPreparingIdentityMismatch,
   Event::kReadyIdentityMismatch,
@@ -171,13 +193,16 @@ inline constexpr std::array<Event, 54> kAllEvents = {
   Event::kReadyTimeout,
   Event::kReadyTakeoff,
   Event::kReadyModeItem,
+  Event::kReadyAirOffboard,
   Event::kSignalTimeout,
   Event::kSignalConfirmed,
+  Event::kOffboardBeforeSetMode,
   Event::kOffboardRejected,
   Event::kOffboardTimeout,
   Event::kOffboardConfirmed,
   Event::kOffboardAckAccepted,
   Event::kOffboardLeft,
+  Event::kOffboardFirstSample,
   Event::kArmRejected,
   Event::kArmTimeout,
   Event::kArmConfirmTimeout,

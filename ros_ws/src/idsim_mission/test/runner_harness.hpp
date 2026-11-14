@@ -20,8 +20,9 @@
 // - 표본의 timestamp는 합성 값이다. 기본은 "수신 시각 - 1 ms"(us)라 명령에 실린 Px4Timestamp(그
 //   tick의 시각)보다 다음 tick의 표본이 늘 뒤다. 실제 시계 관계는 재실측 (5)만 확인한다.
 // - auto_px4가 true이면 간단한 가짜 PX4가 명령에 반응한다(다음 tick의 표본에 보인다):
-//   Offboard -> OFFBOARD, Hold -> HOLD(hold_response), NAV_LAND -> LAND(land_response),
-//   NAV_RTL -> RTL(rtl_response), ARM -> ARMED, DISARM -> landed이면 DISARMED(disarm_response).
+//   Offboard -> OFFBOARD(offboard_response), Hold -> HOLD(hold_response),
+//   NAV_LAND -> LAND(land_response), NAV_RTL -> RTL(rtl_response), ARM -> ARMED,
+//   DISARM -> landed이면 DISARMED(disarm_response).
 //   반응을 끄고 tick 열(feed)로 표본을 직접 주는 테스트도 있다. RTL이 고도를 올리고 돌아와
 //   착지하는 것은 흉내 내지 않는다(착지와 disarm은 테스트가 world를 직접 바꾼다).
 // - auto_px4와 auto_offboard_ack가 둘 다 true이면 가짜 PX4가 Offboard 전환(DO_SET_MODE)마다
@@ -142,6 +143,33 @@ inline MissionSpec land_only_mission(std::int32_t timeout_s = 30)
   return m;
 }
 
+// 공중 Offboard 진입 미션(첫 항목 LOITER. 1b decisions.md 쟁점 7). [LOITER 5 s].
+inline MissionSpec air_loiter_mission()
+{
+  MissionSpec m;
+  m.mission_id = "air1";
+  m.items = {loiter_item()};
+  return m;
+}
+
+// [LOITER 5 s, LAND].
+inline MissionSpec air_loiter_land_mission()
+{
+  MissionSpec m;
+  m.mission_id = "air2";
+  m.items = {loiter_item(), land_item()};
+  return m;
+}
+
+// [LOITER 5 s, RTL].
+inline MissionSpec air_loiter_rtl_mission()
+{
+  MissionSpec m;
+  m.mission_id = "air3";
+  m.items = {loiter_item(), rtl_item()};
+  return m;
+}
+
 // 한 Harness의 runner가 낸 전이 기록을 모으고 전역 기록기에 그대로 넘긴다.
 class EdgeTee : public TransitionObserver
 {
@@ -245,6 +273,18 @@ enum class RtlResponse : std::uint8_t
 // TEMPORARILY_REJECTED ack를 다음 tick에 받은 것으로 둔다([소스] v1.17.0의 DO_SET_MODE ack는
 // ACCEPTED 아니면 TEMPORARILY_REJECTED다). kIgnore는 아무것도 하지 않는다.
 enum class HoldResponse : std::uint8_t
+{
+  kAccept,
+  kReject,
+  kIgnore,
+};
+
+// 가짜 PX4의 Offboard 전환(DO_SET_MODE OFFBOARD) 반응. kAccept는 nav와 intention을 OFFBOARD로
+// 바꾸고 auto_offboard_ack이면 ACCEPTED ack를 다음 tick에 받은 것으로 둔다(기본. 지상 arm 진입이
+// 쓰는 동작). kReject는 nav를 바꾸지 않고 TEMPORARILY_REJECTED ack를 다음 tick에 받은 것으로
+// 둔다([소스] v1.17.0의 DO_SET_MODE ack는 ACCEPTED 아니면 TEMPORARILY_REJECTED다). kIgnore는
+// 아무것도 하지 않는다(명령 유실).
+enum class OffboardResponse : std::uint8_t
 {
   kAccept,
   kReject,
@@ -444,6 +484,32 @@ public:
     world.intention = NavMode::kHold;
   }
 
+  // 공중 Offboard 진입: start_in_air() 뒤 DO_SET_MODE(OFFBOARD)를 처음 보낸 tick(S, PREPARING.
+  // AIR_OFFBOARD에 들어간 tick)까지. S를 돌려준다.
+  std::uint64_t drive_to_air_offboard()
+  {
+    start_in_air();
+    const bool reached = run_until(
+      [this] { return view().stage == Stage::kPreparing && view().prep == PrepStep::kAirOffboard; },
+      200);
+    EXPECT_TRUE(reached) << "PREPARING.AIR_OFFBOARD not reached";
+    return tick_no - 1;
+  }
+
+  // 공중 Offboard 진입: drive_to_air_offboard() 뒤 첫 OFFBOARD 표본(PREPARING.AIR_OFFBOARD_SEEN)
+  // 까지. S를 돌려준다.
+  std::uint64_t drive_to_air_seen()
+  {
+    const std::uint64_t s = drive_to_air_offboard();
+    const bool reached = run_until(
+      [this] {
+        return view().stage == Stage::kPreparing && view().prep == PrepStep::kAirOffboardSeen;
+      },
+      100);
+    EXPECT_TRUE(reached) << "PREPARING.AIR_OFFBOARD_SEEN not reached";
+    return s;
+  }
+
   // LOITER를 지나 세 번째 항목(LAND나 RTL)이 시작될 때까지.
   void drive_to_land()
   {
@@ -491,6 +557,7 @@ public:
   bool auto_px4{true};
   bool auto_offboard_ack{true};
   bool cancel_sticky{false};
+  OffboardResponse offboard_response{OffboardResponse::kAccept};
   RtlResponse rtl_response{RtlResponse::kAccept};
   HoldResponse hold_response{HoldResponse::kAccept};
   CommandResponse land_response{CommandResponse::kAccept};
@@ -518,13 +585,21 @@ private:
     for (const CommandKind kind : out.commands) {
       switch (kind) {
         case CommandKind::kSetModeOffboard:
-          world.nav = NavMode::kOffboard;
-          world.intention = NavMode::kOffboard;
-          if (auto_offboard_ack) {
-            // [소스] v1.17.0의 DO_SET_MODE ack는 ACCEPTED 또는 TEMPORARILY_REJECTED다.
+          if (offboard_response == OffboardResponse::kAccept) {
+            world.nav = NavMode::kOffboard;
+            world.intention = NavMode::kOffboard;
+            if (auto_offboard_ack) {
+              // [소스] v1.17.0의 DO_SET_MODE ack는 ACCEPTED 또는 TEMPORARILY_REJECTED다.
+              AckSample ack;
+              ack.command = AckCommand::kSetMode;
+              ack.result = AckResult::kAccepted;
+              ack.received_tick = tick_no + 1;
+              snapshot.ack = ack;
+            }
+          } else if (offboard_response == OffboardResponse::kReject) {
             AckSample ack;
             ack.command = AckCommand::kSetMode;
-            ack.result = AckResult::kAccepted;
+            ack.result = AckResult::kTemporarilyRejected;
             ack.received_tick = tick_no + 1;
             snapshot.ack = ack;
           }
