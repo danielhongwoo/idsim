@@ -1401,10 +1401,19 @@ def test_length_sum_boundaries():
     assert len(_sum_ok(long_t(2400))) == 1
     assert len(_sum_ok(long_t(1200), long_t(1200.0, id="t2"))) == 2
     assert len(_sum_ok(long_t(1200), long_t(1200, id="t2", loop=True))) == 2  # 정수와 실수, loop 혼합
-    with pytest.raises(gc.FleetError, match="합 2400.001 s가 상한"):
+    with pytest.raises(gc.FleetError, match="합 2400.001 s가 상한") as e:
         _sum_ok(long_t(1200), long_t(1200.001, id="t2"))
-    with pytest.raises(gc.FleetError, match="2400 s를 넘는다: 2400.001"):
+    assert "targets[0] 1200.000 s, targets[1] 1200.001 s" in str(e.value)
+    # 표적 하나의 2400.001 s는 waypoint 오류 하나뿐이고 합 오류는 없다(T를 만들지 않아 합에서 빠진다)
+    with pytest.raises(gc.FleetError) as e:
         _sum_ok(long_t(2400.001))
+    assert str(e.value).count("\n") == 0 and "ms로 반올림한 시각이 2400000 ms를 넘는다: 2400.001" in str(e.value)
+    assert "합" not in str(e.value)
+    # 반올림 경계: 2400.0004 s는 2400000 ms라 통과하고 4 x 600.0004도 합 2400000 ms라 통과한다
+    assert len(_sum_ok(long_t(2400.0004))) == 1
+    assert len(_sum_ok(*[long_t(600.0004, id=f"t{i}") for i in range(4)])) == 4
+    # round(2400000.5)는 짝수 쪽 2400000이다(경계 판정식 x > 2400000.5의 고정점). 2400.0005 자체는 부동소수점 때문에 경계로 쓰지 않는다
+    assert round(2400000.5) == 2400000 and gc.TARGETS_LENGTH_SUM_MAX_MS + 0.5 == 2400000.5
 
 
 def test_length_sum_ranges_and_inclusions():
@@ -1471,11 +1480,12 @@ def test_huge_values_are_rejected_before_ms_conversion(monkeypatch):
         raise AssertionError("actor_samples가 불렸다")
 
     monkeypatch.setattr(gc, "actor_samples", boom)
-    for waypoints in ([wp(0.0, 20.0, 0.0), wp(1e308, 20.0, 0.0)],
-                      [wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 1.0), wp(1e9, 20.0, 2.0)],
-                      [wp(0.0, 20.0, 0.0), wp(-1e308, 20.0, 0.0)]):
+    for waypoints, match in (([wp(0.0, 20.0, 0.0), wp(1e308, 20.0, 0.0)], "2400000 ms를 넘는다"),
+                             ([wp(0.0, 20.0, 0.0), wp(10.0, 20.0, 1.0), wp(1e9, 20.0, 2.0)], "2400000 ms를 넘는다"),
+                             ([wp(0.0, 20.0, 0.0), wp(-1e308, 20.0, 0.0)], "엄격히 증가"),
+                             ([wp(-1e308, 20.0, 0.0), wp(10.0, 20.0, 0.0)], "첫 t는 0")):
         for variant in ("standalone", "embedded"):
-            with pytest.raises(gc.FleetError, match="2400 s를 넘는다"):
+            with pytest.raises(gc.FleetError, match=match):
                 gen(f=with_targets(tgt(waypoints=waypoints)), variant=variant)
 
 
@@ -1672,7 +1682,7 @@ def test_actor_budget_constants():
     waypoints_max = gc.TARGETS_LENGTH_SUM_MAX_MS // gc.ACTOR_SAMPLE_DT_MS + gc.TARGETS_MAX * gc.WAYPOINTS_MAX + 2 * gc.TARGETS_MAX
     assert waypoints_max == 17856 <= 20000
     assert gc.ACTOR_SAMPLE_DT_MS >= 200
-    assert (gc.TARGET_T_MAX_S + gc.ACTOR_HOLD_MS // 1000) * 1000 < 2 ** 31
+    assert (gc.TARGETS_LENGTH_SUM_MAX_MS + gc.ACTOR_HOLD_MS) < 2 ** 31
     assert gc.ACTOR_HOLD_MS < 2 ** 31 and gc.TARGET_START_S_MAX * 1000 < 2 ** 31
 
 

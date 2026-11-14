@@ -105,9 +105,8 @@ TARGET_COORD_XY_MAX_M = 10000.0  # |x|, |y| 상한(모든 waypoint)
 TARGET_COORD_Z_MAX_M = 1000.0
 TARGET_START_S_MAX = 86400.0
 # 시간 규칙은 정수 ms에서 판정한다(T = round(t x 1000)). gz-sim이 <time>을 int ms로 바꿔 map의 key로 쓰기 때문이다.
-TARGET_T_MAX_S = 2400  # 어느 t든 이를 넘으면 ms 변환 전에 거부한다
 TARGET_GAP_MIN_MS = 100  # 인접 waypoint의 T 차 하한
-TARGETS_LENGTH_SUM_MAX_MS = 2400000  # 표적마다 마지막 T를 더한 합의 상한(start_s와 끝 정지 꼬리는 넣지 않는다)
+TARGETS_LENGTH_SUM_MAX_MS = 2400000  # 표적마다 마지막 T를 더한 합의 상한이자 T 하나의 상한(start_s와 끝 정지 꼬리는 넣지 않는다)
 # Gazebo Actor(화면 확인용. 표적 위치의 원천은 아니다). 요소의 형태와 값은 sim-engineer가 정한다(B6 Actor 명세 판 2).
 ACTOR_SAMPLE_DT_MS = 250  # waypoint 표본 간격 상한(ms). 잠정, M4 육안 확인 뒤 확정
 ACTOR_TAIL_STEP_MS = 250  # loop false 꼬리의 첫 점이 마지막 점 뒤 얼마인가(접선을 0으로 만든다)
@@ -316,10 +315,10 @@ def _validate_targets(raw, posed_vehicles, errors):
 
     네 key(id, start_s, loop, waypoints)와 waypoint의 {t, x, y, z}는 모두 필수이고 기본값이 없다.
     거부: id 형식과 중복, 기체 모델 이름(x500_N 형식)과 같은 id, waypoint 2개 미만, t 비증가, 첫 t가 0이 아님,
-    2400 s를 넘는 t, 인접 waypoint의 T 차가 100 ms 미만(T = round(t x 1000)), loop인데 처음과 끝이 다름,
+    ms로 반올림한 시각이 2400000 ms를 넘는 waypoint, 인접 waypoint의 T 차가 100 ms 미만(T = round(t x 1000)), loop인데 처음과 끝이 다름,
     z < 0, 좌표 범위(|x|, |y| 10000 m, z 1000 m)와 start_s(86400 s) 상한 초과, 구간 속도 상한 초과(수평, 수직),
     t=0 위치가 기체 스폰과 수평 2 m 안, 개수 상한 초과, 표적마다 마지막 T를 더한 합이 2400000 ms 초과.
-    합에는 waypoint 형식이 맞고 t가 엄격히 증가하며 2400 s 넘는 t가 없는 표적을 모두 넣는다(다른 규칙으로 거부된
+    합에는 waypoint 형식이 맞고 t가 엄격히 증가하며 모든 waypoint에 T가 만들어진 표적을 모두 넣는다(다른 규칙으로 거부된
     표적도 넣는다. 형식이 틀린 표적은 빠진다). 템플릿 최상위 <model>, <actor>, <light> 이름과의 충돌은
     템플릿을 읽는 build_world_sdf가 거부한다.
     """
@@ -433,12 +432,22 @@ def _ms_str(ms):
 def _check_times(wps, where, errors):
     """형식이 맞는 waypoints의 시간 규칙. 위반은 errors에 더한다.
 
-    길이 합에 넣을 수 있으면(t가 엄격히 증가하고 2400 s를 넘는 t가 없음) 정수 ms T의 목록을, 아니면 None을 돌려준다.
-    ms로 바꾸기 전에 2400 s를 넘는 t를 거부하므로 round(1e308 x 1000)의 OverflowError가 나지 않는다.
+    x = t x 1000.0에서 t < 0이면 T를 만들지 않는다(첫 t 0과 엄격한 증가 규칙이 거부한다). x가
+    TARGETS_LENGTH_SUM_MAX_MS + 0.5를 넘으면 T를 만들지 않고 그 waypoint를 거부한다(round가 이 범위에서만 돌아
+    1e308 같은 값의 OverflowError가 없고, 합 규칙과 같은 상수와 영역이다). 그 밖은 T = round(x)다.
+    길이 합에 넣을 수 있으면(t가 엄격히 증가하고 모든 waypoint에 T가 있음) 정수 ms T의 목록을, 아니면 None을 돌려준다.
     """
-    over = [j for j, w in enumerate(wps) if abs(w["t"]) > TARGET_T_MAX_S]
-    for j in over:
-        errors.append(f"{where}.waypoints[{j}].t: |t|가 {TARGET_T_MAX_S} s를 넘는다: {wps[j]['t']!r}")
+    ms = []
+    for j, w in enumerate(wps):
+        x = w["t"] * 1000.0
+        if x < 0:
+            ms.append(None)
+        elif x > TARGETS_LENGTH_SUM_MAX_MS + 0.5:
+            errors.append(f"{where}.waypoints[{j}].t: ms로 반올림한 시각이 {TARGETS_LENGTH_SUM_MAX_MS} ms를 넘는다: "
+                          f"{w['t']!r}")
+            ms.append(None)
+        else:
+            ms.append(round(x))
     if wps[0]["t"] != 0:
         errors.append(f"{where}.waypoints[0].t: 첫 t는 0이어야 한다: {wps[0]['t']!r}")
     increasing = True
@@ -446,14 +455,10 @@ def _check_times(wps, where, errors):
         if wps[j]["t"] <= wps[j - 1]["t"]:
             errors.append(f"{where}.waypoints[{j}].t: 엄격히 증가해야 한다: {wps[j - 1]['t']!r} 다음 {wps[j]['t']!r}")
             increasing = False
-    if over:
-        return None
-    ms = [round(w["t"] * 1000) for w in wps]
-    for j in range(1, len(wps)):
-        if wps[j]["t"] > wps[j - 1]["t"] and ms[j] - ms[j - 1] < TARGET_GAP_MIN_MS:
+        elif None not in (ms[j - 1], ms[j]) and ms[j] - ms[j - 1] < TARGET_GAP_MIN_MS:
             errors.append(f"{where}.waypoints[{j}].t: 인접 waypoint의 시간 차 {ms[j] - ms[j - 1]} ms < {TARGET_GAP_MIN_MS} ms"
                           f"(T = round(t x 1000): {ms[j - 1]}, {ms[j]})")
-    return ms if increasing else None
+    return ms if increasing and None not in ms else None
 
 
 def _check_trajectory(wps, loop, where, errors):
