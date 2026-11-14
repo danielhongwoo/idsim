@@ -13,7 +13,7 @@
 # limitations under the License.
 """idsim_sim 설치 설정(ament_python).
 
-설치 대상은 Python 패키지 idsim_sim과 실행 파일 target_adapter뿐이다. scripts/의 셸 wrapper, config/, worlds/는
+설치 대상은 Python 패키지 idsim_sim과 실행 파일 target_adapter뿐이다. scripts/의 셸 wrapper와 sim_oracle.py, config/, worlds/는
 설치하지 않고 compose가 이 디렉터리를 /opt/idsim/sim에 읽기 전용으로 마운트해 쓴다.
 """
 
