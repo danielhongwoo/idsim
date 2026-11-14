@@ -124,9 +124,9 @@ enum class EntryPlan : std::uint8_t
 {
   kGroundArm,  // 첫 항목 TAKEOFF: landed이고 DISARMED에서 Offboard로 들어가 arm(P3-P6)
   kModeCommand,  // 첫 항목 LAND, RTL: landed가 아니고 ARMED에서 P2 뒤 바로 그 항목을 시작
-  // 첫 항목 LOITER: landed가 아니고 ARMED이고 AUTO_LOITER(의도도 AUTO_LOITER), failsafe 없음에서
-  // 지금 위치를 진입 setpoint로 발행하고 Offboard로 들어간다(P3-P5. arm을 보내지 않는다. 1b
-  // decisions.md 쟁점 7). GOTO와 TRACK_ENTITY는 runner가 그 type을 받을 때 더한다.
+  // 첫 항목 LOITER, GOTO: landed가 아니고 ARMED이고 AUTO_LOITER(의도도 AUTO_LOITER), failsafe
+  // 없음에서 지금 위치를 진입 setpoint로 발행하고 Offboard로 들어간다(P3-P5. arm을 보내지 않는다.
+  // 1b decisions.md 쟁점 7). TRACK_ENTITY는 runner가 그 type을 받을 때 더한다.
   kAirOffboard,
 };
 

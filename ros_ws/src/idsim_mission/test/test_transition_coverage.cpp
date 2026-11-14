@@ -319,6 +319,8 @@ enum class Scenario
   kMissionEndGroundReentry,
   kAirEntrySuccess,
   kAirEntryOffboardBeforeSetMode,
+  kGotoGroundSuccess,
+  kGotoAirSuccess,
 };
 
 bool expects_overlap(Scenario scenario)
@@ -337,6 +339,8 @@ Reason expected_reason(Scenario scenario)
     case Scenario::kRtlSuccess:
     case Scenario::kMissionEndAirHold:
     case Scenario::kAirEntrySuccess:
+    case Scenario::kGotoGroundSuccess:
+    case Scenario::kGotoAirSuccess:
       return Reason::kNone;
     case Scenario::kRtlRejectedLandPath:
     case Scenario::kMissionEndGroundReentry:
@@ -378,6 +382,10 @@ MissionSpec mission_for(Scenario scenario)
     case Scenario::kAirEntrySuccess:
     case Scenario::kAirEntryOffboardBeforeSetMode:
       return air_loiter_mission();
+    case Scenario::kGotoGroundSuccess:
+      return takeoff_goto_land_mission();
+    case Scenario::kGotoAirSuccess:
+      return air_goto_mission();
     default:
       return standard_mission();
   }
@@ -482,6 +490,27 @@ void run_scenario(Harness & h, Scenario scenario)
       h.world.nav = NavMode::kOffboard;
       h.world.intention = NavMode::kOffboard;
       break;
+    case Scenario::kGotoGroundSuccess:
+      // [TAKEOFF, GOTO, LAND]: GOTO 점 도달, LAND, 착지 뒤 DISARMED.
+      h.frame.mode = FrameMode::kAxis;
+      h.drive_to_takeoff();
+      h.world.landed = false;
+      h.world.z = -5.0;
+      h.tick();
+      h.world.x = 20.0;
+      h.world.y = 10.0;
+      h.run_until([&h] { return h.view().land_confirmed; }, 100);
+      h.world.landed = true;
+      h.world.arming = Arming::kDisarmed;
+      break;
+    case Scenario::kGotoAirSuccess:
+      // [GOTO]: 공중 Offboard 진입, GOTO 점 도달, 종료 단계의 공중 Hold 확인.
+      h.frame.mode = FrameMode::kAxis;
+      h.start_in_air();
+      h.run_until([&h] { return h.view().stage == Stage::kItem; }, 100);
+      h.world.x = 20.0;
+      h.world.y = 10.0;
+      break;
   }
   h.run_until([&h] { return h.runner().done(); }, 600);
   h.tick();
@@ -495,7 +524,8 @@ TEST(TransitionObserver, RecorderDoesNotChangeOutputs)
         Scenario::kMonitorWithCompletion, Scenario::kLandLeftMode, Scenario::kLandOnly,
         Scenario::kRtlSuccess, Scenario::kRtlRejectedLandPath, Scenario::kMissionEndAirHold,
         Scenario::kMissionEndGroundReentry, Scenario::kAirEntrySuccess,
-        Scenario::kAirEntryOffboardBeforeSetMode}) {
+        Scenario::kAirEntryOffboardBeforeSetMode, Scenario::kGotoGroundSuccess,
+        Scenario::kGotoAirSuccess}) {
     SCOPED_TRACE(static_cast<int>(scenario));
     TransitionRecorder * const saved = active_transition_recorder();
     TransitionRecorder local;

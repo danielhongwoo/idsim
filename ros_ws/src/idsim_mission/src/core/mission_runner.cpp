@@ -21,7 +21,7 @@
 // 4. 출력 마무리(timestamp, setpoint, feedback)
 // 정리 중의 순서는 따로 있다(쟁점 3 M6): 상태 끊김 -> 공중 DISARMED -> 정리할 것 없음 -> 정리의
 // 상한 -> 그 분기의 실행. step_cleanup 머리 주석.
-// 공중 Offboard 진입(첫 항목 LOITER. 1b decisions.md 쟁점 7)의 순서: P4는 감시 표 -> 먼저 본
+// 공중 Offboard 진입(첫 항목 LOITER, GOTO. 1b decisions.md 쟁점 7)의 순서: P4는 감시 표 -> 먼저 본
 // OFFBOARD -> offboard_signal_timeout -> 신호 확인, P5는 감시 표 -> 거부 ack -> 첫 OFFBOARD 표본의
 // 관측 -> mode_confirm_timeout -> OFFBOARD 3회 확인이고 취소는 그 뒤다. 첫 OFFBOARD 표본의 관측은
 // 종료를 정하지 않으므로 같은 tick의 mode_confirm_timeout이 그대로 끝낸다(확인과 만료가 같은
@@ -70,6 +70,9 @@ struct MissionRunner::Tick
   bool stamp_queried{false};
   bool stamp_ok{false};
   std::uint64_t stamp_us{0};
+  // GOTO 항목이 이 tick에 얻은 점 변환 값(로컬 NED. 값이 없으면 nullopt). 완료 판정과 feedback
+  // 거리가 쓴다. GOTO 완료 tick에 다음 항목도 GOTO이면 새 항목의 값으로 덮는다.
+  std::optional<Vec3> goto_local;
   // 전이 관측(observer가 있을 때만 쓴다). checkpoint는 마지막으로 닫은 기록의 to(처음은 tick 시작).
   std::vector<TransitionEdge> edges;
   TransitionEdge open_edge;
@@ -84,6 +87,21 @@ namespace
 bool position_finite(const PositionSample & p)
 {
   return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
+}
+
+// GOTO 도달 판정과 feedback 거리에 쓰는 표본인가(수평과 수직 추정이 유효하고 값이 유한).
+bool position_usable(const PositionSample & p)
+{
+  return p.xy_valid && p.z_valid && position_finite(p);
+}
+
+// 표본과 로컬 점의 3차원 거리(m, double).
+double distance_to(const PositionSample & p, const Vec3 & local)
+{
+  const double dx = p.x - local.x;
+  const double dy = p.y - local.y;
+  const double dz = p.z - local.z;
+  return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 const char * arming_name(Arming arming) { return arming == Arming::kArmed ? "ARMED" : "DISARMED"; }
@@ -290,7 +308,7 @@ void MissionRunner::step_preparing(Tick & t)
 void MissionRunner::prepare_wait_ready(Tick & t)
 {
   // 진입 방식(첫 항목 type)마다 P1과 P2의 조건이 다르다. 지상 arm 진입(TAKEOFF)은 landed이고
-  // DISARMED, 모드 명령 진입(LAND, RTL)은 landed가 아니고 ARMED, 공중 Offboard 진입(LOITER)은
+  // DISARMED, 모드 명령 진입(LAND, RTL)은 landed가 아니고 ARMED, 공중 Offboard 진입(LOITER, GOTO)은
   // landed가 아니고 ARMED이고 nav_state와 의도가 AUTO_LOITER이고 failsafe가 없어야 한다(1b
   // decisions.md 쟁점 7. 이미 OFFBOARD, AUTO_RTL, AUTO_LAND이거나 failsafe인 기체는 받지 않는다).
   const ItemSpec & first = mission_.items.front();
@@ -350,7 +368,8 @@ void MissionRunner::prepare_wait_ready(Tick & t)
       return;
     }
     // P2: EKF gate. TAKEOFF는 P3이 목표점을 만들 위치 값도 유한해야 한다. 공중 Offboard 진입은
-    // 진입 setpoint에 쓰는 위치와 heading이 늘 유한해야 한다(LOITER에는 yaw 필드가 없다).
+    // 진입 setpoint에 쓰는 위치와 heading이 늘 유한해야 한다(LOITER에는 yaw 필드가 없고 GOTO
+    // MODE_KEEP은 진입 setpoint의 yaw를 쓴다).
     const bool position_ok = t.position != nullptr && position_finite(*t.position);
     const bool heading_ok = t.position != nullptr && std::isfinite(t.position->heading);
     const bool needs_position = takeoff_first || air_offboard;
@@ -611,7 +630,7 @@ void MissionRunner::prepare_arm_before_armed(Tick & t)
   resend_due(t);
 }
 
-// ---- 공중 Offboard 진입(첫 항목 LOITER. 1b decisions.md 쟁점 7) ----
+// ---- 공중 Offboard 진입(첫 항목 LOITER, GOTO. 1b decisions.md 쟁점 7) ----
 
 namespace
 {
@@ -621,10 +640,10 @@ const char * const kAirEntryLabel = "preparing (air offboard entry)";
 void MissionRunner::start_air_signal(Event event, Tick & t)
 {
   // P3: 이 tick의 위치와 heading을 진입 setpoint로 발행을 시작하고 감시 구간을 연다. 진입
-  // setpoint는 OFFBOARD 3회 확인까지 바꾸지 않고 첫 항목 LOITER도 그대로 쓴다(LOITER는 직전
-  // setpoint를 유지한다). 이 tick은 감시 표를 보지 않는다(P0, P1이 같은 표본으로 순위 2-8에
-  // 걸리지 않음을 봤다). 그래서 이 tick의 Px4Timestamp 실패는 finalize의 STAMP_UNAVAILABLE이고
-  // 다음 tick부터는 감시 표 순위 1이다.
+  // setpoint는 OFFBOARD 3회 확인까지 바꾸지 않는다. 첫 항목 LOITER는 그대로 쓰고(LOITER는 직전
+  // setpoint를 유지한다) 첫 항목 GOTO는 시작 tick에 그 점으로 바꾼다(변환 값이 있으면). 이 tick은
+  // 감시 표를 보지 않는다(P0, P1이 같은 표본으로 순위 2-8에 걸리지 않음을 봤다). 그래서 이 tick의
+  // Px4Timestamp 실패는 finalize의 STAMP_UNAVAILABLE이고 다음 tick부터는 감시 표 순위 1이다.
   const PositionSample * const p = t.position;
   const StatusSample * const s = t.status;
   if (p == nullptr || s == nullptr) {
@@ -767,8 +786,8 @@ void MissionRunner::air_offboard_seen_checks(Tick & t)
     return;
   }
   if (counter_.count() >= kConfirmSamples) {
-    // 진입 setpoint를 유지한 채 첫 항목을 시작한다. 감시 구간에서 넘어온 첫 항목이라 이력을 지우지
-    // 않는다(start_item).
+    // 첫 항목을 시작한다(LOITER는 진입 setpoint를 유지하고 GOTO는 그 점으로 바꾼다). 감시 구간에서
+    // 넘어온 첫 항목이라 이력을 지우지 않는다(start_item).
     start_item(Event::kOffboardConfirmed, t, 0);
   }
 }
@@ -870,7 +889,7 @@ void MissionRunner::start_item(Event event, Tick & t, std::uint32_t index)
   item_start_tick_ = t.input.tick;
   if (index != 0 || !monitor_active_) {
     // 감시 구간에서 넘어온 첫 항목(지상 arm 진입: P6 -> TAKEOFF, 공중 Offboard 진입: P5 ->
-    // LOITER)은 그 구간과 한 이력 구간이다. 모드 명령 진입의 첫 항목은 지운다.
+    // LOITER나 GOTO)은 그 구간과 한 이력 구간이다. 모드 명령 진입의 첫 항목은 지운다.
     failsafe_history_ = false;
     history_after_tick_ = t.input.tick;
   }
@@ -880,6 +899,30 @@ void MissionRunner::start_item(Event event, Tick & t, std::uint32_t index)
     mode_item_.first_send_ns = t.input.now_ns;
     send(t, spec->command);
   }
+  if (current_item().type == item_type::kGoTo) {
+    // yaw는 항목 시작에 한 번 정한다. MODE_KEEP은 시작 직전 setpoint의 yaw다(1b decisions.md 쟁점
+    // 8). 시작 tick에 setpoint를 그 점으로 바꾼다(쟁점 7 "첫 항목을 시작한 tick에 그 항목의
+    // setpoint로 바꾼다"를 중간 GOTO에도 같게 쓴다). 완료는 다음 tick부터 센다.
+    const YawSpec & yaw = current_item().go_to.yaw;
+    goto_yaw_ned_ = yaw.mode == yaw_mode::kFixed ? enu_to_ned_yaw(yaw.yaw_rad) : setpoint_.yaw_ned;
+    goto_counter_.reset();
+    goto_transformed_ = false;
+    goto_transform(t);
+  }
+}
+
+void MissionRunner::goto_transform(Tick & t)
+{
+  // 점 변환 1회. 값이 있으면 setpoint_를 그 점(yaw는 항목 시작에 정한 값, feedforward 없음)으로
+  // 바꾸고, 없으면 setpoint_ 전체(위치와 yaw)를 그대로 둔다(1b decisions.md 쟁점 8 "변환 값 없음").
+  t.goto_local = t.frame.world_to_local(current_item().go_to.position);
+  if (!t.goto_local.has_value()) {
+    return;
+  }
+  const Vec3 & local = *t.goto_local;
+  setpoint_ =
+    SetpointOut{SetpointKind::kTarget, local.x, local.y, local.z, goto_yaw_ned_, false, Vec3{}};
+  goto_transformed_ = true;
 }
 
 void MissionRunner::complete_item(Event event, Tick & t)
@@ -909,7 +952,8 @@ void MissionRunner::step_item(Tick & t)
 void MissionRunner::step_setpoint_item(Tick & t)
 {
   // 감시 표를 먼저 본다(같은 tick이면 감시 표의 행이 ITEM_TIMEOUT과 완료를 이긴다). 그 뒤는
-  // ITEM_TIMEOUT -> 완료다. 셋의 조건은 상태를 바꾸지 않는 식이라 먼저 계산해 겹침 칸에 싣는다.
+  // ITEM_TIMEOUT -> 완료다. 셋의 조건은 상태 key를 바꾸지 않는 식이라 먼저 계산해 겹침 칸에
+  // 싣는다(GOTO의 점 변환과 완료 계수도 여기서 한다. 감시 표로 끝나는 tick에도 변환은 1회 불린다).
   const ItemSpec & item = current_item();
   const bool timed_out = elapsed(t, item_start_ns_) >= item.timeout.to_ns();
   bool completed = false;
@@ -923,6 +967,21 @@ void MissionRunner::step_setpoint_item(Tick & t)
     completion = Event::kTakeoffReached;
   } else if (item.type == item_type::kLoiter) {
     completed = elapsed(t, item_start_ns_) >= item.loiter.duration.to_ns();
+  } else if (item.type == item_type::kGoTo) {
+    // 매 tick 점 변환 1회. 값이 없는 tick은 완료 계수를 0으로 되돌린다(연속을 끊는다). 값이 있으면
+    // 그 tick의 위치 표본을 timestamp로 가르고 반경 안(엄격 부등호)이면 센다. 같은 timestamp의
+    // 표본은 계수를 바꾸지 않는다.
+    goto_transform(t);
+    if (!t.goto_local.has_value()) {
+      goto_counter_.reset();
+    } else if (t.position != nullptr) {
+      const PositionSample & p = *t.position;
+      goto_counter_.observe(
+        p.timestamp_us,
+        position_usable(p) && distance_to(p, *t.goto_local) < item.go_to.acceptance_radius_m);
+    }
+    completed = goto_counter_.count() >= kConfirmSamples;
+    completion = Event::kGotoReached;
   }
   std::vector<Event> later;
   if (observer_ != nullptr) {
@@ -940,9 +999,11 @@ void MissionRunner::step_setpoint_item(Tick & t)
     if (completed) {
       tag(Event::kItemTimeout, t, {completion});
     }
+    // GOTO가 항목 시작부터 점 변환 값을 한 번도 얻지 못했으면 detail에 적는다(앞부분은 같다).
+    const bool no_transform = item.type == item_type::kGoTo && !goto_transformed_;
     begin_cleanup(
       Event::kItemTimeout, t, CleanupCause::kItemTimeout, Reason::kItemTimeout,
-      item_label() + " timeout");
+      item_label() + " timeout" + (no_transform ? " (no frame transform since item start)" : ""));
     return;
   }
   if (completed) {
@@ -1806,6 +1867,12 @@ Feedback MissionRunner::make_feedback(const Tick & t) const
       f.distance_valid = true;
       f.distance_remaining_m = std::abs(p->z - takeoff_target_z_);
     }
+  }
+  if (
+    stage_ == Stage::kItem && current_item().type == item_type::kGoTo && t.goto_local.has_value() &&
+    t.position != nullptr && position_usable(*t.position)) {
+    f.distance_valid = true;
+    f.distance_remaining_m = distance_to(*t.position, *t.goto_local);
   }
   return f;
 }

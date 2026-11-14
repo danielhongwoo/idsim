@@ -228,6 +228,8 @@ private:
   void complete_item(Event event, Tick & t);
   void step_item(Tick & t);
   void step_setpoint_item(Tick & t);
+  // GOTO 항목의 점 변환 1회(항목 시작 tick과 그 뒤 매 tick). 1b decisions.md 쟁점 8.
+  void goto_transform(Tick & t);
   void step_mode_item(Tick & t, const ModeItemSpec & spec);
   void mode_item_timeout(Tick & t, const ModeItemSpec & spec, bool landed);
   void begin_cleanup(Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail);
@@ -295,6 +297,7 @@ private:
   std::int64_t item_start_ns_{0};
   std::uint64_t item_start_tick_{0};
   double takeoff_target_z_{0.0};
+  double goto_yaw_ned_{0.0};         // GOTO 항목 시작에 정한 setpoint yaw
   std::int64_t signal_start_ns_{0};  // P3 발행 시작
   std::uint64_t signal_start_tick_{0};
   std::int64_t step_start_ns_{0};  // P5, P6 시작(ack 대기는 P5의 것을 그대로 쓴다)
@@ -312,6 +315,7 @@ private:
   std::uint64_t history_after_tick_{0};
   std::optional<StatusSample> trusted_status_;  // 감시 구간에서 판정에 쓰는 최신 vehicle_status
   SampleCounter counter_;                       // OFFBOARD, ARMED, AUTO_LOITER 확인
+  SampleCounter goto_counter_;  // GOTO 완료(서로 다른 위치 표본 3개 연속. timestamp로 가른다)
   // 종료 단계의 지상 DISARMED 계수(대비책 disarm 전. 뒤는 disarm_confirm_. 쟁점 10 A1, 쟁점 11)
   SampleCounter ground_disarm_counter_;
   LandedArmedFallback ground_wait_fallback_;  // 종료 단계 지상 대기의 대비책 disarm
@@ -344,7 +348,8 @@ private:
   bool monitor_active_{false};
   bool landed_false_seen_{false};
   bool hold_failed_{false};
-  bool hold_observed_{false};  // 정리 중 AUTO_LOITER 표본을 본 적이 있다
+  bool hold_observed_{false};     // 정리 중 AUTO_LOITER 표본을 본 적이 있다
+  bool goto_transformed_{false};  // 이 GOTO 항목에서 점 변환 값을 한 번이라도 얻었다
   DisarmClass disarm_class_{DisarmClass::kUnknown};
   CleanupCause cause_{CleanupCause::kCancel};
   Reason cleanup_reason_{Reason::kNone};

@@ -175,6 +175,37 @@ inline MissionSpec air_loiter_rtl_mission()
   return m;
 }
 
+// GOTO 항목. position은 world ENU다. MODE_KEEP.
+inline ItemSpec goto_item(
+  Vec3 world_enu = Vec3{10.0, 20.0, 5.0}, double radius = 0.5, std::int32_t timeout_s = 10)
+{
+  ItemSpec item;
+  item.type = item_type::kGoTo;
+  item.timeout = seconds(timeout_s);
+  item.go_to.position = world_enu;
+  item.go_to.acceptance_radius_m = radius;
+  item.go_to.yaw.mode = yaw_mode::kKeep;
+  return item;
+}
+
+// [TAKEOFF 5 m, GOTO, LAND].
+inline MissionSpec takeoff_goto_land_mission()
+{
+  MissionSpec m;
+  m.mission_id = "goto3";
+  m.items = {takeoff_item(), goto_item(), land_item()};
+  return m;
+}
+
+// 공중 Offboard 진입의 [GOTO].
+inline MissionSpec air_goto_mission()
+{
+  MissionSpec m;
+  m.mission_id = "airgoto1";
+  m.items = {goto_item()};
+  return m;
+}
+
 // 한 Harness의 runner가 낸 전이 기록을 모으고 전역 기록기에 그대로 넘긴다.
 class EdgeTee : public TransitionObserver
 {
@@ -304,7 +335,10 @@ struct World
   double y{2.0};
   double z{0.0};
   double heading{0.25};
+  bool xy_valid{true};
   bool z_valid{true};
+  // vehicle_local_position의 timestamp. 비어 있으면 tick마다 default_timestamp_us()(새 표본).
+  std::optional<std::uint64_t> position_timestamp_us;
   bool ekf_ready{true};
   bool signal_lost{true};
 };
@@ -415,10 +449,12 @@ public:
     land.received_tick = tick_no;
     snapshot.land = land;
     PositionSample pos;
+    pos.timestamp_us = world.position_timestamp_us.value_or(default_timestamp_us());
     pos.x = world.x;
     pos.y = world.y;
     pos.z = world.z;
     pos.heading = world.heading;
+    pos.xy_valid = world.xy_valid;
     pos.z_valid = world.z_valid;
     pos.received_tick = tick_no;
     snapshot.position = pos;

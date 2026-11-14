@@ -40,17 +40,6 @@ namespace
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 constexpr double kPi = 3.14159265358979323846;
 
-ItemSpec goto_item()
-{
-  ItemSpec item;
-  item.type = item_type::kGoTo;
-  item.timeout = seconds(10);
-  item.go_to.position = Vec3{1.0, 2.0, 3.0};
-  item.go_to.acceptance_radius_m = 0.5;
-  item.go_to.yaw.mode = yaw_mode::kKeep;
-  return item;
-}
-
 ItemSpec track_item()
 {
   ItemSpec item;
@@ -555,10 +544,10 @@ TEST(ScreenGoal, AirEndingMissionIsInvalidMission)
 
 TEST(MissionRunner, UnvalidatedMissionEndsInternalOnFirstStep)
 {
-  // [TAKEOFF, LOITER]는 S3부터 runner가 받으므로 runner가 아직 받지 않는 type(GOTO)으로 본다.
+  // runner가 아직 받지 않는 type(TRACK_ENTITY. 1b decisions.md 쟁점 12의 S6까지)으로 본다.
   MissionSpec m;
-  m.mission_id = "goto";
-  m.items = {takeoff_item(), goto_item(), land_item()};
+  m.mission_id = "track";
+  m.items = {takeoff_item(), track_item(), land_item()};
   Harness h(m);
   h.tick();
   ASSERT_TRUE(h.termination().has_value());
@@ -568,8 +557,8 @@ TEST(MissionRunner, UnvalidatedMissionEndsInternalOnFirstStep)
     h.termination()->detail, "mission did not pass validate_mission_runnable: " + check.detail);
   EXPECT_EQ(
     h.termination()->detail.rfind(
-      "mission did not pass validate_mission_runnable: items[1].type GOTO is not supported by the "
-      "runner yet (TAKEOFF, LOITER, LAND, RTL only)",
+      "mission did not pass validate_mission_runnable: items[1].type TRACK_ENTITY is not supported "
+      "by the runner yet (TAKEOFF, GOTO, LOITER, LAND, RTL only)",
       0),
     0U)
     << h.termination()->detail;
@@ -629,8 +618,8 @@ TEST(ValidateMission, OneAGoalAcceptsOnlyWhatRunnerAccepts)
   // [TAKEOFF, LOITER, LOITER, LOITER](B9 S3 공중 종료 단계), 첫 항목이 LOITER인 [LOITER],
   // [LOITER, LOITER], [LOITER, LAND], [LOITER, RTL], [LOITER, LOITER, LOITER],
   // [LOITER, LOITER, LAND], [LOITER, LOITER, RTL], [LOITER x 4], [LOITER, LOITER, LOITER, LAND],
-  // [LOITER, LOITER, LOITER, RTL](B9 S4 공중 Offboard 진입).
-  EXPECT_EQ(runnable_valid, 22);
+  // [LOITER, LOITER, LOITER, RTL](B9 S4 공중 Offboard 진입), GOTO가 든 67개(B9 S5).
+  EXPECT_EQ(runnable_valid, 89);
 }
 
 // 1b decisions.md 쟁점 12 "미션 제한의 두 자리"의 단위 테스트 (1). B9 동안 goal 접수는 1a
@@ -711,20 +700,59 @@ TEST(ScreenGoal, LoiterFirstMissionsNewToRunnerStayInvalidMission)
   }
 }
 
-// runner가 아직 실행하지 않는 type(GOTO, TRACK_ENTITY)은 type 검사가 거른다. 첫 항목 검사는 없다.
-TEST(ValidateMission, GotoFirstIsNotRunnableByType)
+// runner가 아직 실행하지 않는 type(TRACK_ENTITY. 1b decisions.md 쟁점 12의 S6까지)은 type 검사가
+// 거른다. 첫 항목 검사는 없다.
+TEST(ValidateMission, TrackEntityIsNotRunnableByType)
 {
-  for (const auto & items :
-       std::vector<std::vector<ItemSpec>>{{goto_item()}, {goto_item(), land_item()}}) {
+  struct Case
+  {
+    std::vector<ItemSpec> items;
+    const char * detail;
+  };
+  const std::vector<Case> cases = {
+    {{track_item()},
+     "items[0].type TRACK_ENTITY is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, "
+     "RTL only)"},
+    {{track_item(), land_item()},
+     "items[0].type TRACK_ENTITY is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, "
+     "RTL only)"},
+    {{takeoff_item(), track_item()},
+     "items[1].type TRACK_ENTITY is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, "
+     "RTL only)"},
+  };
+  for (const Case & c : cases) {
     MissionSpec m;
-    m.mission_id = "gf";
-    m.items = items;
+    m.mission_id = "tf";
+    m.items = c.items;
     const MissionCheck check = validate_mission_runnable(m);
     EXPECT_FALSE(check.valid) << order_name(m);
-    EXPECT_EQ(
-      check.detail,
-      "items[0].type GOTO is not supported by the runner yet (TAKEOFF, LOITER, LAND, RTL only)")
-      << order_name(m);
+    EXPECT_EQ(check.detail, c.detail) << order_name(m);
+  }
+}
+
+// 같은 단위 테스트 (1)의 S5 몫. GOTO가 든 미션은 runner가 받고 goal 접수는 1a 그대로
+// INVALID_MISSION으로 끝낸다(GOTO는 노드와 SITL에서 닿지 않는다).
+TEST(ScreenGoal, GotoMissionsNewToRunnerStayInvalidMission)
+{
+  const std::vector<std::vector<ItemSpec>> cases = {
+    {goto_item()},
+    {goto_item(), land_item()},
+    {takeoff_item(), goto_item(), land_item()},
+    {loiter_item(), goto_item()},
+    {takeoff_item(), goto_item()},
+  };
+  for (const auto & items : cases) {
+    MissionSpec m;
+    m.mission_id = "goto";
+    m.items = items;
+    EXPECT_TRUE(validate_mission_runnable(m).valid)
+      << order_name(m) << ": " << validate_mission_runnable(m).detail;
+    const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
+    ASSERT_TRUE(term.has_value()) << order_name(m);
+    EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
+    EXPECT_EQ(term->reason, Reason::kInvalidMission) << order_name(m);
+    EXPECT_NE(term->detail.find("type GOTO is not supported in 1a"), std::string::npos)
+      << order_name(m) << ": " << term->detail;
   }
 }
 

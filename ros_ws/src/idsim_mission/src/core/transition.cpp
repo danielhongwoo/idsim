@@ -151,6 +151,8 @@ const char * event_name(Event event)
       return "TAKEOFF_REACHED";
     case Event::kLoiterElapsed:
       return "LOITER_ELAPSED";
+    case Event::kGotoReached:
+      return "GOTO_REACHED";
     case Event::kModeItemIdentityMismatch:
       return "MODE_ITEM_IDENTITY_MISMATCH";
     case Event::kModeItemLinkLost:
