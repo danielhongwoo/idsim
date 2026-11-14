@@ -45,6 +45,8 @@ services:
         read_only: true
         bind:
           create_host_path: false
+    tmpfs:
+      - /tmp/idsim:mode=0755
     healthcheck:
       test:
         - CMD-SHELL
@@ -410,6 +412,8 @@ services:
       - /opt/idsim/artifacts/runs/20261109-090000-k0/params/targets.yaml
     init: true
     stop_signal: SIGINT
+    tmpfs:
+      - /tmp/idsim:uid=1000,gid=1000,mode=0755
     healthcheck:
       test:
         - CMD-SHELL
@@ -462,6 +466,8 @@ services:
         read_only: false
         bind:
           create_host_path: false
+    tmpfs:
+      - /tmp/idsim:uid=1000,gid=1000,mode=0755
     healthcheck:
       test:
         - CMD-SHELL

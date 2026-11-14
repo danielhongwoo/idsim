@@ -100,13 +100,14 @@ def three_vehicles():
     return f
 
 
-def make_ctx(k=0, variant="standalone", run_id=None, fleet_path="config/fleet.yaml", fleet_sha="a" * 64):
+def make_ctx(k=0, variant="standalone", run_id=None, fleet_path="config/fleet.yaml", fleet_sha="a" * 64,
+             uid=None, gid=None):
     run_id = run_id or f"20261109-090000-k{k}"
     return {
         "k": k,
         "variant": variant,
-        "uid": FIXED["uid"],
-        "gid": FIXED["gid"],
+        "uid": FIXED["uid"] if uid is None else uid,
+        "gid": FIXED["gid"] if gid is None else gid,
         "run_id": run_id,
         "host_repo_root": HOST_REPO,
         "host_run_dir": f"{HOST_REPO}/artifacts/runs/{run_id}",
@@ -1293,6 +1294,39 @@ def test_targets_service_details():
     assert [x["id"] for x in stack["targets"]] == ["target_a", "target_b"]
     assert stack["targets"][0]["waypoints"][0] == {"t": 0.0, "x": 20.0, "y": 0.0, "z": 3.0}
     assert stack["generator"]["version"] == gc.GENERATOR_VERSION
+
+
+def test_marker_dir_is_tmpfs_for_every_marker_service():
+    compose, stack, _ = gen(f=target_fleet(), k=2)
+    s = compose["services"]
+    own = f"/tmp/idsim:uid={FIXED['uid']},gid={FIXED['gid']},mode=0755"
+    assert s["targets"]["tmpfs"] == [own] and s["sim-oracle"]["tmpfs"] == [own]
+    assert s["gazebo"]["tmpfs"] == ["/tmp/idsim:mode=0755"]
+    # 표시 파일을 보는 서비스는 이 셋뿐이고, 다른 서비스에는 tmpfs가 없다(HOME=/tmp는 컨테이너 레이어 그대로)
+    assert sorted(n for n, v in s.items() if "tmpfs" in v) == ["gazebo", "sim-oracle", "targets"]
+    # 표시 파일 경로가 모두 tmpfs 아래다
+    for svc, ready in (("gazebo", gc.GZ_READY_FILE), ("targets", gc.TARGETS_READY_FILE), ("sim-oracle", gc.ORACLE_READY_FILE)):
+        assert ready.startswith(gc.MARKER_DIR + "/")
+        assert ready in s[svc]["healthcheck"]["test"][1]
+    # 바인드 마운트와 겹치지 않는다(volumes에 /tmp/idsim이 없다)
+    assert all(v["target"] != gc.MARKER_DIR for svc in s.values() for v in svc.get("volumes", []))
+    # stack.json은 tmpfs를 모른다. 판 5의 key 집합이 그대로다
+    assert gc.GENERATOR_VERSION == 5 and "tmpfs" not in gc.dump_stack(stack)
+
+
+def test_marker_tmpfs_follows_the_ci_uid():
+    compose, _, _ = gen(f=target_fleet(), k=2, uid=1001, gid=1001)
+    s = compose["services"]
+    assert s["targets"]["tmpfs"] == ["/tmp/idsim:uid=1001,gid=1001,mode=0755"]
+    assert s["sim-oracle"]["tmpfs"] == s["targets"]["tmpfs"]
+
+
+def test_marker_tmpfs_invariants_catch_tampering():
+    for name in ("targets", "sim-oracle", "gazebo"):
+        compose, stack, _ = gen(f=target_fleet(), k=2)
+        del compose["services"][name]["tmpfs"]
+        with pytest.raises(gc.FleetError, match="tmpfs"):
+            gc.assert_invariants(compose, stack)
 
 
 def test_targets_absent_makes_no_service_params_or_log_dir():
