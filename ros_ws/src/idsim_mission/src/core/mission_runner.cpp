@@ -248,6 +248,9 @@ void MissionRunner::step_preparing(Tick & t)
     case PrepStep::kOffboard:
       prepare_offboard(t);
       break;
+    case PrepStep::kOffboardAck:
+      prepare_offboard_ack(t);
+      break;
     case PrepStep::kArm:
       prepare_arm(t);
       break;
@@ -376,7 +379,7 @@ void MissionRunner::prepare_signal(Tick & t)
 
 void MissionRunner::prepare_offboard(Tick & t)
 {
-  // P5: DO_SET_MODE(Offboard)를 재전송하며 OFFBOARD 3회 연속.
+  // P5: DO_SET_MODE(Offboard)를 재전송하며 OFFBOARD 3회 연속. 확인되면 ack 대기(P5a)로 간다.
   const AckView ack = take_ack(t);
   if (t.status != nullptr) {
     counter_.observe(t.status->timestamp_us, t.status->nav == NavMode::kOffboard);
@@ -393,17 +396,66 @@ void MissionRunner::prepare_offboard(Tick & t)
       "mode_confirm_timeout: OFFBOARD not confirmed");
     return;
   }
-  if (counter_.count() >= kConfirmSamples) {
-    clear_pending();
-    enter_prep(Event::kOffboardConfirmed, t, PrepStep::kArm);
-    step_start_ns_ = t.input.now_ns;
-    counter_.reset();
-    send(t, CommandKind::kArm);
-    arm_sent_ = true;
-    arm_first_tick_ = t.input.tick;
+  if (counter_.count() >= kConfirmSamples && t.status != nullptr) {
+    // 확인을 고정하고 ack 대기로 간다(decisions.md 쟁점 12). 이 tick부터 DO_SET_MODE를 다시 보내지
+    // 않는다. 대기 명령(DO_SET_MODE)은 남겨 노드가 그 묶음의 ack를 계속 넘기게 한다. 이 tick의 거부
+    // ack와 timeout은 위에서 봤고, 확인 표본이 OFFBOARD라 이탈은 없으므로 arm 조건만 이어서 본다.
+    offboard_confirm_timestamp_us_ = t.status->timestamp_us;
+    enter_prep(Event::kOffboardConfirmed, t, PrepStep::kOffboardAck);
+    arm_if_offboard_acked(t);
     return;
   }
   resend_due(t);
+}
+
+void MissionRunner::prepare_offboard_ack(Tick & t)
+{
+  // P5a: OFFBOARD 확인 뒤 마지막 DO_SET_MODE 전송 뒤의 ack를 기다린다. 계수는 보지 않고(확인 고정),
+  // 재전송하지 않으며 새 timeout도 없다(mode_confirm_timeout은 P5 진입부터). 같은 tick의 순서는
+  // 거부 ack -> mode_confirm_timeout -> 이탈 -> arm이고, 식별 불일치는 step_preparing이 먼저 보며
+  // 취소는 단계 처리 뒤다. 실패는 모두 arm 전이라 disarm을 보내지 않는다.
+  const AckView ack = take_ack(t);
+  if (ack.fresh && is_rejection(ack.result)) {
+    begin_cleanup(
+      Event::kOffboardRejected, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      std::string("DO_SET_MODE(OFFBOARD) rejected after OFFBOARD confirmed: ") +
+        ack_result_name(ack.result));
+    return;
+  }
+  if (elapsed(t, step_start_ns_) >= config_.timeouts.mode_confirm_timeout_ns) {
+    begin_cleanup(
+      Event::kOffboardTimeout, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      "mode_confirm_timeout: OFFBOARD confirmed but no DO_SET_MODE(OFFBOARD) ack after last send");
+    return;
+  }
+  // 이탈: 식별이 맞고 timestamp가 확인 표본보다 큰 OFFBOARD 아닌 표본 하나. arming과 failsafe는
+  // 보지 않는다. 확인을 풀어 다시 세지 않고 arm 없이 실패한다(fail-closed).
+  const StatusSample * const s = t.status;
+  if (
+    s != nullptr && s->identity == IdentityCheck::kMatch &&
+    s->timestamp_us > offboard_confirm_timestamp_us_ && s->nav != NavMode::kOffboard) {
+    begin_cleanup(
+      Event::kOffboardLeft, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      "OFFBOARD left before DO_SET_MODE(OFFBOARD) ack: vehicle_status nav_state not OFFBOARD");
+    return;
+  }
+  arm_if_offboard_acked(t);
+}
+
+void MissionRunner::arm_if_offboard_acked(Tick & t)
+{
+  // arm 조건의 ack: 대기 명령(DO_SET_MODE) 묶음의 비거부 ack이고 마지막 전송 tick보다 뒤의 tick에
+  // 받았다. 같은 tick에 받은 ack는 그 tick의 전송보다 앞이다(스냅숏은 tick 시작의 것).
+  if (pending_.accepted_ack_tick <= pending_.last_send_tick) {
+    return;
+  }
+  clear_pending();
+  enter_prep(Event::kOffboardAckAccepted, t, PrepStep::kArm);
+  step_start_ns_ = t.input.now_ns;
+  counter_.reset();
+  send(t, CommandKind::kArm);
+  arm_sent_ = true;
+  arm_first_tick_ = t.input.tick;
 }
 
 void MissionRunner::prepare_arm(Tick & t)
@@ -1238,6 +1290,7 @@ void MissionRunner::send(Tick & t, CommandKind kind)
   pending_.active = true;
   pending_.kind = kind;
   pending_.first_tick = t.input.tick;
+  pending_.last_send_tick = t.input.tick;
   pending_.first_ns = t.input.now_ns;
   pending_.last_ns = t.input.now_ns;
   t.out.commands.push_back(kind);
@@ -1277,6 +1330,7 @@ void MissionRunner::resend_due(Tick & t)
   }
   if (t.input.now_ns - pending_.last_ns >= config_.timeouts.command_resend_period_ns) {
     pending_.last_ns = t.input.now_ns;
+    pending_.last_send_tick = t.input.tick;
     t.out.commands.push_back(pending_.kind);
   }
 }
@@ -1299,6 +1353,9 @@ MissionRunner::AckView MissionRunner::take_ack(const Tick & t)
   last_ack_tick_ = a->received_tick;
   pending_.has_ack = true;
   pending_.last_ack = a->result;
+  if (!is_rejection(a->result)) {
+    pending_.accepted_ack_tick = a->received_tick;
+  }
   view.fresh = true;
   view.result = a->result;
   return view;

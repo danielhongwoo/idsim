@@ -22,6 +22,9 @@
 // - auto_px4가 true이면 간단한 가짜 PX4가 명령에 반응한다(다음 tick의 표본에 보인다):
 //   Offboard -> OFFBOARD, Hold -> HOLD, NAV_LAND -> LAND, ARM -> ARMED, DISARM -> landed이면
 //   DISARMED. 반응을 끄고 tick 열(feed)로 표본을 직접 주는 테스트도 있다.
+// - auto_px4와 auto_offboard_ack가 둘 다 true이면 가짜 PX4가 Offboard 전환(DO_SET_MODE)마다
+//   ACCEPTED ack를 낸다(명령을 낸 tick의 다음 tick에 받은 것으로 snapshot.ack에 둔다). 지상 arm
+//   진입은 이 ack가 있어야 P6으로 간다(1b decisions.md 쟁점 12). 다른 명령에는 ack를 내지 않는다.
 // - 만드는 MissionRunner에 전이 기록기(transition_recorder.hpp)를 넘긴다. 기록기는 test_runner
 //   실행 파일에서만 켜져 있고, 칸 목록 대조는 test_transition_coverage.cpp가 한다. 기록기가 켜져
 //   있으면 Harness는 자기 runner의 기록을 edges()에도 모은다(expect_cell이 한 시나리오의 칸을
@@ -419,6 +422,7 @@ public:
   std::function<std::int64_t(std::uint64_t)> port_skew;
   bool auto_samples{true};
   bool auto_px4{true};
+  bool auto_offboard_ack{true};
   bool cancel_sticky{false};
 
 private:
@@ -445,6 +449,14 @@ private:
         case CommandKind::kSetModeOffboard:
           world.nav = NavMode::kOffboard;
           world.intention = NavMode::kOffboard;
+          if (auto_offboard_ack) {
+            // [소스] v1.17.0의 DO_SET_MODE ack는 ACCEPTED 또는 TEMPORARILY_REJECTED다.
+            AckSample ack;
+            ack.command = AckCommand::kSetMode;
+            ack.result = AckResult::kAccepted;
+            ack.received_tick = tick_no + 1;
+            snapshot.ack = ack;
+          }
           break;
         case CommandKind::kSetModeHold:
           world.nav = NavMode::kHold;

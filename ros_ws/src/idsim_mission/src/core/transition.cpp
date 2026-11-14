@@ -34,6 +34,8 @@ const char * prep_name(PrepStep prep)
       return "SIGNAL";
     case PrepStep::kOffboard:
       return "OFFBOARD";
+    case PrepStep::kOffboardAck:
+      return "OFFBOARD_ACK";
     case PrepStep::kArm:
       return "ARM";
   }
@@ -97,6 +99,10 @@ const char * event_name(Event event)
       return "OFFBOARD_TIMEOUT";
     case Event::kOffboardConfirmed:
       return "OFFBOARD_CONFIRMED";
+    case Event::kOffboardAckAccepted:
+      return "OFFBOARD_ACK_ACCEPTED";
+    case Event::kOffboardLeft:
+      return "OFFBOARD_LEFT";
     case Event::kArmRejected:
       return "ARM_REJECTED";
     case Event::kArmTimeout:

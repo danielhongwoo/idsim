@@ -63,6 +63,19 @@ void reach_offboard(Harness & h)
   h.auto_px4 = false;
 }
 
+// P5a(OFFBOARD 확인 뒤 ack 대기). P5 진입 tick의 DO_SET_MODE에 가짜 PX4가 낸 ack를 지우고 OFFBOARD
+// 표본 셋으로 확인한다. P5 진입 시각(mode_confirm_timeout의 기준)을 돌려준다.
+std::int64_t reach_offboard_ack(Harness & h)
+{
+  reach_offboard(h);
+  const std::int64_t offboard_start_ns = h.now_ns - kTickNs;
+  h.snapshot.ack.reset();
+  const Sample offboard = disarmed(true, NavMode::kOffboard);
+  h.feed({offboard, offboard, offboard});
+  EXPECT_EQ(h.view().prep, PrepStep::kOffboardAck);
+  return offboard_start_ns;
+}
+
 // P6에서 arm을 보낸 뒤, 첫 ARMED 표본 전(기체는 DISARMED 그대로).
 void reach_arm(Harness & h)
 {
@@ -253,6 +266,105 @@ TEST(FlowCells, OffboardIdentityMismatchWithCancelSendsNoHoldOrDisarm)
   h.tick();
   expect_cell(
     h, "PREPARING.OFFBOARD", Event::kPreparingIdentityMismatch, "DONE", "ABORTED/INTERNAL",
+    {Event::kCancel}, before);
+  expect_terminated_once_as(h, "ABORTED/INTERNAL");
+  expect_no_cancel_commands(h, end);
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);  // arm을 보내기 전
+}
+
+// ---- P5a(ack 대기). OFFBOARD_ACK_ACCEPTED, 거부 ack, 이탈, timeout, 취소 칸은
+// test_runner_offboard_ack.cpp의 사례가 덮는다. ----
+
+TEST(FlowCells, OffboardAckIdentityMismatchSendsNoDisarm)
+{
+  Harness h(standard_mission());
+  ASSERT_NO_FATAL_FAILURE(reach_offboard_ack(h));
+  h.world.identity = IdentityCheck::kMismatch;
+  const std::size_t before = h.edges().size();
+  h.tick();
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kPreparingIdentityMismatch, "DONE", "ABORTED/INTERNAL", {},
+    before);
+  expect_terminated_once_as(h, "ABORTED/INTERNAL");
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);  // arm을 보내기 전
+  EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
+}
+
+TEST(FlowCells, OffboardAckStampFailureEndsInternal)
+{
+  Harness h(standard_mission());
+  ASSERT_NO_FATAL_FAILURE(reach_offboard_ack(h));
+  h.clock.fail = true;
+  const std::size_t end = h.outputs().size();
+  const std::size_t before = h.edges().size();
+  h.tick();
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL", {}, before);
+  expect_terminated_once_as(h, "ABORTED/INTERNAL");
+  EXPECT_TRUE(h.outputs()[end].commands.empty());
+  EXPECT_FALSE(h.outputs()[end].setpoint.has_value());
+}
+
+TEST(FlowCells, OffboardAckRejectedWithCancelIsPreparingFailure)
+{
+  Harness h(standard_mission());
+  ASSERT_NO_FATAL_FAILURE(reach_offboard_ack(h));
+  h.push_ack(AckCommand::kSetMode, AckResult::kTemporarilyRejected);
+  const std::size_t before = h.edges().size();
+  h.tick(true);
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardRejected, "CLEANUP.PREPARING_FAILURE.NONE", "-",
+    {Event::kCancel}, before);
+  expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+  EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);
+}
+
+TEST(FlowCells, OffboardAckLeftWithCancelIsPreparingFailure)
+{
+  Harness h(standard_mission());
+  ASSERT_NO_FATAL_FAILURE(reach_offboard_ack(h));
+  h.world.nav = NavMode::kHold;
+  h.world.intention = NavMode::kHold;
+  const std::size_t before = h.edges().size();
+  h.tick(true);
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardLeft, "CLEANUP.PREPARING_FAILURE.NONE", "-",
+    {Event::kCancel}, before);
+  expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+  EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);
+}
+
+TEST(FlowCells, OffboardAckTimeoutWithCancelIsPreparingFailure)
+{
+  Harness h(standard_mission());
+  const std::int64_t offboard_start_ns = reach_offboard_ack(h);
+  const std::int64_t timeout_at = offboard_start_ns + h.config().timeouts.mode_confirm_timeout_ns;
+  while (h.now_ns < timeout_at) {
+    h.tick();
+  }
+  const std::size_t before = h.edges().size();
+  h.tick(true);
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardTimeout, "CLEANUP.PREPARING_FAILURE.NONE", "-",
+    {Event::kCancel}, before);
+  expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+  EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 0);
+}
+
+TEST(FlowCells, OffboardAckIdentityMismatchWithCancelSendsNoHoldOrDisarm)
+{
+  Harness h(standard_mission());
+  ASSERT_NO_FATAL_FAILURE(reach_offboard_ack(h));
+  h.world.identity = IdentityCheck::kMismatch;
+  h.cancel_sticky = true;
+  const std::size_t end = h.outputs().size();
+  const std::size_t before = h.edges().size();
+  h.tick();
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kPreparingIdentityMismatch, "DONE", "ABORTED/INTERNAL",
     {Event::kCancel}, before);
   expect_terminated_once_as(h, "ABORTED/INTERNAL");
   expect_no_cancel_commands(h, end);
