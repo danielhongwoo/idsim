@@ -220,6 +220,31 @@ private:
   bool stamp_known_{false};
 };
 
+// ---- 착지 뒤 대비책 disarm의 기한 ----
+
+// landed이고 ARMED인 상태가 land_disarm_fallback_delay 이어졌는가(decisions.md 쟁점 10 "LAND 항목의
+// 착지 뒤 fallback 계산은 함수로 빼서 지상 대기와 함께 쓴다"). 기준 시각은 그 상태가 처음 관측된
+// tick의 시각이고, 그 상태가 아닌 관측이 오면 끊고 다음 관측에서 다시 잰다. 어느 tick에 관측을
+// 반영할지(observe를 부를지)와 보낼 조건(확인 뒤, 분기)은 부르는 쪽이 정한다. observe를 부르지 않은
+// tick은 기준 시각을 끊지도 새로 시작하지도 않는다. 대비책은 한 번만 보낸다(mark_sent 뒤 due는
+// false).
+class LandedArmedFallback
+{
+public:
+  void reset();
+  // 그 tick의 관측. landed_and_armed가 false면 이어짐을 끊는다.
+  void observe(bool landed_and_armed, std::int64_t now_ns);
+  // 이어지는 중이고 기준 시각부터 delay_ns 이상 지났고 아직 보내지 않았다.
+  bool due(std::int64_t now_ns, std::int64_t delay_ns) const;
+  void mark_sent() { sent_ = true; }
+  bool sent() const { return sent_; }
+
+private:
+  bool known_{false};
+  std::int64_t since_ns_{0};
+  bool sent_{false};
+};
+
 // world ENU yaw -> 로컬 NED yaw, [-pi, pi). idsim_common/frames의 enu_to_ned_yaw와 같은 식이다.
 // core는 idsim_common(rclcpp 의존)을 링크하지 않으므로 식을 다시 쓴다. 같은 값인지는 노드 쪽
 // gtest(P3d)가 교차 검사한다.

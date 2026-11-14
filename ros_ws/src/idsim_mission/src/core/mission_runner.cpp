@@ -832,19 +832,12 @@ void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
   }
   // 대비책: landed이고 ARMED인 채 land_disarm_fallback_delay가 지나면 강제가 아닌 disarm.
   // 확인 대상 모드를 확인한 뒤에만 보낸다(대기 중인 명령은 한 번에 하나다).
-  if (s->arming == Arming::kArmed && landed) {
-    if (!mode_item_.landed_armed_known) {
-      mode_item_.landed_armed_known = true;
-      mode_item_.landed_armed_since_ns = t.input.now_ns;
-    }
-  } else {
-    mode_item_.landed_armed_known = false;
-  }
+  // 이어짐은 매 tick 그 tick의 표본으로 갱신한다(같은 표본을 다시 본 tick도).
+  mode_item_.fallback.observe(s->arming == Arming::kArmed && landed, t.input.now_ns);
   if (
-    mode_item_.confirmed && !mode_item_.fallback_started && mode_item_.landed_armed_known &&
-    elapsed(t, mode_item_.landed_armed_since_ns) >=
-      config_.timeouts.land_disarm_fallback_delay_ns) {
-    mode_item_.fallback_started = true;
+    mode_item_.confirmed &&
+    mode_item_.fallback.due(t.input.now_ns, config_.timeouts.land_disarm_fallback_delay_ns)) {
+    mode_item_.fallback.mark_sent();
     send(t, CommandKind::kDisarm);
     return;
   }

@@ -286,6 +286,25 @@ void DisarmConfirm::observe(const StatusSample & sample)
   counter_.observe(sample.timestamp_us, sample.arming == Arming::kDisarmed);
 }
 
+void LandedArmedFallback::reset() { *this = LandedArmedFallback{}; }
+
+void LandedArmedFallback::observe(bool landed_and_armed, std::int64_t now_ns)
+{
+  if (!landed_and_armed) {
+    known_ = false;
+    return;
+  }
+  if (!known_) {
+    known_ = true;
+    since_ns_ = now_ns;
+  }
+}
+
+bool LandedArmedFallback::due(std::int64_t now_ns, std::int64_t delay_ns) const
+{
+  return !sent_ && known_ && now_ns - since_ns_ >= delay_ns;
+}
+
 double wrap_pi(double angle)
 {
   if (!std::isfinite(angle)) {

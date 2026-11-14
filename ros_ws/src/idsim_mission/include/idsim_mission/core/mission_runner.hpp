@@ -168,9 +168,7 @@ private:
     int disarm_count{0};
     std::uint64_t last_timestamp_us{0};
     bool has_last{false};
-    bool landed_armed_known{false};
-    std::int64_t landed_armed_since_ns{0};
-    bool fallback_started{false};
+    LandedArmedFallback fallback;  // 확인 뒤의 대비책 disarm
   };
   enum class Outcome : std::uint8_t
   {
