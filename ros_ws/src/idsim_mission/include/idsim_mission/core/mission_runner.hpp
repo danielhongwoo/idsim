@@ -149,10 +149,13 @@ private:
     bool active{false};
     CommandKind kind{CommandKind::kArm};
     std::uint64_t first_tick{0};
+    std::uint64_t last_send_tick{0};  // 첫 전송이나 마지막 재전송의 tick
     std::int64_t first_ns{0};
     std::int64_t last_ns{0};
     bool has_ack{false};
     AckResult last_ack{AckResult::kAccepted};
+    // 마지막으로 받은 비거부 ack(ACCEPTED, IN_PROGRESS)의 received_tick. 없으면 0.
+    std::uint64_t accepted_ack_tick{0};
   };
   struct LandState
   {
@@ -185,6 +188,9 @@ private:
   void prepare_wait_ready(Tick & t);
   void prepare_signal(Tick & t);
   void prepare_offboard(Tick & t);
+  void prepare_offboard_ack(Tick & t);
+  // ack 대기에서 arm 조건의 ack가 있으면 arm을 보내고 P6으로 간다(decisions.md 쟁점 12 불변식).
+  void arm_if_offboard_acked(Tick & t);
   void prepare_arm(Tick & t);
   void prepare_arm_before_armed(Tick & t);
   // later는 감시 표 뒤에 볼 사건 가운데 이 tick에 참인 것(겹침 칸의 기록용. 판정에 쓰지 않는다).
@@ -259,7 +265,9 @@ private:
   double takeoff_target_z_{0.0};
   std::int64_t signal_start_ns_{0};  // P3 발행 시작
   std::uint64_t signal_start_tick_{0};
-  std::int64_t step_start_ns_{0};  // P5, P6 시작
+  std::int64_t step_start_ns_{0};  // P5, P6 시작(ack 대기는 P5의 것을 그대로 쓴다)
+  // OFFBOARD 확인에 쓴 3번째 표본의 timestamp. ack 대기의 이탈 판정은 이보다 큰 표본만 본다.
+  std::uint64_t offboard_confirm_timestamp_us_{0};
   std::uint64_t last_ack_tick_{0};
   std::int64_t branch_first_ns_{0};  // 정리 분기의 첫 명령 시각
   std::int64_t cleanup_start_ns_{0};  // 정리를 시작한 tick의 ROS 시각(정리의 상한 M6의 기준)

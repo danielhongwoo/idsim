@@ -158,6 +158,7 @@ if(BUILD_TESTING)
     test/test_runner_conflicts.cpp
     test/test_runner_flow_cells.cpp
     test/test_runner_cleanup_cells.cpp
+    test/test_runner_offboard_ack.cpp
     test/test_transition_coverage.cpp)
   target_link_libraries(test_runner idsim_mission_core)
   target_compile_definitions(test_runner PRIVATE

@@ -18,6 +18,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -35,8 +36,12 @@ TEST(Conflict, ThirdDisarmedAndCancelSameTickIsSucceeded)
   ASSERT_TRUE(h.run_until([&h] { return h.view().land_confirmed; }, 5));
   h.auto_px4 = false;
   h.feed({disarmed(true, NavMode::kLand), disarmed(true, NavMode::kLand)});
+  const std::size_t before = h.edges().size();
   const std::vector<StepOutput> outs = h.feed({disarmed(true, NavMode::kLand)}, true);
   EXPECT_TRUE(outs[0].commands.empty());
+  expect_cell(
+    h, "ITEM.LAND", Event::kLandDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {Event::kCancel},
+    before);
   expect_terminated_once(h, Status::kSucceeded, Reason::kNone);
 }
 
@@ -47,8 +52,12 @@ TEST(Conflict, MonitorRowAndCancelSameTickIsTheRowsAbort)
   h.auto_px4 = false;
   Sample s = armed(NavMode::kHold);
   s.intention = NavMode::kHold;
+  const std::size_t before = h.edges().size();
   const std::vector<StepOutput> outs = h.feed({s}, true);
   EXPECT_TRUE(outs[0].commands.empty());  // Hold를 보내지 않는다
+  expect_cell(
+    h, "ITEM.LOITER", Event::kMonitorModeExternal, "DONE", "ABORTED/EXTERNAL_MODE_CHANGE",
+    {Event::kCancel}, before);
   expect_terminated_once(h, Status::kAborted, Reason::kExternalModeChange);
 }
 

@@ -53,12 +53,15 @@ enum class Stage : std::uint8_t
   kDone,
 };
 
-// PREPARING(첫 항목이 TAKEOFF)의 단계. kWaitReady는 P0-P2, kSignal은 P3-P4.
+// PREPARING(첫 항목이 TAKEOFF)의 단계. kWaitReady는 P0-P2, kSignal은 P3-P4. kOffboardAck는 P5 안의
+// ack 대기 구간(OFFBOARD 3회 확인 뒤 마지막 DO_SET_MODE 전송 뒤의 ack를 기다린다. 1b decisions.md
+// 쟁점 12).
 enum class PrepStep : std::uint8_t
 {
   kWaitReady,
   kSignal,
   kOffboard,
+  kOffboardAck,
   kArm,
 };
 
@@ -92,10 +95,12 @@ enum class Event : std::uint8_t
   // P3-P4
   kSignalTimeout,
   kSignalConfirmed,
-  // P5
+  // P5와 ack 대기(P5a)
   kOffboardRejected,
   kOffboardTimeout,
-  kOffboardConfirmed,
+  kOffboardConfirmed,    // OFFBOARD 3회 연속 확인. 확인을 고정하고 ack 대기로
+  kOffboardAckAccepted,  // ack 대기에서 arm 조건의 ack를 가짐. arm을 보내고 P6
+  kOffboardLeft,         // ack 대기에서 OFFBOARD 이탈
   // P6
   kArmRejected,        // 첫 ARMED 표본 전의 거부 ack(TEMPORARILY_REJECTED 밖)
   kArmTimeout,         // 첫 ARMED 표본 전의 arm_timeout
@@ -144,7 +149,7 @@ enum class Event : std::uint8_t
   kStampUnavailable,  // Px4Timestamp 공급 실패
 };
 
-inline constexpr std::array<Event, 51> kAllEvents = {
+inline constexpr std::array<Event, 53> kAllEvents = {
   Event::kInvalidMission,
   Event::kPreparingIdentityMismatch,
   Event::kReadyIdentityMismatch,
@@ -157,6 +162,8 @@ inline constexpr std::array<Event, 51> kAllEvents = {
   Event::kOffboardRejected,
   Event::kOffboardTimeout,
   Event::kOffboardConfirmed,
+  Event::kOffboardAckAccepted,
+  Event::kOffboardLeft,
   Event::kArmRejected,
   Event::kArmTimeout,
   Event::kArmConfirmTimeout,

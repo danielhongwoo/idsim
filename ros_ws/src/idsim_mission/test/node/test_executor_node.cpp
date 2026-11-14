@@ -51,6 +51,7 @@
 #include "px4_msgs/msg/failsafe_flags.hpp"
 #include "px4_msgs/msg/trajectory_setpoint.hpp"
 #include "px4_msgs/msg/vehicle_command.hpp"
+#include "px4_msgs/msg/vehicle_command_ack.hpp"
 #include "px4_msgs/msg/vehicle_land_detected.hpp"
 #include "px4_msgs/msg/vehicle_local_position.hpp"
 #include "px4_msgs/msg/vehicle_status.hpp"
@@ -133,6 +134,8 @@ std::uint8_t state_of(const std::shared_ptr<MissionExecutorNode> & node)
 }
 
 // 가짜 PX4: 명령에 반응하고 /fmu/out 표본을 낸다. 실제 PX4의 판정을 흉내 내지 않는다(배선만 본다).
+// Offboard 전환(DO_SET_MODE, param2 6)에 반응할 때는 ACCEPTED ack도 낸다(target은 명령의 source).
+// 지상 arm 진입은 그 ack가 있어야 arm을 보낸다(1b decisions.md 쟁점 12).
 class FakePx4
 {
 public:
@@ -149,6 +152,8 @@ public:
       idsim_common::px4::topic_name<topics::VehicleLocalPosition>(ns), qos);
     flags_ = node->create_publisher<px4_msgs::msg::FailsafeFlags>(
       idsim_common::px4::topic_name<topics::FailsafeFlags>(ns), qos);
+    ack_ = node->create_publisher<px4_msgs::msg::VehicleCommandAck>(
+      idsim_common::px4::topic_name<topics::VehicleCommandAck>(ns), qos);
     command_ = node->create_subscription<px4_msgs::msg::VehicleCommand>(
       idsim_common::px4::topic_name<topics::VehicleCommand>(ns), qos,
       [this](const px4_msgs::msg::VehicleCommand::ConstSharedPtr msg) { on_command(*msg); });
@@ -214,7 +219,8 @@ public:
   int holds() const { return holds_; }
   bool landed() const { return landed_; }
   std::uint8_t nav_state() const { return nav_; }
-  bool react_offboard{true};  // false면 Offboard 요청에 반응하지 않는다(P5에 머문다)
+  bool react_offboard{
+    true};  // false면 Offboard 요청에 반응하지 않고 ack도 내지 않는다(P5에 머문다)
 
 private:
   void on_command(const px4_msgs::msg::VehicleCommand & cmd)
@@ -233,6 +239,13 @@ private:
       ++offboards_;
       if (react_offboard) {
         nav_ = VS::NAVIGATION_STATE_OFFBOARD;
+        px4_msgs::msg::VehicleCommandAck ack;
+        ack.timestamp = static_cast<std::uint64_t>(clock_.now_ns() / 1000);
+        ack.command = cmd.command;
+        ack.result = px4_msgs::msg::VehicleCommandAck::VEHICLE_CMD_RESULT_ACCEPTED;
+        ack.target_system = cmd.source_system;
+        ack.target_component = cmd.source_component;
+        ack_->publish(ack);
       }
     } else if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 4.0F) {
       nav_ = VS::NAVIGATION_STATE_AUTO_LOITER;
@@ -254,6 +267,7 @@ private:
   rclcpp::Publisher<px4_msgs::msg::VehicleLandDetected>::SharedPtr land_;
   rclcpp::Publisher<px4_msgs::msg::VehicleLocalPosition>::SharedPtr position_;
   rclcpp::Publisher<px4_msgs::msg::FailsafeFlags>::SharedPtr flags_;
+  rclcpp::Publisher<px4_msgs::msg::VehicleCommandAck>::SharedPtr ack_;
   rclcpp::Subscription<px4_msgs::msg::VehicleCommand>::SharedPtr command_;
   rclcpp::Subscription<px4_msgs::msg::TrajectorySetpoint>::SharedPtr setpoint_;
   std::uint8_t nav_{px4_msgs::msg::VehicleStatus::NAVIGATION_STATE_AUTO_LOITER};
