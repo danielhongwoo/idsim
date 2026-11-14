@@ -1137,5 +1137,142 @@ TEST(MissionEnd, T29CapOnMismatchedTickWhileClassifiedGround)
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
 
+// ---- 지상 대기의 대비책 기준 시각과 확인 함수(B9 S3 최종 검토 보강) ----
+// 칸 명세 2.2(지상 DISARMED 계수, 규칙 R), 2.3 순서 3과 끝 문단(이어짐 갱신, 진입 tick의 관측), D7,
+// D12. 칸은 기존 칸(A13r, G8, G10, Y11)만 쓴다.
+
+// T10 경로(지상 Hold 수락, Hold 기한으로 S+60에 지상 대기)를 S+60까지 돈다.
+// drive_ground_wait와 달리 S+60 tick까지 실행해 A13r를 단정하고, disarm 반응을 끄지 않는다.
+EndStart drive_into_ground_wait(Harness & h)
+{
+  const EndStart st = start_ground_end(h);
+  run_to(h, st.s + 60);
+  const std::size_t before = tick_marked(h);
+  expect_cell(h, kAir, Event::kHoldTimeout, kGroundWait, "-", {}, before);
+  EXPECT_TRUE(commands_at(h, st.s + 60).empty());
+  return st;
+}
+
+TEST(MissionEnd, GroundDisarmedSamplesRestartFallbackBase)
+{
+  // 지상 대기 중 지상 DISARMED 표본이 ARMED, landed의 이어짐을 끊는다(순서 3, D12). S+100, S+101의
+  // 지상 DISARMED 2회는 3회 전이라 끝나지 않고, S+102의 ARMED가 분류를 미정으로 되돌리며 계수를
+  // 0으로 만든다(규칙 R). 대비책의 기준은 S+60이 아니라 S+102이고 disarm은 S+202에 나간다.
+  Harness h(takeoff_only_mission(0.2));
+  const EndStart st = drive_into_ground_wait(h);
+  run_to(h, st.s + 100);
+  h.world.arming = Arming::kDisarmed;  // S+100, S+101 지상 DISARMED
+  h.tick();
+  EXPECT_EQ(h.view().disarm_class, DisarmClass::kGround);
+  h.tick();
+  EXPECT_FALSE(terminated_at(h, st.s + 100));
+  EXPECT_FALSE(terminated_at(h, st.s + 101));
+  EXPECT_FALSE(h.runner().done());
+  h.world.arming = Arming::kArmed;  // S+102부터 ARMED landed(쟁점 11의 전제 밖)
+  h.tick();
+  EXPECT_EQ(h.view().disarm_class, DisarmClass::kUnknown);
+  EXPECT_EQ(h.view().branch, Branch::kGroundWait);
+  EXPECT_FALSE(h.runner().done());
+  run_to(h, st.s + 202);
+  h.tick();
+  EXPECT_TRUE(ticks_sending(h, CommandKind::kDisarm, st.s, st.s + 201).empty());
+  EXPECT_EQ(commands_at(h, st.s + 202), std::vector<CommandKind>{CommandKind::kDisarm});
+  // 대비책 뒤의 지상 DISARMED는 전송 tick(S+202)보다 뒤의 S+203, S+204, S+205로 센다.
+  run_to(h, st.s + 205);
+  const std::size_t before = tick_marked(h);
+  expect_cell(h, kGroundWait, Event::kGroundDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {}, before);
+  EXPECT_TRUE(terminated_at(h, st.s + 205));
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 1);
+  EXPECT_EQ(h.count_command(CommandKind::kNavLand), 0);
+  expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
+}
+
+TEST(MissionEnd, GroundDisarmedCountRestartsAfterArmed)
+{
+  // 규칙 R: 분류 지상 뒤 ARMED가 다시 오면 지상 DISARMED 계수는 0이다. S+100, S+101, S+103의
+  // 지상 DISARMED는 이어진 3회가 아니라 끝나지 않는다. 이어짐은 S+103에 다시 끊기고 S+104가
+  // 기준이다.
+  Harness h(takeoff_only_mission(0.2));
+  const EndStart st = drive_into_ground_wait(h);
+  run_to(h, st.s + 100);
+  h.world.arming = Arming::kDisarmed;  // S+100, S+101
+  run_to(h, st.s + 102);
+  h.world.arming = Arming::kArmed;  // S+102
+  h.tick();
+  EXPECT_EQ(h.view().disarm_class, DisarmClass::kUnknown);
+  h.world.arming = Arming::kDisarmed;  // S+103
+  h.tick();
+  EXPECT_EQ(h.view().disarm_class, DisarmClass::kGround);
+  EXPECT_FALSE(terminated_at(h, st.s + 103));
+  EXPECT_FALSE(h.runner().done());
+  h.world.arming = Arming::kArmed;  // S+104부터
+  run_to(h, st.s + 205);
+  EXPECT_FALSE(has_edge(h, Event::kGroundDisarmConfirmed, st.before));
+  EXPECT_EQ(
+    ticks_sending(h, CommandKind::kDisarm, st.s, st.s + 204),
+    std::vector<std::uint64_t>{st.s + 204});
+  EXPECT_FALSE(h.runner().done());
+}
+
+TEST(MissionEnd, FallbackDisarmConfirmKeptOnLandPath)
+{
+  // 쟁점 10: 대비책 disarm을 보낸 뒤 Land 경로로 옮겨도 확인 함수(DisarmConfirm)로 센다(2.2, D7).
+  // S+160 대비책 disarm(무시), S+162 G8, S+165-S+167 지상 DISARMED. 세는 표본은 모두 전송 tick보다
+  // 뒤 tick의 것이다.
+  Harness h(takeoff_only_mission(0.2));
+  h.land_response = CommandResponse::kIgnore;
+  const EndStart st = drive_ground_wait(h, 160);
+  h.tick();  // S+160
+  EXPECT_EQ(commands_at(h, st.s + 160), std::vector<CommandKind>{CommandKind::kDisarm});
+  run_to(h, st.s + 162);
+  h.world.landed = false;  // S+162: ARMED landed false
+  std::size_t before = tick_marked(h);
+  expect_cell(h, kGroundWait, Event::kEnterAir, kAirLand, "-", {}, before);
+  EXPECT_EQ(commands_at(h, st.s + 162), std::vector<CommandKind>{CommandKind::kNavLand});
+  run_to(h, st.s + 165);
+  h.world.landed = true;
+  h.world.arming = Arming::kDisarmed;  // S+165, S+166, S+167
+  h.tick();
+  EXPECT_FALSE(h.view().pending_active);
+  h.tick();
+  EXPECT_FALSE(h.runner().done());
+  before = tick_marked(h);  // S+167
+  expect_cell(h, kAirLand, Event::kGroundDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {}, before);
+  EXPECT_TRUE(terminated_at(h, st.s + 167));
+  EXPECT_EQ(
+    ticks_sending(h, CommandKind::kDisarm, st.s, st.s + 167),
+    std::vector<std::uint64_t>{st.s + 160});
+  EXPECT_EQ(
+    ticks_sending(h, CommandKind::kNavLand, st.s, st.s + 167),
+    std::vector<std::uint64_t>{st.s + 162});
+  EXPECT_FALSE(has_edge(h, Event::kLandPathTimeout, st.before));
+  expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
+}
+
+TEST(MissionEnd, GroundWaitEnteredOnMismatchedTick)
+{
+  // D12: 지상 대기에 들어간 tick이 식별 불일치면 그 tick에 관측하지 않고, 다음 식별이 맞는
+  // ARMED, landed tick이 대비책 기준이다. 진입은 AIR의 hold_confirm_timeout(표본이 필요 없는 판정,
+  // 2.3 순서 2와 7)이고 그 tick의 최신 landed가 true라 지상 대기로 간다.
+  Harness h(takeoff_only_mission(0.2));
+  const EndStart st = start_ground_end(h);
+  run_to(h, st.s + 60);
+  h.world.identity = IdentityCheck::kMismatch;  // S+60: 식별 불일치 ARMED landed
+  std::size_t before = tick_marked(h);
+  expect_cell(h, kAir, Event::kHoldTimeout, kGroundWait, "-", {}, before);
+  EXPECT_TRUE(commands_at(h, st.s + 60).empty());
+  h.world.identity = IdentityCheck::kMatch;  // S+61부터: 기준 S+61
+  run_to(h, st.s + 161);
+  h.tick();
+  EXPECT_TRUE(ticks_sending(h, CommandKind::kDisarm, st.s, st.s + 160).empty());
+  EXPECT_EQ(commands_at(h, st.s + 161), std::vector<CommandKind>{CommandKind::kDisarm});
+  run_to(h, st.s + 164);
+  before = tick_marked(h);
+  expect_cell(h, kGroundWait, Event::kGroundDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {}, before);
+  EXPECT_TRUE(terminated_at(h, st.s + 164));
+  EXPECT_EQ(h.count_command(CommandKind::kDisarm), 1);
+  expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
+}
+
 }  // namespace
 }  // namespace idsim_mission::core::test
