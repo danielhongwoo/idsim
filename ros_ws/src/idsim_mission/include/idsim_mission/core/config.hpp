@@ -14,7 +14,7 @@
 
 // 상태기의 시간 값과 계수. 모두 ROS 시각(ns)이다.
 //
-// 기본값은 px4-engineer가 정한 값이다(docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 10).
+// 기본값은 px4-engineer가 정한 값이다(1a 6단계 설계 결정(git 이력) 쟁점 10).
 // 값의 변경은 px4-engineer가 필수 승인자다. 노드는 같은 이름의 노드
 // 파라미터를 선언하고 기본값을 이 구조체에서 읽는다(P3d). 지상 setpoint z 오프셋(0.5 m)은 노드
 // 파라미터가 아니라 어댑터 상수라 여기에 없다.

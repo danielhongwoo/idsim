@@ -17,9 +17,8 @@
 tests/sitl/measure/measure.py(라이브)와 단위 테스트(tests/support/test_measure_judge.py)가
 같은 함수를 쓴다. 시간은 모두 마이크로초 정수이고 sim 시간 축이다.
 
-기준의 정본은 docs-for-agent/plan-1a-6-idsim-mission/decisions.md의 "재실측 결과와 기준" 절이다.
-이 모듈의 상수는 그 문장을 옮긴 것이다. 기준을 바꾸려면 정본을 먼저 고친다(통과시키려고 느슨하게
-바꾸지 않는다).
+기준은 이 모듈의 상수다. 근거는 1a 6단계 설계 결정(git 이력)의 "재실측 결과와 기준" 절이다.
+기준을 바꾸려면 근거를 커밋 메시지에 적는다(통과시키려고 느슨하게 바꾸지 않는다).
 
 verdict와 종료 코드의 뜻
   PASS (0)               기준을 만족한 관측.

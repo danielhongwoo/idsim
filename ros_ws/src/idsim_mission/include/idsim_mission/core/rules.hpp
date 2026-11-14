@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 전이 표에서 떼어 낸 순수 규칙 셋. 상태기(mission_runner)가 쓰고 단위 테스트가 표로 시험한다.
-// 근거는 docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 3, 4.
+// 근거는 1a 6단계 설계 결정(git 이력) 쟁점 3, 4.
 //
 // 재실측으로 바뀔 수 있는 것은 고칠 곳이 한 곳이 되게 여기에 모았다(README.md "재실측으로 바뀔 수
 // 있는 곳").

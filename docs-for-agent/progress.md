@@ -87,7 +87,7 @@ B11 판정에서 챙길 것(test-engineer).
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
 - clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다. `tools/ros_ws.sh tidy`의 대상 0개 통과를 `ci`에서 바꿀지(ros2-engineer, devops-engineer).
 - 비결정 빌드 요소(ros.key, gazebo.gpg URL, apt 저장소 상태, pip 인덱스)는 이미지 key에 들어가지 않는다. apt `Acquire::Retries` 미적용이라 미러 장애나 동기화 시차로 apt 단계가 실패할 수 있다.
-- 실패 run의 `artifacts/runs/`가 job artifact로 올라가는지 확인하고, 판정 상수를 재검토한다(1a 쟁점 9).
+- 실패 run의 `artifacts/runs/`가 job artifact로 올라가는지 확인하고, CI 기록이 쌓이면 SITL 판정 상수를 재검토한다.
 
 시뮬레이션과 화면 도구.
 

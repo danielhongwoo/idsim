@@ -1,6 +1,6 @@
 # PX4 재실측 측정 스크립트
 
-`docs-for-agent/plan-1a-6-idsim-mission/decisions.md`의 "재실측 결과와 기준" 절의 재실측 (2), (3), (5)와, OFFBOARD가 아닌 ARMED 표본 기록(`armed` 항목)을 돌리는 도구다. 소유는 test-engineer, 절차의 필수 승인자는 px4-engineer다.
+1a 6단계 설계 결정(git 이력)의 "재실측 결과와 기준" 절의 재실측 (2), (3), (5)와, OFFBOARD가 아닌 ARMED 표본 기록(`armed` 항목)을 돌리는 도구다. 소유는 test-engineer, 절차의 필수 승인자는 px4-engineer다.
 
 이 측정은 Executor 없이 PX4에 직접 명령을 보낸다(PX4 직접 부류). 시나리오 A(Executor 경유)의 대응이나 대체가 아니다. 통과해도 P4 머지 조건은 Executor 경유 부류의 통과가 따로 필요하다.
 

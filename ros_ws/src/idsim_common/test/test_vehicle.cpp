@@ -14,7 +14,7 @@
 
 // 기체 식별 타입과 vehicle_status 대조. 순수 함수만 시험한다.
 // 결정: 1a 4단계 idsim_common 설계 결정(git 이력) 쟁점 5. VehicleId는
-// docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5.
+// 1a 6단계 설계 결정(git 이력) 쟁점 5.
 
 #include <gtest/gtest.h>
 

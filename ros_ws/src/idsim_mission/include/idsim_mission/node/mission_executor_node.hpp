@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Mission Executor 노드 껍질(lifecycle, 컴포넌트 idsim_mission::MissionExecutorNode).
-// 결정: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 2(실행 형태, 자기 전이), 쟁점 7
+// 결정: 1a 6단계 설계 결정(git 이력) 쟁점 2(실행 형태, 자기 전이), 쟁점 7
 // (사건 QoS), 쟁점 10(타임아웃 파라미터). 구현 규칙은 패키지 README.md.
 //
 // - 상태기는 core::MissionRunner, PX4 변환은 px4/ 어댑터다. 이 노드는 구독, 발행, action 서버,

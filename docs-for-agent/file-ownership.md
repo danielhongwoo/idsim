@@ -17,7 +17,7 @@
 
 ## idsim_mission의 승인 규칙
 
-- 상태기는 ros2-engineer가 `docs-for-agent/plan-1a-6-idsim-mission/decisions.md`의 전이 표대로 구현한다. 전이 표와 상태기 단위 테스트의 변경은 px4-engineer가 필수 승인자다.
+- 상태기는 ros2-engineer가 전이 칸 목록(`transition_cells.tsv`)과 `docs/interface.md` "ExecuteMission" 절대로 구현한다. 전이 표와 상태기 단위 테스트의 변경은 px4-engineer가 필수 승인자다.
 - `include/idsim_mission/core/snapshot.hpp`는 ros2-engineer 소유이고 변경은 px4-engineer가 필수 승인자다.
 - `include/idsim_mission/core/transition.hpp`의 `Event` 목록과 전이 칸 목록 파일 `ros_ws/src/idsim_mission/test/transition_cells.tsv`는 전이 표의 일부다. ros2-engineer 소유이고 변경은 px4-engineer가 필수 승인자다.
 - 타임아웃 기본값과 명령 재전송 주기(노드 파라미터의 기본값)는 값을 px4-engineer가 정한다. 그 값이 적힌 파일은 ros2-engineer 소유이고, 값의 변경은 px4-engineer가 필수 승인자다.

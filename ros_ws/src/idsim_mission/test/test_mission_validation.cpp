@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 미션 검증, TYPE_* 분류, goal 즉시 판정의 순서.
-// 결정: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 3 M1, 쟁점 4 "미션의 정적 검증".
+// 결정: 1a 6단계 설계 결정(git 이력) 쟁점 3 M1, 쟁점 4 "미션의 정적 검증".
 
 #include <gtest/gtest.h>
 

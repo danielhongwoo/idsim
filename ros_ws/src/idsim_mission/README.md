@@ -1,6 +1,6 @@
 # idsim_mission
 
-기체 하나의 Mission Executor. `ExecuteMission` action 서버(`/<vehicle_id>/execute_mission`)로 미션을 받아 PX4 Offboard로 실행하고, goal마다 접수와 종료 사건(`mission_event`)을 낸다. 설계 결정의 정본은 `docs-for-agent/plan-1a-6-idsim-mission/decisions.md`(쟁점 2, 3, 4, 6, 10)다. 이 문서는 구현 규칙과 경계를 적는 설계 노트다.
+기체 하나의 Mission Executor. `ExecuteMission` action 서버(`/<vehicle_id>/execute_mission`)로 미션을 받아 PX4 Offboard로 실행하고, goal마다 접수와 종료 사건(`mission_event`)을 낸다. 계약은 `docs/interface.md`, 1b 계약은 `docs-for-agent/plan-1b-mission-target/decisions.md`다. 이 문서는 구현 규칙과 경계를 적는 설계 노트다.
 
 ## 구성
 

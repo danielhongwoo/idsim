@@ -1,6 +1,6 @@
 # tests/sitl
 
-이륙-호버-착륙 통합 테스트(시나리오 B, C, A, D, T)와 PX4 재실측 스크립트(`measure/`)다. 설계와 계약은 `docs-for-agent/plan-1a-6-idsim-mission/decisions.md`(쟁점 1, 7-11)에 있다. 소유는 test-engineer다.
+이륙-호버-착륙 통합 테스트(시나리오 B, C, A, D, T)와 PX4 재실측 스크립트(`measure/`)다. 계약은 `docs/interface.md`에 있다. 소유는 test-engineer다.
 
 ## 실행
 

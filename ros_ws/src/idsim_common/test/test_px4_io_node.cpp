@@ -16,7 +16,7 @@
 //
 // 이 파일만 노드를 만든다(QoS 덮어쓰기는 노드 파라미터 경로라 노드 없이는 확인할 수 없다).
 // 통신은 하지 않는다. tools/ros_ws.sh는 --network none, ROS_DOMAIN_ID=99로 돌린다.
-// 결정: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5, PR #20 px4-engineer 검토 C1.
+// 결정: 1a 6단계 설계 결정(git 이력) 쟁점 5, PR #20 px4-engineer 검토 C1.
 
 #include <gtest/gtest.h>
 

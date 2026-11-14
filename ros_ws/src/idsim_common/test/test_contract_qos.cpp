@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 계약 토픽 QoS(사건, 상태)의 값과 호환 대조. 노드를 만들지 않는다.
-// 결정: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5, 7(사건),
+// 결정: 1a 6단계 설계 결정(git 이력) 쟁점 5, 7(사건),
 // docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 3, 14(상태).
 
 #include <gtest/gtest.h>
