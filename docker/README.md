@@ -211,7 +211,7 @@ tools/sim_stack.sh down --stack 8                     # 끝나면
 제약.
 
 - 기체 상태가 이월된다. attach 실행은 스택을 새로 만들지 않으므로 앞 시나리오가 끝난 상태(착륙 뒤 DISARMED, PX4가 쌓은 EKF 상태와 위치)에서 다음이 시작한다. 시나리오의 사전조건 단정(지상 DISARMED 3회 연속)이 어긋나면 `PRECONDITION`으로 실패하며, 그때는 스택을 새로 올린다.
-- 같은 px4 프로세스에서 arm/disarm을 거듭하면 `battery_status` 발행이 멈춰 `Preflight Fail: Battery unhealthy`가 나고 arm이 거부될 수 있다(실측: 스택 8의 여섯 번째 비행 부근, ULog에서 `battery_status`와 `cpuload`의 마지막 표본이 끝보다 약 230 s 앞이고 `remaining`은 0.61 이상이라 잔량 소모가 아니다. 시나리오 D가 "D 고도 도달" `TIMEOUT_SIM`으로 실패). 이 증상이 보이면 `tools/sim_stack.sh up`으로 새로 올린다(`restart-ops`로는 px4가 초기화되지 않는다). 원인 수정(`PX4_PARAM_IMU_GYRO_CAL_EN`)이 main에 들어가기 전의 제약이다.
+- `Preflight Fail: Battery unhealthy`처럼 px4 쪽 상태 때문에 arm이 거부되면 `tools/sim_stack.sh up`으로 새로 올린다. `restart-ops`는 px4를 초기화하지 않는다.
 - `-- -k`로 일부 시나리오만 돌리면 pytest는 통과해도 wrapper 종료 코드가 1이고 summary의 전체 결과가 "실패"다(다섯 시나리오가 모두 passed여야 통과로 세기 때문이다). 판정은 pytest 요약 줄과 summary.md의 시나리오 표로 한다.
 - px4, bridge, 월드, 파라미터, 생성기 출력(`compose.yaml`, `params/ops-N.yaml`)이 바뀌는 수정은 이 절차로 반영되지 않는다. `tools/sim_stack.sh up`으로 새로 올린다.
 
