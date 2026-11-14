@@ -422,6 +422,8 @@ TEST(MissionEnd, T11AutoDisarmWhileWaitingForHold)
   expect_cell(h, "ITEM.LOITER", Event::kLoiterElapsed, kNone, "-", {}, start);
   run_to(h, s + 20);
   h.world.arming = Arming::kDisarmed;  // S+20부터 PX4 자동 disarm 흉내
+  h.tick();                            // S+20: 첫 지상 DISARMED, 대기 명령 지움
+  EXPECT_FALSE(h.view().pending_active);
   run_to(h, s + 22);
   const std::size_t before = tick_marked(h);
   expect_cell(h, kAir, Event::kGroundDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {}, before);
@@ -1010,6 +1012,7 @@ TEST(MissionEnd, T25LastLoiterAutoDisarmBeforeCompletion)
 
 TEST(MissionEnd, T26DisarmedAutoLandSamplesAreNotLandObserved)
 {
+  // ARMED AUTO_LAND 표본이면 Y9(LAND_PATH_MODE_OBSERVED)가 되는 대조는 T5가 덮는다.
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
   h.land_response = CommandResponse::kIgnore;
