@@ -20,7 +20,7 @@
     },
     "fleet": {
       "path": "tests/fixtures/gen_compose/3\ub300-k0/fleet.yaml",
-      "sha256": "62a311b474cd59336344dad1bf3f201a1ea1f8de3ac78cf82aea53a3a2ad24f9"
+      "sha256": "7c66911abf8e1e3555d21ff3cd2a909ed1f5347e42a820bc39db54d8831b9d06"
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",

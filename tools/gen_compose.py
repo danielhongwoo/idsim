@@ -100,7 +100,6 @@ TARGET_SPEED_XY_MAX_MPS = 5.0
 TARGET_SPEED_Z_MAX_MPS = 1.0
 TARGET_SPEED_EPS = 1e-9  # 상한과 같은 속도는 통과시키는 부동소수점 여유
 TARGET_SPAWN_CLEAR_M = 2.0  # t=0 위치와 기체 스폰의 최소 수평 거리
-# Gazebo Actor(화면 확인용. 표적 위치의 원천은 아니다). 요소의 형태와 값은 sim-engineer가 정한다(B6 Actor 명세 판 1).
 TARGET_COORD_XY_MAX_M = 10000.0  # |x|, |y| 상한(모든 waypoint)
 TARGET_COORD_Z_MAX_M = 1000.0
 TARGET_START_S_MAX = 86400.0
@@ -387,7 +386,7 @@ def _validate_targets(raw, posed_vehicles, errors):
             out.append({"id": tid, "start_s": float(start_s), "loop": loop, "waypoints": norm_wps})
     if sum(ms for _, ms in lengths) > TARGETS_LENGTH_SUM_MAX_MS:
         errors.append(
-            f"targets: 궤적 길이(마지막 waypoint의 t)의 합 {_ms_str(sum(ms for _, ms in lengths))} s가 상한 "
+            f"targets: 궤적 길이(마지막 waypoint의 t를 ms로 반올림한 값)의 합 {_ms_str(sum(ms for _, ms in lengths))} s가 상한 "
             f"{_ms_str(TARGETS_LENGTH_SUM_MAX_MS)} s를 넘는다. 표적별 길이: "
             + ", ".join(f"targets[{i}] {_ms_str(ms)} s" for i, ms in lengths))
     return out
@@ -747,8 +746,8 @@ def actor_samples(target, dt_ms=ACTOR_SAMPLE_DT_MS):
 def actor_tail(target):
     """loop false 표적의 끝 정지 두 점 [(T_ms, x, y, z)], loop true는 빈 목록.
 
-    gz-sim 8.15.0 렌더링이 <loop>false</loop>에서 끝나지 않는 루프에 빠지므로 <loop>는 항상 true이고,
-    정지는 마지막 점 뒤 같은 위치의 두 점(250 ms 뒤, 86400 s 뒤)으로 나타낸다. 첫 점은 마지막 점의
+    gz-sim 8.15.0 렌더링은 <loop>false</loop>인 Actor에서 delay_start가 0이면 끝나지 않는 루프에 빠지고,
+    0보다 크면 첫 waypoint에서 움직이지 않는다. 그래서 <loop>는 항상 true이고 정지는 마지막 점 뒤 같은 위치의 두 점(250 ms 뒤, 86400 s 뒤)으로 나타낸다. 첫 점은 마지막 점의
     Catmull-Rom 접선을 0으로 만든다. 표본 간격 규칙(sampler)을 지나지 않고 두 점을 그대로 더한다.
     """
     if target["loop"]:
@@ -863,9 +862,9 @@ def _check_actor(actor, target):
     if bad:
         problems.append(f"actor {name}: 금지 요소 {bad}가 있다")
     if actor.find("script") is None:
-        return problems + [f"actor {name}: <script>가 없다(렌더링 무한 루프)"]
+        return problems + [f"actor {name}: <script>가 없다(gz-sim 렌더링이 궤적 길이 0에서 끝나지 않는 루프에 빠진다)"]
     if [el.text for el in actor.findall("script/loop")] != ["true"]:
-        problems.append(f"actor {name}: <loop>가 정확히 하나의 true가 아니다(gz-sim 렌더링 무한 루프)")
+        problems.append(f"actor {name}: <loop>가 정확히 하나의 true가 아니다(false이면 delay_start 0에서 gz-sim 렌더링이 끝나지 않고, 0보다 크면 첫 waypoint에서 움직이지 않는다)")
     if actor.findtext("script/delay_start") != format(target["start_s"], ".3f"):
         problems.append(f"actor {name}: delay_start가 start_s와 다르다")
     points = [(w.findtext("time"), w.findtext("pose")) for w in actor.iter("waypoint")]

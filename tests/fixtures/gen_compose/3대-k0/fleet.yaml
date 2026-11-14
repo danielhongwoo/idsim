@@ -1,4 +1,4 @@
-# 생성기 골든 입력: 3대, 직렬 기동, 기체 2의 파라미터 덮어쓰기, 표적 둘. 형식은 config/fleet.yaml 주석을 따른다.
+# 생성기 golden 입력: 3대, 직렬 기동, 기체 2의 파라미터 덮어쓰기, 표적 둘. 형식은 config/fleet.yaml 주석을 따른다.
 schema: 2
 world:
   name: default

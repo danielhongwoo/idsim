@@ -1451,7 +1451,7 @@ def test_length_sum_ranges_and_inclusions():
 def test_length_sum_message_is_full_and_not_truncated():
     with pytest.raises(gc.FleetError) as e:
         _sum_ok(*[long_t(1000, id=f"t{i}") for i in range(3)])
-    assert str(e.value) == ("targets: 궤적 길이(마지막 waypoint의 t)의 합 3000.000 s가 상한 2400.000 s를 넘는다. "
+    assert str(e.value) == ("targets: 궤적 길이(마지막 waypoint의 t를 ms로 반올림한 값)의 합 3000.000 s가 상한 2400.000 s를 넘는다. "
                             "표적별 길이: targets[0] 1000.000 s, targets[1] 1000.000 s, targets[2] 1000.000 s")
     many = [long_t(100, id=f"t{i}", x=20.0 + i) for i in range(gc.TARGETS_MAX)]
     with pytest.raises(gc.FleetError) as e:
