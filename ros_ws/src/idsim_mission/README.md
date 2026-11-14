@@ -15,18 +15,11 @@
 
 ## core와 어댑터의 경계
 
-경계는 `include/idsim_mission/core/snapshot.hpp` 하나다. 헤더 머리 주석에 px4_msgs 필드와의 대응표가 있고 P3c는 그 표대로 채운다. 요약:
+경계는 `include/idsim_mission/core/snapshot.hpp` 하나다. 필드 목록과 px4_msgs 필드와의 대응표("어댑터가 채울 것", "출력에 할 것")는 그 헤더 머리 주석이 정본이고, 어댑터(`px4/`의 `inputs`, `outputs`, `frame_port`, `clock_port`)는 그 표대로 채운다. 여기에는 구조만 적는다.
 
-- 입력: tick 번호, 그 tick의 ROS 시각, `Snapshot`(토픽마다 최신 표본 하나), `Px4ClockPort`(실패할 수 있는 `Px4Timestamp` 공급). core는 벽시계와 rclcpp를 부르지 않는다(decisions.md 쟁점 6 C1).
-  - `Snapshot.status`(vehicle_status): `timestamp_us`, `received_tick`, `received_ns`, 식별 대조 결과와 불일치 설명, `Arming`, `NavMode`(nav_state와 사용자 의도. OFFBOARD, AUTO_LOITER, AUTO_LAND, 그 밖), `failsafe`.
-  - `Snapshot.land`(vehicle_land_detected): `landed`.
-  - `Snapshot.position`(vehicle_local_position): x, y, z, heading(NED), `z_valid`.
-  - `Snapshot.flags`(failsafe_flags): `ekf_ready`(무효 flag 넷이 모두 false. 술어는 어댑터), `offboard_signal_lost`.
-  - `Snapshot.ack`(vehicle_command_ack, target이 이 Executor인 것만): command 묶음(DO_SET_MODE, ARM_DISARM, NAV_LAND)과 result.
+- 입력: tick 번호, 그 tick의 ROS 시각, `Snapshot`(PX4 토픽마다 최신 표본 하나와 target_id별 최신 유효 표적 표본), `Px4ClockPort`(실패할 수 있는 `Px4Timestamp` 공급), `FramePort`(world ENU -> 기체 로컬 NED 변환. 그 tick의 `Snapshot.position`과 같은 표본의 기준으로 만든다). core는 벽시계와 rclcpp를 부르지 않고 `idsim_common`과 px4_msgs를 모른다(decisions.md 쟁점 6 C1, 쟁점 4).
   - `received_tick`은 "그 표본을 처음 볼 수 있는 step의 tick 번호"다. 그래서 step k에서 낸 명령의 응답은 `received_tick > k`다.
-- 출력(`StepOutput`): `px4_timestamp_us`(이 tick의 명령과 setpoint에 실을 값), `setpoint`(있으면 이 tick에 `offboard_control_mode`(position만)와 `trajectory_setpoint`를 발행), `commands`(`CommandKind` 목록. 재전송도 여기에 나온다), `feedback`, `termination`.
-  - `CommandKind` -> `VehicleCommandBuilder`: `kSetModeOffboard` -> `set_mode_offboard`, `kSetModeHold` -> `set_mode_hold`, `kArm` -> `arm`, `kDisarm` -> `disarm`(강제가 아님), `kNavLand` -> `land`.
-  - `SetpointOut.kind == kGround`이면 어댑터가 z에 지상 setpoint 오프셋 +0.5 m(NED 아래쪽, 어댑터 상수)를 더한다. core는 그 값을 모른다.
+- 출력(`StepOutput`): `px4_timestamp_us`(이 tick의 명령과 setpoint에 실을 값), `setpoint`(있으면 이 tick에 `offboard_control_mode`(position만)와 `trajectory_setpoint`를 발행. 속도는 `velocity_valid`일 때만 싣는다), `commands`(`CommandKind` 목록. 재전송도 여기에 나온다), `feedback`, `termination`.
   - 노드는 `Px4ClockPort::now_us`가 그 tick에 만든 `Px4Timestamp` 객체를 보관해 두고 그 객체로 명령과 setpoint를 만든다(`Px4Timestamp`는 시계에서만 만들 수 있다).
 
 ## 노드 껍질(P3d)

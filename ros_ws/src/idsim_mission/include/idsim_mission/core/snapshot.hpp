@@ -205,8 +205,10 @@ struct Snapshot
   std::optional<PositionSample> position;
   std::optional<FlagsSample> flags;
   std::optional<AckSample> ack;
-  // target_id -> 최신 유효 표본. 키가 없으면 "유효 표본을 한 번도 받지 못함"이다. 한 번 받은 뒤에는
-  // 지우지 않는다(소실은 stamp_ns로 core가 판정한다).
+  // target_id -> 최신 유효 표본. 키가 없으면 "이 goal에서 유효 표본을 한 번도 받지 못함"이다.
+  // 노드는 goal 접수 때 비우고 goal 안에서는 지우지 않는다(소실은 stamp_ns로 core가 판정한다).
+  // 앞 goal의 표본이 남으면 TRACK_ENTITY가 시작 tick에 TARGET_LOST가 되어 "항목 시작부터
+  // target_timeout" 유예(decisions.md 쟁점 8)가 사라진다.
   std::map<std::string, TargetSample> targets;
 };
 
