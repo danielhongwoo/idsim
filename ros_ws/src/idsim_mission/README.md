@@ -133,7 +133,7 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 
 ## 테스트
 
-`test/`의 core 단위 테스트는 gtest와 core만 링크한다(노드와 DDS 참가자를 만들지 않는다). `test/px4/`는 어댑터(px4-engineer), `test/node/`는 노드 껍질 테스트다. runner를 쓰는 테스트 파일(`test_mission_validation.cpp`, `test_runner_*.cpp`)과 `test_transition_coverage.cpp`는 gtest 실행 파일 하나 `test_runner`로 묶는다(전이 칸 대조가 모든 상태기 테스트의 관측을 모아야 한다). `test_termination`, `test_monitor_table`, `test_confirm_rules`는 runner를 쓰지 않아 따로 둔다.
+`test/`의 core 단위 테스트는 gtest와 core만 링크한다(노드와 DDS 참가자를 만들지 않는다). `test/px4/`는 어댑터(px4-engineer), `test/node/`는 노드 껍질 테스트다. runner를 쓰는 테스트 파일(`test_mission_validation.cpp`, `test_runner_*.cpp`)과 `test_transition_coverage.cpp`는 gtest 실행 파일 하나 `test_runner`로 묶는다(전이 칸 대조가 모든 상태기 테스트의 관측을 모아야 한다). `test_termination`, `test_monitor_table`, `test_confirm_rules`, `test_snapshot`은 runner를 쓰지 않아 따로 둔다.
 
 | 파일 | 내용 |
 | --- | --- |
@@ -145,6 +145,7 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 | `test_termination.cpp` | status와 reason 전수 대응표, reason 값, 종료 결과 == 종료 사건 |
 | `test_monitor_table.cpp` | 감시 표 순위마다 한 건, 같은 tick 동률 24쌍(`row`가 앞 순위이고 `matched`가 두 행을 순위 순서로 담음. 행 쌍의 "전부"는 이 표가 보증한다), 배타 4쌍, 순위 5의 가지, 행 수와 parametrize 수, 감시 표로 끝낼 때의 disarm 술어(8행 전수 x 입력 16조합) |
 | `test_confirm_rules.cpp` | N회 연속 계수, 전송 뒤 표본 기준, 늦은 arm 경합, 정리 분기 고르기(snapshot 5종), yaw 변환 |
+| `test_snapshot.cpp` | snapshot 헤더의 새 타입 기본값(`SetpointOut.velocity_valid`, `PositionSample.xy_valid`와 `timestamp_us`, `TargetSample.stamp_ns`, 빈 `Snapshot.targets`), `kNavRtl`의 이름과 ack 묶음, 가짜 구현으로 본 `FramePort` 계약 모양(무효 기준의 점 변환은 nullopt, 벡터는 늘 값). 실제 변환 식과 기준 유효 술어는 `px4/test_px4_frame_port.cpp`가 본다 |
 | `test_runner_preparing.cpp` | P0-P6, `[LAND]` 미션, PREPARING 실패의 정리, P6의 첫 ARMED 표본 뒤(감시 표 행마다, 묵은 표본, arm 재전송 중단, 늦은 거부 ack, 확인 기한과 3번째 확인의 같은 tick, P6 최대 길이의 끝 경계, 감시 표의 같은 tick, failsafe 이력의 구간, landed false 이력의 같은 tick 경계), 식별 불일치의 disarm과 `Px4Timestamp` 실패 |
 | `test_runner_items.cpp` | TAKEOFF, LOITER, 상태기 안의 감시 표(순위마다), 엇갈림, 이력의 항목 경계, 분류 고정, 감시 표로 끝낼 때의 disarm 1회(8행 x {P6, TAKEOFF, LOITER} x landed 이력) |
 | `test_runner_land.cpp` | LAND 세 구간, 완료 우선, 대비책 disarm, LAND의 ITEM_TIMEOUT 변형 |
