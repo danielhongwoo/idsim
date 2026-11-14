@@ -18,9 +18,10 @@
 // 있고 OFFBOARD 3회 연속 확인이 된 tick에만 나간다. 확인 tick은 늘 ack 대기 상태
 // PREPARING.OFFBOARD_ACK를 거친다.
 //
-// - 단위 테스트 다섯 사례(T1-T5)와 그 보조, 그리고 확인 tick이나 대기 중 tick에 취소가 겹친 경우의
-//   출력을 단정한다. 대기 구간의 나머지 칸(식별 불일치, Px4Timestamp 실패, 무시된 취소 겹침)은
-//   test_runner_flow_cells.cpp의 P5a 절이 덮는다.
+// - 단위 테스트 다섯 사례(T1-T5)와 그 보조, 대기 중 같은 tick의 이탈과 timeout 대 유효 ack,
+//   그리고 확인 tick이나 대기 중 tick에 취소가 겹친 경우의 출력을 단정한다. 대기 구간의
+//   나머지 칸(식별 불일치, Px4Timestamp 실패, 무시된 취소 겹침)은 test_runner_flow_cells.cpp의
+//   P5a 절이 덮는다.
 // - 기본값: command_resend_period 0.5 s = 10 tick, mode_confirm_timeout 3.0 s = 60 tick.
 // - P5 진입 tick을 S라 한다(SIGNAL_CONFIRMED, DO_SET_MODE 첫 전송). 가짜 PX4가 S의 전송에 낸 ack는
 //   사례마다 지우고(ack 없이 시작) 테스트가 ack를 직접 준다. 표본은 feed로 준다(timestamp는 수신
@@ -359,6 +360,46 @@ TEST(OffboardAck, AckAndCancelSameTickWhileWaitingGoesToGroundDisarm)
   EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kDisarm});
   EXPECT_TRUE(h.view().arm_sent);
   EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
+}
+
+// ---- 대기 중 같은 tick: 이탈과 timeout이 arm보다 먼저다(decisions.md 쟁점 12 같은 tick 문단) ----
+
+TEST(OffboardAck, LeavingAndValidAckSameTickIsLeftWithoutArm)
+{
+  // 합성 표본: 유효 ack와 확인 표본보다 새로운 OFFBOARD 아닌 표본이 같은 tick.
+  Harness h(standard_mission());
+  reach_offboard_ack(h);
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  const std::size_t before = h.edges().size();
+  const StepOutput out = h.feed({hold_ground()})[0];
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardLeft, "CLEANUP.PREPARING_FAILURE.NONE", "-", {},
+    before);
+  expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+  EXPECT_TRUE(out.commands.empty());
+  EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
+  EXPECT_FALSE(h.view().arm_sent);
+}
+
+TEST(OffboardAck, TimeoutAndValidAckSameTickIsTimeoutWithoutArm)
+{
+  // 유효 ack가 mode_confirm_timeout tick(S+60)에 온다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_ack(h);
+  while (h.tick_no < s + 60) {
+    h.feed({offboard_ground()});
+  }
+  ASSERT_FALSE(h.runner().done());
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  const std::size_t before = h.edges().size();
+  const StepOutput out = h.feed({offboard_ground()})[0];
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardTimeout, "CLEANUP.PREPARING_FAILURE.NONE", "-", {},
+    before);
+  expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+  EXPECT_TRUE(out.commands.empty());
+  EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
+  EXPECT_FALSE(h.view().arm_sent);
 }
 
 }  // namespace
