@@ -29,9 +29,9 @@
 //   나가지 않아 실패한다.
 // - ack는 합성이다. 가짜 PX4 반응을 끈 직후 snapshot의 ack를 지워 테스트가 준 ack만 남긴다.
 //   기체 상태는 world로 고정한다.
-// - IN_PROGRESS는 PX4 v1.17.0 기본 설정에서 이 명령들에 오지 않는다([소스] IN_PROGRESS는
-//   ArmAuthorization.cpp 235행, COM_ARM_AUTH_REQ를 켠 arm에만). 비거부 ack 전체가 재전송을 끄지
-//   않음을 고정하는 방어 입력이다.
+// - [소스] PX4 v1.17.0에는 이 명령들의 ack로 IN_PROGRESS를 내는 지점이 없다(유일한 등장은
+//   ArmAuthorization.cpp 235행, 외부 승인자가 보낸 ack의 수신 처리). 비거부 ack 전체가 재전송을
+//   끄지 않음을 고정하는 방어 입력이다.
 
 #include <gtest/gtest.h>
 
