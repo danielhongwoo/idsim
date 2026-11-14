@@ -30,7 +30,7 @@
 #   stdout     마지막 줄이 (마지막 회의) 실행 디렉터리 절대 경로 artifacts/runs/<실행 id>. 나머지는 모두 stderr
 #   요약       GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
 #   산출물     <실행 디렉터리>/sitl/: junit.xml, trace.jsonl, verdict.json, summary.md, steps.tsv, raw_status_A.jsonl,
-#              armed_a.json, crosscheck_a.json, ps_before_stop.jsonl, logs/<서비스>.log,
+#              raw_status_D.jsonl(D 실패 때만), armed_a.json, crosscheck_a.json, ps_before_stop.jsonl, logs/<서비스>.log,
 #              health_<서비스>.txt(실패한 회나 unhealthy 서비스만). steps.tsv 끝에 서비스 종료 상태(stop_exit_*),
 #              ULog 끝 경계(ulog), 회차별 종료 코드(rc_*)가 줄로 붙는다. 실행 디렉터리 안에는 compose.yaml, stack.json, params/, px4-N/log/*.ulg, ros_log/
 #              --repeat이면 artifacts/sitl_repeat/<시각>-k<k>/ 에 repeat_summary.tsv, armed_criterion.json

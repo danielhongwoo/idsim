@@ -189,6 +189,33 @@ def test_milestones_ordered():
     assert "관측되지" in sj.milestones_ordered([("a", 5), ("b", None)])[0][1]
 
 
+def test_milestones_same_clock_tolerates_px4_ts_skew():
+    # PX4 timestamp가 ROS /clock보다 4 ms 앞서도(/clock 지연) 수신 시각으로 비교하면 순서가 맞는다
+    D = mj.ARMING_STATE_DISARMED
+    land = mj.NAV_STATE_AUTO_LAND
+    s = [st(100, D, recv=100), st(200, recv=200), st(300, nav=land, recv=300), st(400, D, nav=land, recv=400),
+         st(500, D, nav=land, recv=500), st(600, D, nav=land, recv=596)]     # 마지막: PX4 stamp 600, ROS 수신 596
+    f, m = sj.sequence_findings(s, 0)
+    assert f == [] and m["disarmed_recv_us"] == 596
+    result_recv = 597                            # PX4 stamp(600)와 섞어 비교하면 3 앞이라 위반으로 보이는 값
+    assert result_recv < m["disarmed_ts"]
+    assert sj.milestones_ordered([("auto_land", m["land_recv_us"]), ("disarmed", m["disarmed_recv_us"]),
+                                  ("result", result_recv)]) == []
+    # 실제 순서 위반(result가 3회 확인 수신보다 앞)은 여전히 잡는다
+    bad = sj.milestones_ordered([("disarmed", m["disarmed_recv_us"]), ("result", 595)])
+    assert len(bad) == 1 and "순서 위반" in bad[0][1]
+
+
+def test_unreached_description():
+    res = sj.ResultRec(recv_us=1, status=sj.STATUS_ABORTED, reason=3, items_completed=0, last_item_index=0, detail="x")
+    fb = sj.FeedbackRec(recv_us=1, goal_id="g", stamp_us=1, item_index=0, item_count=3, item_type=1,
+                        phase=sj.PHASE_PREPARING)
+    d = sj.unreached_description(res, [fb], st(100, mj.ARMING_STATE_DISARMED))
+    assert "ABORTED" in d and "phase=1" in d and "arming_state=%d" % mj.ARMING_STATE_DISARMED in d
+    d0 = sj.unreached_description(None, [], None)
+    assert "result 없음" in d0 and "feedback 없음" in d0
+
+
 def test_sequence_requires_armed_before_disarmed():
     D = mj.ARMING_STATE_DISARMED
     land = mj.NAV_STATE_AUTO_LAND

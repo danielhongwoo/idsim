@@ -298,7 +298,12 @@ def flight_window_findings(status, from_us, to_us):
 
 
 def milestones_ordered(milestones):
-    """[(이름, ROS 시각 us), ...]가 순서대로 줄어들지 않는가. 값이 None인 항목은 없는 것으로 보고 실패시킨다."""
+    """[(이름, ROS 시각 us), ...]가 순서대로 줄어들지 않는가. 값이 None인 항목은 없는 것으로 보고 실패시킨다.
+
+    모든 값은 같은 시계(ROS /clock)여야 한다. PX4 timestamp와 ROS 수신 시각은 /clock이 한 step(4 ms)까지
+    늦을 수 있어 섞어 비교하면 정상 순서가 뒤집혀 보인다(docs/interface.md "시간 기준"). 허용 오차는 두지 않는다.
+    PX4 표본의 이정표는 sequence_findings가 돌려주는 *_recv_us(수신 ROS 시각)를 쓴다.
+    """
     f = []
     prev_name, prev = None, None
     for name, t in milestones:
@@ -315,20 +320,49 @@ def sequence_findings(status, armed_after_us):
     """ARMED -> AUTO_LAND -> DISARMED의 순서(상태 표본의 timestamp 기준).
 
     ARMED를 본 뒤의 DISARMED여야 한다(시작 때 이미 DISARMED라 순서를 보지 않으면 vacuous하다).
-    반환: (findings, {armed_ts, land_ts, disarmed_ts})
+    반환: (findings, {armed_ts, land_ts, disarmed_ts, armed_recv_us, land_recv_us, disarmed_recv_us}).
+    *_ts는 PX4 timestamp(표 기록용), *_recv_us는 그 표본의 수신 ROS 시각이다. 다른 시계의 이정표와 순서를
+    비교할 때는 *_recv_us를 쓴다. disarmed는 DISARMED 3회 연속을 확인한 표본이다.
     """
     armed = next((s for s in status if s.recv_ros_us > armed_after_us and mj.is_armed(s)), None)
     if armed is None:
         return [(sw.WRONG_RESULT, "ARMED 표본을 보지 못했다")], {}
     land = next((s for s in status if s.ts_us > armed.ts_us and s.nav_state == mj.NAV_STATE_AUTO_LAND), None)
     if land is None:
-        return [(sw.WRONG_RESULT, "ARMED 뒤 AUTO_LAND를 보지 못했다")], {"armed_ts": armed.ts_us}
+        return [(sw.WRONG_RESULT, "ARMED 뒤 AUTO_LAND를 보지 못했다")], {"armed_ts": armed.ts_us, "armed_recv_us": armed.recv_ros_us}
     c = mj.ConsecutiveConfirm(mj.is_disarmed, n=N_CONSECUTIVE, min_ts_us=land.ts_us)
     done = next((s for s in status if c.feed(s)), None)
     if done is None:
         return [(sw.WRONG_RESULT, "AUTO_LAND 뒤 DISARMED %d회 연속을 보지 못했다" % N_CONSECUTIVE)], \
-            {"armed_ts": armed.ts_us, "land_ts": land.ts_us}
-    return [], {"armed_ts": armed.ts_us, "land_ts": land.ts_us, "disarmed_ts": c.confirmed_at.ts_us}
+            {"armed_ts": armed.ts_us, "land_ts": land.ts_us,
+             "armed_recv_us": armed.recv_ros_us, "land_recv_us": land.recv_ros_us}
+    return [], {"armed_ts": armed.ts_us, "land_ts": land.ts_us, "disarmed_ts": c.confirmed_at.ts_us,
+                "armed_recv_us": armed.recv_ros_us, "land_recv_us": land.recv_ros_us,
+                "disarmed_recv_us": c.confirmed_at.recv_ros_us}
+
+
+def unreached_description(goal_result, feedbacks, last_status):
+    """목표 고도에 닿지 못한 실패의 설명(원인 좁히기용). 판정은 하지 않는다.
+
+    goal_result: ResultRec 또는 None. feedbacks: 이 goal의 FeedbackRec 목록. last_status: 마지막 vehicle_status 표본 또는 None.
+    """
+    parts = []
+    if goal_result is None:
+        parts.append("goal result 없음")
+    else:
+        parts.append("goal result status=%s reason=%d detail=%r" % (_name(goal_result.status), goal_result.reason,
+                                                                  goal_result.detail))
+    if feedbacks:
+        fb = feedbacks[-1]
+        parts.append("마지막 feedback item=%d phase=%d" % (fb.item_index, fb.phase))
+    else:
+        parts.append("feedback 없음")
+    if last_status is None:
+        parts.append("vehicle_status 없음")
+    else:
+        parts.append("마지막 vehicle_status arming_state=%d nav_state=%d failsafe=%s"
+                     % (last_status.arming_state, last_status.nav_state, last_status.failsafe))
+    return "; ".join(parts)
 
 
 # 구간 안 표본 수 하한. "표본이 없어서 ARMED가 없다"는 통과가 아니다(vacuous 방지). 하한은 N_CONSECUTIVE(3)다:
