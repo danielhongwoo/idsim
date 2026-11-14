@@ -736,10 +736,16 @@ TEST(AirEntry, A16_NoResendAfterFirstOffboardSample)
   h.push_world_samples_without_status();
   h.push_status(stamp);
   before = h.edges().size();
-  h.step_only();  // S+60
+  const StepOutput timeout = h.step_only();  // S+60
   expect_cell(
     h, "PREPARING.AIR_OFFBOARD_SEEN", Event::kOffboardTimeout, "CLEANUP.PREPARING_FAILURE.NONE",
     "-", {}, before);
+  EXPECT_EQ(timeout.commands, kHoldOnly);
+  h.auto_samples = true;
+  ASSERT_TRUE(h.run_until([&h] { return h.runner().done(); }, 10));
+  EXPECT_EQ(
+    termination_or_empty(h).detail,
+    "mode_confirm_timeout: OFFBOARD observed but not confirmed; cleanup: Hold confirmed");
   EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 2);
   for (std::uint64_t k = s + 1; k < s + 15; ++k) {
     EXPECT_EQ(out_at(h, k).commands.empty(), k != s + 10) << "S+" << k - s;
@@ -754,20 +760,22 @@ enum class AirState
   kOffboard,
 };
 
-// AIR_SIGNAL(신호 없음 고정)이나 AIR_OFFBOARD(DO_SET_MODE 무시)에 들어간다.
-void enter_state(Harness & h, AirState state)
+// AIR_SIGNAL(신호 없음 고정)이나 AIR_OFFBOARD(DO_SET_MODE 무시)에 들어간다. AIR_OFFBOARD이면 S를,
+// AIR_SIGNAL이면 0을 돌려준다.
+std::uint64_t enter_state(Harness & h, AirState state)
 {
   if (state == AirState::kSignal) {
     start_air(h);
     tick_without_signal(h);
     tick_without_signal(h);
-    ASSERT_EQ(h.view().prep, PrepStep::kAirSignal);
-  } else {
-    h.offboard_response = OffboardResponse::kIgnore;
-    h.drive_to_air_offboard();
-    h.tick();
-    ASSERT_EQ(h.view().prep, PrepStep::kAirOffboard);
+    EXPECT_EQ(h.view().prep, PrepStep::kAirSignal);
+    return 0;
   }
+  h.offboard_response = OffboardResponse::kIgnore;
+  const std::uint64_t s = h.drive_to_air_offboard();
+  h.tick();
+  EXPECT_EQ(h.view().prep, PrepStep::kAirOffboard);
+  return s;
 }
 
 StepOutput tick_in(Harness & h, AirState state, bool cancel = false)
@@ -802,17 +810,33 @@ TEST(AirEntry, A17_HoldIsExemptBeforeFirstOffboardSample)
     for (const Case & c : cases) {
       SCOPED_TRACE(from + " " + c.name);
       Harness h(air_loiter_mission());
-      enter_state(h, state);
+      const std::uint64_t s = enter_state(h, state);
       h.world.nav = c.nav;
       h.world.intention = c.intention;
       h.world.failsafe = c.failsafe;
       const std::size_t before = h.edges().size();
       const StepOutput out = tick_in(h, state);
       if (c.event == Event::kCancel) {
-        for (int i = 0; i < 5; ++i) {
-          tick_in(h, state);
+        // 면제: 끝나지 않고 상태 key와 발행이 그대로다. AIR_OFFBOARD는 재전송 주기(S+10)를 넘겨
+        // 그 tick의 명령이 DO_SET_MODE(OFFBOARD) 하나뿐인지 본다.
+        const PrepStep prep = h.view().prep;
+        EXPECT_TRUE(out.commands.empty());
+        EXPECT_TRUE(out.setpoint.has_value());
+        for (int i = 0; i < 12; ++i) {
+          const std::uint64_t k = h.tick_no;
+          const StepOutput o = tick_in(h, state);
+          ASSERT_FALSE(h.runner().done()) << "tick " << k << ": " << termination_or_empty(h).detail;
+          EXPECT_EQ(h.view().prep, prep) << "tick " << k;
+          EXPECT_TRUE(o.setpoint.has_value()) << "tick " << k;
+          if (state == AirState::kOffboard && k == s + kResendTicks) {
+            EXPECT_EQ(o.commands, kOffboardOnly) << "S+10";
+          } else {
+            EXPECT_TRUE(o.commands.empty()) << "tick " << k;
+          }
         }
-        EXPECT_FALSE(h.runner().done()) << termination_or_empty(h).detail;
+        if (state == AirState::kOffboard) {
+          EXPECT_GT(h.tick_no, s + kResendTicks);
+        }
         continue;
       }
       expect_cell(h, from, c.event, "DONE", c.reason, {}, before);

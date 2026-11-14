@@ -290,8 +290,6 @@ TEST(MonitorTable, ExclusiveRowsNeverMatchTogether)
   }
 }
 
-// ---- 순위 5 ----
-
 // ---- AUTO_LOITER 면제(hold_exempt) ----
 
 TEST(MonitorHoldExempt, M1_HoldIsExemptFromRank7And8)
@@ -374,6 +372,8 @@ TEST(MonitorHoldExempt, M5_DefaultIsNotExempt)
   p.apply(MonitorRow::kModeExternal);
   EXPECT_TRUE(monitor_row_matches(MonitorRow::kModeExternal, p.get()));
 }
+
+// ---- 순위 5 ----
 
 TEST(MonitorRank5, SampleFailsafeIsFailsafe)
 {
