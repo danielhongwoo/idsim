@@ -340,7 +340,7 @@ TEST(OffboardAck, CancelWhileWaitingEndsCanceledWithoutDisarm)
     std::string::npos);
 }
 
-// ---- 같은 tick의 취소(칸 명세 3.4) ----
+// ---- 같은 tick의 취소 ----
 
 TEST(OffboardAck, CancelOnConfirmTickWithoutAckSendsNothing)
 {

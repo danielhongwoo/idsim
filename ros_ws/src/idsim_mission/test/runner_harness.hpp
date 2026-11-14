@@ -18,7 +18,7 @@
 //   넣고(received_tick = 이번 tick 번호) (2) step을 한 번 부르고 (3) 번호와 시각을 올린다.
 // - feedback이 있는 tick마다 그 stamp_ns가 tick 입력 시각과 같은지 단정한다.
 // - 표본의 timestamp는 합성 값이다. 기본은 "수신 시각 - 1 ms"(us)라 명령에 실린 Px4Timestamp(그
-//   tick의 시각)보다 다음 tick의 표본이 늘 뒤다. 실제 시계 관계는 재실측 (5)만 확인한다.
+//   tick의 시각)보다 다음 tick의 표본이 늘 뒤다. 실제 시계 관계는 SITL 시나리오 trace가 확인한다.
 // - auto_px4가 true이면 간단한 가짜 PX4가 명령에 반응한다(다음 tick의 표본에 보인다):
 //   Offboard -> OFFBOARD(offboard_response), Hold -> HOLD(hold_response),
 //   NAV_LAND -> LAND(land_response), NAV_RTL -> RTL(rtl_response), ARM -> ARMED,

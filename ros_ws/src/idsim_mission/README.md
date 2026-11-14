@@ -55,7 +55,7 @@ action 서버(P3d)
 - 20 Hz tick마다 `step()` 한 번. goal 실행용 thread를 두지 않는다.
 - 한 tick 안의 판정 순서: (1) 그 단계의 실패(감시 표, 상태 끊김, 거부 ack, 타임아웃 만료) (2) 확인과 완료(N회 연속, 도달, 경과) (3) 취소 (4) 출력 마무리. 같은 tick에 실패와 확인이 함께 정해지면 실패가 이긴다(decisions.md 쟁점 3 "종료의 충돌 규칙"을 전이에도 같게 쓴다). P6에서 첫 ARMED 표본을 본 뒤에는 감시 표 -> 확인 기한 -> 확인 -> 취소다.
 - 정리 중 한 tick의 순서(decisions.md 쟁점 3 M6): (1) 상태 끊김 (2) 공중 DISARMED (3) 정리할 것 없음 (4) 정리의 상한(정리 시작 tick부터 `hold_confirm_timeout + 3 x mode_confirm_timeout`, 기본 12 s) (5) 그 분기의 실행. 상한 tick에는 발행을 멈추고 대기 명령을 지운 뒤 지상이면 disarm, 공중이면 NAV_LAND를 한 번 보내고 끝낸다. 식별이 어긋난 표본의 tick이면 직전 분기로 정한다.
-- 공중 종료 단계(1b decisions.md 쟁점 10. 마지막 항목이 setpoint 항목인 미션): 마지막 항목의 완료 tick에 `items_completed`를 N으로 올리고 정리 원인 `kMissionEnd`로 들어간다. 첫 tick은 늘 Hold(AIR)이고, Hold가 실패하면 그 tick의 최신 landed로 Land 경로(AIR_LAND)나 지상 대기(GROUND_WAIT)로 간다. 한 tick의 순서: (1) 표본 없음(방어) (2) 식별 불일치(분기가 있으면 표본 없이 이어 가고 상태 끊김을 보지 않는다) (3) 표본 반영(발행 규칙, disarm 분류, Hold 관측, 두 계수, 지상 대기의 대비책 이어짐) (4) 상태 끊김 (5) 공중 DISARMED (6) 정리의 상한 (6a) disarm 분류가 지상이면 지상 DISARMED 3회만 보고 끝(규칙 R. 첫 지상 DISARMED tick에 대기 명령을 지우고 그 동안의 ack는 버린다) (7) 분기의 거부 ack, 기한, 이동, AUTO_LAND 관측 (8) Hold 3회 (9) 지상 대기의 대비책 disarm (10) 재전송. 표본은 감시 표와 같은 신뢰 표본 규칙(`monitored_status`)이다. 지상 DISARMED 계수는 단계 전체에 하나이고(대비책 전 `SampleCounter`, 뒤 `DisarmConfirm`) 3회면 SUCCEEDED(`ended on ground`)다. 같은 tick의 `hold_confirm_timeout`과 Hold 3회째, 정리의 상한과 모든 확인은 만료가 이긴다. 취소는 결과를 바꾸지 않는다.
+- 공중 종료 단계(1b decisions.md 쟁점 10. 마지막 항목이 setpoint 항목인 미션): 마지막 항목의 완료 tick에 `items_completed`를 N으로 올리고 정리 원인 `kMissionEnd`로 들어간다. 첫 tick은 늘 Hold(AIR)이고, Hold가 실패하면 그 tick의 최신 landed로 Land 경로(AIR_LAND)나 지상 대기(GROUND_WAIT)로 간다. 한 tick의 순서: (1) 표본 없음(방어) (2) 식별 불일치(분기가 있으면 표본 없이 이어 가고 상태 끊김을 보지 않는다) (3) 표본 반영(발행 규칙, disarm 분류, Hold 관측, 두 계수, 지상 대기의 대비책 이어짐) (4) 상태 끊김 (5) 공중 DISARMED (6) 정리의 상한 (6a) disarm 분류가 지상이면 지상 DISARMED 3회만 보고 끝(분류 지상 규칙. 첫 지상 DISARMED tick에 대기 명령을 지우고 그 동안의 ack는 버린다) (7) 분기의 거부 ack, 기한, 이동, AUTO_LAND 관측 (8) Hold 3회 (9) 지상 대기의 대비책 disarm (10) 재전송. 표본은 감시 표와 같은 신뢰 표본 규칙(`monitored_status`)이다. 지상 DISARMED 계수는 단계 전체에 하나이고(대비책 전 `SampleCounter`, 뒤 `DisarmConfirm`) 3회면 SUCCEEDED(`ended on ground`)다. 같은 tick의 `hold_confirm_timeout`과 Hold 3회째, 정리의 상한과 모든 확인은 만료가 이긴다. 취소는 결과를 바꾸지 않는다.
 - 비행 중 감시 표로 끝낼 때는 정리 분기에 들어가지 않는다. 순위 2는 arm을 보냈으면, 순위 3, 6, 7, 8은 arm을 보냈고 첫 ARMED 표본 뒤 landed false를 본 적이 없고 그 tick의 landed가 true이면 강제가 아닌 disarm을 한 번 보낸다(`monitor_sends_disarm`). P6과 setpoint 항목이 같은 종료 함수(`end_by_monitor`)를 쓴다.
 - 시간 경계: 경과가 값 이상(`>=`)이면 만료다.
 - 전이 관측(`docs-for-agent/plan-1b-mission-target/decisions.md` 쟁점 13): 전이를 일으키는 함수(`terminate`, `begin_cleanup`, `start_signal`, `enter_prep`, `start_item`, `complete_item`, `enter_ground`, `enter_air`, `enter_air_land`, `mission_end_hold_failed`, `mission_end_enter_air_land`, `mission_end_enter_ground_wait`, `finish`)는 첫 인자로 사건 꼬리표 `Event`를 받는다. 상태 key 성분(`stage_`, `prep_`, `item_index_`, `cause_`, `branch_`)은 `set_state` 한 곳에서만 쓴다. 생성자의 `TransitionObserver`(기본 nullptr. 노드는 넘기지 않는다)가 있으면 tick마다 (from, 사건, to, reason, 함께 참이던 사건) 기록을 넘긴다. 꼬리표 하나는 상태 key를 한 번까지만 바꾼다. 꼬리표 없이 상태 key가 바뀌거나 한 꼬리표의 기록이 열린 동안 두 번째로 바뀌면 그 변경은 untagged 기록이 되고, 앞 기록은 그 변경 직전의 상태 key로 닫는다(같은 값 쓰기는 세지 않는다). 겹침을 실으려고 setpoint 항목은 감시 표, ITEM_TIMEOUT, 완료의 조건을 먼저 계산해 둔다(상태를 바꾸지 않는 식이고 고르는 순서는 그대로다). `evaluate_monitor`는 맞는 행 전부를 `matched`에 함께 싣는다(고르는 행은 그대로 첫 행이다). observer가 없으면 기록을 만들지 않고 출력은 같다.
@@ -90,7 +90,7 @@ action 서버(P3d)
 | 항목 표 LAND와 RTL(1b 쟁점 9), 모드 명령 항목의 감시 세 구간, 대비책 disarm, RTL의 거부 ack와 미확인 | `step_mode_item`, `mode_item_spec`(`core/rules.hpp`) |
 | 모드 명령 항목의 ITEM_TIMEOUT | `mode_item_timeout` |
 | 쟁점 3 M3-M5 취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패, RTL 실패(1b 쟁점 9)의 정리. 공중 Offboard 진입의 실패와 취소도 같은 분기 고르기다(arm을 보내지 않은 goal이라 지상 DISARMED이면 정리할 것 없음) | `begin_cleanup`, `step_cleanup`, `select_cleanup` |
-| 1b 쟁점 10 공중 종료 단계(상태 key `CLEANUP.MISSION_END.{NONE, AIR, AIR_LAND, GROUND_WAIT}`), 쟁점 10 A1의 지상 DISARMED 계수, A2의 규칙 R과 "만료가 이긴다", 쟁점 11의 지상 대기 disarm 확인 | `complete_item`, `step_mission_end`, `mission_end_hold_failed`, `mission_end_enter_air_land`, `mission_end_enter_ground_wait`, `mission_end_ground_disarm_count`, `finish`(원인 `kMissionEnd`의 결과 대응) |
+| 1b 쟁점 10 공중 종료 단계(상태 key `CLEANUP.MISSION_END.{NONE, AIR, AIR_LAND, GROUND_WAIT}`), 쟁점 10의 지상 DISARMED 3회 계수, "지상 DISARMED를 보는 동안의 규칙"(아래와 테스트 주석의 "분류 지상 규칙")과 종료 단계의 "만료가 이긴다" 두 쌍, 쟁점 11의 지상 대기 disarm 확인 | `complete_item`, `step_mission_end`, `mission_end_hold_failed`, `mission_end_enter_air_land`, `mission_end_enter_ground_wait`, `mission_end_ground_disarm_count`, `finish`(원인 `kMissionEnd`의 결과 대응) |
 | 착지 뒤 대비책 disarm의 기한(LAND, RTL 항목과 지상 대기가 같이 쓴다. 1b 쟁점 10) | `LandedArmedFallback`(`core/rules.hpp`) |
 | M4 Hold 분기와 Land 경로, Hold 실패 뒤의 공중 재진입, RTL 실패의 Land 경로(Hold 없음) | `enter_air`, `run_air`, `enter_air_land`, `run_air_land` |
 | M5 지상 disarm 분기, 상태 끊김과 거부 ack | `enter_ground`, `run_ground`, `DisarmConfirm` |
@@ -99,17 +99,17 @@ action 서버(P3d)
 | 명령 재전송 규칙 | `send`, `resend_due`, `take_ack` |
 | 쟁점 10 타임아웃 기본값, 정리의 상한 | `core/config.hpp`의 `Timeouts`, `cleanup_cap_ns` |
 
-## 재실측으로 바뀔 수 있는 곳
+## SITL 시나리오 trace가 다르면 고칠 곳
 
-결과가 표와 다르면 아래 한 곳만 고친다. 고칠 때는 px4-engineer가 필수 승인자다.
+아래 동작은 표대로 구현했고 Executor를 거치는 SITL 시나리오 trace로 확인한다. trace가 표와 다르면 아래 한 곳만 고친다. 고칠 때는 px4-engineer가 필수 승인자다.
 
-| 항목 | 재실측 | 고칠 곳 |
-| --- | --- | --- |
-| 지상 setpoint 발행 중의 Hold(지상 분기 -> 공중 분기) | (2) | `MissionRunner::enter_air` |
-| 이륙 직후 landed가 true인 구간의 지상 setpoint와 disarm | (3) | `MissionRunner::enter_ground`, `ground_setpoint` |
-| 감시 표의 행 순위 | (4) | `core/rules.hpp`의 `kMonitorRankOrder` |
-| "disarm 전송 뒤 받은 표본"의 기준 | (5) | `core/rules.cpp`의 `is_after_disarm_send` |
-| 타임아웃 기본값과 재전송 주기 | - | `core/config.hpp`의 `Timeouts` |
+| 항목 | 고칠 곳 |
+| --- | --- |
+| 지상 setpoint 발행 중의 Hold(지상 분기 -> 공중 분기) | `MissionRunner::enter_air` |
+| 이륙 직후 landed가 true인 구간의 지상 setpoint와 disarm | `MissionRunner::enter_ground`, `ground_setpoint` |
+| 감시 표의 행 순위 | `core/rules.hpp`의 `kMonitorRankOrder` |
+| "disarm 전송 뒤 받은 표본"의 기준 | `core/rules.cpp`의 `is_after_disarm_send` |
+| 타임아웃 기본값과 재전송 주기 | `core/config.hpp`의 `Timeouts` |
 
 ## 표에 없어 구현에서 정한 것
 
@@ -160,9 +160,9 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 | `test_runner_rtl.cpp` | `EntryPlan`과 `mode_item_spec`, `[RTL]`과 `[TAKEOFF, RTL]`, `[TAKEOFF, LOITER, RTL]`(발행 중단 시점), 거부 ack와 미확인의 Land fallback(거부 범위, detail, Hold 실패 표시 없음, phase WAITING_MODE), 지상 분기 뒤 재진입 문구, 확인 뒤 이탈, 확인 전 흔들림, nav 무관 완료, 즉시 종료 넷, item timeout 문구, 대비책 disarm, 같은 tick 규칙(거부와 만료, 거부와 공중 DISARMED), 취소의 Hold와 취소 겹침, LAND의 거부 ack 무시와 1a 문구 고정. 확인과 만료가 같은 tick, 확인 tick의 거부 ack는 미정 경계라 단정하지 않는다 |
 | `test_runner_cleanup.cpp` | 취소 분기, Hold와 Land 경로, 지상 disarm 확인과 상태 끊김, ITEM_TIMEOUT 정리, 원인 3 x snapshot 3 교차표, 정리 중 식별 불일치, Hold 실패 뒤 공중 재진입과 재진입 문구, 분기 재진입(`BranchReentry`: 지상 재진입의 disarm 확인 기준, 공중 재진입의 Hold 재전송과 타이머와 계수), 정리의 상한(원인 3 x {지상, 공중}과 정확한 마지막 분기 문자열, 가장 긴 정당한 경로, 같은 tick 넷, 상한 tick의 고르기가 직전 분기와 다른 경우, 상한 대 3번째 Hold 확인, 마지막 분기가 Land 경로, 식별 불일치 표본, Hold 관측 문구), 끝나는 tick의 `Px4Timestamp` 실패(상한의 disarm과 NAV_LAND, 상태 끊김의 disarm, 정리 첫 tick 식별 불일치의 disarm) |
 | `test_runner_conflicts.cpp` | 종료의 충돌 규칙, `Px4Timestamp` 공급 실패(지상 disarm 분기 만료의 마지막 disarm 포함) |
-| `test_runner_mission_end.cpp` | 공중 종료 단계(1b decisions.md 쟁점 10, 쟁점 11): 공중 Hold 확인과 `[TAKEOFF]`, ACCEPTED ack 뒤의 Hold 재전송과 Hold 하나 유실, 공중 거부와 거부 ack 유실, Hold 기한과 Land 경로 기한, 만료가 이기는 두 쌍(Hold 3회째 대 `hold_confirm_timeout`, 확인 대 상한), 지상 대기의 대비책 disarm과 확인, Hold 대기 중 자동 disarm, 지상 거부 뒤 공중 재진입, 대비책 실패의 상한, Land 경로의 상한(공중과 지상), Land 경로의 지상 DISARMED, 상태 끊김 넷, 공중 DISARMED 셋, `Px4Timestamp` 실패 셋과 첫 tick, 취소 셋, 마지막 항목의 겹침(기존 칸), 식별 불일치 다섯, 묵은 표본, 지면 높이 목표, 규칙 R(DISARMED AUTO_LAND 표본, 분류 지상의 분기 기한과 상한, 버린 거부 ack, 식별 불일치 상한 tick). 칸마다 그 tick의 명령과 종료의 `items_completed` N, `last_item_index` N-1, phase EXECUTING을 본다 |
+| `test_runner_mission_end.cpp` | 공중 종료 단계(1b decisions.md 쟁점 10, 쟁점 11): 공중 Hold 확인과 `[TAKEOFF]`, ACCEPTED ack 뒤의 Hold 재전송과 Hold 하나 유실, 공중 거부와 거부 ack 유실, Hold 기한과 Land 경로 기한, 만료가 이기는 두 쌍(Hold 3회째 대 `hold_confirm_timeout`, 확인 대 상한), 지상 대기의 대비책 disarm과 확인, Hold 대기 중 자동 disarm, 지상 거부 뒤 공중 재진입, 대비책 실패의 상한, Land 경로의 상한(공중과 지상), Land 경로의 지상 DISARMED, 상태 끊김 넷, 공중 DISARMED 셋, `Px4Timestamp` 실패 셋과 첫 tick, 취소 셋, 마지막 항목의 겹침(기존 칸), 식별 불일치 다섯, 묵은 표본, 지면 높이 목표, 분류 지상 규칙(DISARMED AUTO_LAND 표본, 분류 지상의 분기 기한과 상한, 버린 거부 ack, 식별 불일치 상한 tick). 칸마다 그 tick의 명령과 종료의 `items_completed` N, `last_item_index` N-1, phase EXECUTING을 본다 |
 | `test_runner_offboard_ack.cpp` | P5 안의 ack 대기(1b decisions.md 쟁점 12): 단위 테스트 다섯 사례(재전송 다음 tick 확인, 확인 뒤 ack 없으면 주기 재전송 뒤 timeout, 확인 뒤 거부 ack, 대기 중 이탈, ack 전 대기 중 취소)와 보조(주기가 찬 tick에 받은 ack는 유효이고 재전송을 막음, 확인 전 유효 ack면 재전송 없이 확인 tick에 arm(IN_PROGRESS 포함), 재전송이나 그 ack의 유실 뒤 다음 주기로 arm, 주기가 찬 확인 tick의 재전송, 주기가 찬 tick의 실패와 취소에 재전송 없음, 유효 ack 뒤 OFFBOARD 미확인의 timeout, 앞선 전송의 늦은 ack의 열화, 확인 표본 이하 timestamp는 이탈이 아님, 확인 전 거부의 detail), 확인 tick이나 대기 중 tick의 취소 겹침 출력 |
-| `test_runner_air_entry.cpp` | 공중 Offboard 진입(1b decisions.md 쟁점 7, B9 S4 칸 명세의 사례 A1-A27): 정상과 첫 항목 뒤 LAND, RTL, LOITER, 시작 조건 여섯(detail의 값), P2 대기와 `ready_timeout`, 진입 setpoint 고정, 신호 기한과 신호 확인의 같은 tick, DO_SET_MODE 전에 본 OFFBOARD와 그 겹침, DO_SET_MODE 유실 뒤 재전송, 거부와 거부 ack 유실, 첫 OFFBOARD 표본과 거부 ack의 같은 tick, 기한(OFFBOARD를 못 봄, 봄), 첫 표본과 3회째의 기한 같은 tick, 첫 OFFBOARD 표본 뒤 재전송 없음, AUTO_LOITER 면제와 그 끝, failsafe 이력 구간(첫 항목까지 한 구간), 세 상태 key의 감시 행 전부, 묵은 표본, P3 tick의 Px4Timestamp, 취소와 겹침, 지상 ARMED의 취소와 실패(지상 분기, Hold 없음), ITEM_TIMEOUT 정리와 준비 단계 실패 정리의 "정리할 것 없음". 모든 사례에서 ARM이 없고 준비 단계 feedback은 item 0의 LOITER다 |
+| `test_runner_air_entry.cpp` | 공중 Offboard 진입(1b decisions.md 쟁점 7. 사례 이름의 A1-A27은 일련번호): 정상과 첫 항목 뒤 LAND, RTL, LOITER, 시작 조건 여섯(detail의 값), P2 대기와 `ready_timeout`, 진입 setpoint 고정, 신호 기한과 신호 확인의 같은 tick, DO_SET_MODE 전에 본 OFFBOARD와 그 겹침, DO_SET_MODE 유실 뒤 재전송, 거부와 거부 ack 유실, 첫 OFFBOARD 표본과 거부 ack의 같은 tick, 기한(OFFBOARD를 못 봄, 봄), 첫 표본과 3회째의 기한 같은 tick, 첫 OFFBOARD 표본 뒤 재전송 없음, AUTO_LOITER 면제와 그 끝, failsafe 이력 구간(첫 항목까지 한 구간), 세 상태 key의 감시 행 전부, 묵은 표본, P3 tick의 Px4Timestamp, 취소와 겹침, 지상 ARMED의 취소와 실패(지상 분기, Hold 없음), ITEM_TIMEOUT 정리와 준비 단계 실패 정리의 "정리할 것 없음". 모든 사례에서 ARM이 없고 준비 단계 feedback은 item 0의 LOITER다 |
 | `test_runner_goto.cpp` | FramePort 호출 규율(1a type 미션 일곱과 취소, TAKEOFF ITEM_TIMEOUT에서 호출 0, GOTO -> GOTO 완료 tick의 호출 2회)과 GOTO 항목(1b decisions.md 쟁점 8): 지상 진입 정상(시작 tick의 setpoint와 feedback 거리, tick당 호출 1회), 서로 다른 표본과 연속(같은 timestamp, `xy_valid`, `z_valid`, 반경 밖 표본), 경계 거리(엄격 부등호)와 ITEM_TIMEOUT, 첫 변환 대기, 중간의 변환 없음, 변환을 못 얻은 ITEM_TIMEOUT의 detail과 정리 중 phase, 만료와 3개째의 같은 tick, yaw(MODE_FIXED, 값 없음 동안 유지, MODE_KEEP의 직전 yaw), 매 tick 다시 변환, 다음 항목(LOITER, RTL, GOTO, 종료 단계, LOITER -> GOTO), 공중 진입(정상, LAND, LOITER 뒤, 시작 조건 detail, 변환 없음, 지상 DISARMED의 정리할 것 없음), 취소와 겹침, 감시 표 단일 행과 대표 쌍, ITEM_TIMEOUT과 완료의 대표 행 넷씩. 끝나는 사례마다 완료 수, index, 매 tick feedforward 없음을 단정한다 |
 | `test_runner_resend_after_ack.cpp` | 지상 arm 진입 밖의 재전송 경로 여섯 곳(P6 arm, 모드 명령 항목(NAV_LAND, NAV_RTL, 대비책 disarm), 정리의 지상 disarm, 공중 Hold, Land 경로, 공중 Offboard 진입의 P5)이 비거부 ack(ACCEPTED, IN_PROGRESS) 뒤에도 확인 표본 전까지 주기 재전송을 이어 감 |
 | `test_runner_flow_cells.cpp` | PREPARING과 항목 단계의 칸을 하나씩 덮는다(칸마다 `expect_cell`과 종료 결과). 무시된 취소의 대표 칸은 Hold와 disarm이 그 tick과 그 뒤에 나가지 않음을 함께 단정한다(READY_TIMEOUT과 취소는 NOT_READY이고 명령 없음, ARM의 MONITOR_MODE_FAILSAFE와 취소는 disarm 1회). setpoint 항목의 tick 순서는 대표 행 넷 x {TAKEOFF, LOITER} x {ITEM_TIMEOUT, 완료}의 파라미터화 테스트(`SetpointOrderCells`) |
@@ -174,9 +174,9 @@ decisions.md에 적히지 않아 구현에서 정한 것이다. 근거가 바뀌
 
 | 부류 | 단일 | 겹침 | 합 |
 | --- | --- | --- | --- |
-| covered | 288 | 62 | 350 |
-| impossible | 108 | 0 | 108 |
+| covered | 307 | 75 | 382 |
+| impossible | 111 | 0 | 111 |
 | uncovered | 0 | 0 | 0 |
-| 합 | 396 | 62 | 458 |
+| 합 | 418 | 75 | 493 |
 
-PX4 v1.17.0에서 나오지 않는 방어 경로(OFFBOARD이고 ARMED인 채 failsafe, 순위 5의 이력, 순위 8, DISARM과 ARM의 그 밖의 거부 ack, 첫 ARMED 표본보다 묵은 표본, timestamp가 늘지 않는 표본)와 실제 PX4로 재현하기 어려운 P3-P5의 외부 arm, P5 ack 대기의 확인 뒤 거부 ack(DISARMED에서 DO_SET_MODE 거부는 TERMINATION뿐)와 대기 중 OFFBOARD 이탈(다른 출처의 모드 변경), 정리 중 공중 DISARMED, 정리의 상한, 공중 종료 단계의 Hold 거부 ack와 식별 불일치, 시각 건너뛰기, NAV_RTL의 거부 ack(SITL의 1b 시나리오에 RTL이 거부되는 경우가 없다)와 RTL 실패 정리 첫 tick의 묵은 공중 DISARMED 표본은 합성 표본과 합성 ack로만 시험하고 테스트 주석에 그렇게 적었다. 단위 테스트는 합성 timestamp만 검사한다. 실제 시계 관계는 재실측 (5)만 확인한다.
+PX4 v1.17.0에서 나오지 않는 방어 경로(OFFBOARD이고 ARMED인 채 failsafe, 순위 5의 이력, 순위 8, DISARM과 ARM의 그 밖의 거부 ack, 첫 ARMED 표본보다 묵은 표본, timestamp가 늘지 않는 표본)와 실제 PX4로 재현하기 어려운 P3-P5의 외부 arm, P5 ack 대기의 확인 뒤 거부 ack(DISARMED에서 DO_SET_MODE 거부는 TERMINATION뿐)와 대기 중 OFFBOARD 이탈(다른 출처의 모드 변경), 정리 중 공중 DISARMED, 정리의 상한, 공중 종료 단계의 Hold 거부 ack와 식별 불일치, 시각 건너뛰기, NAV_RTL의 거부 ack(SITL의 1b 시나리오에 RTL이 거부되는 경우가 없다)와 RTL 실패 정리 첫 tick의 묵은 공중 DISARMED 표본은 합성 표본과 합성 ack로만 시험하고 테스트 주석에 그렇게 적었다. 단위 테스트는 합성 timestamp만 검사한다. 실제 시계 관계는 SITL 시나리오 trace가 확인한다.

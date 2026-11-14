@@ -15,7 +15,7 @@
 // setpoint 항목(TAKEOFF, LOITER)과 상태기 안의 비행 중 감시(decisions.md 쟁점 4 "항목", "비행 중
 // 감시"). 순위마다 한 건, 엇갈려 시작하는 경우, 순위 5 이력의 항목 경계, disarm 분류의 고정, 감시
 // 표로 끝낼 때의 disarm 1회(P6, TAKEOFF, LOITER).
-// 감시 표의 행 순위는 재실측 (4) 전까지 잠정이다.
+// 감시 표의 행 순위가 SITL 시나리오 trace와 다르면 rules.hpp의 kMonitorRankOrder만 고친다.
 
 #include <gtest/gtest.h>
 

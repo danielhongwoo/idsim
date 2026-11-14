@@ -14,7 +14,7 @@
 
 // 공중 Offboard 진입(첫 항목 LOITER. docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 7).
 //
-// - 사례 이름의 A1-A27은 B9 S4 칸 명세 7.1의 사례 번호다. 칸은 transition_cells.tsv의
+// - 사례 이름의 A1-A27은 사례를 가리키는 일련번호다. 칸은 transition_cells.tsv의
 //   PREPARING.AIR_SIGNAL, PREPARING.AIR_OFFBOARD, PREPARING.AIR_OFFBOARD_SEEN 행과, 공중 진입이
 //   새로 닿는 기존 정리 칸이다.
 // - 기호: P는 발행을 시작한 tick(READY_AIR_OFFBOARD), S는 DO_SET_MODE(OFFBOARD)를 처음 보낸
@@ -1088,7 +1088,7 @@ TEST(AirEntry, A21_StaleSampleIsNotMonitored)
 }
 
 // P+1에 P 표본보다 묵은 vehicle_status만 오면 감시 표는 P tick의 표본(신뢰 표본)을 다시 보고 끝나지
-// 않는다(명세 2.3). 감시 구간의 landed 이력은 P tick부터라 P 전에 받은 landed false 표본은 넣지
+// 않는다. 감시 구간의 landed 이력은 P tick부터라 P 전에 받은 landed false 표본은 넣지
 // 않는다(view().landed_false_seen. 공중 goal의 판정에는 쓰이지 않는다).
 TEST(AirEntry, A21b_StaleSampleRightAfterPublishStart)
 {

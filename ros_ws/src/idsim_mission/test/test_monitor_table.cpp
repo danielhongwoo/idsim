@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 비행 중 감시 표(decisions.md 쟁점 4 "비행 중 감시"). 순위는 재실측 (4) 전까지 잠정이다.
+// 비행 중 감시 표(decisions.md 쟁점 4 "비행 중 감시"). 순위가 SITL 시나리오 trace와 다르면
+// rules.hpp의 kMonitorRankOrder만 고친다.
 // - 순위마다 한 건(표 주도, 테스트 이름에 순위). 표의 행 수와 parametrize 수가 같다.
 // - 같은 tick 동률: 동시에 맞을 수 있는 행 쌍 전부(1-3은 서로와 모든 행, 4-5끼리와 6-8끼리는 배타).
 // - 순위 5의 failsafe 가지와 nav_state를 보지 않는다는 것.

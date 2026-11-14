@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 공중 종료 단계(마지막 항목이 setpoint 항목인 미션. 1b decisions.md 쟁점 10, 쟁점 11, 쟁점 12
-// "명령과 ack의 유실"). 사례 이름의 T 번호는 B9 S3 칸 명세 6.2절의 사례다.
+// "명령과 ack의 유실"). 사례 이름의 T 번호는 사례를 가리키는 일련번호다.
 //
 // 표기: S는 마지막 setpoint 항목의 완료 tick(종료 단계 첫 tick), S+k는 그 뒤 k번째 tick(50 ms
 // 간격). 시간 값은 core/config.hpp 기본값이다: hold_confirm_timeout 3 s(S+60), 정리의 상한
@@ -329,7 +329,7 @@ TEST(MissionEnd, T7AirTimeoutThenLandTimeout)
     "confirmed");
 }
 
-// ---- 만료가 이긴다(쟁점 10 A2의 두 쌍) ----
+// ---- 만료가 이긴다(쟁점 10 종료 단계의 두 쌍) ----
 
 TEST(MissionEnd, T8HoldTimeoutBeatsThirdHoldSample)
 {
@@ -528,7 +528,7 @@ TEST(MissionEnd, T14ContrastThirdGroundDisarmedBeforeCap)
 
 TEST(MissionEnd, T15GroundDisarmedOnHoldTimeoutTick)
 {
-  // 규칙 R: 분류가 지상인 tick은 hold_confirm_timeout을 보지 않는다(쟁점 10 A2).
+  // 분류 지상 규칙: 분류가 지상인 tick은 hold_confirm_timeout을 보지 않는다(쟁점 10).
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = start_ground_end(h);
   run_to(h, st.s + 58);
@@ -582,7 +582,7 @@ TEST(MissionEnd, T16ContrastLandPathCapOnGround)
 
 TEST(MissionEnd, T17aLandPathGroundDisarmed)
 {
-  // 쟁점 10 A1: Land 경로에서 AUTO_LAND를 보기 전에 지상 DISARMED 3회면 SUCCEEDED.
+  // 쟁점 10: Land 경로에서 AUTO_LAND를 보기 전에 지상 DISARMED 3회면 SUCCEEDED.
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
   h.land_response = CommandResponse::kIgnore;
@@ -1008,7 +1008,7 @@ TEST(MissionEnd, T25LastLoiterAutoDisarmBeforeCompletion)
   expect_terminated_once_as(h, "ABORTED/EXTERNAL_DISARM");
 }
 
-// ---- 규칙 R(분류 지상 동안의 분기 판정. 쟁점 10 A2) ----
+// ---- 분류 지상 규칙(분류 지상 동안의 분기 판정. 쟁점 10 "지상 DISARMED를 보는 동안의 규칙") ----
 
 TEST(MissionEnd, T26DisarmedAutoLandSamplesAreNotLandObserved)
 {
@@ -1138,11 +1138,12 @@ TEST(MissionEnd, T29CapOnMismatchedTickWhileClassifiedGround)
 }
 
 // ---- 지상 대기의 대비책 기준 시각과 확인 함수(B9 S3 최종 검토 보강) ----
-// 칸 명세 2.2(지상 DISARMED 계수, 규칙 R), 2.3 순서 3과 끝 문단(이어짐 갱신, 진입 tick의 관측), D7,
-// D12. 칸은 기존 칸(A13r, G8, G10, Y11)만 쓴다.
+// 쟁점 10의 지상 DISARMED 계수와 분류 지상 규칙, 지상 대기의 이어짐 갱신과 진입 tick의 관측,
+// 대비책 disarm 뒤의 확인 함수. 칸은 기존 칸만 쓴다.
 
 // T10 경로(지상 Hold 수락, Hold 기한으로 S+60에 지상 대기)를 S+60까지 돈다.
-// drive_ground_wait와 달리 S+60 tick까지 실행해 A13r를 단정하고, disarm 반응을 끄지 않는다.
+// drive_ground_wait와 달리 S+60 tick까지 실행해 AIR -> GROUND_WAIT(HOLD_TIMEOUT) 칸을 단정하고,
+// disarm 반응을 끄지 않는다.
 EndStart drive_into_ground_wait(Harness & h)
 {
   const EndStart st = start_ground_end(h);
@@ -1155,9 +1156,9 @@ EndStart drive_into_ground_wait(Harness & h)
 
 TEST(MissionEnd, GroundDisarmedSamplesRestartFallbackBase)
 {
-  // 지상 대기 중 지상 DISARMED 표본이 ARMED, landed의 이어짐을 끊는다(순서 3, D12). S+100, S+101의
+  // 지상 대기 중 지상 DISARMED 표본이 ARMED, landed의 이어짐을 끊는다. S+100, S+101의
   // 지상 DISARMED 2회는 3회 전이라 끝나지 않고, S+102의 ARMED가 분류를 미정으로 되돌리며 계수를
-  // 0으로 만든다(규칙 R). 대비책의 기준은 S+60이 아니라 S+102이고 disarm은 S+202에 나간다.
+  // 0으로 만든다(분류 지상 규칙). 대비책의 기준은 S+60이 아니라 S+102이고 disarm은 S+202에 나간다.
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_into_ground_wait(h);
   run_to(h, st.s + 100);
@@ -1189,8 +1190,8 @@ TEST(MissionEnd, GroundDisarmedSamplesRestartFallbackBase)
 
 TEST(MissionEnd, GroundDisarmedCountRestartsAfterArmed)
 {
-  // 규칙 R: 분류 지상 뒤 ARMED가 다시 오면 지상 DISARMED 계수는 0이다. S+100, S+101, S+103의
-  // 지상 DISARMED는 이어진 3회가 아니라 끝나지 않는다. 이어짐은 S+103에 다시 끊기고 S+104가
+  // 분류 지상 규칙: 분류 지상 뒤 ARMED가 다시 오면 지상 DISARMED 계수는 0이다. S+100, S+101,
+  // S+103의 지상 DISARMED는 이어진 3회가 아니라 끝나지 않는다. 이어짐은 S+103에 다시 끊기고 S+104가
   // 기준이다.
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_into_ground_wait(h);
@@ -1216,7 +1217,7 @@ TEST(MissionEnd, GroundDisarmedCountRestartsAfterArmed)
 
 TEST(MissionEnd, FallbackDisarmConfirmKeptOnLandPath)
 {
-  // 쟁점 10: 대비책 disarm을 보낸 뒤 Land 경로로 옮겨도 확인 함수(DisarmConfirm)로 센다(2.2, D7).
+  // 쟁점 10: 대비책 disarm을 보낸 뒤 Land 경로로 옮겨도 확인 함수(DisarmConfirm)로 센다.
   // S+160 대비책 disarm(무시), S+162 G8, S+165-S+167 지상 DISARMED. 세는 표본은 모두 전송 tick보다
   // 뒤 tick의 것이다.
   Harness h(takeoff_only_mission(0.2));
@@ -1251,9 +1252,9 @@ TEST(MissionEnd, FallbackDisarmConfirmKeptOnLandPath)
 
 TEST(MissionEnd, GroundWaitEnteredOnMismatchedTick)
 {
-  // D12: 지상 대기에 들어간 tick이 식별 불일치면 그 tick에 관측하지 않고, 다음 식별이 맞는
-  // ARMED, landed tick이 대비책 기준이다. 진입은 AIR의 hold_confirm_timeout(표본이 필요 없는 판정,
-  // 2.3 순서 2와 7)이고 그 tick의 최신 landed가 true라 지상 대기로 간다.
+  // 지상 대기에 들어간 tick이 식별 불일치면 그 tick에 관측하지 않고, 다음 식별이 맞는
+  // ARMED, landed tick이 대비책 기준이다. 진입은 AIR의 hold_confirm_timeout(표본이 필요 없는 판정.
+  // step_mission_end의 순서 (2)와 (7))이고 그 tick의 최신 landed가 true라 지상 대기로 간다.
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = start_ground_end(h);
   run_to(h, st.s + 60);

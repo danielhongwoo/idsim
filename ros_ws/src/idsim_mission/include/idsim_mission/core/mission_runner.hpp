@@ -316,7 +316,7 @@ private:
   std::optional<StatusSample> trusted_status_;  // 감시 구간에서 판정에 쓰는 최신 vehicle_status
   SampleCounter counter_;                       // OFFBOARD, ARMED, AUTO_LOITER 확인
   SampleCounter goto_counter_;  // GOTO 완료(서로 다른 위치 표본 3개 연속. timestamp로 가른다)
-  // 종료 단계의 지상 DISARMED 계수(대비책 disarm 전. 뒤는 disarm_confirm_. 쟁점 10 A1, 쟁점 11)
+  // 종료 단계의 지상 DISARMED 계수(대비책 disarm 전. 뒤는 disarm_confirm_. 쟁점 10, 쟁점 11)
   SampleCounter ground_disarm_counter_;
   LandedArmedFallback ground_wait_fallback_;  // 종료 단계 지상 대기의 대비책 disarm
   std::string cleanup_detail_;

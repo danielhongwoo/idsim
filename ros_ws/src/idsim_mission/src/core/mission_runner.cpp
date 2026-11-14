@@ -1366,7 +1366,7 @@ void MissionRunner::cleanup_with_untrusted_sample(Tick & t)
 
 void MissionRunner::enter_ground(Event event, Tick & t)
 {
-  // 재실측 (2), (3)이 바꿀 수 있는 곳(README.md). 지상 arm 분기에 들어간 tick에 발행 중이면
+  // SITL 시나리오 trace가 다르면 고칠 곳(README.md). 지상 arm 분기에 들어간 tick에 발행 중이면
   // setpoint를 지상 setpoint로 바꾼다. 이미 멈춘 발행은 다시 켜지 않고 disarm만 보낸다.
   tag(event, t);
   StateKey next = state_key();
@@ -1408,8 +1408,8 @@ void MissionRunner::run_ground(Tick & t)
 
 void MissionRunner::enter_air(Event event, Tick & t)
 {
-  // 재실측 (2)가 바꿀 수 있는 곳(README.md). 지금 발행 중인 setpoint(지상 분기에서 넘어왔으면 지상
-  // setpoint)를 TAKEOFF 목표점으로 되돌리지 않고 유지한 채 Hold를 보낸다.
+  // SITL 시나리오 trace가 다르면 고칠 곳(README.md). 지금 발행 중인 setpoint(지상 분기에서
+  // 넘어왔으면 지상 setpoint)를 TAKEOFF 목표점으로 되돌리지 않고 유지한 채 Hold를 보낸다.
   if (cause_ == CleanupCause::kRtlFailure) {
     // RTL 실패의 정리는 Hold를 거치지 않고 Land 경로다(1b decisions.md 쟁점 9). Hold 실패 표시보다
     // 먼저 본다. 기준 시각은 들어간 시각이다.
@@ -1508,8 +1508,8 @@ void MissionRunner::run_air_land(Tick & t)
 void MissionRunner::step_mission_end(Tick & t)
 {
   // 한 tick의 순서: (1) 표본 없음(방어) (2) 식별 불일치 (3) 표본 반영 (4) 상태 끊김 (5) 공중
-  // DISARMED (6) 정리의 상한 (6a) disarm 분류가 지상이면(규칙 R) 지상 DISARMED 3회만 보고 끝
-  // (7) 분기의 실패, 기한, 이동과 표본 하나로 정하는 관측 (8) Hold 3회 (9) 지상 대기의 대비책
+  // DISARMED (6) 정리의 상한 (6a) disarm 분류가 지상이면(분류 지상 규칙) 지상 DISARMED 3회만 보고
+  // 끝 (7) 분기의 실패, 기한, 이동과 표본 하나로 정하는 관측 (8) Hold 3회 (9) 지상 대기의 대비책
   // (10) 재전송. 표본은 감시 표와 같은 신뢰 표본 규칙(monitored_status)이라 첫 tick의 표본은 같은
   // tick의 감시 표가 통과시킨 것과 같다. 분기가 정해진 뒤의 식별 불일치 tick은 표본 없이(분류,
   // 계수, 대비책의 이어짐을 바꾸지 않고) 이어 가고 상태 끊김을 보지 않는다.
@@ -1596,9 +1596,9 @@ void MissionRunner::step_mission_end(Tick & t)
     end_at_cleanup_cap(t, on_ground);
     return;
   }
-  // (6a) 규칙 R(쟁점 10 A2): 분류가 지상인 동안은 분기의 거부 ack, 기한, 이동, AUTO_LAND 관측,
-  // 대비책, 재전송을 보지 않는다. 첫 지상 DISARMED 표본의 tick에 대기 명령을 지우고, 그 동안 받은
-  // ack는 버린다(뒤 tick에 다시 보지 않는다).
+  // (6a) 분류 지상 규칙(쟁점 10 "지상 DISARMED를 보는 동안의 규칙"): 분류가 지상인 동안은 분기의
+  // 거부 ack, 기한, 이동, AUTO_LAND 관측, 대비책, 재전송을 보지 않는다. 첫 지상 DISARMED 표본의
+  // tick에 대기 명령을 지우고, 그 동안 받은 ack는 버린다(뒤 tick에 다시 보지 않는다).
   if (disarm_class_ == DisarmClass::kGround) {
     if (first_ground_disarm) {
       clear_pending();
