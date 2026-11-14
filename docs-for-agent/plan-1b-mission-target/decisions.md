@@ -76,7 +76,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - 생성기는 템플릿에서 `<world>`가 정확히 하나가 아니거나 월드 직속 `<plugin>`(있으면 `server.idsim.config`가 무시된다), `<spherical_coordinates>`, `<actor>`, `<include>`(include된 모델의 월드 수준 plugin은 생성기가 볼 수 없다)가 있으면 거부한다. Actor 안에도 `<plugin>`을 넣지 않는다.
 - bridge: 1b의 bridge 토픽은 `/clock`(gz -> ROS) 하나다. 표적 pose와 정답 pose는 bridge를 거치지 않는다. 형식은 지금의 명령행 인자 하나(`/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock`)를 유지한다. 생성기 단위 테스트가 bridge 토픽 인자 집합이 정확히 그 하나임과, compose와 생성된 SDF 어디에도 `dynamic_pose`가 없음을 단정한다. 같은 금지 검사를 `sim-oracle`의 구독 토픽에도 적용한다(쟁점 5, `idsim_sim` 단위 테스트). `gui.config`는 plugin 목록을 고정한다. `idsim_sim` 단위 테스트(B6, sim-engineer. 패키지의 `test/`가 B6의 ament_python 전환에서 생긴다)가 `ros_ws/src/idsim_sim/config/gui.config`의 `<plugin filename>` 목록이 테스트 안의 고정 목록(gz-sim8 기본 `gui.config`에서 WorldControl을 빼고 GridConfig를 더한 것)과 정확히 같고 파일에 `dynamic_pose` 문자열이 없음을 본다. 설정 파일 수준의 방어이고, 실행 중 GUI 메뉴로 plugin을 더하거나 `IDSIM_GUI_CONFIG`로 다른 설정을 주는 것은 막지 않는다(쟁점 17의 운영 문서 문장이 맡는다).
 - bridge healthcheck는 `/clock` 1회 수신 그대로다.
-- 커스텀 모델: 모델 파일을 두지 않는다. [실측] M1: `<skin>` 없이 `<link>` visual만 가진 Actor가 렌더링되고 script 궤적대로 움직인다. `GZ_SIM_RESOURCE_PATH`는 바꾸지 않는다.
+- 커스텀 모델: 모델 파일을 두지 않는다. [실측] M1(headless ogre2 카메라 센서 영상): `<skin>` 없이 `<link>` visual만 가진 Actor가 렌더링되고 script 궤적대로 움직인다. [소스] GUI도 같은 `RenderUtil`/`SceneManager::CreateActor` 경로를 쓴다. GUI와 ogre 엔진에서의 확인은 M4에서 한다. `GZ_SIM_RESOURCE_PATH`는 바꾸지 않는다.
 
 근거
 - Actor 궤적과 원점을 SDF에 손으로 다시 적으면 출처가 둘이 된다.
@@ -495,8 +495,8 @@ U6의 산출물 최소 원칙을 1b에도 쓴다. 결과는 PR 본문과, 상수
 
 | 이름 | 무엇 | 왜 | 담당 | 방법 |
 | --- | --- | --- | --- | --- |
-| M1 | `<skin>` 없는 Actor가 GUI에서 보이고 움직이는가 | 커스텀 모델 필요 여부(쟁점 2) | sim-engineer | 수동 1회 |
-| M4 | Actor 월드에 `gz-gui` 연결, 재접속, 120 s 생존. M2(Actor와 `TargetState` 차)를 육안으로 같이. 궤적 길이 합이 상한인 월드의 GUI CPU, 서버 RSS, RTF 기록 | viz 서버 생존 리스크(쟁점 17) | sim-engineer | 수동 1회 |
+| M1 | `<skin>` 없는 Actor가 렌더링되고 움직이는가(headless ogre2 카메라 센서 영상으로 실측함. GUI와 ogre 확인은 M4) | 커스텀 모델 필요 여부(쟁점 2) | sim-engineer | 수동 1회 |
+| M4 | Actor 월드에 `gz-gui` 연결, 재접속, 120 s 생존. link visual만 가진 Actor가 GUI(ogre2, ogre)에서 보이는지. M2(Actor와 `TargetState` 차)를 육안으로 같이. 궤적 길이 합이 상한인 월드의 GUI CPU, 서버 RSS, RTF 기록 | viz 서버 생존 리스크(쟁점 17) | sim-engineer | 수동 1회 |
 | M5 | 원점을 SDF로만 넣었을 때 스모크 S2 통과 | 런타임 원점 호출 제거(쟁점 2) | sim-engineer, test-engineer | 스모크 1회 |
 | S1-a | 지상 정지에서 oracle의 base_link 위치와 스폰 pose(x, y 같고 z는 스폰 z + 0.24 근처), Pose_V의 `x500_N` model 항목이 world 기준인지 | 오프셋 합성과 top-level pose가 world 기준이라는 [추정](쟁점 5) | sim-engineer | B7 PR의 스택 실행(`sim-oracle`이 생긴 뒤) |
 | S1-b | 호버 중 oracle 위치와 `vehicle_local_position`을 사슬 역변환한 값의 차, 수평과 수직 | 기준점이 같다는 판단과 사슬의 부호, 축(쟁점 4, 5) | sim-engineer, test-engineer | F1 trace |

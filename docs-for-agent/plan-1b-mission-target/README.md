@@ -77,7 +77,7 @@
 | B8b | px4-engineer(필수 승인: 칸 목록 diff, 새 테스트), test-engineer(구조 승인), reviewer | 미덮임 0, "불가능"으로 옮긴 칸의 [소스] 이유, 대표 취소 칸의 명령 미발행 단정, core 소스 무변경 |
 | B9 | px4-engineer(필수 승인: snapshot 헤더, 전이 표, 상태기 단위 테스트), test-engineer(칸 목록 diff), architect(계약 문장과 구현의 일치) | 진입 방식 셋, 지상 arm 진입의 순서 불변식(쟁점 12), 감시 표 면제 구간, RTL과 Land 폴백, 공중 종료 결과 표, 속도 feedforward 조건, 순서 규칙, core가 `idsim_common`과 px4_msgs에 의존하지 않는지 |
 | B10 | px4-engineer(`px4/` 어댑터와 `FramePort` 연결, 같은 표본에서 기준 읽기, `target_fresh_age` 0.1 s와 `target_timeout` 1.0 s 기본값), test-engineer(로더 출력) | 표적 구독 수명, TARGET_LOST 뒤 Hold 확인까지 발행 유지, `world.origin` 누락 시 configure 실패(embedded 변형에는 `ops-N`이 없어 해당 없음. `decisions.md` 쟁점 4) |
-| B11 | px4-engineer(판정 필드와 timeout), sim-engineer(정답 pose 경로), devops-engineer(wrapper와 `sitl.yml`), architect(판정이 `decisions.md` 쟁점 5, 15와 같은지) | 계약 판정과 정답 판정의 분리, `ORACLE_ABSENT`, `ORACLE_STALE`, `UPSTREAM_FAILED`, b와 `R_home`의 근거와 모형 검증, 시험 미션 반경과 판정 상수의 대조 테스트, L과 `target_fresh_age`의 대조 테스트, 두 커밋 절차 |
+| B11 | px4-engineer(판정 필드와 timeout), sim-engineer(정답 pose 경로), devops-engineer(wrapper와 `sitl.yml`), architect(판정이 `decisions.md` 쟁점 5, 15와 같은지) | 계약 판정과 정답 판정의 분리, `ORACLE_ABSENT`, `ORACLE_STALE`, `UPSTREAM_FAILED`, b와 `R_home`의 근거와 모형 검증, 시험 미션 반경과 판정 상수의 대조 테스트, L과 `target_fresh_age`의 대조 테스트, `/targets/*/state` 발행자 QoS를 계약 상태 행과 대조하는 통합 테스트, 두 커밋 절차 |
 | B12 | devops-engineer | 서버 생존 기록 |
 | B13 | reviewer(필수), px4-engineer(SITL 파라미터 표, 전이 문장, "Offboard setpoint" 절의 속도 예외), ros2-engineer | golden 무변경, 1a 미션에 대한 의미가 그대로인지 |
 | 전체 | reviewer | PR마다 규칙 준수와 가정의 근거. B8, B8b, B9, B11, B13은 머지 전 필수 |
