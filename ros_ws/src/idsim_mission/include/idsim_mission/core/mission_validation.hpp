@@ -16,14 +16,16 @@
 //
 // 검증 함수는 셋이고 모두 계약 검증을 먼저 부른다(1b decisions.md 쟁점 12 "미션 제한의 두 자리").
 // - validate_mission_contract: 계약(Mission, MissionItem 주석)의 규칙. 필드 검사 뒤에 순서
-//   규칙(TAKEOFF는 첫 항목에만, LAND와 RTL은 마지막 항목에만)을 본다. Phase 3에 Fleet이 같이
-//   쓸 수 있게 1a 제한을 넣지 않는다.
+//   규칙(TAKEOFF는 첫 항목에만, LAND와 RTL은 마지막 항목에만)을 본다. 필드 검사에는 좌표 상한(GOTO
+//   position과 TRACK_ENTITY offset의 각 성분 절댓값 1e6 m 이하, 유한 검사 뒤. 1b decisions.md 쟁점
+//   8)이 든다. Phase 3에 Fleet이 같이 쓸 수 있게 1a 제한을 넣지 않는다.
 // - validate_mission_1a_goal: 계약 + 1a 임시 제한(계약 문장이 아니다). type은 TAKEOFF, LOITER,
 //   LAND만, 마지막은 LAND, 첫 항목은 TAKEOFF 또는 LAND(계약 순서 규칙과 합쳐 LAND로 시작하면
 //   길이 1). goal 접수(screen_goal)가 쓴다. B9 동안 받는 미션 집합은 1a 그대로다.
 // - validate_mission_runnable: 계약 + runner가 아직 실행하지 못하는 미션의 제한. type은
-//   TAKEOFF, LOITER, LAND, RTL만이고 첫 항목과 마지막 항목은 계약 순서 규칙 말고는 제한하지
-//   않는다(첫 항목이 LOITER이면 공중 Offboard 진입, 마지막이 setpoint 항목이면 공중 종료 단계).
+//   TAKEOFF, GOTO, LOITER, LAND, RTL만이고 첫 항목과 마지막 항목은 계약 순서 규칙 말고는 제한하지
+//   않는다(첫 항목이 LOITER나 GOTO이면 공중 Offboard 진입, 마지막이 setpoint 항목이면 공중 종료
+//   단계).
 //   MissionRunner 생성자가 쓴다. validate_mission_1a_goal이 받는 미션은 이것도 받는다. 문구는
 //   사용자에게 닿지 않는다(노드는 screen_goal이 먼저 끝낸다).
 

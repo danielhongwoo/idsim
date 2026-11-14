@@ -98,6 +98,26 @@ TEST(Px4Setpoint, PositionSetpointYawIsNotWrapped)
   EXPECT_EQ(sp->yaw, 4.0F);
 }
 
+TEST(Px4Setpoint, FitsFloat32)
+{
+  const double max = static_cast<double>(std::numeric_limits<float>::max());
+  const double above_max = std::nextafter(max, kInf);
+  for (const double good : {0.0, max, -max}) {
+    EXPECT_TRUE(px4::fits_float32(good)) << good;
+  }
+  for (const double bad : {above_max, -above_max, 1e39, -1e39, kInf, -kInf, kNaN}) {
+    EXPECT_FALSE(px4::fits_float32(bad)) << bad;
+  }
+  EXPECT_TRUE(px4::fits_float32(Eigen::Vector3d(max, -max, 0.0)));
+  for (int axis = 0; axis < 3; ++axis) {
+    for (const double bad : {1e39, kNaN}) {
+      Eigen::Vector3d v(1.0, -2.0, 3.0);
+      v[axis] = bad;
+      EXPECT_FALSE(px4::fits_float32(v)) << "axis " << axis << " value " << bad;
+    }
+  }
+}
+
 TEST(Px4Setpoint, PositionSetpointAcceptsFloatMax)
 {
   const double max = static_cast<double>(std::numeric_limits<float>::max());

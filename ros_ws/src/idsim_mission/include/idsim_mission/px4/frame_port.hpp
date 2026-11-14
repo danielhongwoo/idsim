@@ -71,9 +71,10 @@ LocalPositionInput to_local_position_input(
   const px4_msgs::msg::VehicleLocalPosition & msg, std::uint64_t received_tick);
 
 // core::FramePort 구현. 한 tick의 기준(reference)과 params의 world.origin으로 만든다.
-// - world_to_local: 기준이 없으면 nullopt. 기준이 있어도 입력이나 결과가 비유한이면 nullopt다
-//   (비유한 setpoint는 어댑터 출력에서 짝째 버려져 발행이 끊기므로, core가 직전 setpoint를
-//   유지하도록 값 없음으로 둔다).
+// - world_to_local: 기준이 없으면 nullopt. 기준이 있어도 결과의 성분이 하나라도 비유한이거나
+//   float32 범위 밖이면(idsim_common::px4::fits_float32가 거짓) nullopt다. 그런 setpoint는 어댑터
+//   출력에서 짝째 버려져 발행이 끊기므로, core가 직전 setpoint를 유지하도록 값 없음으로 둔다.
+//   비유한 입력은 비유한 결과라 함께 걸러진다.
 // - world_velocity_to_local: 기준과 무관한 축 치환. 비유한 입력은 비유한 출력이다.
 class Px4FramePort final : public core::FramePort
 {

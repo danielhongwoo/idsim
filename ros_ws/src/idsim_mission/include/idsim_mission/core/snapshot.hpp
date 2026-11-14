@@ -62,8 +62,12 @@
 //   최신 표본 하나에서 둘을 함께 만든다)의 ref_lat, ref_lon, ref_alt, xy_global, z_global과
 //   params의 world.origin. 기준 유효 술어(xy_global과 z_global이 true, ref_lat, ref_lon, ref_alt가
 //   유한, ref_alt가 정확히 0.0이 아님)는 기준을 읽는 px4 어댑터 함수에 둔다. 술어가 거짓이면
-//   world_to_local은 nullopt다. 식은 idsim_common::geo::world_enu_to_local_ned(점)와
-//   idsim_common::frames::enu_to_ned(벡터)다(decisions.md 쟁점 4).
+//   world_to_local은 nullopt다. 점 변환은 결과의 성분이 하나라도 trajectory_setpoint(float32)에
+//   실을 수 없으면(비유한이거나 절댓값이 float 최댓값보다 크면) nullopt다. 술어는
+//   idsim_common::px4::fits_float32이고 position_setpoint의 수용 조건과 같다. 벡터 변환의 같은
+//   술어는 decisions.md 쟁점 12의 S6에서 반환형과 함께 더한다. 식은
+//   idsim_common::geo::world_enu_to_local_ned(점)와 idsim_common::frames::enu_to_ned(벡터)다
+//   (decisions.md 쟁점 4).
 // - Snapshot.targets는 PX4 메시지가 아니다. 노드(node/conversion.cpp)가 idsim_interfaces
 //   TargetState의 유효 표본만 TargetSample로 바꿔 target_id별로 최신 하나를 둔다(decisions.md
 //   쟁점 8의 유효 표본 규칙).
@@ -213,8 +217,9 @@ struct Snapshot
 };
 
 // world ENU -> 기체 로컬 NED 변환 port. 노드는 tick마다 Snapshot.position과 같은 표본의 기준으로
-// 구현을 만든다(위 "어댑터가 채울 것"의 FramePort). 기준이 무효이거나 입력 또는 결과가 비유한이면
-// 점 변환은 nullopt다. 벡터 변환은 기준에 의존하지 않는 축 치환(ENU -> NED)이라 늘 값이 있다.
+// 구현을 만든다(위 "어댑터가 채울 것"의 FramePort). 기준이 무효이거나 입력 또는 결과가
+// 비유한이거나 결과가 float32 범위 밖이면 점 변환은 nullopt다. 벡터 변환은 기준에 의존하지 않는
+// 축 치환(ENU -> NED)이라 늘 값이 있다.
 class FramePort
 {
 public:
@@ -225,7 +230,8 @@ public:
   FramePort & operator=(FramePort &&) = delete;
   virtual ~FramePort() = default;
 
-  // world ENU 점(m) -> 로컬 NED 점(m). 기준이 무효이거나 입력 또는 결과가 비유한이면 nullopt.
+  // world ENU 점(m) -> 로컬 NED 점(m). 기준이 무효이거나 입력 또는 결과가 비유한이거나 결과가
+  // float32 범위 밖이면 nullopt.
   virtual std::optional<Vec3> world_to_local(const Vec3 & world_enu) const = 0;
 
   // world ENU 벡터(m/s) -> 로컬 NED 벡터(m/s).

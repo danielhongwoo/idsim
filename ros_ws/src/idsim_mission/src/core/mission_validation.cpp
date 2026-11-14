@@ -30,6 +30,10 @@ namespace
 constexpr double kPi = 3.14159265358979323846;
 constexpr std::size_t kMissionIdMaxLength = 64;
 constexpr std::uint32_t kNanosecPerSecond = 1000000000U;
+// 계약 좌표 상한(m). GOTO position과 TRACK_ENTITY offset의 각 성분 절댓값이 이 값 이하(경계
+// 포함)여야 한다. 1b decisions.md 쟁점 8 "좌표 상한"의 값이다. 올리는 쪽이 호환된다(받던 미션을
+// 계속 받는다).
+constexpr double kMaxMissionCoordinateM = 1e6;
 
 bool lower_or_digit(char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); }
 
@@ -41,6 +45,13 @@ bool finite(const Vec3 & v)
 }
 
 bool is_zero(const Vec3 & v) { return v.x == 0.0 && v.y == 0.0 && v.z == 0.0; }
+
+// 유한한 성분에만 뜻이 있다(유한 검사 뒤에 부른다).
+bool within_coordinate_bound(const Vec3 & v)
+{
+  return std::fabs(v.x) <= kMaxMissionCoordinateM && std::fabs(v.y) <= kMaxMissionCoordinateM &&
+         std::fabs(v.z) <= kMaxMissionCoordinateM;
+}
 
 bool is_zero(const Duration & d) { return d.sec == 0 && d.nanosec == 0; }
 
@@ -133,6 +144,9 @@ std::string check_used(const ItemSpec & item, std::size_t index)
       if (!finite(s.position)) {
         return field(index, "go_to.position") + " must be finite";
       }
+      if (!within_coordinate_bound(s.position)) {
+        return field(index, "go_to.position") + " components must be within [-1e6, 1e6] m";
+      }
       if (!positive_finite(s.acceptance_radius_m)) {
         return field(index, "go_to.acceptance_radius_m") + " must be finite and > 0";
       }
@@ -145,6 +159,9 @@ std::string check_used(const ItemSpec & item, std::size_t index)
       }
       if (!finite(s.offset) || is_zero(s.offset)) {
         return field(index, "track_entity.offset") + " must be finite and non-zero";
+      }
+      if (!within_coordinate_bound(s.offset)) {
+        return field(index, "track_entity.offset") + " components must be within [-1e6, 1e6] m";
       }
       if (!positive_finite(s.acceptance_radius_m)) {
         return field(index, "track_entity.acceptance_radius_m") + " must be finite and > 0";
@@ -196,7 +213,7 @@ bool supported_in_1a(std::uint8_t type)
 
 bool supported_by_runner(std::uint8_t type)
 {
-  return supported_in_1a(type) || type == item_type::kRtl;
+  return supported_in_1a(type) || type == item_type::kRtl || type == item_type::kGoTo;
 }
 
 // 계약 + 1a 임시 제한. validate_mission_1a_goal이 쓴다.
@@ -294,10 +311,10 @@ MissionCheck validate_mission_runnable(const MissionSpec & mission)
     if (!supported_by_runner(type)) {
       return invalid(
         field(i, "type") + " " + item_type_name(type) +
-        " is not supported by the runner yet (TAKEOFF, LOITER, LAND, RTL only)");
+        " is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, RTL only)");
     }
   }
-  // 첫 항목 type은 모두 진입 방식이 있다(TAKEOFF, LOITER, LAND, RTL. rules.hpp entry_plan).
+  // 첫 항목 type은 모두 진입 방식이 있다(TAKEOFF, GOTO, LOITER, LAND, RTL. rules.hpp entry_plan).
   return check;
 }
 

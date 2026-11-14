@@ -15,10 +15,10 @@
 // 전이 표에서 떼어 낸 순수 규칙 셋. 상태기(mission_runner)가 쓰고 단위 테스트가 표로 시험한다.
 // 근거는 1a 6단계 설계 결정(git 이력) 쟁점 3, 4.
 //
-// 재실측으로 바뀔 수 있는 것은 고칠 곳이 한 곳이 되게 여기에 모았다(README.md "재실측으로 바뀔 수
-// 있는 곳").
-// - 비행 중 감시 표의 행 순위(재실측 (4) 전까지 잠정): kMonitorRankOrder 한 배열.
-// - "disarm 전송 뒤 받은 표본"의 기준(재실측 (5)): is_after_disarm_send 한 함수.
+// SITL 시나리오 trace가 표와 다르면 고칠 곳이 한 곳이 되게 여기에 모았다(README.md "SITL 시나리오
+// trace가 다르면 고칠 곳").
+// - 비행 중 감시 표의 행 순위: kMonitorRankOrder 한 배열.
+// - "disarm 전송 뒤 받은 표본"의 기준: is_after_disarm_send 한 함수.
 
 #ifndef IDSIM_MISSION__CORE__RULES_HPP_
 #define IDSIM_MISSION__CORE__RULES_HPP_
@@ -51,7 +51,7 @@ enum class MonitorRow : std::uint8_t
 };
 
 // 순위. 앞이 이긴다. 순위는 같은 tick의 동률만 가른다(엇갈려 시작하면 먼저 맞은 행이 그 tick에
-// goal을 끝낸다). 재실측 (4) 전까지 잠정이다. 순위를 바꾸려면 이 배열만 고친다.
+// goal을 끝낸다). SITL 시나리오 trace가 다르면 이 배열만 고친다.
 inline constexpr std::array<MonitorRow, 8> kMonitorRankOrder = {
   MonitorRow::kTimestampFailure, MonitorRow::kIdentityMismatch, MonitorRow::kLinkLost,
   MonitorRow::kDisarmedInAir,    MonitorRow::kDisarmedOnGround, MonitorRow::kModeFailsafe,
@@ -124,9 +124,9 @@ enum class EntryPlan : std::uint8_t
 {
   kGroundArm,  // 첫 항목 TAKEOFF: landed이고 DISARMED에서 Offboard로 들어가 arm(P3-P6)
   kModeCommand,  // 첫 항목 LAND, RTL: landed가 아니고 ARMED에서 P2 뒤 바로 그 항목을 시작
-  // 첫 항목 LOITER: landed가 아니고 ARMED이고 AUTO_LOITER(의도도 AUTO_LOITER), failsafe 없음에서
-  // 지금 위치를 진입 setpoint로 발행하고 Offboard로 들어간다(P3-P5. arm을 보내지 않는다. 1b
-  // decisions.md 쟁점 7). GOTO와 TRACK_ENTITY는 runner가 그 type을 받을 때 더한다.
+  // 첫 항목 LOITER, GOTO: landed가 아니고 ARMED이고 AUTO_LOITER(의도도 AUTO_LOITER), failsafe
+  // 없음에서 지금 위치를 진입 setpoint로 발행하고 Offboard로 들어간다(P3-P5. arm을 보내지 않는다.
+  // 1b decisions.md 쟁점 7). TRACK_ENTITY는 runner가 그 type을 받을 때 더한다.
   kAirOffboard,
 };
 
@@ -204,10 +204,10 @@ private:
   bool has_last_{false};
 };
 
-// "disarm 전송 뒤 받은 표본"의 기준(decisions.md 쟁점 3 M5 "arm을 보낸 뒤의 지상 분기"). 재실측
-// (5)로 바뀌면 이 함수만 고친다. 수신 tick이 이 분기의 첫 disarm 전송 tick보다 크고, timestamp가
-// 첫 전송에 실은 Px4Timestamp보다 엄격히 뒤인 표본만 센다(두 조건 모두. 재전송의 값이 아니라
-// 첫 전송의 값과 비교한다).
+// "disarm 전송 뒤 받은 표본"의 기준(decisions.md 쟁점 3 M5 "arm을 보낸 뒤의 지상 분기"). SITL
+// 시나리오 trace가 다르면 이 함수만 고친다. 수신 tick이 이 분기의 첫 disarm 전송 tick보다 크고,
+// timestamp가 첫 전송에 실은 Px4Timestamp보다 엄격히 뒤인 표본만 센다(두 조건 모두. 재전송의 값이
+// 아니라 첫 전송의 값과 비교한다).
 bool is_after_disarm_send(
   const StatusSample & sample, std::uint64_t first_send_tick, std::uint64_t first_send_stamp_us);
 

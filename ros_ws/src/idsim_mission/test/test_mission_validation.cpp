@@ -40,17 +40,6 @@ namespace
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 constexpr double kPi = 3.14159265358979323846;
 
-ItemSpec goto_item()
-{
-  ItemSpec item;
-  item.type = item_type::kGoTo;
-  item.timeout = seconds(10);
-  item.go_to.position = Vec3{1.0, 2.0, 3.0};
-  item.go_to.acceptance_radius_m = 0.5;
-  item.go_to.yaw.mode = yaw_mode::kKeep;
-  return item;
-}
-
 ItemSpec track_item()
 {
   ItemSpec item;
@@ -231,6 +220,86 @@ INSTANTIATE_TEST_SUITE_P(
       },
       "track_entity.target_id"}),
   [](const ::testing::TestParamInfo<ContractCase> & info) { return std::string(info.param.name); });
+
+// 계약 좌표 상한(1b decisions.md 쟁점 8): GOTO position과 TRACK_ENTITY offset의 각 성분 절댓값이
+// 1e6 m 이하(경계 포함). 유한 검사 뒤에 보므로 NaN의 detail은 그대로다.
+TEST(ValidateMissionContract, CoordinateBound)
+{
+  const double above = std::nextafter(1e6, std::numeric_limits<double>::infinity());
+  const auto single = [](const ItemSpec & item) {
+    MissionSpec m;
+    m.mission_id = "bound";
+    m.items = {item};
+    return m;
+  };
+  for (int axis = 0; axis < 3; ++axis) {
+    const auto set = [axis](Vec3 & v, double value) {
+      (axis == 0 ? v.x : axis == 1 ? v.y : v.z) = value;
+    };
+    for (const double ok : {1e6, -1e6}) {
+      ItemSpec g = goto_item();
+      set(g.go_to.position, ok);
+      EXPECT_TRUE(validate_mission_contract(single(g)).valid)
+        << "goto axis " << axis << " " << ok << ": " << validate_mission_contract(single(g)).detail;
+      ItemSpec t = track_item();
+      set(t.track_entity.offset, ok);
+      EXPECT_TRUE(validate_mission_contract(single(t)).valid)
+        << "track axis " << axis << " " << ok << ": "
+        << validate_mission_contract(single(t)).detail;
+    }
+    for (const double bad : {above, -above}) {
+      ItemSpec g = goto_item();
+      set(g.go_to.position, bad);
+      MissionCheck check = validate_mission_contract(single(g));
+      EXPECT_FALSE(check.valid) << "goto axis " << axis;
+      EXPECT_EQ(check.detail, "items[0].go_to.position components must be within [-1e6, 1e6] m");
+      ItemSpec t = track_item();
+      set(t.track_entity.offset, bad);
+      check = validate_mission_contract(single(t));
+      EXPECT_FALSE(check.valid) << "track axis " << axis;
+      EXPECT_EQ(
+        check.detail, "items[0].track_entity.offset components must be within [-1e6, 1e6] m");
+    }
+  }
+  // NaN은 유한 검사의 detail(검사 순서).
+  ItemSpec g = goto_item();
+  g.go_to.position.x = kNaN;
+  EXPECT_EQ(validate_mission_contract(single(g)).detail, "items[0].go_to.position must be finite");
+  ItemSpec t = track_item();
+  t.track_entity.offset.y = kNaN;
+  EXPECT_EQ(
+    validate_mission_contract(single(t)).detail,
+    "items[0].track_entity.offset must be finite and non-zero");
+  // 상한을 넘는 둘째 항목.
+  MissionSpec two;
+  two.mission_id = "bound";
+  ItemSpec far = goto_item();
+  far.go_to.position.z = -2e6;
+  two.items = {goto_item(), far};
+  EXPECT_EQ(
+    validate_mission_contract(two).detail,
+    "items[1].go_to.position components must be within [-1e6, 1e6] m");
+  far = track_item();
+  far.track_entity.offset.x = 2e6;
+  two.items = {goto_item(), far};
+  EXPECT_EQ(
+    validate_mission_contract(two).detail,
+    "items[1].track_entity.offset components must be within [-1e6, 1e6] m");
+  // goal 접수도 계약을 먼저 보므로 1a 문구가 아니라 상한 문장이다.
+  ItemSpec goal_item = goto_item();
+  goal_item.go_to.position = Vec3{2e6, 0.0, 5.0};
+  const std::optional<Termination> term = screen_goal("px4_1", "px4_1", single(goal_item), false);
+  ASSERT_TRUE(term.has_value());
+  EXPECT_EQ(term->status, Status::kAborted);
+  EXPECT_EQ(term->reason, Reason::kInvalidMission);
+  EXPECT_EQ(term->detail, "items[0].go_to.position components must be within [-1e6, 1e6] m");
+  EXPECT_EQ(term->detail.find("not supported in 1a"), std::string::npos);
+  // TAKEOFF height_m에는 상한이 없다.
+  ItemSpec high = takeoff_item();
+  high.takeoff.height_m = 1e30;
+  EXPECT_TRUE(validate_mission_contract(single(high)).valid)
+    << validate_mission_contract(single(high)).detail;
+}
 
 TEST(ValidateMission, ContractAcceptsOtherTypesButExecutor1aDoesNot)
 {
@@ -475,10 +544,10 @@ TEST(ScreenGoal, AirEndingMissionIsInvalidMission)
 
 TEST(MissionRunner, UnvalidatedMissionEndsInternalOnFirstStep)
 {
-  // [TAKEOFF, LOITER]는 S3부터 runner가 받으므로 runner가 아직 받지 않는 type(GOTO)으로 본다.
+  // runner가 아직 받지 않는 type(TRACK_ENTITY. 1b decisions.md 쟁점 12의 S6까지)으로 본다.
   MissionSpec m;
-  m.mission_id = "goto";
-  m.items = {takeoff_item(), goto_item(), land_item()};
+  m.mission_id = "track";
+  m.items = {takeoff_item(), track_item(), land_item()};
   Harness h(m);
   h.tick();
   ASSERT_TRUE(h.termination().has_value());
@@ -488,8 +557,8 @@ TEST(MissionRunner, UnvalidatedMissionEndsInternalOnFirstStep)
     h.termination()->detail, "mission did not pass validate_mission_runnable: " + check.detail);
   EXPECT_EQ(
     h.termination()->detail.rfind(
-      "mission did not pass validate_mission_runnable: items[1].type GOTO is not supported by the "
-      "runner yet (TAKEOFF, LOITER, LAND, RTL only)",
+      "mission did not pass validate_mission_runnable: items[1].type TRACK_ENTITY is not supported "
+      "by the runner yet (TAKEOFF, GOTO, LOITER, LAND, RTL only)",
       0),
     0U)
     << h.termination()->detail;
@@ -549,8 +618,8 @@ TEST(ValidateMission, OneAGoalAcceptsOnlyWhatRunnerAccepts)
   // [TAKEOFF, LOITER, LOITER, LOITER](B9 S3 공중 종료 단계), 첫 항목이 LOITER인 [LOITER],
   // [LOITER, LOITER], [LOITER, LAND], [LOITER, RTL], [LOITER, LOITER, LOITER],
   // [LOITER, LOITER, LAND], [LOITER, LOITER, RTL], [LOITER x 4], [LOITER, LOITER, LOITER, LAND],
-  // [LOITER, LOITER, LOITER, RTL](B9 S4 공중 Offboard 진입).
-  EXPECT_EQ(runnable_valid, 22);
+  // [LOITER, LOITER, LOITER, RTL](B9 S4 공중 Offboard 진입), GOTO가 든 67개(B9 S5).
+  EXPECT_EQ(runnable_valid, 89);
 }
 
 // 1b decisions.md 쟁점 12 "미션 제한의 두 자리"의 단위 테스트 (1). B9 동안 goal 접수는 1a
@@ -631,20 +700,59 @@ TEST(ScreenGoal, LoiterFirstMissionsNewToRunnerStayInvalidMission)
   }
 }
 
-// runner가 아직 실행하지 않는 type(GOTO, TRACK_ENTITY)은 type 검사가 거른다. 첫 항목 검사는 없다.
-TEST(ValidateMission, GotoFirstIsNotRunnableByType)
+// runner가 아직 실행하지 않는 type(TRACK_ENTITY. 1b decisions.md 쟁점 12의 S6까지)은 type 검사가
+// 거른다. 첫 항목 검사는 없다.
+TEST(ValidateMission, TrackEntityIsNotRunnableByType)
 {
-  for (const auto & items :
-       std::vector<std::vector<ItemSpec>>{{goto_item()}, {goto_item(), land_item()}}) {
+  struct Case
+  {
+    std::vector<ItemSpec> items;
+    const char * detail;
+  };
+  const std::vector<Case> cases = {
+    {{track_item()},
+     "items[0].type TRACK_ENTITY is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, "
+     "RTL only)"},
+    {{track_item(), land_item()},
+     "items[0].type TRACK_ENTITY is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, "
+     "RTL only)"},
+    {{takeoff_item(), track_item()},
+     "items[1].type TRACK_ENTITY is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, "
+     "RTL only)"},
+  };
+  for (const Case & c : cases) {
     MissionSpec m;
-    m.mission_id = "gf";
-    m.items = items;
+    m.mission_id = "tf";
+    m.items = c.items;
     const MissionCheck check = validate_mission_runnable(m);
     EXPECT_FALSE(check.valid) << order_name(m);
-    EXPECT_EQ(
-      check.detail,
-      "items[0].type GOTO is not supported by the runner yet (TAKEOFF, LOITER, LAND, RTL only)")
-      << order_name(m);
+    EXPECT_EQ(check.detail, c.detail) << order_name(m);
+  }
+}
+
+// 같은 단위 테스트 (1)의 S5 몫. GOTO가 든 미션은 runner가 받고 goal 접수는 1a 그대로
+// INVALID_MISSION으로 끝낸다(GOTO는 노드와 SITL에서 닿지 않는다).
+TEST(ScreenGoal, GotoMissionsNewToRunnerStayInvalidMission)
+{
+  const std::vector<std::vector<ItemSpec>> cases = {
+    {goto_item()},
+    {goto_item(), land_item()},
+    {takeoff_item(), goto_item(), land_item()},
+    {loiter_item(), goto_item()},
+    {takeoff_item(), goto_item()},
+  };
+  for (const auto & items : cases) {
+    MissionSpec m;
+    m.mission_id = "goto";
+    m.items = items;
+    EXPECT_TRUE(validate_mission_runnable(m).valid)
+      << order_name(m) << ": " << validate_mission_runnable(m).detail;
+    const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
+    ASSERT_TRUE(term.has_value()) << order_name(m);
+    EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
+    EXPECT_EQ(term->reason, Reason::kInvalidMission) << order_name(m);
+    EXPECT_NE(term->detail.find("type GOTO is not supported in 1a"), std::string::npos)
+      << order_name(m) << ": " << term->detail;
   }
 }
 

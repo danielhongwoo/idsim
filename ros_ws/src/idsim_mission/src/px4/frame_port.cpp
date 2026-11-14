@@ -20,6 +20,7 @@
 
 #include "Eigen/Core"
 #include "idsim_common/frames.hpp"
+#include "idsim_common/px4_setpoint.hpp"
 #include "idsim_mission/px4/inputs.hpp"
 
 namespace idsim_mission::px4
@@ -61,7 +62,9 @@ std::optional<core::Vec3> Px4FramePort::world_to_local(const core::Vec3 & world_
   }
   const Eigen::Vector3d ned = idsim_common::geo::world_enu_to_local_ned(
     origin_, *reference_, Eigen::Vector3d(world_enu.x, world_enu.y, world_enu.z));
-  if (!ned.allFinite()) {
+  // 비유한이거나 float32 범위 밖인 성분이 있으면 trajectory_setpoint에 실을 수 없다
+  // (position_setpoint의 수용 조건과 같은 술어. decisions.md 쟁점 4).
+  if (!idsim_common::px4::fits_float32(ned)) {
     return std::nullopt;
   }
   return core::Vec3{ned.x(), ned.y(), ned.z()};

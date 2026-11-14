@@ -7,13 +7,13 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 계약은 `docs/interface.md`에 고정 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S4 반영. 칸 목록 covered 350, impossible 108, uncovered 0. runner가 받는 미션 22종 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S5 반영. 칸 목록 covered 382, impossible 111, uncovered 0. runner가 받는 미션 89종 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
 ## 다음 작업
 
-1. B9 S5(`step()`의 `FramePort`, GOTO, 좌표 상한 1e6 m, `fits_float32` 공개). 이어서 S6(표적, TRACK_ENTITY, TARGET_LOST). 순서와 범위, B9와 B10의 경계는 `decisions.md` 쟁점 12.
+1. B9 S6(표적, TRACK_ENTITY, TARGET_LOST). 순서와 범위, B9와 B10의 경계는 `decisions.md` 쟁점 12.
    - 상태기 PR마다 px4-engineer 칸 명세가 먼저이고, 칸 목록 diff의 새 칸을 같은 PR에서 덮는다.
    - 머지 전에 로컬 `tests/sitl/run_sitl.sh`(1a 시나리오)를 돌리고 1a 미션이 지나는 덮임 칸이 그대로라는 대조를 merge 메시지에 남긴다.
    - goal 접수가 받는 미션은 B9 동안 1a 그대로이고, 노드는 값 없는 임시 port와 빈 `Snapshot.targets`를 넘긴다.
@@ -23,7 +23,7 @@
 ## 운영 규칙
 
 - 실험용 스택 번호는 px4 5, ros2 6, test 7, devops 8, sim 9. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
-- 로컬 branch는 main에 `--no-ff`로 머지하고, 적절한 시점에 origin main에 push해 CI를 확인한다.
+- 작업 branch를 push해 PR을 만들고, CI 통과와 owner 승인 뒤 merge commit으로 main에 머지한다.
 - `idsim_mission`의 전이 표와 상태기 단위 테스트는 px4-engineer가 필수 승인자다(`file-ownership.md`).
 - 그림은 계층으로 나눈다. 개요 그림은 묶음과 주요 경로만, 상세 그림은 개요의 상자 하나를 펼치고 도입 문장에 어느 상자인지 적는다. 같은 내용을 두 그림에 그리지 않는다. 그림 하나는 node 8개, edge 10개 이하, subgraph 중첩 1단, node label 두 줄, edge label 15자 이하이고 넘으면 나눈다. 포트, 환경변수, 경로, 명령줄은 label에 넣지 않고 그림 아래에 둔다(사용자 결정).
 - 대표 시나리오의 통과를 기준으로 개발한다. 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮고, 새 실측은 관찰된 문제의 재현용으로만 하며, 산출물은 최소로 둔다(U6).
@@ -51,17 +51,19 @@ B10 전에 정할 것.
 - (u) 모드 명령 항목(LAND, RTL)에서 모드 3회 확인과 `mode_confirm_timeout`이 같은 tick이면 구현은 확인이 이기는데 `docs/interface.md` "종료의 충돌 규칙"은 만료가 이긴다고 적는다. 구현을 고칠지(1a 동작 변경) 계약에 예외를 둘지, 확인 tick의 거부 ack까지 함께 정한다(architect, px4-engineer, ros2-engineer).
 - 공중 종료 단계의 정리 상한(12 s)이 `land_disarm_fallback_delay`를 포함하지 않는다. 지연을 9 s 이상으로 주면 이륙 이력 없는 지상 대기가 늘 상한 ABORTED다. 상한에 넣을지 파라미터 관계 검사를 둘지 정하고 `config.hpp` 상한 주석도 고친다(architect).
 - 공중 Offboard 진입: 첫 OFFBOARD 표본 뒤에도 감시 하한 timestamp가 P3 표본에 머문다(`monitored_status`). 늦은 AUTO_LOITER 표본이 EXTERNAL_MODE_CHANGE를 낼 수 있다(관찰 안 됨). 하한을 올릴지, 재전송이 운용자 Hold를 한 번 덮는 경우를 받아들인 위험에 올릴지, `docs/interface.md` 607행 목록에 먼저 본 OFFBOARD와 첫 OFFBOARD 표본을 넣을지(B13) 정한다(architect).
-- Px4Timestamp를 만들지 못해 끝난 goal의 `detail` 꼬리 "vehicle state unknown, may remain armed on ground"가 공중 경로에도 붙는다. `landed`로 문구를 가를지 정해 별도 PR로 고친다. `COM_FAIL_ACT_T`가 `sitl_params.env`에 없어 Offboard 손실 Land 앞에 지연이 끼는지도 본다(architect, px4-engineer, ros2-engineer).
+- Px4Timestamp를 만들지 못해 끝난 goal의 `detail` 꼬리 "vehicle state unknown, may remain armed on ground"가 공중 경로에도 붙는다(GOTO의 공중 진입 포함). `landed`로 문구를 가를지 정해 별도 PR로 고친다. `COM_FAIL_ACT_T`가 `sitl_params.env`에 없어 Offboard 손실 Land 앞에 지연이 끼는지도 본다(architect, px4-engineer, ros2-engineer).
 
 S6 칸 명세 전에 정할 것.
 
-- 표적 위치의 유효 표본 규칙에 좌표 상한을 둘지(px4-engineer, ros2-engineer, sim-engineer, architect).
+- 표적 위치의 유효 표본 규칙에 좌표 상한을 둘지. 월드 ENU는 접평면이라 먼 좌표에서 고도 차가 커진다(1e4 m에 7.8 m)(px4-engineer, ros2-engineer, sim-engineer, architect).
+- TRACK_ENTITY에서 표적 표본이 오래된 tick이 완료 계수를 끊는지 건너뛰는지(px4-engineer, ros2-engineer).
+- 표적 추종의 수직 일치를 sim과 PX4 값으로 잴지(sim-engineer, px4-engineer).
+- B13 전에 `decisions.md` "1a 고정 계약 영향" 표에 월드 ENU 좌표계 문장을 넣을지(architect).
 
 문서 정리(정형, 다음 문서 정리 때).
 
 - `decisions.md` 쟁점 12 근거의 "DISARMED에서 DO_SET_MODE 거부는 TERMINATION뿐이다" 인용을 `UserModeIntention.cpp` 73-74행(결과 값은 `Commander.cpp` 927-932행)으로 고친다. 쟁점 7의 "루프"는 loop로.
 - 유효 ack 뒤 재전송을 멈추는 규칙의 전제 "ACCEPTED면 모드 전환이 일어난다"(`Commander.cpp` 912-927행, [실측] 17회)를 쟁점 12 근거에 적고, `docs/interface.md` 341행을 1a 고정 계약 영향 (t)에 넣을지 정한다(architect).
-- 저장소 밖 이름표("쟁점 10 A1/A2", "칸 명세 6.2절", "D12", "B9 S4 칸 명세(7.1)의 사례 A1-A27")를 `mission_runner.cpp/.hpp`, 패키지 `README.md`, `test_runner_mission_end.cpp`, `test_runner_air_entry.cpp`에서 `decisions.md` 문구로 바꾼다(ros2-engineer).
 - `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
 - `docs/architecture.md`의 `tools/sim_stack.sh` 운영 규칙 문단에 restart-ops 뒤 attach 경로를 적을지(architect). `docs/interface.md` SITL 파라미터 표에 `IMU_GYRO_CAL_EN`을 넣을지(architect).
 
@@ -92,6 +94,7 @@ B11 판정에서 챙길 것(test-engineer).
 시뮬레이션과 화면 도구.
 
 - Gazebo GUI 깜빡임(VMware 3D 가속). 다음 후보: SceneBroadcaster `state_hertz` 낮추기, `--render-engine-gui ogre`.
+- `fleet.yaml` spawn 좌표에 미션과 같은 상한(1e6 m)을 둘지(devops-engineer, 급하지 않음).
 - 이 호스트의 포트 5900과 8090은 다른 프로젝트가 쓴다. VNC를 도입하면 피한다.
 - PX4 버전을 올리면 "ULog `vehicle_command` `timestamp`가 보낸 쪽(Executor)의 stamp와 같다"와 "ack 기록 순서가 처리 순서와 같다"를 다시 확인한다(px4-engineer).
 - [미확인]으로 둔 것(관찰된 문제가 있을 때만 잰다, U6): QGC 연결 중 `qgc.sh` TERM 종료와 sha256 불일치 경로, `GZ_IP` 없는 디스커버리, `ops-N` goal 실행 중 stop의 종료 사건, `vehicle.id` 누락에서 unhealthy까지의 시간, 에이전트 Fast DDS 멀티캐스트의 LAN 섞임, MAVLink bind 실패 시 PX4 동작, compose `start_interval`의 Docker 하한.

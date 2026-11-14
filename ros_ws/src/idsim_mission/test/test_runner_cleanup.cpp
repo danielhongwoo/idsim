@@ -17,8 +17,8 @@
 // Hold 실패 뒤 공중 재진입(M4).
 // 고르기의 교차표는 test_confirm_rules.cpp, PREPARING 실패의 정리는
 // test_runner_preparing.cpp에 있다.
-// 지상 setpoint 발행 중의 Hold와 이륙 직후의 지상 setpoint + disarm은 실측이 없는 경로다(필수
-// 재실측 (2), (3)). 여기의 단정은 표대로이고 재실측 결과로 바뀔 수 있다.
+// 지상 setpoint 발행 중의 Hold와 이륙 직후의 지상 setpoint + disarm의 단정은 표대로다. SITL
+// 시나리오 trace가 다르면 README.md "SITL 시나리오 trace가 다르면 고칠 곳"의 한 곳만 고친다.
 
 #include <gtest/gtest.h>
 
@@ -42,9 +42,9 @@ class MissionRunnerTestAccess
 public:
   static StepOutput begin_cancel(
     MissionRunner & runner, const TickInput & input, const Snapshot & snapshot,
-    Px4ClockPort & clock)
+    Px4ClockPort & clock, const FramePort & frame)
   {
-    return runner.begin_cancel_without_stage(input, snapshot, clock);
+    return runner.begin_cancel_without_stage(input, snapshot, clock, frame);
   }
 };
 
@@ -170,8 +170,8 @@ TEST(CancelGround, BeforeActingEndsImmediately)
 
 TEST(CancelGround, GroundToAirKeepsGroundSetpointAndSendsHold)
 {
-  // 재실측 (2)가 바꿀 수 있는 경로. 대기 중 landed가 false가 되면 공중 분기로 넘어가되 TAKEOFF
-  // 목표점으로 되돌리지 않고 지상 setpoint를 유지한 채 Hold를 보낸다.
+  // SITL 시나리오 trace가 다르면 고칠 경로(enter_air). 대기 중 landed가 false가 되면 공중 분기로
+  // 넘어가되 TAKEOFF 목표점으로 되돌리지 않고 지상 setpoint를 유지한 채 Hold를 보낸다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
   h.auto_px4 = false;
@@ -667,8 +667,8 @@ TEST(UntrustedSample, FirstCleanupTickEndsAndDisarmsIfArmSent)
     input.cancel_requested = true;
     h.clock.now_ns = h.now_ns;
     h.clock.fail = stamp_fails;
-    const StepOutput out =
-      MissionRunnerTestAccess::begin_cancel(h.mutable_runner(), input, h.snapshot, h.clock);
+    const StepOutput out = MissionRunnerTestAccess::begin_cancel(
+      h.mutable_runner(), input, h.snapshot, h.clock, h.frame);
     ASSERT_TRUE(out.termination.has_value());
     EXPECT_EQ(out.termination->status, Status::kAborted);
     EXPECT_EQ(out.termination->reason, Reason::kInternal);

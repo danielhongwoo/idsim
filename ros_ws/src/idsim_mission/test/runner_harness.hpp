@@ -18,7 +18,7 @@
 //   넣고(received_tick = 이번 tick 번호) (2) step을 한 번 부르고 (3) 번호와 시각을 올린다.
 // - feedback이 있는 tick마다 그 stamp_ns가 tick 입력 시각과 같은지 단정한다.
 // - 표본의 timestamp는 합성 값이다. 기본은 "수신 시각 - 1 ms"(us)라 명령에 실린 Px4Timestamp(그
-//   tick의 시각)보다 다음 tick의 표본이 늘 뒤다. 실제 시계 관계는 재실측 (5)만 확인한다.
+//   tick의 시각)보다 다음 tick의 표본이 늘 뒤다. 실제 시계 관계는 SITL 시나리오 trace가 확인한다.
 // - auto_px4가 true이면 간단한 가짜 PX4가 명령에 반응한다(다음 tick의 표본에 보인다):
 //   Offboard -> OFFBOARD(offboard_response), Hold -> HOLD(hold_response),
 //   NAV_LAND -> LAND(land_response), NAV_RTL -> RTL(rtl_response), ARM -> ARMED,
@@ -33,6 +33,10 @@
 //   실행 파일에서만 켜져 있고, 칸 목록 대조는 test_transition_coverage.cpp가 한다. 기록기가 켜져
 //   있으면 Harness는 자기 runner의 기록을 edges()에도 모은다(expect_cell이 한 시나리오의 칸을
 //   단정할 때 쓴다). 꺼져 있으면 runner에 observer를 넘기지 않는다.
+// - FramePort는 HarnessFramePort(frame)다. 기본 모드 kFail은 부르면 테스트를 실패시킨다. 그래서
+//   GOTO가 없는 미션의 모든 사례가 "1a type 미션은 FramePort를 부르지 않는다"(1b decisions.md
+//   쟁점 12)를 함께 단정한다. GOTO 사례는 kAxis(축 치환)나 kNone(값 없음)으로 바꾸거나 tick마다
+//   값을 고르는 hook을 둔다.
 // - 방어 경로(PX4 v1.17.0에서 나오지 않는 조합과 ack)는 합성 표본과 합성 ack로만 시험한다.
 //   해당 테스트에 그렇게 적는다.
 
@@ -45,6 +49,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
@@ -170,6 +175,37 @@ inline MissionSpec air_loiter_rtl_mission()
   return m;
 }
 
+// GOTO 항목. position은 world ENU다. MODE_KEEP.
+inline ItemSpec goto_item(
+  Vec3 world_enu = Vec3{10.0, 20.0, 5.0}, double radius = 0.5, std::int32_t timeout_s = 10)
+{
+  ItemSpec item;
+  item.type = item_type::kGoTo;
+  item.timeout = seconds(timeout_s);
+  item.go_to.position = world_enu;
+  item.go_to.acceptance_radius_m = radius;
+  item.go_to.yaw.mode = yaw_mode::kKeep;
+  return item;
+}
+
+// [TAKEOFF 5 m, GOTO, LAND].
+inline MissionSpec takeoff_goto_land_mission()
+{
+  MissionSpec m;
+  m.mission_id = "goto3";
+  m.items = {takeoff_item(), goto_item(), land_item()};
+  return m;
+}
+
+// 공중 Offboard 진입의 [GOTO].
+inline MissionSpec air_goto_mission()
+{
+  MissionSpec m;
+  m.mission_id = "airgoto1";
+  m.items = {goto_item()};
+  return m;
+}
+
 // 한 Harness의 runner가 낸 전이 기록을 모으고 전역 기록기에 그대로 넘긴다.
 class EdgeTee : public TransitionObserver
 {
@@ -210,6 +246,82 @@ public:
   int calls{0};
 };
 
+// FramePort의 시험 구현. 호출을 센다(const 메서드라 mutable).
+enum class FrameMode : std::uint8_t
+{
+  kFail,  // 부르면 ADD_FAILURE()하고 값 없음(점은 nullopt, 벡터는 NaN)
+  kAxis,  // world ENU -> 로컬 NED 축 치환에 shift를 더한다(원점 이동 없음)
+  kNone,  // 점 변환은 늘 nullopt(기준 무효)
+};
+
+class HarnessFramePort final : public FramePort
+{
+public:
+  struct PointCall
+  {
+    std::uint64_t tick{0};
+    Vec3 world;
+  };
+
+  // (world.y, world.x, -world.z) + shift.
+  static Vec3 axis(const Vec3 & world, const Vec3 & shift = Vec3{})
+  {
+    return Vec3{world.y + shift.x, world.x + shift.y, -world.z + shift.z};
+  }
+
+  std::optional<Vec3> world_to_local(const Vec3 & world_enu) const override
+  {
+    point_calls.push_back(PointCall{tick, world_enu});
+    if (hook) {
+      return hook(tick, world_enu);
+    }
+    switch (mode) {
+      case FrameMode::kAxis:
+        return axis(world_enu, shift);
+      case FrameMode::kNone:
+        return std::nullopt;
+      case FrameMode::kFail:
+        break;
+    }
+    ADD_FAILURE() << "FramePort::world_to_local called at tick " << tick;
+    return std::nullopt;
+  }
+
+  Vec3 world_velocity_to_local(const Vec3 & world_enu) const override
+  {
+    ++vector_calls;
+    if (mode == FrameMode::kFail && !hook) {
+      ADD_FAILURE() << "FramePort::world_velocity_to_local called at tick " << tick;
+      const double nan = std::numeric_limits<double>::quiet_NaN();
+      return Vec3{nan, nan, nan};
+    }
+    return Vec3{world_enu.y, world_enu.x, -world_enu.z};
+  }
+
+  // 이 tick의 점 변환 호출 수.
+  int point_calls_at(std::uint64_t at) const
+  {
+    return static_cast<int>(std::count_if(
+      point_calls.begin(), point_calls.end(), [at](const PointCall & c) { return c.tick == at; }));
+  }
+
+  // tick이 from 이상인 점 변환 호출 수.
+  int point_calls_from(std::uint64_t from) const
+  {
+    return static_cast<int>(std::count_if(
+      point_calls.begin(), point_calls.end(),
+      [from](const PointCall & c) { return c.tick >= from; }));
+  }
+
+  FrameMode mode{FrameMode::kFail};
+  Vec3 shift;
+  // 있으면 mode 대신 tick 번호와 입력으로 점 변환 값을 고른다.
+  std::function<std::optional<Vec3>(std::uint64_t tick, const Vec3 & world)> hook;
+  std::uint64_t tick{0};  // Harness가 step 직전에 그 tick 번호로 둔다
+  mutable std::vector<PointCall> point_calls;
+  mutable int vector_calls{0};
+};
+
 // 가짜 PX4가 보고하는 기체 상태.
 struct World
 {
@@ -223,7 +335,10 @@ struct World
   double y{2.0};
   double z{0.0};
   double heading{0.25};
+  bool xy_valid{true};
   bool z_valid{true};
+  // vehicle_local_position의 timestamp. 비어 있으면 tick마다 default_timestamp_us()(새 표본).
+  std::optional<std::uint64_t> position_timestamp_us;
   bool ekf_ready{true};
   bool signal_lost{true};
 };
@@ -334,10 +449,12 @@ public:
     land.received_tick = tick_no;
     snapshot.land = land;
     PositionSample pos;
+    pos.timestamp_us = world.position_timestamp_us.value_or(default_timestamp_us());
     pos.x = world.x;
     pos.y = world.y;
     pos.z = world.z;
     pos.heading = world.heading;
+    pos.xy_valid = world.xy_valid;
     pos.z_valid = world.z_valid;
     pos.received_tick = tick_no;
     snapshot.position = pos;
@@ -405,7 +522,8 @@ public:
     input.tick = tick_no;
     input.now_ns = now_ns;
     input.cancel_requested = cancel || cancel_sticky;
-    StepOutput out = runner_.step(input, snapshot, clock);
+    frame.tick = tick_no;
+    StepOutput out = runner_.step(input, snapshot, clock, frame);
     // 불변식: feedback의 stamp는 그 tick의 입력 시각이다(Px4ClockPort가 본 시각이 아니다).
     if (out.feedback.has_value()) {
       EXPECT_EQ(out.feedback->stamp_ns, input.now_ns) << "tick " << input.tick;
@@ -548,6 +666,7 @@ public:
   World world;
   Snapshot snapshot;
   FakeClock clock;
+  HarnessFramePort frame;
   std::uint64_t tick_no{1};
   std::int64_t now_ns{kStartNs};
   // Px4ClockPort가 보는 시각 - tick 입력 시각(ns). 노드에서 두 시각은 따로 읽혀 tick마다 0 또는

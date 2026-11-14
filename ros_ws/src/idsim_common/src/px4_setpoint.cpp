@@ -25,20 +25,18 @@ namespace
 
 constexpr float kNaN = std::numeric_limits<float>::quiet_NaN();
 
-// double이 유한하고 float 범위 안인가. 범위 밖 double의 float 변환은 미정의 동작이라
-// 변환 전에 비교한다.
-bool finite_as_float(double value)
+}  // namespace
+
+bool fits_float32(double value)
 {
   return std::isfinite(value) &&
          std::fabs(value) <= static_cast<double>(std::numeric_limits<float>::max());
 }
 
-bool finite_as_float(const Eigen::Vector3d & v)
+bool fits_float32(const Eigen::Vector3d & v)
 {
-  return finite_as_float(v.x()) && finite_as_float(v.y()) && finite_as_float(v.z());
+  return fits_float32(v.x()) && fits_float32(v.y()) && fits_float32(v.z());
 }
-
-}  // namespace
 
 px4_msgs::msg::OffboardControlMode offboard_position_mode(Px4Timestamp timestamp)
 {
@@ -58,10 +56,10 @@ std::optional<px4_msgs::msg::TrajectorySetpoint> position_setpoint(
   Px4Timestamp timestamp, const Eigen::Vector3d & position_ned, double yaw_ned,
   const std::optional<Eigen::Vector3d> & velocity_ned)
 {
-  if (!finite_as_float(position_ned) || !finite_as_float(yaw_ned)) {
+  if (!fits_float32(position_ned) || !fits_float32(yaw_ned)) {
     return std::nullopt;
   }
-  if (velocity_ned.has_value() && !finite_as_float(*velocity_ned)) {
+  if (velocity_ned.has_value() && !fits_float32(*velocity_ned)) {
     return std::nullopt;
   }
   px4_msgs::msg::TrajectorySetpoint sp;

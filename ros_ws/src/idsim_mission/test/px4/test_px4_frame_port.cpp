@@ -22,14 +22,19 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <stdexcept>
 
 #include "Eigen/Core"
 #include "idsim_common/frames.hpp"
 #include "idsim_common/geo.hpp"
+#include "idsim_common/px4_timestamp.hpp"
 #include "idsim_mission/core/snapshot.hpp"
 #include "idsim_mission/core/types.hpp"
 #include "idsim_mission/px4/frame_port.hpp"
 #include "idsim_mission/px4/inputs.hpp"
+#include "idsim_mission/px4/outputs.hpp"
+#include "rcl/time.h"
+#include "rclcpp/clock.hpp"
 
 namespace idsim_mission::px4::test
 {
@@ -52,6 +57,19 @@ constexpr double kLon = 126.98;
 constexpr float kAlt = 30.0F;  // float32로 정확히 표현되는 값
 
 WorldOrigin origin() { return WorldOrigin{kLat, kLon, static_cast<double>(kAlt)}; }
+
+// Px4Timestamp는 ROS 시계로만 만든다(test_px4_outputs.cpp와 같은 방법).
+idsim_common::Px4Timestamp stamp_at(std::uint64_t us)
+{
+  rclcpp::Clock clock(RCL_ROS_TIME);
+  if (
+    rcl_enable_ros_time_override(clock.get_clock_handle()) != RCL_RET_OK ||
+    rcl_set_ros_time_override(
+      clock.get_clock_handle(), static_cast<rcl_time_point_value_t>(us) * 1000) != RCL_RET_OK) {
+    throw std::runtime_error("cannot set ROS time override");
+  }
+  return idsim_common::Px4Timestamp::now(clock).value();
+}
 
 // 기준이 유효한 표본. 기준은 world 원점과 같다.
 VehicleLocalPosition valid_msg()
@@ -231,6 +249,61 @@ TEST(Px4FramePort, NonFinitePointGivesNoValue)
     EXPECT_FALSE(frame.world_to_local(Vec3{0.0, bad, 0.0}).has_value());
     EXPECT_FALSE(frame.world_to_local(Vec3{0.0, 0.0, bad}).has_value());
   }
+}
+
+TEST(Px4FramePort, PointOutsideFloat32GivesNoValue)
+{
+  // 결과가 유한해도 float32 범위 밖이면 값 없음이다(decisions.md 쟁점 4). world (0, 0, u)의
+  // 로컬 z는 약 -(u - ref_alt)라 u = 3e38은 float 범위 안, u = 1e39는 유한한 double이지만
+  // 범위 밖이다.
+  const Px4FramePort frame(origin(), local_reference_from_px4(valid_msg()));
+  const std::optional<Vec3> inside = frame.world_to_local(Vec3{0.0, 0.0, 3e38});
+  ASSERT_TRUE(inside.has_value());
+  EXPECT_TRUE(std::isfinite(inside->z));
+  EXPECT_LE(std::fabs(inside->z), static_cast<double>(std::numeric_limits<float>::max()));
+  EXPECT_GT(std::fabs(inside->z), 1e38);  // float 최댓값 경계 근처를 실제로 지난다
+  // geo 사슬 자체는 1e39에서도 유한한 값을 낸다(술어가 거르는 경우임을 확인).
+  const Eigen::Vector3d raw = idsim_common::geo::world_enu_to_local_ned(
+    origin(), *local_reference_from_px4(valid_msg()), Eigen::Vector3d(0.0, 0.0, 1e39));
+  ASSERT_TRUE(raw.allFinite());
+  EXPECT_FALSE(frame.world_to_local(Vec3{0.0, 0.0, 1e39}).has_value());
+  EXPECT_FALSE(frame.world_to_local(Vec3{0.0, 0.0, -1e39}).has_value());
+}
+
+TEST(Px4FramePort, ReturnedPointIsNeverDroppedBySetpointOutput)
+{
+  // Px4FramePort가 값을 돌려준 점은 to_setpoint_messages가 버리지 않는다(decisions.md 쟁점 4의 대조
+  // 테스트. 벡터 쪽은 S6에서 반환형과 함께 더한다).
+  const Px4FramePort frame(origin(), local_reference_from_px4(valid_msg()));
+  const idsim_common::Px4Timestamp ts = stamp_at(1'000'000);
+  int with_value = 0;
+  int without_value = 0;
+  for (const Vec3 & p :
+       {Vec3{1e6, 1e6, 5.0}, Vec3{-1e6, -1e6, -1e6}, Vec3{0.0, 0.0, 1e30}, Vec3{0.0, 0.0, 3e38},
+        Vec3{0.0, 0.0, 3.4e38}, Vec3{0.0, 0.0, 1e39}, Vec3{kInf, 0.0, 0.0}, Vec3{kNaN, 0.0, 0.0}}) {
+    const std::optional<Vec3> v = frame.world_to_local(p);
+    if (!v.has_value()) {
+      ++without_value;
+      continue;
+    }
+    ++with_value;
+    core::SetpointOut sp;
+    sp.kind = core::SetpointKind::kTarget;
+    sp.x = v->x;
+    sp.y = v->y;
+    sp.z = v->z;
+    sp.yaw_ned = 0.0;
+    const std::optional<SetpointMessages> msgs = to_setpoint_messages(sp, ts);
+    ASSERT_TRUE(msgs.has_value()) << p.x << " " << p.y << " " << p.z;
+    EXPECT_EQ(msgs->trajectory.position[0], static_cast<float>(v->x));
+    EXPECT_EQ(msgs->trajectory.position[1], static_cast<float>(v->y));
+    EXPECT_EQ(msgs->trajectory.position[2], static_cast<float>(v->z));
+  }
+  EXPECT_GE(with_value, 1);
+  EXPECT_GE(without_value, 1);
+  // 계약 좌표 상한의 꼭짓점은 값이 있다(상한 안의 미션 좌표는 변환에서 버려지지 않는다).
+  EXPECT_TRUE(frame.world_to_local(Vec3{1e6, 1e6, 5.0}).has_value());
+  EXPECT_TRUE(frame.world_to_local(Vec3{-1e6, -1e6, -1e6}).has_value());
 }
 
 TEST(Px4FramePort, VelocityDelegatesToFramesAndIgnoresReference)
