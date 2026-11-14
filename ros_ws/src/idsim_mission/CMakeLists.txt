@@ -43,6 +43,7 @@ find_package(px4_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 add_library(idsim_mission_px4 SHARED
   src/px4/clock_port.cpp
+  src/px4/frame_port.cpp
   src/px4/inputs.cpp
   src/px4/outputs.cpp)
 target_include_directories(idsim_mission_px4 PUBLIC
@@ -139,7 +140,8 @@ if(BUILD_TESTING)
   set(_core_tests
     test_termination
     test_monitor_table
-    test_confirm_rules)
+    test_confirm_rules
+    test_snapshot)
   foreach(_test ${_core_tests})
     ament_add_gtest(${_test} test/${_test}.cpp)
     target_link_libraries(${_test} idsim_mission_core)
@@ -163,6 +165,7 @@ if(BUILD_TESTING)
 
   # ---- px4 어댑터 단위 테스트(test/px4/, 소유 px4-engineer). 노드와 DDS 참가자를 만들지 않는다 ----
   set(_px4_tests
+    test_px4_frame_port
     test_px4_inputs
     test_px4_outputs)
   foreach(_test ${_px4_tests})

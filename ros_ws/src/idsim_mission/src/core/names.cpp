@@ -150,6 +150,8 @@ const char * command_name(CommandKind kind)
       return "DISARM";
     case CommandKind::kNavLand:
       return "NAV_LAND";
+    case CommandKind::kNavRtl:
+      return "NAV_RTL";
   }
   return "UNKNOWN";
 }
@@ -165,6 +167,8 @@ AckCommand ack_command_of(CommandKind kind)
       return AckCommand::kArmDisarm;
     case CommandKind::kNavLand:
       return AckCommand::kNavLand;
+    case CommandKind::kNavRtl:
+      return AckCommand::kNavRtl;
   }
   return AckCommand::kOther;
 }

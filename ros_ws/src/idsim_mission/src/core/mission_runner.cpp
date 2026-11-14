@@ -333,8 +333,10 @@ void MissionRunner::start_signal(Event event, Tick & t)
   const TakeoffSpec & spec = mission_.items.front().takeoff;
   const double yaw =
     spec.yaw.mode == yaw_mode::kFixed ? enu_to_ned_yaw(spec.yaw.yaw_rad) : wrap_pi(p->heading);
-  reference_ = SetpointOut{SetpointKind::kGround, p->x, p->y, p->z, yaw};
-  setpoint_ = SetpointOut{SetpointKind::kTarget, p->x, p->y, p->z - spec.height_m, yaw};
+  // TAKEOFF와 지상 setpoint는 속도를 싣지 않는다(decisions.md 쟁점 8).
+  reference_ = SetpointOut{SetpointKind::kGround, p->x, p->y, p->z, yaw, false, Vec3{}};
+  setpoint_ =
+    SetpointOut{SetpointKind::kTarget, p->x, p->y, p->z - spec.height_m, yaw, false, Vec3{}};
   takeoff_target_z_ = setpoint_.z;
   publishing_ = true;
   acted_ = true;
