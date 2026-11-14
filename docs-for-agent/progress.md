@@ -76,7 +76,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 1a 6단계.
 
 - B9 S1 지상 arm 진입의 재전송 수정(`decisions.md` 쟁점 12 "명령과 ack의 유실")은 반영됐다. CI `sitl` branch 실행 4회는 모두 통과했지만, 통과 run은 ULog를 남기지 않아 CI에서 DO_SET_MODE 전송 수와 P5 소요는 재지 못했다(로컬 [실측] 1회, 1048-1052 ms). main에서 `sitl` 통과가 쌓이는지 본다. 남은 일:
-  - S3 전(test-engineer, ros2-engineer): P6 arm, LAND/RTL, Hold에 "ACCEPTED ack 뒤에도 미확인이면 주기 재전송이 이어진다" 사례를 더한다. 지금은 새 helper를 이 경로들에 잘못 쓰는 변이를 테스트가 잡지 못한다.
+  - S3 전: 지상 arm 진입 밖의 재전송 다섯 지점(P6 arm, 모드 명령 항목의 NAV_LAND/NAV_RTL/대비책 disarm, 정리의 지상 disarm, Hold, Land 경로)에 "비거부 ack 뒤에도 미확인이면 주기 재전송이 이어진다" 사례를 `idsim_mission/test/test_runner_resend_after_ack.cpp`에 더했다(브랜치 `test/b9-resend-after-ack`, 로컬 커밋). test-engineer의 구조 승인과 px4-engineer의 상태기 단위 테스트 승인 뒤 머지한다.
   - architect: 유효 ack 뒤 재전송을 멈추는 규칙이 기대는 전제 "ACCEPTED면 모드 전환이 일어난다"(`Commander.cpp` 912-927행, [실측] 17회)를 쟁점 12 근거에 적고, `docs/interface.md` 341행(이 전제를 미확인으로 적는 문장)을 1a 고정 계약 영향 (t)에 넣을지 정한다. `has_valid_offboard_ack`의 `last_send_tick` 비교 표현은 쟁점 11의 ack timestamp 기준을 넣을 때 다시 본다.
 - CI `sitl`(1a 시나리오)의 간헐 실패는 원인 둘로 처치했다. 종류 1(시나리오 D의 "D 고도 도달" `TIMEOUT_SIM`): 첫 ARM 직후 PX4의 `battery_status`, `cpuload`, `system_power` 발행이 멈춰 D의 arm이 거부된다. 처치는 `IMU_GYRO_CAL_EN=0`(`config/px4/sitl_params.env`)이고 기전(hrt callout 경합)은 [추정]이다. 종류 2(이정표 순서 위반 "result가 disarmed보다 앞", 4 ms 차): 판정이 노드 간 시계를 섞어 비교한 것이고 수신 시각 비교로 처치했다. 로컬 콜드 27회에서 정지 0건이다. CI에서 연속 통과하는지는 아직 확인하지 못했다.
   - 후속 (a): ACCEPTED 사건 stamp의 건전성을 SITL 판정이 더는 보지 않는다. `idsim_mission` 노드 테스트로 덮을지 별도 판정으로 덮을지 test-engineer와 ros2-engineer가 정한다.
