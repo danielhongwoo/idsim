@@ -83,6 +83,10 @@ OPS_PROBE_TIMEOUT_S = 8
 SPACING_REJECT_M = 2.0
 SPACING_WARN_M = 4.0
 
+# 표시 파일 디렉터리. 컨테이너 레이어에 두면 stop/start와 restart 뒤에 옛 표시 파일이 남아 healthcheck가 새 노드 기동 전에
+# 통과하므로 tmpfs로 둔다(컨테이너를 멈추면 tmpfs 내용이 사라진다). 실행 user의 uid:gid가 소유하고 mode 0755다.
+# CI runner의 uid 1001처럼 passwd에 없는 uid도 숫자 옵션이라 동작한다. root로 도는 gazebo는 uid 옵션 없이 root 소유다.
+MARKER_DIR = "/tmp/idsim"
 # targets(표적 어댑터). 궤적 정의의 출처는 fleet.yaml의 targets 하나이고, 생성기가 정규화한 값을 월드 SDF의 Actor,
 # params/targets.yaml, stack.json의 targets에 낸다(decisions.md 쟁점 1, 3).
 TARGETS_SERVICE = "targets"
@@ -90,12 +94,12 @@ TARGETS_SERVICE = "targets"
 TARGET_ADAPTER_PKG = "idsim_sim"
 TARGET_ADAPTER_EXEC = "target_adapter"
 TARGETS_PARAMS_FILE = f"{PARAMS_DIR}/targets.yaml"
-TARGETS_READY_FILE = "/tmp/idsim/targets_ready"
+TARGETS_READY_FILE = f"{MARKER_DIR}/targets_ready"
 # sim-oracle(SITL 전용 정답 pose 공급자, decisions.md 쟁점 5). sim-base 이미지에 마운트한 idsim_sim/scripts/sim_oracle.py를 돌린다.
 # standalone이면 표적과 무관하게 항상 만들고 embedded에는 없다.
 ORACLE_SERVICE = "sim-oracle"
 ORACLE_SCRIPT = "scripts/sim_oracle.py"  # SIM_PKG_IN_CONTAINER 기준
-ORACLE_READY_FILE = "/tmp/idsim/oracle_ready"
+ORACLE_READY_FILE = f"{MARKER_DIR}/oracle_ready"
 TARGET_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}\Z")
 TARGET_KEYS = ("id", "start_s", "loop", "waypoints")
 WAYPOINT_KEYS = ("t", "x", "y", "z")
@@ -133,11 +137,7 @@ WORLD_IN_CONTAINER = "/opt/idsim/world"  # 실행 디렉터리의 world/를 gaze
 WORLD_DIR = "world"  # 실행 디렉터리 안의 생성 월드 디렉터리
 GZ_SERVER_CONFIG = "/opt/px4-gz/server.idsim.config"
 GZ_RESOURCE_PATH = "/opt/px4-gz/models:/opt/px4-gz/worlds"
-GZ_READY_FILE = "/tmp/idsim/ready"
-# 표시 파일 디렉터리. 컨테이너 레이어에 두면 stop/start와 restart 뒤에 옛 표시 파일이 남아 healthcheck가 새 노드 기동 전에
-# 통과하므로 tmpfs로 둔다(컨테이너를 멈추면 tmpfs 내용이 사라진다). 실행 user의 uid:gid가 소유하고 mode 0755다.
-# CI runner의 uid 1001처럼 passwd에 없는 uid도 숫자 옵션이라 동작한다. root로 도는 gazebo는 uid 옵션 없이 root 소유다.
-MARKER_DIR = "/tmp/idsim"
+GZ_READY_FILE = f"{MARKER_DIR}/ready"
 X11_SOCKET_DIR = "/tmp/.X11-unix"
 XAUTH_IN_CONTAINER = "/tmp/.Xauthority"
 

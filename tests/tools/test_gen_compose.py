@@ -1310,7 +1310,7 @@ def test_marker_dir_is_tmpfs_for_every_marker_service():
         assert ready in s[svc]["healthcheck"]["test"][1]
     # 바인드 마운트와 겹치지 않는다(volumes에 /tmp/idsim이 없다)
     assert all(v["target"] != gc.MARKER_DIR for svc in s.values() for v in svc.get("volumes", []))
-    # stack.json은 tmpfs를 모른다. 판 5의 key 집합이 그대로다
+    # stack.json에는 tmpfs가 없다
     assert gc.GENERATOR_VERSION == 5 and "tmpfs" not in gc.dump_stack(stack)
 
 
