@@ -29,6 +29,7 @@
 #define IDSIM_MISSION__NODE__MISSION_EXECUTOR_NODE_HPP_
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -157,7 +158,9 @@ private:
   std::optional<rclcpp::PreShutdownCallbackHandle> pre_shutdown_;
 
   core::Snapshot snapshot_;
-  std::array<std::optional<core::AckSample>, 4> acks_;  // AckCommand별 최신 하나
+  // AckCommand별 최신 하나. 크기는 AckCommand 값의 수다(kOther가 마지막 값).
+  std::array<std::optional<core::AckSample>, static_cast<std::size_t>(core::AckCommand::kOther) + 1>
+    acks_;
   std::uint64_t next_tick_{1};
   std::unique_ptr<core::MissionRunner> runner_;
   std::shared_ptr<GoalHandle> goal_;
