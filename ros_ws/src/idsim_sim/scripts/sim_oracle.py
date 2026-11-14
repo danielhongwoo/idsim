@@ -27,14 +27,17 @@ sim-base 이미지의 compose 서비스 sim-oracle이 이 파일을 마운트 �
 - /sim/<vehicle_id>/pose(geometry_msgs/PoseStamped, frame_id "world", stamp는 pose/info header의 sim 시각)를
   낸다. 주기는 SceneBroadcaster의 pose/info 주기를 따른다(sim 시간 약 50 Hz). 기체마다 직전 발행보다 stamp가
   MIN_PERIOD_NS 이상 큰 표본만 내고, stamp 0과 역행은 내지 않는다.
-- 준비 표시 파일 /tmp/idsim/oracle_ready: 시작 때 지우고, 모든 기체의 pose를 한 번 이상 낸 순간 임시 파일 +
+- 준비 표시 파일 /tmp/idsim/oracle_ready: run()의 맨 앞(설정 해석 전)에서 지우고, 모든 기체의 pose를 한 번 이상 낸 순간 임시 파일 +
   rename으로 만든다(idsim_sim/ready.py 재사용. 내용은 기체마다 "<vehicle_id> <첫 stamp>" 한 줄).
 
 모듈 수준에서는 표준 라이브러리와 idsim_sim.ready(표준 라이브러리만 쓴다)만 import한다. rclpy, gz, sdformat14,
 geometry_msgs는 main 안에서 import한다. 그래서 순수 함수(이름 조립, 환경 변수 해석, 오프셋 합성, 발행 판단)는
 gz 바인딩이 없는 ros-ws 이미지의 단위 테스트(test/test_sim_oracle.py)가 이 파일을 경로로 읽어 시험한다.
 
+- 기체마다 stamp 역행에 들어갈 때 오류 로그를 한 번 남긴다(직전 stamp를 넘어 다시 발행하면 풀린다).
+
 종료 코드: 설정 오류(환경 변수 누락과 형식, 모델 SDF를 찾지 못함, base_link 없음이나 회전 있음, 구독 실패)는 2,
+pose/info 콜백의 예외(표시 파일 쓰기 실패, 잘못된 쿼터니언 등)는 오류 로그와 표시 파일 삭제 뒤 3,
 SIGINT/SIGTERM 정상 종료는 0.
 """
 
@@ -42,6 +45,7 @@ import math
 import os
 import re
 import sys
+import traceback
 
 # 마운트된 패키지 디렉터리(scripts/의 부모)를 path에 넣어 idsim_sim.ready를 쓴다. 설치된 idsim_sim이 있으면 같은 코드다.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -49,6 +53,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from idsim_sim.ready import ReadyTracker, remove_ready_file, write_ready_file  # noqa: E402
 
 EXIT_CONFIG_ERROR = 2
+EXIT_RUNTIME_ERROR = 3
 READY_PATH = "/tmp/idsim/oracle_ready"
 ENV_WORLD_NAME = "IDSIM_WORLD_NAME"
 ENV_VEHICLES = "IDSIM_ORACLE_VEHICLES"
@@ -171,11 +176,28 @@ def check_offset_rotation(q):
         raise ConfigError(f"base_link가 model 프레임에서 회전을 가진다(자세를 model과 같게 둘 수 없다): {q!r}")
 
 
-def should_publish(last_ns, stamp_ns, min_period_ns=MIN_PERIOD_NS):
-    """기체 하나의 발행 판단. stamp 0은 내지 않고, 직전 발행 뒤로는 min_period_ns 이상 지난 표본만 낸다."""
+PUBLISH = "publish"
+SKIP_ZERO = "skip_zero"  # stamp가 0 이하
+SKIP_BACKWARD = "skip_backward"  # 직전 발행 stamp보다 작다(sim 시계 역행). 호출자가 역행에 들어갈 때 오류 로그를 남긴다
+SKIP_SHORT = "skip_short"  # 직전 발행과 같거나 min_period_ns 미만 뒤
+
+
+def stamp_decision(last_ns, stamp_ns, min_period_ns=MIN_PERIOD_NS):
+    """기체 하나의 발행 판단. 위 네 값 가운데 하나."""
     if stamp_ns <= 0:
-        return False
-    return last_ns is None or stamp_ns - last_ns >= min_period_ns
+        return SKIP_ZERO
+    if last_ns is None:
+        return PUBLISH
+    if stamp_ns < last_ns:
+        return SKIP_BACKWARD
+    if stamp_ns - last_ns < min_period_ns:
+        return SKIP_SHORT
+    return PUBLISH
+
+
+def should_publish(last_ns, stamp_ns, min_period_ns=MIN_PERIOD_NS):
+    """stamp 0은 내지 않고, 직전 발행 뒤로는 min_period_ns 이상 지난 표본만 낸다."""
+    return stamp_decision(last_ns, stamp_ns, min_period_ns) == PUBLISH
 
 
 def index_models(entries, names):
@@ -204,17 +226,30 @@ class OracleCore:
         self._offsets = dict(offsets)
         self._models = {m for _, m in self._vehicles}
         self._last = {v: None for v, _ in self._vehicles}
+        self._backward = {v: False for v, _ in self._vehicles}
         self._min_period_ns = min_period_ns
         self._ready = ReadyTracker([v for v, _ in self._vehicles])
 
     def step(self, stamp_ns, entries):
-        """반환 (발행 목록 [(vehicle_id, p_bl, q)], 준비 완료면 [(vehicle_id, 첫 stamp)] 아니면 None, 중복 이름 집합)."""
+        """반환 (발행 목록 [(vehicle_id, p_bl, q)], 준비 완료면 [(vehicle_id, 첫 stamp)] 아니면 None, 중복 이름 집합,
+        이번 표본에서 역행에 들어간 기체 [(vehicle_id, 직전 발행 stamp)]). 역행은 기체마다 들어갈 때 한 번만 알리고,
+        직전 stamp를 넘어 다시 발행하면 풀린다(표적 어댑터와 같은 규칙)."""
         found, dup = index_models(entries, self._models)
         out = []
         ready = None
+        backward = []
         for vid, model in self._vehicles:
-            if model not in found or not should_publish(self._last[vid], stamp_ns, self._min_period_ns):
+            if model not in found:
                 continue
+            decision = stamp_decision(self._last[vid], stamp_ns, self._min_period_ns)
+            if decision == SKIP_BACKWARD:
+                if not self._backward[vid]:
+                    backward.append((vid, self._last[vid]))
+                self._backward[vid] = True
+                continue
+            if decision != PUBLISH:
+                continue
+            self._backward[vid] = False
             pos, quat = found[model]
             p_bl, q = compose_base_link(pos, quat, self._offsets[model])
             out.append((vid, p_bl, q))
@@ -222,7 +257,30 @@ class OracleCore:
             done = self._ready.record(vid, stamp_ns)
             if done is not None:
                 ready = done
-        return out, ready, dup
+        return out, ready, dup, backward
+
+
+class FatalOnError:
+    """콜백 감싸기. 첫 예외에서 on_fatal(예외)을 한 번 부르고 그 뒤 호출은 아무것도 하지 않는다.
+
+    gz-transport 콜백은 pybind11 스레드에서 불리므로 예외가 그 밖으로 나갈 때의 동작(프로세스 종료인지 삼켜지는지)에
+    기대지 않는다. 여기서 잡아 프로세스를 0이 아닌 코드로 끝내게 해 조용히 발행만 멈추는 상태를 막는다.
+    """
+
+    def __init__(self, fn, on_fatal):
+        self._fn = fn
+        self._on_fatal = on_fatal
+        self.failed = False
+
+    def __call__(self, *args):
+        if self.failed:
+            return None
+        try:
+            return self._fn(*args)
+        except Exception as e:  # noqa: BLE001 - 어떤 예외든 프로세스 종료로 바꾼다
+            self.failed = True
+            self._on_fatal(e)
+            return None
 
 
 def load_base_link_offset(model_dir):  # pragma: no cover - sdformat14는 sim-base에만 있다
@@ -260,6 +318,8 @@ def load_base_link_offset(model_dir):  # pragma: no cover - sdformat14는 sim-ba
 
 
 def run(argv):  # pragma: no cover - gz와 rclpy가 있는 sim-base에서만 돈다
+    # 재시작 때 옛 표시 파일이 남는 창을 인터프리터 기동 시간으로 줄이려고 무엇보다 먼저 지운다
+    remove_ready_file(READY_PATH)
     try:
         world, topic, vehicles, paths = load_env(os.environ)
         offsets = {}
@@ -280,7 +340,6 @@ def run(argv):  # pragma: no cover - gz와 rclpy가 있는 sim-base에서만 돈
     from rclpy.executors import ExternalShutdownException
     from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 
-    remove_ready_file(READY_PATH)
     rclpy.init(args=argv)
     node = rclpy.create_node("sim_oracle")
     log = node.get_logger()
@@ -291,6 +350,18 @@ def run(argv):  # pragma: no cover - gz와 rclpy가 있는 sim-base에서만 돈
     for vid, model in vehicles:
         log.info(f"{model} -> {oracle_pose_topic(vid)}, base_link 오프셋 {offsets[model]}")
     warned_dup = set()
+    exit_code = [0]
+
+    def on_fatal(exc):
+        # gz-transport 스레드. 표시 파일을 지우고 spin을 끝내 run이 EXIT_RUNTIME_ERROR를 돌려주게 한다
+        log.error(f"pose/info 콜백에서 예외가 났다. 종료한다: {type(exc).__name__}: {exc}\n"
+                  + "".join(traceback.format_exception(exc)))
+        exit_code[0] = EXIT_RUNTIME_ERROR
+        try:
+            remove_ready_file(READY_PATH)
+            rclpy.try_shutdown()
+        except Exception:  # noqa: BLE001 - 정리에 실패해도 반드시 끝낸다
+            os._exit(EXIT_RUNTIME_ERROR)
 
     def on_pose_v(msg):
         # gz-transport 스레드에서 불린다. 종료 중에는 내지 않는다
@@ -299,10 +370,13 @@ def run(argv):  # pragma: no cover - gz와 rclpy가 있는 sim-base에서만 돈
         stamp_ns = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nsec
         entries = [(p.name, (p.position.x, p.position.y, p.position.z),
                     (p.orientation.w, p.orientation.x, p.orientation.y, p.orientation.z)) for p in msg.pose]
-        out, ready, dup = core.step(stamp_ns, entries)
+        out, ready, dup, backward = core.step(stamp_ns, entries)
         for name in dup - warned_dup:
             log.error(f"pose/info에 이름 {name}이 둘 이상이다. 그 기체의 표본을 내지 않는다")
             warned_dup.add(name)
+        for vid, last_ns in backward:
+            log.error(f"{vid}: pose/info stamp가 역행했다(직전 발행 {last_ns} ns, 지금 {stamp_ns} ns). "
+                      "직전 stamp를 넘을 때까지 발행하지 않는다")
         for vid, p, q in out:
             m = PoseStamped()
             m.header.stamp.sec = msg.header.stamp.sec
@@ -316,7 +390,7 @@ def run(argv):  # pragma: no cover - gz와 rclpy가 있는 sim-base에서만 돈
             log.info(f"준비: {READY_PATH}")
 
     gz_node = GzNode()
-    if not gz_node.subscribe(Pose_V, topic, on_pose_v):
+    if not gz_node.subscribe(Pose_V, topic, FatalOnError(on_pose_v, on_fatal)):
         log.error(f"gz 토픽 구독 실패: {topic}")
         node.destroy_node()
         rclpy.try_shutdown()
@@ -331,7 +405,7 @@ def run(argv):  # pragma: no cover - gz와 rclpy가 있는 sim-base에서만 돈
         gz_node.unsubscribe(topic)
         node.destroy_node()
         rclpy.try_shutdown()
-    return 0
+    return exit_code[0]
 
 
 def main(argv=None):  # pragma: no cover

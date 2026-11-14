@@ -250,29 +250,94 @@ def test_core_step_ready_and_rate():
     core = so.OracleCore([("px4_1", "x500_1"), ("px4_2", "x500_2")],
                          {"x500_1": (0.0, 0.0, 0.24), "x500_2": (0.0, 0.0, 0.24)})
     # stamp 0: 내지 않는다
-    out, ready, _ = core.step(0, [_entry("x500_1", 6, -3, 0), _entry("x500_2", -2, 4, 0)])
+    out, ready, _, _ = core.step(0, [_entry("x500_1", 6, -3, 0), _entry("x500_2", -2, 4, 0)])
     assert out == [] and ready is None
     # 기체 2가 아직 스폰되지 않았다
-    out, ready, _ = core.step(20_000_000, [_entry("x500_1", 6, -3, -0.013), _entry("base_link", 0, 0, 0.24)])
+    out, ready, _, _ = core.step(20_000_000, [_entry("x500_1", 6, -3, -0.013), _entry("base_link", 0, 0, 0.24)])
     assert [(v, p) for v, p, _ in out] == [("px4_1", pytest.approx((6.0, -3.0, 0.227)))]
     assert ready is None
     # 너무 짧은 간격의 기체 1은 내지 않고, 기체 2의 첫 표본에서 준비가 된다
-    out, ready, _ = core.step(25_000_000, [_entry("x500_1", 6, -3, 0), _entry("x500_2", -2, 4, 0)])
+    out, ready, _, _ = core.step(25_000_000, [_entry("x500_1", 6, -3, 0), _entry("x500_2", -2, 4, 0)])
     assert [v for v, _, _ in out] == ["px4_2"]
     assert ready == [("px4_1", 20_000_000), ("px4_2", 25_000_000)]
     # 준비는 한 번만 알린다
-    out, ready, _ = core.step(45_000_000, [_entry("x500_1", 6, -3, 0), _entry("x500_2", -2, 4, 0)])
+    out, ready, _, _ = core.step(45_000_000, [_entry("x500_1", 6, -3, 0), _entry("x500_2", -2, 4, 0)])
     assert [v for v, _, _ in out] == ["px4_1", "px4_2"]
     assert ready is None
     # 역행 표본은 내지 않는다
-    out, _, _ = core.step(30_000_000, [_entry("x500_1", 6, -3, 0), _entry("x500_2", -2, 4, 0)])
+    out, _, _, _ = core.step(30_000_000, [_entry("x500_1", 6, -3, 0), _entry("x500_2", -2, 4, 0)])
     assert out == []
 
 
 def test_core_skips_duplicate_model_names():
     core = so.OracleCore([("px4_1", "x500_1")], {"x500_1": (0.0, 0.0, 0.24)})
-    out, ready, dup = core.step(20_000_000, [_entry("x500_1", 0, 0, 0), _entry("x500_1", 1, 1, 1)])
+    out, ready, dup, _ = core.step(20_000_000, [_entry("x500_1", 0, 0, 0), _entry("x500_1", 1, 1, 1)])
     assert out == [] and ready is None and dup == {"x500_1"}
+
+
+@pytest.mark.parametrize("last, stamp, expected", [
+    (None, 0, "skip_zero"),
+    (None, 5, "publish"),
+    (100_000_000, 99_999_999, "skip_backward"),
+    (100_000_000, 100_000_000, "skip_short"),
+    (100_000_000, 105_000_000, "skip_short"),
+    (100_000_000, 110_000_000, "publish"),
+    (100_000_000, 0, "skip_zero"),
+])
+def test_stamp_decision(last, stamp, expected):
+    assert so.stamp_decision(last, stamp) == expected
+
+
+def test_core_reports_backward_once_per_entry():
+    core = so.OracleCore([("px4_1", "x500_1"), ("px4_2", "x500_2")],
+                         {"x500_1": (0.0, 0.0, 0.24), "x500_2": (0.0, 0.0, 0.24)})
+    both = [_entry("x500_1", 0, 0, 0), _entry("x500_2", 1, 1, 0)]
+    core.step(1_000_000_000, both)
+    # 역행에 들어가는 표본에서 두 기체를 한 번씩 알린다
+    out, _, _, backward = core.step(900_000_000, both)
+    assert out == [] and backward == [("px4_1", 1_000_000_000), ("px4_2", 1_000_000_000)]
+    # 역행이 이어져도 다시 알리지 않는다
+    out, _, _, backward = core.step(950_000_000, both)
+    assert out == [] and backward == []
+    # 직전 stamp와 같은 표본은 역행이 아니고 역행 상태도 풀지 않는다
+    out, _, _, backward = core.step(1_000_000_000, both)
+    assert out == [] and backward == []
+    # 직전 stamp를 넘어 다시 발행하면 풀리고, 그 뒤의 역행은 다시 알린다
+    out, _, _, backward = core.step(1_020_000_000, both)
+    assert [v for v, _, _ in out] == ["px4_1", "px4_2"] and backward == []
+    _, _, _, backward = core.step(1_000_000_000, [_entry("x500_1", 0, 0, 0)])
+    assert backward == [("px4_1", 1_020_000_000)]
+
+
+def test_core_raises_on_bad_quaternion():
+    # 콜백 안의 예외는 FatalOnError가 잡아 프로세스를 끝낸다(삼키지 않는다)
+    core = so.OracleCore([("px4_1", "x500_1")], {"x500_1": (0.0, 0.0, 0.24)})
+    with pytest.raises(ValueError):
+        core.step(20_000_000, [_entry("x500_1", 0, 0, 0, q=(0.0, 0.0, 0.0, 0.0))])
+
+
+def test_fatal_on_error_calls_once_and_stops():
+    calls = []
+    fatal = []
+
+    def fn(x):
+        calls.append(x)
+        if x == 2:
+            raise OSError("쓰기 실패")
+        return x * 10
+
+    wrapped = so.FatalOnError(fn, fatal.append)
+    assert wrapped(1) == 10
+    assert wrapped(2) is None
+    assert wrapped(3) is None  # 실패 뒤에는 부르지 않는다
+    assert calls == [1, 2]
+    assert len(fatal) == 1 and isinstance(fatal[0], OSError)
+    assert wrapped.failed
+
+
+def test_exit_codes_distinct():
+    assert so.EXIT_CONFIG_ERROR == 2
+    assert so.EXIT_RUNTIME_ERROR == 3
 
 
 def test_ready_path():
