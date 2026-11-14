@@ -14,8 +14,6 @@
 
 """PX4 입력 발행자의 허용 목록 고정(decisions.md 쟁점 8). 소스를 정적으로 읽고 일부는 가짜 rclpy로 실행한다.
 
-- px4_measure_pub.py: 발행자는 vehicle_command(source 254/1), offboard_control_mode, trajectory_setpoint 셋뿐이고
-  명령은 arm, disarm, offboard, hold, land 다섯뿐이다. tests/sitl/measure/ 밖에서 가져가지 않는다.
 - px4_raw.py: 발행자는 offboard_control_mode(context manager)와 vehicle_command(비상 정리, source 254/25)
   둘뿐이다. trajectory_setpoint는 발행하지 않는다.
 - tests/smoke/check_px4.py: tests/smoke에서 /fmu/in에 쓰는 곳은 이 파일의 --arm 경로 하나뿐이다. 발행자는 vehicle_command
@@ -32,11 +30,9 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 SUPPORT = REPO / "tests" / "support"
-MEASURE_PUB = SUPPORT / "px4_measure_pub.py"
 RAW = SUPPORT / "px4_raw.py"
 SMOKE = REPO / "tests" / "smoke"
 SMOKE_PUB = SMOKE / "check_px4.py"
-SKIP_DIRS = {".git", ".claude", "artifacts", "build", "install", "log", "__pycache__", "node_modules", "target"}
 
 
 def _tree(path):
@@ -76,104 +72,6 @@ def _find_class(tree, name):
 
 def _methods(cls):
     return {n.name for n in cls.body if isinstance(n, ast.FunctionDef)}
-
-
-# --- px4_measure_pub ---
-
-def test_measure_pub_publishers_are_exactly_three():
-    t = _tree(MEASURE_PUB)
-    assert _publisher_classes(t) == ["OffboardControlMode", "TrajectorySetpoint", "VehicleCommand"]
-    assert _px4_msgs_imports(t) == {"OffboardControlMode", "TrajectorySetpoint", "VehicleCommand"}
-
-
-def test_measure_pub_publish_calls_use_only_its_three_publishers():
-    t = _tree(MEASURE_PUB)
-    recv = sorted(n.func.value.attr for n in ast.walk(t)
-                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "publish")
-    assert recv == ["_pub_cmd", "_pub_mode", "_pub_sp"]
-
-
-def test_measure_pub_commands_are_exactly_five():
-    cls = _find_class(_tree(MEASURE_PUB), "MeasureOnlyPublisher")
-    send = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "send")
-    kinds = set()
-    for n in ast.walk(send):
-        if isinstance(n, ast.Compare) and isinstance(n.left, ast.Name) and n.left.id == "kind":
-            for c in n.comparators:
-                assert isinstance(c, ast.Constant)
-                kinds.add(c.value)
-    assert kinds == {"arm", "disarm", "offboard", "hold", "land"}
-    assert _methods(cls) == {"__init__", "_cmd", "send", "publish_position"}
-
-
-def test_measure_pub_source_is_254_1():
-    t = _tree(MEASURE_PUB)
-    assert _int_assign(t, "SOURCE_SYSTEM") == 254
-    assert _int_assign(t, "SOURCE_COMPONENT") == 1
-
-
-def test_measure_pub_requires_measure_only_flag():
-    cls = _find_class(_tree(MEASURE_PUB), "MeasureOnlyPublisher")
-    init = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "__init__")
-    assert [a.arg for a in init.args.kwonlyargs][:1] == ["measure_only"]
-
-
-def _code_files():
-    for p in REPO.rglob("*"):
-        if p.is_file() and p.suffix in (".py", ".sh", ".yml", ".yaml", ".cpp", ".hpp", ".cmake", ".txt") \
-                and not (set(p.relative_to(REPO).parts) & SKIP_DIRS):
-            yield p
-
-
-def _imports_measure_pub(text):
-    """import 문(또는 importlib 경로 문자열)이 px4_measure_pub을 가리키는가. 주석과 docstring의 언급은 세지 않는다."""
-    try:
-        tree = ast.parse(text)
-    except SyntaxError:
-        return "px4_measure_pub" in text
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Import) and any("px4_measure_pub" in a.name for a in n.names):
-            return True
-        if isinstance(n, ast.ImportFrom) and (
-                "px4_measure_pub" in (n.module or "") or any(a.name == "px4_measure_pub" for a in n.names)):
-            return True
-        if isinstance(n, ast.Call) and any(isinstance(a, ast.Constant) and isinstance(a.value, str)
-                                           and "px4_measure_pub" in a.value for a in n.args):
-            return True
-    return False
-
-
-def test_import_detector_catches_each_form():
-    assert _imports_measure_pub("from tests.support.px4_measure_pub import MeasureOnlyPublisher")
-    assert _imports_measure_pub("from tests.support import px4_measure_pub")
-    assert _imports_measure_pub("import tests.support.px4_measure_pub as m")
-    assert _imports_measure_pub("importlib.import_module('tests.support.px4_measure_pub')")
-    assert not _imports_measure_pub('"""px4_measure_pub.py에 분리했다"""\nimport os')
-
-
-def test_measure_pub_is_not_imported_outside_the_measure_directory():
-    allowed_dirs = (REPO / "tests" / "sitl" / "measure",)
-    allowed_files = {MEASURE_PUB, Path(__file__).resolve()}
-    offenders = []
-    for p in _code_files():
-        if p.resolve() in allowed_files or any(d in p.parents for d in allowed_dirs):
-            continue
-        try:
-            text = p.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        if p.suffix == ".py":
-            if _imports_measure_pub(text):
-                offenders.append(str(p.relative_to(REPO)))
-        elif "px4_measure_pub" in text:
-            offenders.append(str(p.relative_to(REPO)))
-    assert offenders == [], "측정 전용 발행 모듈을 tests/sitl/measure/ 밖에서 가져간다: %s" % offenders
-
-
-def test_measure_pub_is_imported_somewhere_inside_measure():
-    # 위 검사가 빈 검사가 아님을 확인한다(측정 스크립트가 실제로 가져간다)
-    text = (REPO / "tests" / "sitl" / "measure" / "measure.py").read_text(encoding="utf-8")
-    assert "px4_measure_pub" in text
 
 
 # --- px4_raw ---

@@ -514,8 +514,7 @@ idsim/
     tools/           # 생성기 단위 테스트 (test_gen_compose.py. golden과 불변식 검사)
     fixtures/px4/<PX4_TAG>/  # golden 토픽 목록, 발행자 QoS, env (추적)
     fixtures/gen_compose/    # 생성기 golden: 케이스별 fleet.yaml, compose.yaml, stack.json (추적)
-    sitl/            # SITL 통합 테스트. 호스트 wrapper run_sitl.sh, 전용 fleet.yaml(1b), 시나리오(pytest. runner 컨테이너 안에서 실행),
-                     # measure/ (Executor 없이 PX4에 직접 명령을 보내는 재실측 스크립트)
+    sitl/            # SITL 통합 테스트. 호스트 wrapper run_sitl.sh, 전용 fleet.yaml(1b), 시나리오(pytest. runner 컨테이너 안에서 실행)
   artifacts/         # 실행 로그, ULog, 원시 측정값, 생성된 compose와 stack.json과 노드 params(runs/<실행 id>/params/),
                      # 통합 테스트 산출물(runs/<실행 id>/sitl/) (비추적, CI job artifact로 업로드)
   docs/

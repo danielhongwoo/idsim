@@ -22,8 +22,7 @@
 - `include/idsim_mission/core/transition.hpp`의 `Event` 목록과 전이 칸 목록 파일 `ros_ws/src/idsim_mission/test/transition_cells.tsv`는 전이 표의 일부다. ros2-engineer 소유이고 변경은 px4-engineer가 필수 승인자다.
 - 타임아웃 기본값과 명령 재전송 주기(노드 파라미터의 기본값)는 값을 px4-engineer가 정한다. 그 값이 적힌 파일은 ros2-engineer 소유이고, 값의 변경은 px4-engineer가 필수 승인자다.
 - 패키지 `test/`는 `test/px4/`가 px4-engineer, 나머지가 ros2-engineer 소유다. 단위 테스트의 구조는 test-engineer가 승인한다.
-- `tests/support/px4_raw.py`(통합 테스트가 /fmu/in에 쓰는 모듈)와 `tests/support/px4_measure_pub.py`(측정 전용 발행 모듈. `tests/sitl/measure/` 밖에서 가져가지 않는다)는 test-engineer 소유이고 변경은 px4-engineer가 필수 승인자다.
-- `tests/sitl/measure/`(실측 스크립트)는 test-engineer 소유이고 측정 절차의 변경은 px4-engineer가 필수 승인자다.
+- `tests/support/px4_raw.py`(통합 테스트가 /fmu/in에 쓰는 모듈)는 test-engineer 소유이고 변경은 px4-engineer가 필수 승인자다.
 - `idsim_mission_core`는 px4_msgs에 의존하지 않는다. PX4 enum의 해석은 `px4/` 디렉터리에만 둔다.
 
 ## 인터페이스: 골든 경로 규칙

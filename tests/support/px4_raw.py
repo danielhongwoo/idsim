@@ -24,14 +24,12 @@
   - OffboardSignal: offboard_control_mode(시나리오 T). context manager로만 만들고 끝나면 destroy한다.
   - EmergencyCommand: vehicle_command(비상 정리 전용). source가 (254, 25)가 아니면 생성을 거부하고,
     기대 sysid의 vehicle_status를 받아 대조한 뒤에만 발행한다.
-측정 전용 직접 발행(trajectory_setpoint, source 254/1)은 px4_measure_pub.py에 분리했다.
 이 모듈의 변경과 발행자, 명령 목록의 확장은 px4-engineer의 필수 승인 대상이다.
 
 시간 규칙: 모든 대기는 노드의 sim 시각 기준이다. 벽시계는 /clock이 멈췄는지 보는 보호에만 쓴다
 (ClockStalled. 시나리오는 sitl_wait.Waiter를 쓴다).
 
-토픽 이름은 px4_topic.py가 만든다. topic_regex는 측정 스크립트(px4_measure_pub)가 버전 접미사를 가리지 않고
-찾을 때 쓰는 정규식이다.
+토픽 이름은 px4_topic.py가 만든다. topic_regex는 버전 접미사를 가리지 않고 찾을 때 쓰는 정규식이다.
 """
 import math
 import re
