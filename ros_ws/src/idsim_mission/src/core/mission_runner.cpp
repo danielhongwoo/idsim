@@ -390,7 +390,8 @@ void MissionRunner::prepare_signal(Tick & t)
 
 void MissionRunner::prepare_offboard(Tick & t)
 {
-  // P5: DO_SET_MODE(Offboard)를 재전송하며 OFFBOARD 3회 연속. 확인되면 ack 대기(P5a)로 간다.
+  // P5: DO_SET_MODE(Offboard)를 유효 ack가 없는 동안 재전송하며 OFFBOARD 3회 연속. 확인되면 ack
+  // 대기(P5a)로 간다.
   const AckView ack = take_ack(t);
   if (t.status != nullptr) {
     counter_.observe(t.status->timestamp_us, t.status->nav == NavMode::kOffboard);
@@ -408,23 +409,26 @@ void MissionRunner::prepare_offboard(Tick & t)
     return;
   }
   if (counter_.count() >= kConfirmSamples && t.status != nullptr) {
-    // 확인을 고정하고 ack 대기로 간다(decisions.md 쟁점 12). 이 tick부터 DO_SET_MODE를 다시 보내지
-    // 않는다. 대기 명령(DO_SET_MODE)은 남겨 노드가 그 묶음의 ack를 계속 넘기게 한다. 이 tick의 거부
-    // ack와 timeout은 위에서 봤고, 확인 표본이 OFFBOARD라 이탈은 없으므로 arm 조건만 이어서 본다.
+    // 확인을 고정하고 ack 대기로 간다(decisions.md 쟁점 12). 대기 명령(DO_SET_MODE)은 남겨 노드가
+    // 그 묶음의 ack를 계속 넘기게 한다. 이 tick의 거부 ack와 timeout은 위에서 봤고, 확인 표본이
+    // OFFBOARD라 이탈은 없으므로 arm 조건을 이어서 보고, arm하지 않았으면 유효 ack가 없을 때 주기
+    // 재전송을 본다.
     offboard_confirm_timestamp_us_ = t.status->timestamp_us;
     enter_prep(Event::kOffboardConfirmed, t, PrepStep::kOffboardAck);
-    arm_if_offboard_acked(t);
-    return;
+    if (arm_if_offboard_acked(t)) {
+      return;
+    }
   }
-  resend_due(t);
+  resend_offboard_until_acked(t);
 }
 
 void MissionRunner::prepare_offboard_ack(Tick & t)
 {
   // P5a: OFFBOARD 확인 뒤 마지막 DO_SET_MODE 전송 뒤의 ack를 기다린다. 계수는 보지 않고(확인 고정),
-  // 재전송하지 않으며 새 timeout도 없다(mode_confirm_timeout은 P5 진입부터). 같은 tick의 순서는
-  // 거부 ack -> mode_confirm_timeout -> 이탈 -> arm이고, 식별 불일치는 step_preparing이 먼저 보며
-  // 취소는 단계 처리 뒤다. 실패는 모두 arm 전이라 disarm을 보내지 않는다.
+  // 유효 ack가 없는 동안 command_resend_period마다 재전송하며 새 timeout은 없다
+  // (mode_confirm_timeout은 P5 진입부터). 같은 tick의 순서는 거부 ack -> mode_confirm_timeout ->
+  // 이탈 -> arm -> 재전송이고, 식별 불일치는 step_preparing이 먼저 보며 취소는 단계 처리 뒤다.
+  // 실패는 모두 arm 전이라 disarm을 보내지 않는다.
   const AckView ack = take_ack(t);
   if (ack.fresh && is_rejection(ack.result)) {
     begin_cleanup(
@@ -450,15 +454,34 @@ void MissionRunner::prepare_offboard_ack(Tick & t)
       "OFFBOARD left before DO_SET_MODE(OFFBOARD) ack: vehicle_status nav_state not OFFBOARD");
     return;
   }
-  arm_if_offboard_acked(t);
+  if (arm_if_offboard_acked(t)) {
+    return;
+  }
+  resend_offboard_until_acked(t);
 }
 
-void MissionRunner::arm_if_offboard_acked(Tick & t)
+bool MissionRunner::has_valid_offboard_ack() const
 {
-  // arm 조건의 ack: 대기 명령(DO_SET_MODE) 묶음의 비거부 ack이고 마지막 전송 tick보다 뒤의 tick에
-  // 받았다. 같은 tick에 받은 ack는 그 tick의 전송보다 앞이다(스냅숏은 tick 시작의 것).
-  if (pending_.accepted_ack_tick <= pending_.last_send_tick) {
+  // 유효 ack: 대기 명령(DO_SET_MODE) 묶음의 비거부 ack이고 마지막 전송 tick보다 뒤의 tick에 받았다.
+  // 같은 tick에 받은 ack는 그 tick의 전송보다 앞이다(스냅숏은 tick 시작의 것).
+  return pending_.accepted_ack_tick > pending_.last_send_tick;
+}
+
+void MissionRunner::resend_offboard_until_acked(Tick & t)
+{
+  // 지상 arm 진입(P5, P5a) 전용. 유효 ack가 없을 때만 주기 재전송한다(decisions.md 쟁점 12 "명령과
+  // ack의 유실"). 유효 ack를 무효로 만드는 것은 그 뒤의 재전송뿐이라 한 번 유효가 된 ack는 arm이나
+  // 실패까지 유효하다.
+  if (has_valid_offboard_ack()) {
     return;
+  }
+  resend_due(t);
+}
+
+bool MissionRunner::arm_if_offboard_acked(Tick & t)
+{
+  if (!has_valid_offboard_ack()) {
+    return false;
   }
   clear_pending();
   enter_prep(Event::kOffboardAckAccepted, t, PrepStep::kArm);
@@ -467,6 +490,7 @@ void MissionRunner::arm_if_offboard_acked(Tick & t)
   send(t, CommandKind::kArm);
   arm_sent_ = true;
   arm_first_tick_ = t.input.tick;
+  return true;
 }
 
 void MissionRunner::prepare_arm(Tick & t)

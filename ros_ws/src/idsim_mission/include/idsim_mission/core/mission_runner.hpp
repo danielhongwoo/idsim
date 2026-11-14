@@ -191,7 +191,13 @@ private:
   void prepare_offboard(Tick & t);
   void prepare_offboard_ack(Tick & t);
   // ack 대기에서 arm 조건의 ack가 있으면 arm을 보내고 P6으로 간다(decisions.md 쟁점 12 불변식).
-  void arm_if_offboard_acked(Tick & t);
+  // arm을 보냈으면 true.
+  bool arm_if_offboard_acked(Tick & t);
+  // 마지막 DO_SET_MODE 전송 tick보다 뒤에 받은 비거부 ack가 있다(arm 조건과 재전송 억제가 같이
+  // 쓴다).
+  bool has_valid_offboard_ack() const;
+  // 지상 arm 진입(P5, P5a) 전용: 유효 ack가 없을 때만 resend_due.
+  void resend_offboard_until_acked(Tick & t);
   void prepare_arm(Tick & t);
   void prepare_arm_before_armed(Tick & t);
   // later는 감시 표 뒤에 볼 사건 가운데 이 tick에 참인 것(겹침 칸의 기록용. 판정에 쓰지 않는다).
