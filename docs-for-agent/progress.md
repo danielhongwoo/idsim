@@ -73,7 +73,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 1a 6단계.
 
-- CI `sitl`(1a 시나리오)이 간헐적으로 실패한다. 관측한 두 종류: 시나리오 D의 "D 고도 도달" `TIMEOUT_SIM`(60 s, #49 머지 뒤 main과 #54 첫 실행), 이정표 순서 위반 "result가 disarmed보다 앞"(4 ms 차, #50 머지 뒤 main). #54는 같은 commit의 재실행에서 통과했고, main은 다음 머지의 실행에서 통과했다. 장애 분석(test-engineer, px4-engineer)을 할지는 사용자가 정한다.
+- CI `sitl`(1a 시나리오)이 간헐적으로 실패한다. 관측한 두 종류: 시나리오 D의 "D 고도 도달" `TIMEOUT_SIM`(60 s, #43, #49 머지 뒤 main과 #54 첫 실행), 이정표 순서 위반 "result가 disarmed보다 앞"(4 ms 차, #50 머지 뒤 main). #54는 같은 commit의 재실행에서 통과했다. main은 #49, #50 머지 뒤 연속으로 실패했고 #51 머지의 실행부터 통과했다. 장애 분석(test-engineer, px4-engineer)을 할지는 사용자가 정한다.
 - CI `sitl` job의 기록은 첫 1회뿐이다(PR #36: 전체 5분 43초, 이미지 pull 약 3분 20초, 스택 올리기부터 정리까지 약 2분 13초, runner Docker Engine 28.0.4). 실패 때 `artifacts/runs/`가 job artifact로 올라가는지는 아직 보지 못했다. 판정 상수의 재검토(쟁점 9)는 CI 기록이 쌓이면 한다.
 - 스모크 images 단계(`tests/smoke/run_smoke.sh`의 check_s0)가 `LLVM_MAJOR`와 `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다. `tools/ros_ws.sh`의 대조는 이미지에 있는 ENV만 돌아서 그 ENV가 없는 옛 ros-ws 이미지가 통과한다. 옛 `:local` 이미지로 `sim_stack.sh up --viz`를 하면 foxglove만 죽는다. images 단계에 넣는다(test-engineer). `ros_ws.sh`에 `versions.env`의 이름 기준 존재 검사를 둘지는 devops-engineer와 test-engineer가 정한다.
 - foxglove_bridge의 판은 `FOXGLOVE_BRIDGE_VERSION` 접두 단정까지만 고정된다. ROS sync로 새 판이 오면 ros-ws key가 바뀌는 PR의 빌드가 실패한다(의도한 동작). 같은 판 안의 revision과 의존 패키지는 고정되지 않는다.
