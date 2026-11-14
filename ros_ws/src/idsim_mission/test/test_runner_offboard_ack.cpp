@@ -22,6 +22,9 @@
 //   그리고 확인 tick이나 대기 중 tick에 취소가 겹친 경우의 출력을 단정한다. 대기 구간의
 //   나머지 칸(식별 불일치, Px4Timestamp 실패, 무시된 취소 겹침)은 test_runner_flow_cells.cpp의
 //   P5a 절이 덮는다.
+// - 유효 ack가 없는 동안의 DO_SET_MODE 재전송(P5부터 arm 전까지, 확인 tick 포함): 재전송이나
+//   그 ack의 유실 회복, 유효 ack의 재전송 억제, 주기가 찬 tick의 확인, 실패, 취소, 앞선 전송의
+//   늦은 ack를 단정한다.
 // - 기본값: command_resend_period 0.5 s = 10 tick, mode_confirm_timeout 3.0 s = 60 tick.
 // - P5 진입 tick을 S라 한다(SIGNAL_CONFIRMED, DO_SET_MODE 첫 전송). 가짜 PX4가 S의 전송에 낸 ack는
 //   사례마다 지우고(ack 없이 시작) 테스트가 ack를 직접 준다. 표본은 feed로 준다(timestamp는 수신
@@ -31,6 +34,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -84,14 +88,45 @@ void expect_no_arm_disarm_hold(const Harness & h, std::size_t from)
   }
 }
 
+// tick first..last의 출력에서 명령은 resend_ticks의 tick에만 있고 그것은 DO_SET_MODE 하나다.
+void expect_resends_only_at(
+  const Harness & h, std::uint64_t first, std::uint64_t last,
+  const std::vector<std::uint64_t> & resend_ticks)
+{
+  for (std::uint64_t tick = first; tick <= last; ++tick) {
+    const StepOutput * const out = output_of_tick(h, tick);
+    if (out == nullptr) {
+      // 구간 first..last는 모두 이미 먹인 tick이어야 한다.
+      ADD_FAILURE() << "no output at tick " << tick;
+      return;
+    }
+    const bool due =
+      std::find(resend_ticks.begin(), resend_ticks.end(), tick) != resend_ticks.end();
+    if (due) {
+      EXPECT_EQ(out->commands, std::vector<CommandKind>{CommandKind::kSetModeOffboard})
+        << "tick " << tick;
+    } else {
+      EXPECT_TRUE(out->commands.empty()) << "tick " << tick;
+    }
+  }
+}
+
+// 같은 표본을 tick last까지(포함) 준다.
+void feed_through(Harness & h, const Sample & sample, std::uint64_t last)
+{
+  while (h.tick_no <= last) {
+    h.feed({sample});
+  }
+}
+
 // ---- T1: 재전송 다음 tick 확인 ----
 
 TEST(OffboardAck, ConfirmAfterResendArmsOnlyOnAckOfThatResend)
 {
+  // S 전송의 ack가 없다(있으면 유효 ack라 S+10 재전송이 나가지 않는다). S+8까지는 OFFBOARD가
+  // 아니다.
   Harness h(standard_mission());
   const std::uint64_t s = reach_offboard_without_ack(h);
-  // S+1: S 전송의 ACCEPTED ack. S+8까지는 OFFBOARD가 아니다.
-  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
   for (int i = 0; i < 8; ++i) {
     h.feed({hold_ground()});
   }
@@ -100,16 +135,17 @@ TEST(OffboardAck, ConfirmAfterResendArmsOnlyOnAckOfThatResend)
   h.feed({offboard_ground()});
   const StepOutput resend = h.feed({offboard_ground()})[0];
   EXPECT_EQ(resend.commands, std::vector<CommandKind>{CommandKind::kSetModeOffboard});
-  // S+11: 확인. S+1의 ack는 S+10 재전송보다 앞이라 무효다.
+  // S+11: 확인. 유효 ack가 없고 재전송 주기(기준 S+10)는 차지 않았다.
   std::size_t before = h.edges().size();
   const StepOutput confirm = h.feed({offboard_ground()})[0];
+  ASSERT_EQ(h.edges().size(), before + 1);
   expect_cell(
     h, "PREPARING.OFFBOARD", Event::kOffboardConfirmed, "PREPARING.OFFBOARD_ACK", "-", {}, before);
   EXPECT_TRUE(confirm.commands.empty());
   EXPECT_TRUE(confirm.setpoint.has_value());
   EXPECT_EQ(h.view().prep, PrepStep::kOffboardAck);
   EXPECT_FALSE(h.view().arm_sent);
-  // S+12: ack 없음. 아무 명령도 내지 않는다(재전송 없음).
+  // S+12: ack 없음. 주기가 차지 않아 명령이 없다.
   const StepOutput wait = h.feed({offboard_ground()})[0];
   EXPECT_TRUE(wait.commands.empty());
   EXPECT_EQ(h.view().prep, PrepStep::kOffboardAck);
@@ -127,10 +163,11 @@ TEST(OffboardAck, ConfirmAfterResendArmsOnlyOnAckOfThatResend)
   EXPECT_EQ(h.count_command(CommandKind::kArm), 1);
 }
 
-TEST(OffboardAck, AckReceivedOnResendTickIsNotValid)
+TEST(OffboardAck, AckOnResendDueTickSuppressesResend)
 {
-  // 같은 tick에 받은 ack와 재전송은 ack가 먼저다(스냅숏은 tick 시작의 것). 그 ack는 그 재전송의
-  // 것이 아니다(received_tick == 마지막 전송 tick은 무효).
+  // 재전송 주기가 찬 tick(S+10)에 받은 비거부 ack는 판정 시점의 마지막 전송(S)보다 뒤라 유효이고,
+  // ack 판정이 재전송보다 앞이라 그 tick의 재전송을 막는다(received_tick == 마지막 전송 tick인
+  // ack는 이 순서에서 생기지 않는다).
   Harness h(standard_mission());
   const std::uint64_t s = reach_offboard_without_ack(h);
   for (int i = 0; i < 8; ++i) {
@@ -139,15 +176,18 @@ TEST(OffboardAck, AckReceivedOnResendTickIsNotValid)
   h.feed({offboard_ground()});
   h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
   ASSERT_EQ(h.tick_no, s + 10);
-  const StepOutput resend = h.feed({offboard_ground()})[0];
-  EXPECT_EQ(resend.commands, std::vector<CommandKind>{CommandKind::kSetModeOffboard});
-  const StepOutput confirm = h.feed({offboard_ground()})[0];
-  EXPECT_TRUE(confirm.commands.empty());
-  EXPECT_EQ(h.view().prep, PrepStep::kOffboardAck);
-  const StepOutput wait = h.feed({offboard_ground()})[0];
-  EXPECT_TRUE(wait.commands.empty());
-  EXPECT_EQ(h.view().prep, PrepStep::kOffboardAck);
-  EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
+  const StepOutput due = h.feed({offboard_ground()})[0];
+  EXPECT_TRUE(due.commands.empty());
+  EXPECT_EQ(h.view().prep, PrepStep::kOffboard);
+  const std::size_t before = h.edges().size();
+  const StepOutput confirm = h.feed({offboard_ground()})[0];  // S+11
+  ASSERT_EQ(h.edges().size(), before + 2);
+  expect_cell(
+    h, "PREPARING.OFFBOARD", Event::kOffboardConfirmed, "PREPARING.OFFBOARD_ACK", "-", {}, before);
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardAckAccepted, "PREPARING.ARM", "-", {}, before + 1);
+  EXPECT_EQ(confirm.commands, std::vector<CommandKind>{CommandKind::kArm});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 1);
 }
 
 TEST(OffboardAck, ValidAckBeforeConfirmArmsOnConfirmTick)
@@ -175,12 +215,10 @@ TEST(OffboardAck, ValidAckBeforeConfirmArmsOnConfirmTick)
 
 TEST(OffboardAck, NoAckAfterConfirmTimesOutWithoutArm)
 {
+  // 확인(S+3) 뒤 유효 ack가 없는 동안 주기마다 재전송하고, 그래도 없으면 S+60에 끝난다.
   Harness h(standard_mission());
   const std::uint64_t s = reach_offboard_ack(h);
-  const std::size_t confirmed_outputs = h.outputs().size();
-  while (h.tick_no < s + 60) {
-    h.feed({offboard_ground()});
-  }
+  feed_through(h, offboard_ground(), s + 59);
   EXPECT_FALSE(h.runner().done());  // S+59
   EXPECT_EQ(h.view().prep, PrepStep::kOffboardAck);
   const std::size_t before = h.edges().size();
@@ -190,11 +228,9 @@ TEST(OffboardAck, NoAckAfterConfirmTimesOutWithoutArm)
     before);
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
   expect_no_arm_disarm_hold(h, 0);
-  // 확인 tick(S+3) 뒤에는 DO_SET_MODE를 다시 보내지 않는다.
-  for (std::size_t i = confirmed_outputs - 1; i < h.outputs().size(); ++i) {
-    EXPECT_TRUE(h.outputs()[i].commands.empty()) << "output " << i;
-  }
-  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 1);
+  // S+10..S+50에 하나씩. S+60은 주기가 찼지만 timeout이 재전송보다 앞이라 명령이 없다.
+  expect_resends_only_at(h, s + 3, s + 60, {s + 10, s + 20, s + 30, s + 40, s + 50});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 6);
   const std::string & detail = termination_or_empty(h).detail;
   EXPECT_NE(detail.find("no DO_SET_MODE(OFFBOARD) ack"), std::string::npos) << detail;
   EXPECT_EQ(detail.find("not confirmed"), std::string::npos) << detail;
@@ -400,6 +436,321 @@ TEST(OffboardAck, TimeoutAndValidAckSameTickIsTimeoutWithoutArm)
   EXPECT_TRUE(out.commands.empty());
   EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
   EXPECT_FALSE(h.view().arm_sent);
+}
+
+// ---- 유효 ack가 없는 동안의 재전송(decisions.md 쟁점 12 "명령과 ack의 유실") ----
+// 단위 테스트에서 재전송의 유실과 그 ack의 유실은 core 입력이 같다(ack가 오지 않음).
+
+TEST(OffboardAck, LostResendBeforeConfirmRecoversByNextResend)
+{
+  // CI 재현: S, S+10 전송의 ack가 없고 S+20 재전송이 유실되었다. S+21에 확인된 뒤에도 주기마다
+  // 재전송하고, S+30 재전송의 ack로 arm한다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_without_ack(h);
+  feed_through(h, hold_ground(), s + 18);
+  feed_through(h, offboard_ground(), s + 20);
+  const std::size_t before = h.edges().size();
+  h.feed({offboard_ground()});  // S+21: 확인
+  ASSERT_EQ(h.edges().size(), before + 1);
+  expect_cell(
+    h, "PREPARING.OFFBOARD", Event::kOffboardConfirmed, "PREPARING.OFFBOARD_ACK", "-", {}, before);
+  EXPECT_EQ(h.edges()[before].tick, s + 21);
+  feed_through(h, offboard_ground(), s + 30);
+  EXPECT_EQ(h.view().prep, PrepStep::kOffboardAck);
+  EXPECT_FALSE(h.view().arm_sent);
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  const std::size_t before_arm = h.edges().size();
+  const StepOutput arm = h.feed({offboard_ground()})[0];  // S+31
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardAckAccepted, "PREPARING.ARM", "-", {}, before_arm);
+  EXPECT_EQ(arm.commands, std::vector<CommandKind>{CommandKind::kArm});
+  expect_resends_only_at(h, s + 1, s + 30, {s + 10, s + 20, s + 30});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 4);
+  EXPECT_EQ(h.count_command(CommandKind::kArm), 1);
+  EXPECT_FALSE(h.runner().done());
+}
+
+TEST(OffboardAck, CiInputArmsOnFirstAckWithoutResend)
+{
+  // CI 입력 그대로: S 전송의 ACCEPTED ack가 S+1에 온다. 그 뒤로 재전송이 없어 S+20 유실은 생기지
+  // 않고, 확인 tick에 arm한다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_without_ack(h);
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  feed_through(h, hold_ground(), s + 18);
+  feed_through(h, offboard_ground(), s + 20);
+  const std::size_t before = h.edges().size();
+  const StepOutput confirm = h.feed({offboard_ground()})[0];  // S+21
+  ASSERT_EQ(h.edges().size(), before + 2);
+  expect_cell(
+    h, "PREPARING.OFFBOARD", Event::kOffboardConfirmed, "PREPARING.OFFBOARD_ACK", "-", {}, before);
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardAckAccepted, "PREPARING.ARM", "-", {}, before + 1);
+  EXPECT_EQ(confirm.commands, std::vector<CommandKind>{CommandKind::kArm});
+  expect_resends_only_at(h, s + 1, s + 20, {});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 1);
+}
+
+TEST(OffboardAck, LostAckOfWaitingResendArmsOnNextPeriod)
+{
+  // 확인(S+3) 뒤 S+10 재전송의 ack가 유실되고 S+20 재전송의 ack(S+21)로 arm한다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_ack(h);
+  feed_through(h, offboard_ground(), s + 20);
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  const std::size_t before = h.edges().size();
+  const StepOutput arm = h.feed({offboard_ground()})[0];  // S+21
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardAckAccepted, "PREPARING.ARM", "-", {}, before);
+  EXPECT_EQ(arm.commands, std::vector<CommandKind>{CommandKind::kArm});
+  expect_resends_only_at(h, s + 4, s + 20, {s + 10, s + 20});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 3);
+}
+
+class ValidAckBeforeLongConfirm : public ::testing::TestWithParam<AckResult>
+{
+};
+
+TEST_P(ValidAckBeforeLongConfirm, ValidAckStopsResendAndArmsOnConfirmTick)
+{
+  // 확인 전에 받은 비거부 ack(ACCEPTED, IN_PROGRESS)가 있으면 S+10, S+20에도 재전송하지 않고
+  // 확인 tick(S+25)에 arm한다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_without_ack(h);
+  h.push_ack(AckCommand::kSetMode, GetParam());
+  feed_through(h, hold_ground(), s + 22);
+  feed_through(h, offboard_ground(), s + 24);
+  const std::size_t before = h.edges().size();
+  const StepOutput confirm = h.feed({offboard_ground()})[0];  // S+25
+  ASSERT_EQ(h.edges().size(), before + 2);
+  expect_cell(
+    h, "PREPARING.OFFBOARD", Event::kOffboardConfirmed, "PREPARING.OFFBOARD_ACK", "-", {}, before);
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardAckAccepted, "PREPARING.ARM", "-", {}, before + 1);
+  EXPECT_EQ(h.edges()[before].tick, s + 25);
+  EXPECT_EQ(h.edges()[before + 1].tick, s + 25);
+  EXPECT_EQ(confirm.commands, std::vector<CommandKind>{CommandKind::kArm});
+  expect_resends_only_at(h, s + 1, s + 24, {});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 1);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  OffboardAck, ValidAckBeforeLongConfirm,
+  ::testing::Values(AckResult::kAccepted, AckResult::kInProgress),
+  [](const ::testing::TestParamInfo<AckResult> & info) {
+    return info.param == AckResult::kAccepted ? std::string("Accepted") : std::string("InProgress");
+  });
+
+TEST(OffboardAck, ConfirmOnResendDueTickWithoutAckResendsOnly)
+{
+  // 확인 tick(S+10)이 재전송 주기가 찬 tick이고 유효 ack가 없다. 기록은 CONFIRMED 하나이고
+  // 그 tick에 DO_SET_MODE 하나만 나간다(arm 없음). 그 재전송 뒤의 ack(S+11)로 arm한다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_without_ack(h);
+  feed_through(h, hold_ground(), s + 7);
+  feed_through(h, offboard_ground(), s + 9);
+  const std::size_t before = h.edges().size();
+  const StepOutput confirm = h.feed({offboard_ground()})[0];  // S+10
+  ASSERT_EQ(h.edges().size(), before + 1);
+  expect_cell(
+    h, "PREPARING.OFFBOARD", Event::kOffboardConfirmed, "PREPARING.OFFBOARD_ACK", "-", {}, before);
+  EXPECT_EQ(confirm.commands, std::vector<CommandKind>{CommandKind::kSetModeOffboard});
+  EXPECT_EQ(h.view().prep, PrepStep::kOffboardAck);
+  EXPECT_FALSE(h.view().arm_sent);
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  const std::size_t before_arm = h.edges().size();
+  const StepOutput arm = h.feed({offboard_ground()})[0];  // S+11
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardAckAccepted, "PREPARING.ARM", "-", {}, before_arm);
+  EXPECT_EQ(arm.commands, std::vector<CommandKind>{CommandKind::kArm});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 2);
+}
+
+TEST(OffboardAck, ConfirmOnResendDueTickWithAckArmsWithoutResend)
+{
+  // 확인 tick(S+10)이 재전송 주기가 찬 tick이고 그 tick에 유효 ack를 받았다. arm만 나간다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_without_ack(h);
+  feed_through(h, hold_ground(), s + 7);
+  feed_through(h, offboard_ground(), s + 9);
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  const std::size_t before = h.edges().size();
+  const StepOutput confirm = h.feed({offboard_ground()})[0];  // S+10
+  ASSERT_EQ(h.edges().size(), before + 2);
+  expect_cell(
+    h, "PREPARING.OFFBOARD", Event::kOffboardConfirmed, "PREPARING.OFFBOARD_ACK", "-", {}, before);
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardAckAccepted, "PREPARING.ARM", "-", {}, before + 1);
+  EXPECT_EQ(confirm.commands, std::vector<CommandKind>{CommandKind::kArm});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 1);
+}
+
+enum class WaitingEnd : std::uint8_t
+{
+  kLeft,
+  kCancel,
+  kIdentityMismatch,
+  kStampFailure,
+  kRejectedAck,
+};
+
+class WaitingEndOnResendDueTick : public ::testing::TestWithParam<WaitingEnd>
+{
+};
+
+TEST_P(WaitingEndOnResendDueTick, SendsNoResend)
+{
+  // 대기 중 재전송 주기가 찬 tick(S+10)에 끝나는 사건이 오면 그 tick의 재전송은 나가지 않는다
+  // (실패 판정이 재전송보다 앞이고, 취소는 정리 진입이 지운다).
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_ack(h);
+  feed_through(h, offboard_ground(), s + 9);
+  const std::size_t before = h.edges().size();
+  StepOutput out;
+  switch (GetParam()) {
+    case WaitingEnd::kLeft:
+      out = h.feed({hold_ground()})[0];
+      expect_cell(
+        h, "PREPARING.OFFBOARD_ACK", Event::kOffboardLeft, "CLEANUP.PREPARING_FAILURE.NONE", "-",
+        {}, before);
+      expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+      break;
+    case WaitingEnd::kCancel:
+      out = h.feed({offboard_ground()}, true)[0];
+      expect_cell(
+        h, "PREPARING.OFFBOARD_ACK", Event::kCancel, "CLEANUP.CANCEL.NONE", "-", {}, before);
+      expect_terminated_once_as(h, "CANCELED/NONE");
+      break;
+    case WaitingEnd::kIdentityMismatch:
+      h.world.identity = IdentityCheck::kMismatch;
+      out = h.feed({offboard_ground()})[0];
+      expect_cell(
+        h, "PREPARING.OFFBOARD_ACK", Event::kPreparingIdentityMismatch, "DONE", "ABORTED/INTERNAL",
+        {}, before);
+      expect_terminated_once_as(h, "ABORTED/INTERNAL");
+      break;
+    case WaitingEnd::kStampFailure:
+      h.clock.fail = true;
+      out = h.feed({offboard_ground()})[0];
+      expect_cell(
+        h, "PREPARING.OFFBOARD_ACK", Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL", {},
+        before);
+      expect_terminated_once_as(h, "ABORTED/INTERNAL");
+      EXPECT_FALSE(out.setpoint.has_value());
+      break;
+    case WaitingEnd::kRejectedAck:
+      h.push_ack(AckCommand::kSetMode, AckResult::kTemporarilyRejected);
+      out = h.feed({offboard_ground()})[0];
+      expect_cell(
+        h, "PREPARING.OFFBOARD_ACK", Event::kOffboardRejected, "CLEANUP.PREPARING_FAILURE.NONE",
+        "-", {}, before);
+      expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+      break;
+  }
+  EXPECT_EQ(h.edges().empty() ? 0U : h.edges().back().tick, s + 10);
+  EXPECT_TRUE(out.commands.empty());
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 1);
+  expect_no_arm_disarm_hold(h, 0);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  OffboardAck, WaitingEndOnResendDueTick,
+  ::testing::Values(
+    WaitingEnd::kLeft, WaitingEnd::kCancel, WaitingEnd::kIdentityMismatch,
+    WaitingEnd::kStampFailure, WaitingEnd::kRejectedAck),
+  [](const ::testing::TestParamInfo<WaitingEnd> & info) {
+    switch (info.param) {
+      case WaitingEnd::kLeft:
+        return std::string("Left");
+      case WaitingEnd::kCancel:
+        return std::string("Cancel");
+      case WaitingEnd::kIdentityMismatch:
+        return std::string("IdentityMismatch");
+      case WaitingEnd::kStampFailure:
+        return std::string("StampFailure");
+      case WaitingEnd::kRejectedAck:
+        return std::string("RejectedAck");
+    }
+    return std::string("Unknown");
+  });
+
+TEST(OffboardAck, ConfirmTickCancelOnResendDueTickSendsNothing)
+{
+  // 주기가 찬 확인 tick(S+10)에 유효 ack가 없고 취소가 겹친다. 재전송은 정리 진입이 지운다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_without_ack(h);
+  feed_through(h, hold_ground(), s + 7);
+  feed_through(h, offboard_ground(), s + 9);
+  const std::size_t before = h.edges().size();
+  const StepOutput out = h.feed({offboard_ground()}, true)[0];  // S+10
+  expect_cell(
+    h, "PREPARING.OFFBOARD", Event::kOffboardConfirmed, "PREPARING.OFFBOARD_ACK", "-", {}, before);
+  expect_cell(h, "PREPARING.OFFBOARD_ACK", Event::kCancel, "CLEANUP.CANCEL.NONE", "-", {}, before);
+  EXPECT_TRUE(out.commands.empty());
+  expect_terminated_once_as(h, "CANCELED/NONE");
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 1);
+  expect_no_arm_disarm_hold(h, 0);
+}
+
+TEST(OffboardAck, AckOnResendDueTickWhileWaitingArmsWithoutResend)
+{
+  // 대기 중(확인 S+3 뒤) 재전송 주기가 찬 tick(S+10)에 유효 ack를 받으면 arm 판정이 재전송보다
+  // 앞이라 재전송 없이 그 ack로 arm한다. 그 tick의 출력은 [ARM] 하나다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_ack(h);
+  feed_through(h, offboard_ground(), s + 9);
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  ASSERT_EQ(h.tick_no, s + 10);
+  const std::size_t before = h.edges().size();
+  const StepOutput arm = h.feed({offboard_ground()})[0];  // S+10
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardAckAccepted, "PREPARING.ARM", "-", {}, before);
+  EXPECT_EQ(arm.commands, std::vector<CommandKind>{CommandKind::kArm});
+  expect_resends_only_at(h, s + 4, s + 9, {});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 1);
+  EXPECT_EQ(h.count_command(CommandKind::kArm), 1);
+}
+
+TEST(OffboardAck, ValidAckBeforeConfirmThenModeLostTimesOutWithoutResend)
+{
+  // 유효 ack(S+1) 뒤 OFFBOARD가 확인되지 않으면 재전송 없이 S+60에 P5의 timeout으로 끝난다(다른
+  // 주체가 바꾼 모드를 다시 덮지 않는다).
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_without_ack(h);
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  feed_through(h, hold_ground(), s + 59);
+  EXPECT_FALSE(h.runner().done());
+  const std::size_t before = h.edges().size();
+  h.feed({hold_ground()});  // S+60
+  expect_cell(
+    h, "PREPARING.OFFBOARD", Event::kOffboardTimeout, "CLEANUP.PREPARING_FAILURE.NONE", "-", {},
+    before);
+  expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+  expect_resends_only_at(h, s + 1, s + 60, {});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 1);
+  const std::string & detail = termination_or_empty(h).detail;
+  EXPECT_NE(detail.find("mode_confirm_timeout: OFFBOARD not confirmed"), std::string::npos)
+    << detail;
+}
+
+TEST(OffboardAck, LateAckOfEarlierSendIsReadAsValid)
+{
+  // 알려진 열화. S+12의 ack는 S 전송의 것이고 지연이 12 tick(0.6 s, 주기와 두 배 사이)이다. core는
+  // 이것을 S+10 재전송의 ack와 가르지 못해 유효로 읽고 arm한다. PX4 queue에서 arm 앞에 S+10의
+  // DO_SET_MODE 하나가 남을 수 있다(decisions.md 쟁점 12가 허용한 열화). 단정하는 것은 현재
+  // 동작이지 바람직한 동작이 아니다. 이 테스트가 깨지면 열화가 해소된 것이므로 기대를
+  // 뒤집는다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_ack(h);
+  feed_through(h, offboard_ground(), s + 11);
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  const std::size_t before = h.edges().size();
+  const StepOutput arm = h.feed({offboard_ground()})[0];  // S+12
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardAckAccepted, "PREPARING.ARM", "-", {}, before);
+  EXPECT_EQ(arm.commands, std::vector<CommandKind>{CommandKind::kArm});
+  expect_resends_only_at(h, s + 4, s + 11, {s + 10});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 2);
 }
 
 }  // namespace
