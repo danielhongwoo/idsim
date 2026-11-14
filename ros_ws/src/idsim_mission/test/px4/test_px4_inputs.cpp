@@ -122,7 +122,7 @@ TEST(Px4Inputs, DescendIsNotLand)
 TEST(Px4Inputs, RtlIsOnlyAutoRtl)
 {
   // RTL 확인은 AUTO_RTL 하나다. RTL이 착륙 단계로 넘어가면 PX4 v1.17은 nav_state를 AUTO_RTL로 둔 채
-  // 내부 단계만 바꾸므로 AUTO_LAND로 접지 않는다(추정. RTL 항목 SITL 실측에서 확인한다).
+  // 내부 단계만 바꾸므로 AUTO_LAND로 접지 않는다([소스]. decisions.md 쟁점 9 근거).
   EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_AUTO_RTL), NavMode::kRtl);
   EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_AUTO_LAND), NavMode::kLand);
   EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_AUTO_PRECLAND), NavMode::kOther);
