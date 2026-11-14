@@ -131,34 +131,3 @@ def read_topics(path, wanted):
 def read_topic(path, topic, multi_id=0):
     """path의 ULog에서 topic(multi_id) 표본을 dict 목록으로 읽는다."""
     return read_topics(path, {topic: multi_id})[topic]
-
-
-def read_logged(path):
-    """ULog의 logged message(L, tag가 붙은 C)를 [{"level", "ts", "msg"}]로 읽는다.
-
-    level은 ULog 문자 코드의 숫자(0 emerg ... 7 debug). ts는 PX4 timestamp(us)다.
-    """
-    with open(path, "rb") as fh:
-        buf = fh.read()
-    if buf[:7] != _MAGIC:
-        raise UlogError("ULog header가 아니다: %s" % path)
-    pos = 16
-    out = []
-    while pos + 3 <= len(buf):
-        size, mtype = struct.unpack_from("<HB", buf, pos)
-        start = pos + 3
-        if start + size > len(buf):
-            break
-        payload = buf[start:start + size]
-        pos = start + size
-        if mtype == 0x4C and size >= 9:        # 'L'
-            level, ts = struct.unpack_from("<BQ", payload, 0)
-            text = payload[9:]
-        elif mtype == 0x43 and size >= 11:     # 'C': log_level u8, tag u16, timestamp u64, message
-            level, _tag, ts = struct.unpack_from("<BHQ", payload, 0)
-            text = payload[11:]
-        else:
-            continue
-        out.append({"level": level - 0x30 if level >= 0x30 else level, "ts": ts,
-                    "msg": text.decode("utf-8", "replace")})
-    return out

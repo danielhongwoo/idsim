@@ -16,7 +16,7 @@
 """시나리오 A의 vehicle_status 원시 표본을 ULog와 교차 확인한다(호스트에서, compose stop 뒤).
 
 값의 정본은 PX4이므로 ROS로 받은 원시 표본(sitl/raw_status_A.jsonl)을 ULog의 vehicle_status와 대조한다.
-대조 로직은 측정 스크립트와 같은 tests/support/measure_check.check_row를 쓴다(ROS 표본이 ULog에 있는지,
+대조 로직은 tests/support/measure_check.check_row를 쓴다(ROS 표본이 ULog에 있는지,
 필드가 같은지, ULog에만 있는 표본(ROS 유실)이 있는지, ULog 기준 OFFBOARD가 아닌 ARMED 표본 수).
   - 위반 구간: goal 전송부터 TAKEOFF 시작 feedback의 stamp 뒤 0.5 s까지(늦게 도착하는 표본을 덮는다)
   - 비행 구간: 그 뒤 LAND 시작 feedback까지(TAKEOFF와 LOITER 동안 OFFBOARD여야 한다)
@@ -59,7 +59,7 @@ def build_row(armed_a, raw_status):
 
 
 def vacuous_reason(res):
-    """대조가 비어 있어 통과로 볼 수 없는 경우의 사유(없으면 None). measure_check.row_status와 같은 처리다:
+    """대조가 비어 있어 통과로 볼 수 없는 경우의 사유(없으면 None). 다음 경우다:
     ULog 구간 표본 0개, ULog에 ARMED 표본 0개, ROS 표본이 하나도 ULog에서 확인되지 않음."""
     if res["ulog_samples_in_range"] == 0:
         return "ULog 구간에 vehicle_status 표본이 없다"
@@ -117,7 +117,7 @@ def _main(argv=None):
     path = ulogs[-1]
     topics = ulog_min.read_topics(str(path), {"vehicle_status": 0})
     by_ts = {int(r["timestamp"]): r for r in topics["vehicle_status"]}
-    res = mc.check_row(row, raw, by_ts, sorted(by_ts), ulog_min.read_logged(str(path)))
+    res = mc.check_row(row, raw, by_ts, sorted(by_ts))
     status, notes = decide(res, "land_start_recv_us" in armed_a)
     res = dict(res, status=status, notes=notes, ulog=str(path.relative_to(run)))
     (out / "crosscheck_a.json").write_text(json.dumps(res, indent=1, sort_keys=True, default=str) + "\n", encoding="utf-8")

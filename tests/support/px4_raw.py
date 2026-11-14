@@ -24,17 +24,14 @@
   - OffboardSignal: offboard_control_mode(시나리오 T). context manager로만 만들고 끝나면 destroy한다.
   - EmergencyCommand: vehicle_command(비상 정리 전용). source가 (254, 25)가 아니면 생성을 거부하고,
     기대 sysid의 vehicle_status를 받아 대조한 뒤에만 발행한다.
-측정 전용 직접 발행(trajectory_setpoint, source 254/1)은 px4_measure_pub.py에 분리했다.
 이 모듈의 변경과 발행자, 명령 목록의 확장은 px4-engineer의 필수 승인 대상이다.
 
 시간 규칙: 모든 대기는 노드의 sim 시각 기준이다. 벽시계는 /clock이 멈췄는지 보는 보호에만 쓴다
 (ClockStalled. 시나리오는 sitl_wait.Waiter를 쓴다).
 
-토픽 이름은 px4_topic.py가 만든다. topic_regex는 측정 스크립트(px4_measure_pub)가 버전 접미사를 가리지 않고
-찾을 때 쓰는 정규식이다.
+토픽 이름은 px4_topic.py가 만든다.
 """
 import math
-import re
 import time
 
 from rclpy.node import Node
@@ -56,9 +53,9 @@ from tests.support import measure_judge as mj
 from tests.support import sitl_judge as sj
 from tests.support import sitl_wait as sw
 from tests.support.px4_topic import px4_topic
-from tests.support.receive import SpinThread, wait_for_topic
+from tests.support.receive import SpinThread
 
-EMERGENCY_SOURCE = (254, 25)    # 비상 정리 전용 발행자의 source(system, component). 측정기는 (254, 1)
+EMERGENCY_SOURCE = (254, 25)    # 비상 정리 전용 발행자의 source(system, component)
 
 CLOCK_STALL_WALL_S = 15.0
 
@@ -77,10 +74,6 @@ def _qos_clock():
                       durability=DurabilityPolicy.VOLATILE)
 
 
-def topic_regex(ns, direction, base):
-    return "^/%s/fmu/%s/%s(_v[0-9]+)?$" % (re.escape(ns), direction, re.escape(base))
-
-
 def _qos_in():
     # 스모크 px4-in과 같다. fmu 입력 데이터 리더는 BEST_EFFORT, VOLATILE이다.
     return QoSProfile(depth=10, history=HistoryPolicy.KEEP_LAST,
@@ -91,8 +84,8 @@ def _qos_in():
 class Px4Raw:
     """한 기체의 원시 표본 기록(구독 전용)."""
 
-    def __init__(self, ns, sysid, node_name="measure_px4_raw", with_flags=False):
-        self.ns = ns                              # 측정 스크립트 표기("px4_1"). 빗금 유무는 가리지 않는다
+    def __init__(self, ns, sysid, node_name="sitl_px4_raw", with_flags=False):
+        self.ns = ns                              # 시나리오 표기("px4_1"). 빗금 유무는 가리지 않는다
         self.ns_abs = "/" + ns.strip("/")         # px4_topic 표기("/px4_1")
         self.sysid = int(sysid)
         self.with_flags = bool(with_flags)
@@ -114,20 +107,18 @@ class Px4Raw:
 
     # --- 시작과 종료 ---------------------------------------------------
 
-    def start(self, timeout_s=60.0, waiter=None, clock_wall_grace_s=15.0):
+    def start(self, waiter, timeout_s=60.0, clock_wall_grace_s=15.0):
         """토픽을 찾아 구독을 만들고 spin을 시작한다. 못 찾으면 NO_PUBLISHER.
 
-        waiter가 없으면(측정 스크립트) 토픽 탐색을 벽시계 timeout_s로 기다린다(옛 동작 그대로).
-        waiter가 있으면(통합 테스트) 구독을 만들자마자 spin을 시작하고, 벽시계를 쓰는 곳은 첫 /clock을 기다리는
-        유예(clock_wall_grace_s) 하나뿐이다. 그 뒤 토픽 탐색은 ROS 시각 timeout_s로 기다린다.
+        구독을 만들자마자 spin을 시작하고, 벽시계를 쓰는 곳은 첫 /clock을 기다리는 유예(clock_wall_grace_s)
+        하나뿐이다. 그 뒤 토픽 탐색은 waiter로 ROS 시각 timeout_s만큼 기다린다.
         """
         n = self.node
         self.subs["clock"] = n.create_subscription(Clock, "/clock", self._on_clock, _qos_clock())
         self._keep.append(self.subs["clock"])
-        if waiter is not None:
-            self._spin = SpinThread(n)
-            self._spin.__enter__()
-            self.wait_first_clock(clock_wall_grace_s)
+        self._spin = SpinThread(n)
+        self._spin.__enter__()
+        self.wait_first_clock(clock_wall_grace_s)
         found = {}
         specs = [("status", "vehicle_status", VehicleStatus),
                  ("landed", "vehicle_land_detected", VehicleLandDetected),
@@ -137,13 +128,9 @@ class Px4Raw:
             specs.append(("flags", "failsafe_flags", FailsafeFlags))
         for key, base, cls in specs:
             name = px4_topic(self.ns_abs, "out", base, cls)
-            if waiter is None:
-                hit = wait_for_topic(n, "^%s$" % re.escape(name), timeout_s)
-                ok = hit is not None
-            else:
-                ok = waiter.wait_or_timeout(
-                    lambda name=name: any(t == name for t, _ in n.get_topic_names_and_types()), timeout_s,
-                    "토픽 " + name)
+            ok = waiter.wait_or_timeout(
+                lambda name=name: any(t == name for t, _ in n.get_topic_names_and_types()), timeout_s,
+                "토픽 " + name)
             if not ok:
                 raise sw.SitlFailure(sw.NO_PUBLISHER, "%s 토픽을 %s s 안에 찾지 못함" % (name, timeout_s))
             found[key] = name
@@ -158,9 +145,6 @@ class Px4Raw:
         if self.with_flags:
             self.subs["flags"] = n.create_subscription(FailsafeFlags, found["flags"], self._on_flags, qos)
             self._keep.append(self.subs["flags"])
-        if self._spin is None:
-            self._spin = SpinThread(n)
-            self._spin.__enter__()
 
     def wait_first_clock(self, grace_s):
         """프로세스 시작 직후 /clock 구독이 맺어질 때까지의 유예(벽시계). 통합 테스트에서 벽시계를 쓰는 유일한 대기다.
@@ -319,7 +303,7 @@ class EmergencyCommand:
     """비상 정리 전용 vehicle_command 발행자. source가 (254, 25)가 아니면 생성을 거부한다.
 
     발행 전에 기록기가 받은 vehicle_status가 기대 sysid뿐인지 대조한다(아니면 RuntimeError).
-    정상 경로(Executor)와 측정기(source 254/1)가 아닌 사람이 읽는 source로 남기려는 것이다.
+    정상 경로(Executor)와 구분되는 source로 남기려는 것이다.
     명령은 land와 disarm 둘뿐이다.
 
     채널이 BEST_EFFORT, VOLATILE이라 구독자가 맺어지기 전에 보낸 명령은 유실된다. 그래서 첫 발행 전에

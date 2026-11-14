@@ -1,6 +1,6 @@
 # tests/sitl
 
-이륙-호버-착륙 통합 테스트(시나리오 B, C, A, D, T)와 PX4 재실측 스크립트(`measure/`)다. 계약은 `docs/interface.md`에 있다. 소유는 test-engineer다.
+이륙-호버-착륙 통합 테스트(시나리오 B, C, A, D, T)다. 계약은 `docs/interface.md`에 있다. 소유는 test-engineer다.
 
 ## 실행
 
@@ -54,7 +54,3 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 - 판정: ULog 기준 OFFBOARD가 아닌 ARMED 표본이 위반 구간(`ulog_armed_non_offboard`)이나 비행 구간(`ulog_flight_armed_non_offboard`)에 있으면 종료 코드 1이고 `run_sitl.sh`가 그 실행을 실패로 센다. 입력이 없으면(ULog나 원시 표본 없음) 종료 코드 2이고 INFRA로 따로 센다.
 - 기록만 하는 것: `ros_missing_in_ulog`, `ros_field_mismatch`, `ulog_only`. `ulog_only`가 0이 아니면 `notes`에 적는다.
 - `--repeat`의 `armed_criterion.json`은 `passed`(ROS 기록만)와 `passed_with_ulog`(모든 회의 교차 확인이 끝났고 ULog 기준 위반이 0건)를 둘 다 적고 `ulog_crosscheck`에 합계를 둔다.
-
-## 측정 스크립트
-
-`measure/`는 Executor 없이 PX4에 직접 명령을 보내는 PX4 재실측 도구다(사용법은 `measure/README.md`). `tests/support/px4_measure_pub.py`는 이 디렉터리 밖에서 가져가지 않는다(pytest가 검사한다).

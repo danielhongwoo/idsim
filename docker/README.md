@@ -158,7 +158,7 @@ CI(`build-images.yml`)는 runner가 미국에 있어 위 방식으로 우분투 
 tools/sim_stack.sh up                 # 스택 0. 실행 디렉터리 경로를 출력한다
 tools/sim_stack.sh up --stack 1       # 스택 1을 동시에
 tools/sim_stack.sh up --viz           # Gazebo GUI까지
-tools/sim_stack.sh up --infra-only    # Executor(ops-N), 표적 어댑터(targets), sim-oracle 없이 인프라만(스모크와 측정 스크립트가 쓴다)
+tools/sim_stack.sh up --infra-only    # Executor(ops-N), 표적 어댑터(targets), sim-oracle 없이 인프라만(스모크가 쓴다)
 tools/sim_stack.sh ps
 tools/sim_stack.sh logs px4-1
 tools/sim_stack.sh down               # docker compose -p idsim-0 down
