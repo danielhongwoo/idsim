@@ -91,7 +91,7 @@ enum class Event : std::uint8_t
   kPreconditionFailed,     // P1 시작 조건
   kReadyTimeout,           // ready_timeout
   kReadyTakeoff,           // 첫 항목 TAKEOFF: P3 발행 시작
-  kReadyLand,              // 첫 항목 LAND: 항목 시작
+  kReadyModeItem,          // 첫 항목이 모드 명령 항목(LAND): 항목 시작
   // P3-P4
   kSignalTimeout,
   kSignalConfirmed,
@@ -119,14 +119,14 @@ enum class Event : std::uint8_t
   kItemTimeout,
   kTakeoffReached,
   kLoiterElapsed,
-  // LAND 항목
-  kLandIdentityMismatch,
-  kLandLinkLost,
-  kLandDisarmedInAir,
-  kLandLeftMode,  // AUTO_LAND 확인 뒤 ARMED인 채 이탈
-  kLandModeTimeout,
-  kLandItemTimeout,
-  kLandDisarmConfirmed,
+  // 모드 명령 항목(LAND)
+  kModeItemIdentityMismatch,  // 식별 불일치
+  kModeItemLinkLost,          // 상태 끊김
+  kModeItemDisarmedInAir,     // 공중 DISARMED
+  kModeItemLeftMode,          // 확인 뒤 ARMED인 채 확인 대상 모드(AUTO_LAND) 이탈
+  kModeItemModeTimeout,       // mode_confirm_timeout 안에 확인 대상 모드 미확인
+  kModeItemTimeout,           // 모드 명령 항목의 timeout
+  kModeItemDisarmConfirmed,   // 지상 DISARMED 3회
   // 취소(단계 처리 뒤)
   kCancel,
   // 정리
@@ -156,7 +156,7 @@ inline constexpr std::array<Event, 53> kAllEvents = {
   Event::kPreconditionFailed,
   Event::kReadyTimeout,
   Event::kReadyTakeoff,
-  Event::kReadyLand,
+  Event::kReadyModeItem,
   Event::kSignalTimeout,
   Event::kSignalConfirmed,
   Event::kOffboardRejected,
@@ -179,13 +179,13 @@ inline constexpr std::array<Event, 53> kAllEvents = {
   Event::kItemTimeout,
   Event::kTakeoffReached,
   Event::kLoiterElapsed,
-  Event::kLandIdentityMismatch,
-  Event::kLandLinkLost,
-  Event::kLandDisarmedInAir,
-  Event::kLandLeftMode,
-  Event::kLandModeTimeout,
-  Event::kLandItemTimeout,
-  Event::kLandDisarmConfirmed,
+  Event::kModeItemIdentityMismatch,
+  Event::kModeItemLinkLost,
+  Event::kModeItemDisarmedInAir,
+  Event::kModeItemLeftMode,
+  Event::kModeItemModeTimeout,
+  Event::kModeItemTimeout,
+  Event::kModeItemDisarmConfirmed,
   Event::kCancel,
   Event::kCleanupNoSample,
   Event::kCleanupIdentityMismatch,

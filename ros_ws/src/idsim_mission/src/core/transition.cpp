@@ -87,8 +87,8 @@ const char * event_name(Event event)
       return "READY_TIMEOUT";
     case Event::kReadyTakeoff:
       return "READY_TAKEOFF";
-    case Event::kReadyLand:
-      return "READY_LAND";
+    case Event::kReadyModeItem:
+      return "READY_MODE_ITEM";
     case Event::kSignalTimeout:
       return "SIGNAL_TIMEOUT";
     case Event::kSignalConfirmed:
@@ -133,20 +133,20 @@ const char * event_name(Event event)
       return "TAKEOFF_REACHED";
     case Event::kLoiterElapsed:
       return "LOITER_ELAPSED";
-    case Event::kLandIdentityMismatch:
-      return "LAND_IDENTITY_MISMATCH";
-    case Event::kLandLinkLost:
-      return "LAND_LINK_LOST";
-    case Event::kLandDisarmedInAir:
-      return "LAND_DISARMED_IN_AIR";
-    case Event::kLandLeftMode:
-      return "LAND_LEFT_MODE";
-    case Event::kLandModeTimeout:
-      return "LAND_MODE_TIMEOUT";
-    case Event::kLandItemTimeout:
-      return "LAND_ITEM_TIMEOUT";
-    case Event::kLandDisarmConfirmed:
-      return "LAND_DISARM_CONFIRMED";
+    case Event::kModeItemIdentityMismatch:
+      return "MODE_ITEM_IDENTITY_MISMATCH";
+    case Event::kModeItemLinkLost:
+      return "MODE_ITEM_LINK_LOST";
+    case Event::kModeItemDisarmedInAir:
+      return "MODE_ITEM_DISARMED_IN_AIR";
+    case Event::kModeItemLeftMode:
+      return "MODE_ITEM_LEFT_MODE";
+    case Event::kModeItemModeTimeout:
+      return "MODE_ITEM_MODE_TIMEOUT";
+    case Event::kModeItemTimeout:
+      return "MODE_ITEM_TIMEOUT";
+    case Event::kModeItemDisarmConfirmed:
+      return "MODE_ITEM_DISARM_CONFIRMED";
     case Event::kCancel:
       return "CANCEL";
     case Event::kCleanupNoSample:

@@ -158,12 +158,12 @@ private:
     // 마지막으로 받은 비거부 ack(ACCEPTED, IN_PROGRESS)의 received_tick. 없으면 0.
     std::uint64_t accepted_ack_tick{0};
   };
-  struct LandState
+  struct ModeItemState
   {
     std::int64_t first_send_ns{0};
     bool confirmed{false};
     bool mode_seen{false};
-    bool nav_land_accepted{false};
+    bool command_accepted{false};
     int mode_count{0};
     int disarm_count{0};
     std::uint64_t last_timestamp_us{0};
@@ -206,8 +206,8 @@ private:
   void complete_item(Event event, Tick & t);
   void step_item(Tick & t);
   void step_setpoint_item(Tick & t);
-  void step_land(Tick & t);
-  void land_item_timeout(Tick & t, bool landed);
+  void step_mode_item(Tick & t);
+  void mode_item_timeout(Tick & t, bool landed);
   void begin_cleanup(Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail);
   void step_cleanup(Tick & t);
   bool cleanup_cap_reached(const Tick & t) const;
@@ -289,7 +289,7 @@ private:
   Pending pending_;        // 대기 중인 명령은 한 번에 하나
   DisarmConfirm disarm_confirm_;
   MissionSpec mission_;
-  LandState land_;
+  ModeItemState mode_item_;
   Config config_;
   std::uint32_t item_index_{0};
   std::uint32_t items_completed_{0};

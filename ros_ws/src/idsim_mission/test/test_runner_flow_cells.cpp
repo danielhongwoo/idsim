@@ -644,8 +644,8 @@ TEST(FlowCells, LandLeftModeWithCancelSendsNoHoldOrDisarm)
   const std::size_t before = h.edges().size();
   h.tick();
   expect_cell(
-    h, "ITEM.LAND", Event::kLandLeftMode, "DONE", "ABORTED/EXTERNAL_MODE_CHANGE", {Event::kCancel},
-    before);
+    h, "ITEM.LAND", Event::kModeItemLeftMode, "DONE", "ABORTED/EXTERNAL_MODE_CHANGE",
+    {Event::kCancel}, before);
   expect_terminated_once_as(h, "ABORTED/EXTERNAL_MODE_CHANGE");
   expect_no_cancel_commands(h, end);
 }
