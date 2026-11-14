@@ -1,4 +1,4 @@
-# 생성기 골든 입력: 3대, 직렬 기동, 기체 2의 파라미터 덮어쓰기. 형식은 config/fleet.yaml 주석을 따른다.
+# 생성기 golden 입력: 3대, 직렬 기동, 기체 2의 파라미터 덮어쓰기, 표적 둘. 형식은 config/fleet.yaml 주석을 따른다.
 schema: 2
 world:
   name: default
@@ -21,7 +21,24 @@ vehicles:
     airframe: 4001_gz_x500
     pose: {x: 0.0, y: 8.0, z: 0.0, yaw: 0.0}
     px4_params: {}
-targets: []
+targets:
+  # loop true, start_s 0, 정수로 적은 좌표(x, y, z)가 있다
+  - id: target_a
+    start_s: 0
+    loop: true
+    waypoints:
+      - {t: 0.0, x: 20, y: 0, z: 3}
+      - {t: 10.0, x: 20.0, y: 20.0, z: 3.0}
+      - {t: 20.0, x: 40.0, y: 20.0, z: 5.0}
+      - {t: 30.0, x: 20.0, y: 0.0, z: 3.0}
+  # loop false, start_s 0 초과, 정지 구간(마지막 두 waypoint가 같은 위치)이 있다
+  - id: target_b
+    start_s: 5.5
+    loop: false
+    waypoints:
+      - {t: 0.0, x: -15.5, y: 12.25, z: 0.0}
+      - {t: 8.0, x: -15.5, y: -3.75, z: 0.5}
+      - {t: 12.0, x: -15.5, y: -3.75, z: 0.5}
 px4:
   params_file: config/px4/sitl_params.env
   start: sequential

@@ -7,7 +7,7 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 1a 완료 범위의 계약은 `docs/interface.md`에 고정되어 있다 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1, B2, B3(원점과 월드: 생성기 판 5, fleet schema 2, 원점은 월드 SDF로만), B4, B8 반영됨 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1, B2, B3(원점과 월드: 생성기 판 5, fleet schema 2, 원점은 월드 SDF로만), B4, B6(표적 어댑터 `targets` 서비스, Actor 생성, 궤적 상한), B8 반영됨 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
@@ -67,7 +67,7 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. 1b: README 진행 순서대로 B5, B8b, B6, B7을 진행한다. B4(`idsim_common`의 원점 이동 변환, `TargetId`, 상태 QoS, `position_setpoint` 속도 인자)와 B8(전이 관측 계측, 1a 칸 목록)은 끝났다. B8b는 1a 칸 목록의 미덮임을 테스트만 더해 0으로 만들고, B9 상태기 PR의 선행이다(B9 헤더 PR은 B4, B8 뒤 바로). B8b 테스트 본문에서 챙길 것(px4-engineer): WAIT_READY의 READY_TIMEOUT과 취소가 겹치면 NOT_READY로 끝나고 Hold나 disarm이 나가지 않음, ARM의 MONITOR_MODE_FAILSAFE와 취소가 겹치면 disarm이 두 번 나가지 않음. 지상 arm 진입의 arm 순서 불변식은 B9가 구현한다. B6, B7은 생성기 golden을 바꾸므로 나중에 머지되는 쪽이 rebase 뒤 golden을 다시 만든다.
+1. 1b: README 진행 순서대로 B5, B8b, B7, B12를 진행한다. B4(`idsim_common`의 원점 이동 변환, `TargetId`, 상태 QoS, `position_setpoint` 속도 인자), B6(표적 어댑터, Actor 생성, 궤적 상한), B8(전이 관측 계측, 1a 칸 목록)은 끝났다. B8b는 1a 칸 목록의 미덮임을 테스트만 더해 0으로 만들고, B9 상태기 PR의 선행이다(B9 헤더 PR은 B4, B8 뒤 바로). B8b 테스트 본문에서 챙길 것(px4-engineer): WAIT_READY의 READY_TIMEOUT과 취소가 겹치면 NOT_READY로 끝나고 Hold나 disarm이 나가지 않음, ARM의 MONITOR_MODE_FAILSAFE와 취소가 겹치면 disarm이 두 번 나가지 않음. 지상 arm 진입의 arm 순서 불변식은 B9가 구현한다. B5, B7은 생성기 golden을 바꾸므로 main에 rebase한 뒤 golden을 생성기로 다시 만든다. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다. `target_id` 사례 표의 단일 출처(test-engineer 제안 위치 `idsim_interfaces/test/cases/`, architect)는 `tests/support`에 이름 조립이 들어올 때 정한다. B11 표적 소실 시험은 같은 `targets` 컨테이너를 stop/start하면 컨테이너 레이어의 `/tmp/idsim/targets_ready`가 남아 healthcheck가 새 노드 기동 전에 통과할 수 있으므로([추정]) `/tmp/idsim`을 tmpfs로 두거나 재시작 뒤 stamp로 판정한다.
 
 ## 미해결 사항
 

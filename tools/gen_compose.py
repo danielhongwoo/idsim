@@ -83,6 +83,38 @@ OPS_PROBE_TIMEOUT_S = 8
 SPACING_REJECT_M = 2.0
 SPACING_WARN_M = 4.0
 
+# targets(표적 어댑터). 궤적 정의의 출처는 fleet.yaml의 targets 하나이고, 생성기가 정규화한 값을 월드 SDF의 Actor,
+# params/targets.yaml, stack.json의 targets에 낸다(decisions.md 쟁점 1, 3).
+TARGETS_SERVICE = "targets"
+# ros2 run <패키지> <실행 이름>. 실행 이름의 출처는 이 상수 하나다(idsim_sim 패키지의 console_scripts가 같은 이름을 만든다)
+TARGET_ADAPTER_PKG = "idsim_sim"
+TARGET_ADAPTER_EXEC = "target_adapter"
+TARGETS_PARAMS_FILE = f"{PARAMS_DIR}/targets.yaml"
+TARGETS_READY_FILE = "/tmp/idsim/targets_ready"
+TARGET_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}\Z")
+TARGET_KEYS = ("id", "start_s", "loop", "waypoints")
+WAYPOINT_KEYS = ("t", "x", "y", "z")
+TARGETS_MAX = 32
+WAYPOINTS_MAX = 256
+TARGET_SPEED_XY_MAX_MPS = 5.0
+TARGET_SPEED_Z_MAX_MPS = 1.0
+TARGET_SPEED_EPS = 1e-9  # 상한과 같은 속도는 통과시키는 부동소수점 여유
+TARGET_SPAWN_CLEAR_M = 2.0  # t=0 위치와 기체 스폰의 최소 수평 거리
+TARGET_COORD_XY_MAX_M = 10000.0  # |x|, |y| 상한(모든 waypoint)
+TARGET_COORD_Z_MAX_M = 1000.0
+TARGET_START_S_MAX = 86400.0
+# 시간 규칙은 정수 ms에서 판정한다(T = round(t x 1000)). gz-sim이 <time>을 int ms로 바꿔 map의 key로 쓰기 때문이다.
+TARGET_GAP_MIN_MS = 100  # 인접 waypoint의 T 차 하한
+TARGETS_LENGTH_SUM_MAX_MS = 2400000  # 표적마다 마지막 T를 더한 합의 상한이자 T 하나의 상한(start_s와 끝 정지 꼬리는 넣지 않는다)
+# Gazebo Actor(화면 확인용. 표적 위치의 원천은 아니다). 요소의 형태와 값은 sim-engineer가 정한다(B6 Actor 명세 판 2).
+ACTOR_SAMPLE_DT_MS = 250  # waypoint 표본 간격 상한(ms). 잠정, M4 육안 확인 뒤 확정
+ACTOR_TAIL_STEP_MS = 250  # loop false 꼬리의 첫 점이 마지막 점 뒤 얼마인가(접선을 0으로 만든다)
+ACTOR_HOLD_MS = 86400000  # loop false 꼬리의 둘째 점(시뮬레이션 시간 1일 뒤)
+ACTOR_SPHERE_RADIUS_M = "0.3"
+ACTOR_MATERIAL = (("ambient", "1 0 0 1"), ("diffuse", "1 0 0 1"), ("emissive", "0.6 0 0 1"))
+ACTOR_TRAJECTORY_TYPE = "idsim_target"  # skin이 없어 어떤 animation과도 대응하지 않는 이름표
+ACTOR_FORBIDDEN_DESCENDANTS = ("plugin", "skin", "animation", "collision")
+
 # 이미지 레이아웃(컨테이너 안 경로). 이미지가 바뀌면 여기와 Dockerfile을 함께 고친다.
 REPO_IN_CONTAINER = "/opt/idsim"
 CYCLONEDDS_URI = "file:///opt/idsim/config/cyclonedds.xml"
@@ -115,14 +147,16 @@ WGS84_E2 = 0.00669437999014
 BRIDGE_TOPIC_ARGS = ("/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",)
 # 템플릿 world 직속에 있으면 거부하는 요소(plugin은 server config를 무시하게 하고, 나머지는 생성기가 넣는다)
 WORLD_FORBIDDEN_CHILDREN = ("plugin", "spherical_coordinates", "actor", "include")
-TEMPLATE_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+\.sdf$")
+# 템플릿 world 직속에서 이름(name 속성)이 Gazebo 엔티티 이름이 되는 요소. 표적 id와 겹치면 거부한다
+TEMPLATE_NAMED_CHILDREN = ("model", "actor", "light")
+TEMPLATE_PATH_RE = re.compile(r"^[A-Za-z0-9_./-]+\.sdf\Z")
 # fleet.yaml에서 거부하는 식별 파라미터. PX4가 -i N과 환경에서 스스로 정한다.
 FORBIDDEN_PARAMS = ("MAV_SYS_ID", "UXRCE_DDS_KEY", "UXRCE_DDS_DOM_ID", "UXRCE_DDS_AG_IP", "SYS_AUTOSTART")
-PARAM_NAME_RE = re.compile(r"^[A-Z0-9_]{1,16}$")
-PARAM_VALUE_RE = re.compile(r"^[^\s'\"#]+$")
-WORLD_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-PATH_SAFE_RE = re.compile(r"^/[A-Za-z0-9_./@+-]*$")
+PARAM_NAME_RE = re.compile(r"^[A-Z0-9_]{1,16}\Z")
+PARAM_VALUE_RE = re.compile(r"^[^\s'\"#]+\Z")
+WORLD_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}\Z")
+RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
+PATH_SAFE_RE = re.compile(r"^/[A-Za-z0-9_./@+-]*\Z")
 
 # viz 서비스에만 허용하는 compose 보간. 이 밖의 ${...}와 $는 출력에 남으면 안 된다.
 ALLOWED_INTERPOLATIONS = ("${DISPLAY:-}", "${XAUTHORITY:-/dev/null}")
@@ -219,7 +253,12 @@ def check_port_plan(participant_max):
 
 # ---------------------------------------------------------------- fleet.yaml 검증
 def _is_number(v):
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return False
+    try:
+        return math.isfinite(v)
+    except OverflowError:  # 400자리 정수는 float로 바꿀 수 없다
+        return False
 
 
 def _decimal_str(v):
@@ -264,12 +303,203 @@ def _unknown_keys(obj, allowed, where, errors):
             errors.append(f"{where}: 모르는 key {key!r} (허용: {', '.join(sorted(allowed))})")
 
 
+def _vehicle_model_name_re():
+    """허용 airframe의 기체 모델 이름 형식(x500_N). 표적 id가 같으면 Actor와 기체 모델의 이름이 겹친다."""
+    models = sorted({split_airframe(af)[2] for af in ALLOWED_AIRFRAMES})
+    return re.compile(r"^(%s)_[0-9]+\Z" % "|".join(re.escape(m) for m in models))
+
+
+def _validate_targets(raw, posed_vehicles, errors):
+    """targets 목록을 검사해 정규화한다(fleet.yaml의 순서 그대로. 숫자는 모두 float). 오류는 errors에 더하고 정규화 값을 돌려준다.
+
+    네 key(id, start_s, loop, waypoints)와 waypoint의 {t, x, y, z}는 모두 필수이고 기본값이 없다.
+    거부: id 형식과 중복, 기체 모델 이름(x500_N 형식)과 같은 id, waypoint 2개 미만, t 비증가, 첫 t가 0이 아님,
+    ms로 반올림한 시각이 2400000 ms를 넘는 waypoint, 인접 waypoint의 T 차가 100 ms 미만(T = round(t x 1000)), loop인데 처음과 끝이 다름,
+    z < 0, 좌표 범위(|x|, |y| 10000 m, z 1000 m)와 start_s(86400 s) 상한 초과, 구간 속도 상한 초과(수평, 수직),
+    t=0 위치가 기체 스폰과 수평 2 m 안, 개수 상한 초과, 표적마다 마지막 T를 더한 합이 2400000 ms 초과.
+    합에는 waypoint 형식이 맞고 t가 엄격히 증가하며 모든 waypoint에 T가 만들어진 표적을 모두 넣는다(다른 규칙으로 거부된
+    표적도 넣는다. 형식이 틀린 표적은 빠진다). 템플릿 최상위 <model>, <actor>, <light> 이름과의 충돌은
+    템플릿을 읽는 build_world_sdf가 거부한다.
+    """
+    if not isinstance(raw, list):
+        errors.append("targets: 목록이어야 한다(표적이 없으면 [])")
+        return []
+    if len(raw) > TARGETS_MAX:
+        errors.append(f"targets: 표적이 {len(raw)}개다(상한 {TARGETS_MAX})")
+    model_re = _vehicle_model_name_re()
+    out, seen, lengths = [], set(), []
+    for i, t in enumerate(raw):
+        where = f"targets[{i}]"
+        if not isinstance(t, dict):
+            errors.append(f"{where}: 매핑이어야 한다")
+            continue
+        _unknown_keys(t, set(TARGET_KEYS), where, errors)
+        missing = [key for key in TARGET_KEYS if key not in t]
+        if missing:
+            errors.append(f"{where}: 필수 key가 없다(기본값 없음): {', '.join(missing)}")
+        ok = not missing
+        tid = t.get("id")
+        if "id" in t:
+            if not isinstance(tid, str) or not TARGET_ID_RE.match(tid):
+                errors.append(f"{where}.id: ^[a-z][a-z0-9_]{{0,31}}$ 형식이어야 한다: {tid!r}")
+                ok = False
+            elif tid in seen:
+                errors.append(f"{where}.id: {tid!r}가 중복된다")
+                ok = False
+            else:
+                seen.add(tid)
+                if model_re.match(tid):
+                    errors.append(f"{where}.id: {tid!r}는 기체 모델 이름 형식({model_re.pattern})이다. "
+                                  "Actor와 기체 모델의 이름이 겹친다")
+                    ok = False
+        start_s = t.get("start_s")
+        if "start_s" in t:
+            if not _is_number(start_s) or not 0 <= start_s <= TARGET_START_S_MAX:
+                errors.append(f"{where}.start_s: 0 이상 {TARGET_START_S_MAX:.0f} 이하의 숫자여야 한다: {start_s!r}")
+                ok = False
+        loop = t.get("loop")
+        if "loop" in t and not isinstance(loop, bool):
+            errors.append(f"{where}.loop: true 또는 false여야 한다: {loop!r}")
+            ok = False
+        wps = t.get("waypoints")
+        norm_wps = None
+        if "waypoints" in t:
+            norm_wps = _validate_waypoints(wps, where, errors)
+            if norm_wps is None:
+                ok = False
+            else:
+                n0 = len(errors)
+                times = _check_times(norm_wps, where, errors)
+                if times is not None:
+                    lengths.append((i, times[-1]))
+                ok = ok and len(errors) == n0
+                if ok:
+                    ok = _check_trajectory(norm_wps, loop is True, where, errors)
+                if ok:
+                    for v in posed_vehicles:
+                        d = math.hypot(norm_wps[0]["x"] - v["pose"]["x"], norm_wps[0]["y"] - v["pose"]["y"])
+                        if d < TARGET_SPAWN_CLEAR_M:
+                            errors.append(f"{where}: t=0 위치와 기체 {v['id']}의 스폰 지점의 수평 거리 {d:.2f} m < "
+                                          f"{TARGET_SPAWN_CLEAR_M} m")
+                            ok = False
+        if ok:
+            out.append({"id": tid, "start_s": float(start_s), "loop": loop, "waypoints": norm_wps})
+    if sum(ms for _, ms in lengths) > TARGETS_LENGTH_SUM_MAX_MS:
+        errors.append(
+            f"targets: 궤적 길이(마지막 waypoint의 t를 ms로 반올림한 값)의 합 {_ms_str(sum(ms for _, ms in lengths))} s가 상한 "
+            f"{_ms_str(TARGETS_LENGTH_SUM_MAX_MS)} s를 넘는다. 표적별 길이: "
+            + ", ".join(f"targets[{i}] {_ms_str(ms)} s" for i, ms in lengths))
+    return out
+
+
+def _validate_waypoints(wps, where, errors):
+    """waypoints의 형식을 검사해 정규화한다(숫자는 float). 형식 위반이 있으면 None."""
+    if not isinstance(wps, list):
+        errors.append(f"{where}.waypoints: 목록이어야 한다")
+        return None
+    if len(wps) > WAYPOINTS_MAX:
+        errors.append(f"{where}.waypoints: {len(wps)}개다(상한 {WAYPOINTS_MAX})")
+    if len(wps) < 2:
+        errors.append(f"{where}.waypoints: 2개 이상이어야 한다: {len(wps)}개")
+    out, good = [], len(wps) <= WAYPOINTS_MAX and len(wps) >= 2
+    for j, w in enumerate(wps):
+        wwhere = f"{where}.waypoints[{j}]"
+        if not isinstance(w, dict):
+            errors.append(f"{wwhere}: {{t, x, y, z}} 매핑이어야 한다")
+            good = False
+            continue
+        _unknown_keys(w, set(WAYPOINT_KEYS), wwhere, errors)
+        missing = [key for key in WAYPOINT_KEYS if key not in w]
+        bad = [key for key in WAYPOINT_KEYS if key in w and not _is_number(w[key])]
+        if missing:
+            errors.append(f"{wwhere}: 필수 key가 없다(기본값 없음): {', '.join(missing)}")
+        if bad:
+            errors.append(f"{wwhere}: 숫자가 아닌 값 {', '.join(bad)}")
+        if missing or bad or any(key not in WAYPOINT_KEYS for key in w):
+            good = False
+            continue
+        out.append({key: float(w[key]) for key in WAYPOINT_KEYS})
+    return out if good else None
+
+
+def _ms_str(ms):
+    """정수 ms를 초 단위 소수 3자리 문자열로(예: 250 -> 0.250). 음수도 받는다."""
+    sign = "-" if ms < 0 else ""
+    return f"{sign}{abs(ms) // 1000}.{abs(ms) % 1000:03d}"
+
+
+def _check_times(wps, where, errors):
+    """형식이 맞는 waypoints의 시간 규칙. 위반은 errors에 더한다.
+
+    x = t x 1000.0에서 t < 0이면 T를 만들지 않는다(첫 t 0과 엄격한 증가 규칙이 거부한다). x가
+    TARGETS_LENGTH_SUM_MAX_MS + 0.5를 넘으면 T를 만들지 않고 그 waypoint를 거부한다(round가 이 범위에서만 돌아
+    1e308 같은 값의 OverflowError가 없고, 합 규칙과 같은 상수와 영역이다). 그 밖은 T = round(x)다.
+    길이 합에 넣을 수 있으면(t가 엄격히 증가하고 모든 waypoint에 T가 있음) 정수 ms T의 목록을, 아니면 None을 돌려준다.
+    """
+    ms = []
+    for j, w in enumerate(wps):
+        x = w["t"] * 1000.0
+        if x < 0:
+            ms.append(None)
+        elif x > TARGETS_LENGTH_SUM_MAX_MS + 0.5:
+            errors.append(f"{where}.waypoints[{j}].t: ms로 반올림한 시각이 {TARGETS_LENGTH_SUM_MAX_MS} ms를 넘는다: "
+                          f"{w['t']!r}")
+            ms.append(None)
+        else:
+            ms.append(round(x))
+    if wps[0]["t"] != 0:
+        errors.append(f"{where}.waypoints[0].t: 첫 t는 0이어야 한다: {wps[0]['t']!r}")
+    increasing = True
+    for j in range(1, len(wps)):
+        if wps[j]["t"] <= wps[j - 1]["t"]:
+            errors.append(f"{where}.waypoints[{j}].t: 엄격히 증가해야 한다: {wps[j - 1]['t']!r} 다음 {wps[j]['t']!r}")
+            increasing = False
+        elif None not in (ms[j - 1], ms[j]) and ms[j] - ms[j - 1] < TARGET_GAP_MIN_MS:
+            errors.append(f"{where}.waypoints[{j}].t: 인접 waypoint의 시간 차 {ms[j] - ms[j - 1]} ms < {TARGET_GAP_MIN_MS} ms"
+                          f"(T = round(t x 1000): {ms[j - 1]}, {ms[j]})")
+    return ms if increasing and None not in ms else None
+
+
+def _check_trajectory(wps, loop, where, errors):
+    """형식과 시간 규칙을 통과한 waypoints의 궤적 규칙. 어기면 errors에 더하고 False."""
+    n0 = len(errors)
+    for j, w in enumerate(wps):
+        if w["z"] < 0 or w["z"] > TARGET_COORD_Z_MAX_M:
+            errors.append(f"{where}.waypoints[{j}].z: 0 이상 {TARGET_COORD_Z_MAX_M:.0f} m 이하여야 한다: {w['z']!r}")
+        for key in ("x", "y"):
+            if abs(w[key]) > TARGET_COORD_XY_MAX_M:
+                errors.append(f"{where}.waypoints[{j}].{key}: |{key}|가 {TARGET_COORD_XY_MAX_M:.0f} m를 넘는다: {w[key]!r}")
+    if len(errors) > n0:
+        return False
+    for j in range(1, len(wps)):
+        a, b = wps[j - 1], wps[j]
+        dt = b["t"] - a["t"]
+        vxy = math.hypot(b["x"] - a["x"], b["y"] - a["y"]) / dt
+        vz = abs(b["z"] - a["z"]) / dt
+        if vxy > TARGET_SPEED_XY_MAX_MPS + TARGET_SPEED_EPS:
+            errors.append(f"{where}.waypoints[{j}]: 구간 수평 속도 {vxy:.3f} m/s > {TARGET_SPEED_XY_MAX_MPS} m/s")
+        if vz > TARGET_SPEED_Z_MAX_MPS + TARGET_SPEED_EPS:
+            errors.append(f"{where}.waypoints[{j}]: 구간 수직 속도 {vz:.3f} m/s > {TARGET_SPEED_Z_MAX_MPS} m/s")
+    if loop and any(wps[0][key] != wps[-1][key] for key in ("x", "y", "z")):
+        errors.append(f"{where}: loop가 true이면 처음과 끝 waypoint의 x, y, z가 같아야 한다")
+    return len(errors) == n0
+
+
+def target_length_ms(target):
+    """표적의 궤적 길이(정수 ms). 마지막 waypoint의 T다. start_s와 끝 정지 꼬리는 넣지 않는다."""
+    return round(target["waypoints"][-1]["t"] * 1000)
+
+
+def targets_length_sum_ms(targets):
+    return sum(target_length_ms(t) for t in targets)
+
+
 def validate_fleet(fleet):
     """fleet dict를 검사하고 정규화한 dict와 경고 목록을 돌려준다. 실패하면 FleetError.
 
     정규화 결과: {"world": {name, template, origin({lat,lon,alt} 숫자), speed_factor None},
                   "vehicles": [{id, airframe, pose{x,y,z,yaw} float, px4_params{이름: 문자열}}] (id 순),
-                  "targets": [], "px4": {params_file, start}}
+                  "targets": [{id, start_s, loop, waypoints[{t,x,y,z}]}] (fleet.yaml 순서, 숫자는 float), "px4": {params_file, start}}
     """
     errors, warnings = [], []
     if not isinstance(fleet, dict):
@@ -323,10 +553,6 @@ def validate_fleet(fleet):
                     out_world["origin"] = vals
         if world.get("speed_factor") is not None:
             errors.append("world.speed_factor: 1a, 1b에서는 null이어야 한다(배속 기제는 Phase 3에서 정한다)")
-
-    # targets
-    if fleet["targets"] != []:
-        errors.append("targets: 빈 목록이어야 한다(표적 스키마는 아직 없다)")
 
     # px4
     px4 = fleet["px4"]
@@ -406,10 +632,13 @@ def validate_fleet(fleet):
             elif d < SPACING_WARN_M:
                 warnings.append(f"기체 {a['id']}와 {b['id']}의 수평 간격 {d:.2f} m < {SPACING_WARN_M} m")
 
+    # targets(기체 검증 뒤. t=0 위치를 기체 스폰과 비교한다)
+    out_targets = _validate_targets(fleet["targets"], posed, errors)
+
     if errors:
         raise FleetError("\n".join(errors))
     out_vehicles.sort(key=lambda v: v["id"])
-    return {"world": out_world, "vehicles": out_vehicles, "targets": [], "px4": out_px4}, warnings
+    return {"world": out_world, "vehicles": out_vehicles, "targets": out_targets, "px4": out_px4}, warnings
 
 
 def parse_params_env(text, where="px4.params_file"):
@@ -419,7 +648,7 @@ def parse_params_env(text, where="px4.params_file"):
         s = line.strip()
         if not s or s.startswith("#"):
             continue
-        m = re.match(r"^PX4_PARAM_([^=]*)=(.*)$", s)
+        m = re.match(r"^PX4_PARAM_([^=]*)=(.*)\Z", s)
         if not m:
             errors.append(f"{where}:{lineno}: PX4_PARAM_<이름>=<값> 형식이 아니다: {s!r}")
             continue
@@ -485,15 +714,115 @@ def parse_world_template(text, where="world.template"):
     return root
 
 
+def _f6(v):
+    """Actor 요소의 실수 표기: 고정 소수점 6자리, 지수 표기 없음, -0은 0."""
+    out = format(v, ".6f")
+    return "0.000000" if out == "-0.000000" else out
+
+
+def actor_samples(target, dt_ms=ACTOR_SAMPLE_DT_MS):
+    """표적 궤적을 간격 dt_ms 이하로 촘촘히 나눈 표본 [(T_ms, x, y, z)]. T는 start_s 기준 정수 ms다.
+
+    원래 waypoint 시각은 T = round(t x 1000)이고, 구간마다 n = ceil(구간 길이 / dt_ms)개(최소 1)로 나눠
+    표본 시각 T_i + (구간 길이 x j) // n(정수 연산)에 선형 보간한다. 원래 waypoint는 모두 정확히 들어간다.
+    정지 구간도 같은 규칙이다. 끝 정지 꼬리는 여기에 넣지 않는다(actor_tail). Gazebo Actor는 spline이라
+    꺾이는 점 앞뒤에서 TargetState와 어긋난다(화면 확인용).
+    """
+    wps = target["waypoints"]
+    ms = [round(w["t"] * 1000) for w in wps]
+    out = []
+    for i in range(len(wps) - 1):
+        a, b, span = wps[i], wps[i + 1], ms[i + 1] - ms[i]
+        n = max(1, -(-span // dt_ms))
+        for j in range(n):
+            at = ms[i] + (span * j) // n
+            r = (at - ms[i]) / span
+            out.append((at, *(a[key] + (b[key] - a[key]) * r for key in WAYPOINT_KEYS[1:])))
+    last = wps[-1]
+    out.append((ms[-1], last["x"], last["y"], last["z"]))
+    return out
+
+
+def actor_tail(target):
+    """loop false 표적의 끝 정지 두 점 [(T_ms, x, y, z)], loop true는 빈 목록.
+
+    gz-sim 8.15.0 렌더링은 <loop>false</loop>인 Actor에서 delay_start가 0이면 끝나지 않는 루프에 빠지고,
+    0보다 크면 첫 waypoint에서 움직이지 않는다. 그래서 <loop>는 항상 true이고 정지는 마지막 점 뒤 같은 위치의 두 점(250 ms 뒤, 86400 s 뒤)으로 나타낸다. 첫 점은 마지막 점의
+    Catmull-Rom 접선을 0으로 만든다. 표본 간격 규칙(sampler)을 지나지 않고 두 점을 그대로 더한다.
+    """
+    if target["loop"]:
+        return []
+    last = target["waypoints"][-1]
+    t_last = round(last["t"] * 1000)
+    return [(t_last + step, last["x"], last["y"], last["z"]) for step in (ACTOR_TAIL_STEP_MS, ACTOR_HOLD_MS)]
+
+
+def _indent_tree(node, indent, step="  "):
+    """node 아래를 줄 단위로 들여쓴다(indent는 node 자신의 들여쓰기, 앞의 줄바꿈 포함). tail은 호출하는 쪽이 정한다."""
+    if len(node):
+        node.text = indent + step
+        for child in node:
+            _indent_tree(child, indent + step, step)
+            child.tail = indent + step
+        node[-1].tail = indent
+
+
+def build_actor(target, indent):
+    """표적 하나의 <actor> 요소(B6 Actor 명세 판 2). 이름은 target_id 그대로다.
+
+    link 하나에 visual 하나(충돌 없음, 물리 대상 아님)와 script 궤적뿐이고 plugin, skin, animation은 없다.
+    actor pose는 0이고 waypoint pose가 world ENU 절대 좌표다(자세는 0). start_s는 delay_start로만 쓴다.
+    <loop>는 항상 true이고 loop false는 끝 정지 꼬리(actor_tail)로 나타낸다.
+    """
+    zero = "0.000000"
+    actor = ET.Element("actor", name=target["id"])
+
+    def sub(parent, tag, text=None, **attrib):
+        el = ET.SubElement(parent, tag, **attrib)
+        if text is not None:
+            el.text = text
+        return el
+
+    sub(actor, "pose", " ".join([zero] * 6))
+    link = sub(actor, "link", name="link")
+    visual = sub(link, "visual", name="visual")
+    sub(sub(sub(visual, "geometry"), "sphere"), "radius", ACTOR_SPHERE_RADIUS_M)
+    material = sub(visual, "material")
+    for tag, val in ACTOR_MATERIAL:
+        sub(material, tag, val)
+    script = sub(actor, "script")
+    sub(script, "loop", "true")
+    sub(script, "delay_start", format(target["start_s"], ".3f"))
+    sub(script, "auto_start", "true")
+    traj = sub(script, "trajectory", id="0", type=ACTOR_TRAJECTORY_TYPE, tension="0.0")
+    for t, x, y, z in actor_samples(target) + actor_tail(target):
+        point = sub(traj, "waypoint")
+        sub(point, "time", _ms_str(t))
+        sub(point, "pose", " ".join([_f6(x), _f6(y), _f6(z), zero, zero, zero]))
+    _indent_tree(actor, indent)
+    return actor
+
+
 def build_world_sdf(fleet_norm, template_text):
     """템플릿에 <world name>과 <spherical_coordinates>(world.origin, heading 0, ENU)를 넣은 월드 SDF 본문.
 
-    표적 Actor 생성은 아직 없다. 출력을 다시 파싱해 구성 보장을 단정한다(어기면 FleetError, 생성기 버그):
-    spherical_coordinates 정확히 하나, 월드 직속 plugin 0, actor 이름 집합 = 표적 id 집합, dynamic_pose 없음.
+    표적마다 <actor>(build_actor)를 spherical_coordinates 뒤에 fleet.yaml 순서대로 넣는다.
+    출력을 다시 파싱해 구성 보장을 단정한다(어기면 FleetError, 생성기 버그): spherical_coordinates 정확히 하나,
+    월드 직속 plugin 0, actor 이름 집합 = 표적 id 집합, actor 안의 plugin, skin, animation, collision 없음,
+    script와 loop true, 표본 시각(정수 ms)과 간격, 원래 waypoint의 포함, loop false의 끝 정지 꼬리, dynamic_pose 없음.
+    Actor를 만들기 전에 궤적 길이의 합을 다시 본다.
     """
     world = fleet_norm["world"]
     root = parse_world_template(template_text)
     el = next(c for c in root if _tag(c) == "world")
+    taken = {c.get("name") for c in el if _tag(c) in TEMPLATE_NAMED_CHILDREN and c.get("name")}
+    clash = sorted(t["id"] for t in fleet_norm["targets"] if t["id"] in taken)
+    if clash:
+        raise FleetError(f"targets: id {', '.join(clash)}가 월드 템플릿 최상위 <model>, <actor>, <light>의 이름과 같다"
+                         "(Actor 이름이 target_id라 정답 pose와 GUI가 다른 엔티티를 보게 된다)")
+    total = targets_length_sum_ms(fleet_norm["targets"])
+    if total > TARGETS_LENGTH_SUM_MAX_MS:
+        raise FleetError(f"targets: 궤적 길이의 합 {_ms_str(total)} s가 상한 {_ms_str(TARGETS_LENGTH_SUM_MAX_MS)} s를 넘는다")
     el.set("name", world["name"])
     # 마지막 자식 뒤에 넣고, 템플릿의 들여쓰기(자식 들여쓰기 = world.text, 닫는 들여쓰기 = 마지막 자식의 tail)를 따른다
     child_indent = el.text if el.text and not el.text.strip() else "\n    "
@@ -509,15 +838,68 @@ def build_world_sdf(fleet_norm, template_text):
         sub.tail = inner_indent
     sc[-1].tail = child_indent
     sc.text = inner_indent
-    sc.tail = close_indent
+    added = [sc] + [build_actor(t, child_indent) for t in fleet_norm["targets"]]
+    for node in added:
+        node.tail = child_indent
+    added[-1].tail = close_indent
     if len(el):
         el[-1].tail = child_indent
     else:
         el.text = child_indent
-    el.append(sc)
+    el.extend(added)
     text = '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode") + "\n"
     check_world_sdf(text, fleet_norm)
     return text
+
+
+TIME_TEXT_RE = re.compile(r"^[0-9]+\.[0-9]{3}\Z")
+
+
+def _check_actor(actor, target):
+    """생성된 <actor> 하나의 단정. 문제 문장의 목록을 돌려준다."""
+    name, problems = target["id"], []
+    bad = sorted({el.tag for el in actor.iter() if _tag(el) in ACTOR_FORBIDDEN_DESCENDANTS})
+    if bad:
+        problems.append(f"actor {name}: 금지 요소 {bad}가 있다")
+    if actor.find("script") is None:
+        return problems + [f"actor {name}: <script>가 없다(gz-sim 렌더링이 궤적 길이 0에서 끝나지 않는 루프에 빠진다)"]
+    if [el.text for el in actor.findall("script/loop")] != ["true"]:
+        problems.append(f"actor {name}: <loop>가 정확히 하나의 true가 아니다(false이면 delay_start 0에서 gz-sim 렌더링이 끝나지 않고, 0보다 크면 첫 waypoint에서 움직이지 않는다)")
+    if actor.findtext("script/delay_start") != format(target["start_s"], ".3f"):
+        problems.append(f"actor {name}: delay_start가 start_s와 다르다")
+    points = [(w.findtext("time"), w.findtext("pose")) for w in actor.iter("waypoint")]
+    if not points:
+        return problems + [f"actor {name}: waypoint가 없다"]
+    if not all(t and TIME_TEXT_RE.match(t) for t, _ in points):
+        return problems + [f"actor {name}: waypoint 시각이 소수 3자리 비음수 수가 아니다"]
+    times = [int(t.replace(".", "")) for t, _ in points]
+    if times[0] != 0 or any(b <= a for a, b in zip(times, times[1:])):
+        problems.append(f"actor {name}: waypoint 시각이 0에서 시작해 엄격히 증가하지 않는다")
+    body, tail = len(actor_samples(target)), len(actor_tail(target))
+    if len(points) != body + tail:
+        problems.append(f"actor {name}: waypoint가 {len(points)}개다(궤적 부분 {body} + 꼬리 {tail}이어야 한다)")
+    gaps = [b - a for a, b in zip(times, times[1:])]
+    if tail:
+        gaps = gaps[:-1]  # 꼬리의 마지막 구간(86400 s 정지)은 예외다
+        if len(points) >= 3 and len({p for _, p in points[-3:]}) != 1:
+            problems.append(f"actor {name}: loop false인데 마지막 세 점의 위치가 같지 않다")
+        t_last = round(target["waypoints"][-1]["t"] * 1000)
+        if len(times) >= 2 and times[-2] != t_last + ACTOR_TAIL_STEP_MS:
+            problems.append(f"actor {name}: 꼬리 첫 점의 시각 {times[-2]} ms != 마지막 waypoint + {ACTOR_TAIL_STEP_MS} ms")
+        want_end = t_last + ACTOR_HOLD_MS
+        if times[-1] != want_end:
+            problems.append(f"actor {name}: 마지막 시각 {times[-1]} ms != 마지막 waypoint + {ACTOR_HOLD_MS} ms")
+    elif abs(times[-1] - round(target["waypoints"][-1]["t"] * 1000)) > 0:
+        problems.append(f"actor {name}: 마지막 시각 {times[-1]} ms가 표적의 마지막 T와 다르다")
+    if any(g < TARGET_GAP_MIN_MS or g > ACTOR_SAMPLE_DT_MS for g in gaps):
+        problems.append(f"actor {name}: 인접 waypoint 시각 차가 {TARGET_GAP_MIN_MS}-{ACTOR_SAMPLE_DT_MS} ms 밖이다")
+    present = set(points)
+    zero = "0.000000"
+    for w in target["waypoints"]:
+        want = (_ms_str(round(w["t"] * 1000)), " ".join([_f6(w["x"]), _f6(w["y"]), _f6(w["z"]), zero, zero, zero]))
+        if want not in present:
+            problems.append(f"actor {name}: 원래 waypoint {want}가 표본에 없다")
+    return problems
 
 
 def check_world_sdf(text, fleet_norm):
@@ -554,6 +936,10 @@ def check_world_sdf(text, fleet_norm):
     actors = sorted(c.get("name") for c in el if _tag(c) == "actor")
     if actors != sorted(t["id"] for t in fleet_norm["targets"]):
         problems.append(f"actor 이름 집합 {actors} != 표적 id 집합")
+    by_name = {c.get("name"): c for c in el if _tag(c) == "actor"}
+    for t in fleet_norm["targets"]:
+        if t["id"] in by_name:
+            problems.extend(_check_actor(by_name[t["id"]], t))
     if "dynamic_pose" in text:
         problems.append("dynamic_pose 문자열이 있다")
     if problems:
@@ -644,6 +1030,10 @@ def build(fleet_norm, ctx):
         warnings.append(f"embedded 변형의 PX4는 이미지의 {PX4_GZ_WORLDS}/{world['name']}.sdf를 연다. "
                         f"world.template({world['template']})은 월드를 만들지 않는다")
     standalone = variant == "standalone"
+    if not standalone and fleet_norm["targets"]:
+        warnings.append(f"embedded 변형에는 표적 어댑터와 월드 생성이 없어 targets {len(fleet_norm['targets'])}개를 무시한다"
+                        "(stack.json의 targets는 빈 목록)")
+    targets = fleet_norm["targets"] if standalone else []
     origin = world["origin"] if standalone else None
     world_file_rel = f"{WORLD_DIR}/{world['name']}.sdf" if standalone else None
     if "world_template" not in ctx["inputs"]:
@@ -836,6 +1226,25 @@ def build(fleet_norm, ctx):
             })
             services[f"ops-{n}"] = ops
 
+        # targets: 표적 어댑터 하나가 모든 표적을 발행한다. 표적이 없으면 서비스와 params를 만들지 않는다.
+        # ops-N과 같은 노드 단계에서 병렬로 올리고 서로 기다리지 않는다. 준비 판정은 노드가 만드는 표시 파일이다.
+        if targets:
+            tsvc = ros_ws_service(TARGETS_SERVICE)
+            tsvc.update({
+                "command": ["ros2", "run", TARGET_ADAPTER_PKG, TARGET_ADAPTER_EXEC, "--ros-args",
+                            "--params-file", f"{run_in_container}/{TARGETS_PARAMS_FILE}"],
+                "init": True,
+                "stop_signal": OPS_STOP_SIGNAL,
+                "healthcheck": {
+                    "test": ["CMD-SHELL", f"test -f {TARGETS_READY_FILE}"],
+                    "interval": "10s", "timeout": "5s", "retries": 2,
+                    "start_period": "20s", "start_interval": "2s",
+                },
+                "depends_on": _healthy("bridge"),
+            })
+            services[TARGETS_SERVICE] = tsvc
+    node_services = ops_services + ([TARGETS_SERVICE] if targets else [])
+
     runner = ros_ws_service("runner", {"IDSIM_STACK_FILE": f"{run_in_container}/stack.json"})
     runner.update({
         # 1회 실행용(compose run). 인자 없는 up --wait가 기다리지 않도록 프로필 tools에 둔다
@@ -844,7 +1253,7 @@ def build(fleet_norm, ctx):
         "init": True,
         "working_dir": REPO_IN_CONTAINER,
         "command": ["true"],
-        "depends_on": _healthy(*ops_services) if standalone else _healthy(px4_services[0]),
+        "depends_on": _healthy(*node_services) if standalone else _healthy(px4_services[0]),
     })
     services["runner"] = runner
 
@@ -948,7 +1357,7 @@ def build(fleet_norm, ctx):
             "ops": ops_services,
             "runner": "runner",
             "gz_gui": "gz-gui" if standalone else None,
-            "targets": None,
+            "targets": TARGETS_SERVICE if targets else None,
             "sim_oracle": None,
             "foxglove": "foxglove" if standalone else None,
             "lichtblick": "lichtblick" if standalone else None,
@@ -957,10 +1366,10 @@ def build(fleet_norm, ctx):
         "startup": {
             "stages": [["xrce-agent", "gazebo"], px4_services, ["bridge"]] if standalone
             else [["xrce-agent"], px4_services],
-            "node_stages": [ops_services] if standalone else [],
+            "node_stages": [node_services] if standalone else [],
             "model_precheck": standalone,
         },
-        "targets": [],
+        "targets": targets,
         "vehicles": vehicle_out,
     }
     assert_invariants(compose, stack)
@@ -985,6 +1394,37 @@ def render_ops_params(vehicle):
             + f"    vehicle.sysid: {vehicle['sysid']}\n")
 
 
+TARGETS_PARAMS_HEADER = (
+    "# 생성 파일. tools/gen_compose.py가 config/fleet.yaml의 targets에서 만든다. 손으로 고치지 않는다.\n"
+    "# 표적 궤적만 담는다. 발행 주기는 노드 선언 기본값을 쓴다.\n"
+)
+
+
+def _float_str(v):
+    """params의 double 표기. 정수로 적은 값도 소수점이 있어야 ROS 파라미터가 double로 읽는다."""
+    return _decimal_str(float(v))
+
+
+def render_targets_params(targets):
+    """targets 서비스(표적 어댑터)의 params 파일 본문. 평탄화 형식이다(decisions.md 쟁점 3).
+
+    ROS 2 파라미터가 구조체 배열을 담지 못해 target_ids와 targets.<id>.{start_s, loop, t, x, y, z}로 편다.
+    실수는 모두 소수점 표기, id는 큰따옴표로 감싼다(YAML이 true, null 같은 낱말을 문자열이 아닌 값으로 읽지 않게).
+    """
+    lines = [TARGETS_PARAMS_HEADER.rstrip("\n"),
+             "/**:",
+             "  ros__parameters:",
+             "    use_sim_time: true",
+             "    target_ids: [" + ", ".join(f'"{t["id"]}"' for t in targets) + "]"]
+    for t in targets:
+        base = f"    targets.{t['id']}."
+        lines.append(f"{base}start_s: {_float_str(t['start_s'])}")
+        lines.append(f"{base}loop: {'true' if t['loop'] else 'false'}")
+        for key in WAYPOINT_KEYS:
+            lines.append(f"{base}{key}: [" + ", ".join(_float_str(w[key]) for w in t["waypoints"]) + "]")
+    return "\n".join(lines) + "\n"
+
+
 def render_files(compose, stack, world_sdf=None):
     """실행 디렉터리에 만드는 파일 {상대 경로: 본문}. 생성 파일의 유일한 목록이다(golden 비교도 이 함수를 쓴다).
 
@@ -999,13 +1439,15 @@ def render_files(compose, stack, world_sdf=None):
     for v in stack["vehicles"]:
         if v["params_file"] is not None:
             files[v["params_file"]] = render_ops_params(v)
+    if stack["services"]["targets"] is not None:
+        files[TARGETS_PARAMS_FILE] = render_targets_params(stack["targets"])
     return files
 
 
 def render_dirs(compose, stack):
     """실행 디렉터리에 빈 채로 만드는 디렉터리. px4 rootfs는 실행마다 새로 만들고, ros_log는 서비스별 하위를 호스트 사용자 소유로 만든다."""
     dirs = [v["rootfs_dir"] for v in stack["vehicles"]]
-    logs = ["bridge"] + [f"ops-{v['id']}" for v in stack["vehicles"]] + ["foxglove", "runner"]
+    logs = ["bridge"] + [f"ops-{v['id']}" for v in stack["vehicles"]] + [TARGETS_SERVICE, "foxglove", "runner"]
     dirs += [f"ros_log/{name}" for name in logs if name in compose["services"]]
     return dirs
 
@@ -1131,6 +1573,33 @@ def assert_invariants(compose, stack):
             problems.append(f"{v['service']}: expect_gps가 null인 것과 embedded 변형이 일치하지 않는다")
     if (stack["services"]["targets"] is None) != (not stack["targets"]):
         problems.append("services.targets가 null인 것과 targets가 빈 것이 일치하지 않는다")
+    if stack["variant"] == "embedded" and stack["targets"]:
+        problems.append("embedded 변형인데 targets가 비어 있지 않다")
+    if len(stack["targets"]) > TARGETS_MAX or any(len(t["waypoints"]) > WAYPOINTS_MAX for t in stack["targets"]):
+        problems.append("표적 또는 waypoint 개수가 상한을 넘는다")
+    if targets_length_sum_ms(stack["targets"]) > TARGETS_LENGTH_SUM_MAX_MS:
+        problems.append("targets의 궤적 길이 합이 상한을 넘는다")
+    if len({t["id"] for t in stack["targets"]}) != len(stack["targets"]):
+        problems.append("targets의 id가 중복된다")
+    tname = stack["services"]["targets"]
+    if (TARGETS_SERVICE in services) != (tname is not None) or (tname is not None and tname != TARGETS_SERVICE):
+        problems.append("targets 서비스와 services.targets가 일치하지 않는다")
+    if tname is not None and TARGETS_SERVICE in services:
+        tsvc = services[TARGETS_SERVICE]
+        cmd = tsvc.get("command", [])
+        if (cmd[:6] != ["ros2", "run", TARGET_ADAPTER_PKG, TARGET_ADAPTER_EXEC, "--ros-args", "--params-file"]
+                or len(cmd) != 7 or not cmd[6].startswith("/") or not cmd[6].endswith(f"/{TARGETS_PARAMS_FILE}")):
+            problems.append(f"targets: command가 stack.json과 다르다: {cmd}")
+        if set(tsvc.get("depends_on", {})) != {"bridge"}:
+            problems.append("targets: depends_on이 bridge 하나가 아니다")
+        if tsvc.get("stop_signal") != OPS_STOP_SIGNAL:
+            problems.append(f"targets: stop_signal이 {OPS_STOP_SIGNAL}가 아니다")
+        if tsvc.get("healthcheck", {}).get("test") != ["CMD-SHELL", f"test -f {TARGETS_READY_FILE}"]:
+            problems.append("targets: healthcheck가 표시 파일 검사가 아니다")
+        if service_profiles(tsvc):
+            problems.append("targets: 프로필 서비스다")
+        if any(TARGETS_SERVICE in stage for stage in stack["startup"]["stages"]):
+            problems.append("targets가 인프라 단계(startup.stages)에 있다")
     if any("dynamic_pose" in text for text in _strings(compose)):
         problems.append("compose에 dynamic_pose 문자열이 있다(정답 pose는 bridge를 거치지 않는다)")
     wt = stack["inputs"].get("world_template")
@@ -1173,10 +1642,11 @@ def assert_invariants(compose, stack):
         if set(ops.get("depends_on", {})) != {"bridge", v["service"]}:
             problems.append(f"{name}: depends_on이 bridge와 {v['service']}가 아니다")
     if ops_names:
-        if set(services["runner"].get("depends_on", {})) != set(ops_names):
-            problems.append("runner의 depends_on이 ops 서비스 전부가 아니다")
-        if stack["startup"]["node_stages"] != [ops_names]:
-            problems.append("startup.node_stages가 [ops 서비스 전부]가 아니다")
+        node_names = ops_names + ([tname] if tname is not None else [])
+        if set(services["runner"].get("depends_on", {})) != set(node_names):
+            problems.append("runner의 depends_on이 ops 서비스 전부와 targets(있으면)가 아니다")
+        if stack["startup"]["node_stages"] != [node_names]:
+            problems.append("startup.node_stages가 [ops 서비스 전부, targets(있으면)]가 아니다")
     elif stack["startup"]["node_stages"]:
         problems.append("ops 서비스가 없는데 startup.node_stages가 비어 있지 않다")
     for name in ops_names:

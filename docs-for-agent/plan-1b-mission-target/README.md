@@ -77,7 +77,7 @@
 | B8b | px4-engineer(필수 승인: 칸 목록 diff, 새 테스트), test-engineer(구조 승인), reviewer | 미덮임 0, "불가능"으로 옮긴 칸의 [소스] 이유, 대표 취소 칸의 명령 미발행 단정, core 소스 무변경 |
 | B9 | px4-engineer(필수 승인: snapshot 헤더, 전이 표, 상태기 단위 테스트), test-engineer(칸 목록 diff), architect(계약 문장과 구현의 일치) | 진입 방식 셋, 지상 arm 진입의 순서 불변식(쟁점 12), 감시 표 면제 구간, RTL과 Land 폴백, 공중 종료 결과 표, 속도 feedforward 조건, 순서 규칙, core가 `idsim_common`과 px4_msgs에 의존하지 않는지 |
 | B10 | px4-engineer(`px4/` 어댑터와 `FramePort` 연결, 같은 표본에서 기준 읽기, `target_fresh_age` 0.1 s와 `target_timeout` 1.0 s 기본값), test-engineer(로더 출력) | 표적 구독 수명, TARGET_LOST 뒤 Hold 확인까지 발행 유지, `world.origin` 누락 시 configure 실패(embedded 변형에는 `ops-N`이 없어 해당 없음. `decisions.md` 쟁점 4) |
-| B11 | px4-engineer(판정 필드와 timeout), sim-engineer(정답 pose 경로), devops-engineer(wrapper와 `sitl.yml`), architect(판정이 `decisions.md` 쟁점 5, 15와 같은지) | 계약 판정과 정답 판정의 분리, `ORACLE_ABSENT`, `ORACLE_STALE`, `UPSTREAM_FAILED`, b와 `R_home`의 근거와 모형 검증, 시험 미션 반경과 판정 상수의 대조 테스트, L과 `target_fresh_age`의 대조 테스트, 두 커밋 절차 |
+| B11 | px4-engineer(판정 필드와 timeout), sim-engineer(정답 pose 경로), devops-engineer(wrapper와 `sitl.yml`), architect(판정이 `decisions.md` 쟁점 5, 15와 같은지) | 계약 판정과 정답 판정의 분리, `ORACLE_ABSENT`, `ORACLE_STALE`, `UPSTREAM_FAILED`, b와 `R_home`의 근거와 모형 검증, 시험 미션 반경과 판정 상수의 대조 테스트, L과 `target_fresh_age`의 대조 테스트, `/targets/*/state` 발행자 QoS를 계약 상태 행과 대조하는 통합 테스트, 두 커밋 절차 |
 | B12 | devops-engineer | 서버 생존 기록 |
 | B13 | reviewer(필수), px4-engineer(SITL 파라미터 표, 전이 문장, "Offboard setpoint" 절의 속도 예외), ros2-engineer | golden 무변경, 1a 미션에 대한 의미가 그대로인지 |
 | 전체 | reviewer | PR마다 규칙 준수와 가정의 근거. B8, B8b, B9, B11, B13은 머지 전 필수 |
@@ -103,7 +103,7 @@
   - CI `sitl` job이 통과한다. 단계별 시간과 판정 구간 RTF를 PR 본문에 남긴다. 15분(U11)을 넘으면 겹치는 비행 구간 -> 순회 waypoint 수 -> Hold 유지 시간 순으로 줄이고(U15), 그래도 넘으면 판정 기준을 느슨하게 하지 않고 측정값과 함께 architect와 사용자에게 올린다.
   - b와 `R_home`이 근거(값, 부팅 30회 이상, 사건 수, `mean(s)`, `std(s)`, 최댓값, `s_track` 통계, 실행 id)와 함께 판정 상수 머리말에 있고 모형 검증(GOTO와 `s_track` 각각의 최댓값 점검과 Shapiro-Wilk, `s_track` 허용한계가 b 이하)을 통과했다. m과 m_home이 시나리오의 사건 수와 같다는 단위 테스트가 있다. b가 0.5 m 이하이고(시험 미션의 `acceptance_radius_m = 1.0 - b`가 0.5 m 이상) `R_home`이 1 m 이하다. 넘거나 모형 검증에 실패하면 올린다(쟁점 5). (나)의 확인 실행에서 모든 도달 사건이 1.0 m 안이다.
   - R1, R3가 `verdict.json`에 `recorded_only`로 남는다. F2, F4 trace로 표적 접근의 L(0.2 s)이 맞는지와 R3 판단 기준(나이 99.9% 분위수, 신선하지 않은 tick 비율)을 확인한 결과가 PR 본문에 있다.
-- B12: M4 결과(ogre2와 ogre, 재접속, 120 s 생존)가 PR 본문에 있다.
+- B12: M4 결과(ogre2와 ogre, 재접속, 120 s 생존)와 궤적 길이 합 상한 월드의 기록이 PR 본문에 있다.
 - B13: `docs/interface.md`의 1b 계약이 고정되고 "고정 전" 표시가 1b 몫에서 빠진다. 계약 테스트 golden과 type hash가 그대로다. reviewer가 확인했다.
 - 1b 전체(roadmap 1b 완료 기준): 합친 미션 F4를 포함한 미션 통합 테스트가 headless로 로컬 3회 연속과 CI에서 통과, 상태기 단위 테스트가 승인된 전이 칸 전부를 덮음, `TargetState`와 GOTO, TRACK_ENTITY, RTL 항목(`GoToItem`, `TrackEntityItem` 포함)과 공중에서 끝나는 미션의 종료 동작의 계약 고정.
 

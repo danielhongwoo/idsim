@@ -381,6 +381,47 @@ services:
         condition: service_healthy
       px4-3:
         condition: service_healthy
+  targets:
+    image: idsim/ros-ws:local
+    network_mode: host
+    restart: 'no'
+    user: 1000:1000
+    environment:
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      CYCLONEDDS_URI: file:///opt/idsim/config/cyclonedds.xml
+      ROS_DOMAIN_ID: '20'
+      PYTHONDONTWRITEBYTECODE: '1'
+      HOME: /tmp
+      ROS_LOG_DIR: /opt/idsim/artifacts/runs/20261109-090000-k0/ros_log/targets
+    volumes:
+      - type: bind
+        source: /work/idsim
+        target: /opt/idsim
+        read_only: false
+        bind:
+          create_host_path: false
+    command:
+      - ros2
+      - run
+      - idsim_sim
+      - target_adapter
+      - --ros-args
+      - --params-file
+      - /opt/idsim/artifacts/runs/20261109-090000-k0/params/targets.yaml
+    init: true
+    stop_signal: SIGINT
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -f /tmp/idsim/targets_ready
+      interval: 10s
+      timeout: 5s
+      retries: 2
+      start_period: 20s
+      start_interval: 2s
+    depends_on:
+      bridge:
+        condition: service_healthy
   runner:
     image: idsim/ros-ws:local
     network_mode: host
@@ -413,6 +454,8 @@ services:
       ops-2:
         condition: service_healthy
       ops-3:
+        condition: service_healthy
+      targets:
         condition: service_healthy
   gz-gui:
     image: idsim/sim-base:local

@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>idsim_sim</name>
+  <version>0.1.0</version>
+  <description>idsim 시뮬레이션 쪽 패키지: 표적 어댑터 노드(궤적 정의 -> TargetState), 월드 템플릿, Gazebo wrapper와 GUI 설정</description>
+  <maintainer email="27140685+danielhongwoo@users.noreply.github.com">Daniel Hongwoo Lee</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>builtin_interfaces</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>idsim_interfaces</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
