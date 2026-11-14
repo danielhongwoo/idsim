@@ -11,7 +11,8 @@ PX4 서버와 같은 컨테이너 안에서만 동작한다(서버 소켓이 컨
    commander_check  "px4-commander --instance N check" 출력에 "Preflight check: OK"
    param_<이름>     "px4-param --instance N show <이름>"의 값이 기대값과 같음.
                     기대값은 --expect-param 이름=값 (여러 번). 기본은
-                    COM_OBL_RC_ACT=4, COM_RC_IN_MODE=4
+                    COM_OBL_RC_ACT=4, COM_RC_IN_MODE=4,
+                    UXRCE_DDS_SYNCT=0, IMU_GYRO_CAL_EN=0
    param_show_all   "px4-param --instance N show" 전체 출력이 비어 있지 않음(원문 저장용)
    ver_all          "px4-ver --instance N all" 출력이 비어 있지 않음(원문 저장용)
    원문은 JSON의 raw 아래에 넣는다. IDSIM_BUILD_PX4_TAG 환경변수도 기록한다.

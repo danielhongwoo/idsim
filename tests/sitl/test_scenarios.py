@@ -131,6 +131,8 @@ def _record_armed_a(s, t_goal, run):
 
     vehicle_status 원시 표본(KEEP_ALL 기록기)에서 센다. 노드의 tick 모델과 무관하다. 구간은 PX4 timestamp 축이다.
     TAKEOFF 시작을 보지 못한 실행은 지금까지를 구간으로 잡는다(그때 A는 이미 실패했다).
+    구간 경계는 Executor stamp이고 노드 시계는 PX4 hrt보다 늦기만 하므로(docs/interface.md) 한쪽 방향
+    skew라 오탐이 없다. armed3_reached는 armed_criterion 집계에만 쓰이고 시나리오 판정에는 쓰이지 않는다.
     """
     raw = s.raw
     fb = first_feedback(s.mission.feedbacks_of(run), sj.TYPE_TAKEOFF) if run.goal_id else None
@@ -222,8 +224,10 @@ def test_d_cancel_in_air_then_land_only_mission(session):
     try:
         _scenario_d(s, raw)
     except BaseException:
-        s.dump_raw_status("raw_status_D.jsonl", t_start)     # 실패 원인 분석용(ULog 대조)
-        s.emergency_cleanup()
+        try:
+            s.dump_raw_status("raw_status_D.jsonl", t_start)     # 실패 원인 분석용(ULog 대조)
+        finally:
+            s.emergency_cleanup()
         raise
 
 

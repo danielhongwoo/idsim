@@ -24,7 +24,7 @@
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",
-      "sha256": "5a83ea552c36de3faa3b94e59cce5be15d2434f8f927fd2ef650167fce389f5d"
+      "sha256": "6a386d70da8140f659fa9d091a07c444aab3456fc96024f4bab15d0163e50889"
     },
     "versions_env": {
       "path": "docker/versions.env",
