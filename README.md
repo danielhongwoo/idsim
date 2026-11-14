@@ -48,7 +48,7 @@ px4-out, px4-in, clock은 각각 스택을 내렸다가 다시 올리고, 끝나
 
 | 명령 | 하는 일 |
 | --- | --- |
-| `tools/sim_stack.sh up` | `config/fleet.yaml`로 스택(아래 "스택과 스택 번호")을 생성하고 인프라(에이전트, gazebo, px4-N, bridge)에 이어 Mission Executor(`ops-N`)까지 healthy로 올린다. 실행 디렉터리 `artifacts/runs/<실행 id>/`를 출력한다. Executor 없이 인프라만 올리려면 `--infra-only`(스모크와 측정 스크립트가 쓴다). `ros_ws/install/idsim_mission/`이 없으면 먼저 `tools/ros_ws.sh build`. 내리기는 `tools/sim_stack.sh down`. 화면 도구는 아래 "화면으로 보기" |
+| `tools/sim_stack.sh up` | `config/fleet.yaml`로 스택(아래 "스택과 스택 번호")을 생성하고 인프라(에이전트, gazebo, px4-N, bridge)에 이어 Mission Executor(`ops-N`)까지 healthy로 올린다. 실행 디렉터리 `artifacts/runs/<실행 id>/`를 출력한다. Executor 없이 인프라만 올리려면 `--infra-only`(스모크가 쓴다). `ros_ws/install/idsim_mission/`이 없으면 먼저 `tools/ros_ws.sh build`. 내리기는 `tools/sim_stack.sh down`. 화면 도구는 아래 "화면으로 보기" |
 | `tests/sitl/run_sitl.sh --stack k` | 통합 테스트(이륙-호버-착륙 시나리오 B, C, A, D, T). 아래 "통합 테스트" |
 | `tools/ros_ws.sh ci` | `ros_ws/src`의 ROS 2 패키지를 ros-ws 컨테이너에서 빌드하고 테스트(ament_lint 포함)와 clang-tidy를 돌린다. CI의 unit job과 같은 명령 |
 | `tools/ci/lint.sh all` | CI와 같은 lint 전체 (호스트에 linter 설치가 필요 없다) |

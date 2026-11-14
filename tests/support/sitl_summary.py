@@ -119,13 +119,13 @@ def hold_notes(verdict):
 
 
 def armed_rows(verdicts):
-    """회차마다 시나리오 A의 ARMED 기록을 measure_judge의 행 형식으로 바꾼다. 측정되지 않은 회는 None 값."""
+    """회차마다 시나리오 A의 ARMED 기록을 measure_judge.judge_armed_criterion의 행 형식으로 바꾼다. 측정되지 않은 회는 None 값."""
     rows = []
     for v in verdicts:
         a = v.get("armed_a")
         measured = a is not None
         rows.append({
-            "item": "A", "class": mj.CLASS_EXECUTOR, "verdict": "PASS" if run_passed(v) else "FAIL",
+            "class": mj.CLASS_EXECUTOR,
             "armed3_reached": bool(a and a.get("armed3_reached")),
             "armed_non_offboard": a["armed_non_offboard"] if measured else None,
         })

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// goal 하나의 상태기. 정본은 docs-for-agent/plan-1a-6-idsim-mission/decisions.md의 쟁점 4 전이 표와
-// 쟁점 3의 취소 분기다. 전이 표와 이 상태기의 단위 테스트를 바꾸려면 px4-engineer가 필수
+// goal 하나의 상태기. 정본은 전이 칸 목록 test/transition_cells.tsv와 docs/interface.md
+// "ExecuteMission" 절이다. 전이 표와 이 상태기의 단위 테스트를 바꾸려면 px4-engineer가 필수
 // 승인자다(docs-for-agent/file-ownership.md).
 //
 // 쓰는 법(노드, P3d)

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Offboard position setpoint 헬퍼의 필드 표와 비유한 거부. 노드를 만들지 않는다.
-// 결정: docs-for-agent/plan-1a-6-idsim-mission/decisions.md 쟁점 5,
+// 결정: 1a 6단계 설계 결정(git 이력) 쟁점 5,
 // 속도 feedforward 인자는 docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 8, 14.
 // 필드 값은 px4-engineer 의견서(git 이력) 넘김 표 (2).
 
