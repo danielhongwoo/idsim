@@ -4,13 +4,13 @@ lint 잡의 python 이미지(PyYAML == versions.env의 LINT_PYYAML_VERSION, pyte
 디렉터리로 `python3 -m pytest tests/tools`로 돈다. docker가 필요 없다(compose config 검사는 lint.sh의
 compose-config 항목).
 
-골든: tests/fixtures/gen_compose/<사례>/{fleet.yaml, compose.yaml, stack.json, params/ops-N.yaml}. 사례의
-fleet.yaml을 고정 인자로 생성해 실행 디렉터리의 파일 전체(파일 집합과 바이트)와 비교한다. 골든 파일이 없거나
+golden: tests/fixtures/gen_compose/<사례>/{fleet.yaml, compose.yaml, stack.json, params/ops-N.yaml}. 사례의
+fleet.yaml을 고정 인자로 생성해 실행 디렉터리의 파일 전체(파일 집합과 바이트)와 비교한다. golden 파일이 없거나
 남는 파일이 있으면 실패한다. 빈 디렉터리(px4-N, ros_log/*)는 git이 추적하지 못하므로 render_dirs 테스트가 따로 본다.
 갱신은 --update-golden(저장소를 쓰기 가능하게 마운트한 환경에서):
   python3 -m pytest tests/tools --update-golden -p no:cacheprovider
 diff는 리뷰에서 본다. 고정 인자 중 versions_env의 sha256만 상수로 둔다(도구 버전 줄을 고칠 때마다
-골든이 바뀌지 않게). 나머지 입력 sha256은 실제 파일 값이다.
+golden이 바뀌지 않게). 나머지 입력 sha256은 실제 파일 값이다.
 """
 import copy
 import hashlib
@@ -140,7 +140,7 @@ def gen_world(f=None, template=FIXTURE_TEMPLATE):
     return gc.build_world_sdf(norm, _read(os.path.join(REPO, template)))
 
 
-# ------------------------------------------------------------------ 골든
+# ------------------------------------------------------------------ golden
 def _golden_build(case):
     k, variant = GOLDEN_CASES[case]
     rel = f"tests/fixtures/gen_compose/{case}/fleet.yaml"
@@ -159,7 +159,7 @@ def _golden_outputs(case):
 
 
 def _golden_files(case_dir):
-    """골든 디렉터리의 파일 집합(입력 fleet.yaml 제외). 상대 경로는 /로 쓴다."""
+    """golden 디렉터리의 파일 집합(입력 fleet.yaml 제외). 상대 경로는 /로 쓴다."""
     out = set()
     for root, _, names in os.walk(case_dir):
         for name in names:
@@ -172,7 +172,7 @@ def _golden_files(case_dir):
 @pytest.mark.parametrize("case", sorted(GOLDEN_CASES))
 def test_golden(case, request):
     case_dir = os.path.join(GOLDEN_DIR, case)
-    assert os.path.isfile(os.path.join(case_dir, "fleet.yaml")), f"골든 입력 없음: {case_dir}/fleet.yaml"
+    assert os.path.isfile(os.path.join(case_dir, "fleet.yaml")), f"golden 입력 없음: {case_dir}/fleet.yaml"
     outputs = _golden_outputs(case)
     update = request.config.getoption("--update-golden", default=False)
     changed = []
@@ -192,13 +192,13 @@ def test_golden(case, request):
             if root != case_dir and not dirs and not names:
                 os.rmdir(root)
         if changed:
-            pytest.skip(f"골든 갱신: {case}/{', '.join(changed)} (git diff로 검토한다)")
+            pytest.skip(f"golden 갱신: {case}/{', '.join(changed)} (git diff로 검토한다)")
         return
     assert _golden_files(case_dir) == set(outputs), \
-        f"골든 파일 집합 불일치: 없음 {sorted(set(outputs) - _golden_files(case_dir))}, " \
+        f"golden 파일 집합 불일치: 없음 {sorted(set(outputs) - _golden_files(case_dir))}, " \
         f"남음 {sorted(_golden_files(case_dir) - set(outputs))} (의도한 변경이면 --update-golden)"
     for rel, text in sorted(outputs.items()):
-        assert _read(os.path.join(case_dir, rel)) == text, f"골든 불일치: {case}/{rel} (의도한 변경이면 --update-golden)"
+        assert _read(os.path.join(case_dir, rel)) == text, f"golden 불일치: {case}/{rel} (의도한 변경이면 --update-golden)"
 
 
 @pytest.mark.parametrize("case", sorted(GOLDEN_CASES))
@@ -210,7 +210,7 @@ def test_golden_has_no_fmu_strings(case):
 
 @pytest.mark.parametrize("case", sorted(GOLDEN_CASES))
 def test_golden_stack_loads_with_support_loader(case):
-    """교차 테스트: 골든 stack.json을 tests.support.stack 로더가 받는다(test-engineer 합의)."""
+    """교차 테스트: golden stack.json을 tests.support.stack 로더가 받는다(test-engineer 합의)."""
     path = os.path.join(GOLDEN_DIR, case, "stack.json")
     s = stk.load(path)
     k, variant = GOLDEN_CASES[case]
