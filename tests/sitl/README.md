@@ -25,7 +25,7 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 | --- | --- | --- |
 | B | GOTO가 든 미션 | result ABORTED와 `REASON_INVALID_MISSION`. 접수와 종료 사건 한 쌍(종료 사건 == result). feedback 0건. goal 뒤 5 s 동안 ARMED 표본 없음 |
 | C | goal의 `vehicle_id`가 다른 값 | result ABORTED와 `REASON_VEHICLE_ID_MISMATCH`. 사건의 `vehicle_id`는 Executor 자신의 값. feedback 0건. 5 s 동안 ARMED 표본 없음 |
-| A | `[TAKEOFF 5 m, LOITER 5 s, LAND]` | SUCCEEDED, `REASON_NONE`, `items_completed` 3. 사건 짝과 result 일치. 이정표 순서(goal 전송, 접수, ARMED, TAKEOFF 시작, 도달, LAND 시작, AUTO_LAND, DISARMED, result)가 ROS 시각으로 줄어들지 않음. LOITER 유지 5 s 이상과 고도 허용 0.5 m. TAKEOFF와 LOITER 동안 `failsafe`가 false이고 `nav_state`가 OFFBOARD. ARMED를 본 뒤의 AUTO_LAND, 그 뒤 DISARMED 3회 연속. OFFBOARD가 아닌 ARMED 표본 0개 |
+| A | `[TAKEOFF 5 m, LOITER 5 s, LAND]` | SUCCEEDED, `REASON_NONE`, `items_completed` 3. 사건 짝과 result 일치. 이정표 순서(goal 전송, 접수, ARMED, TAKEOFF 시작, 도달, LAND 시작, AUTO_LAND, DISARMED, result)가 테스트 노드 수신 시각으로 줄어들지 않음. LOITER 유지 5 s 이상과 고도 허용 0.5 m. TAKEOFF와 LOITER 동안 `failsafe`가 false이고 `nav_state`가 OFFBOARD. ARMED를 본 뒤의 AUTO_LAND, 그 뒤 DISARMED 3회 연속. OFFBOARD가 아닌 ARMED 표본 0개 |
 | D | 도달 뒤 cancel, 이어서 `[LAND]` | cancel 응답 `ERROR_NONE`, CANCELED와 `REASON_NONE`. AUTO_LOITER 3회 연속, 그 뒤 5 s 동안 고도 변화 0.5 m 이하이고 ARMED, `landed` false. `[LAND]` 미션 SUCCEEDED, ARMED 뒤 AUTO_LAND, DISARMED 3회 연속, `landed` true |
 | T | 지상, Executor idle, `offboard_control_mode`(`position=true`) 20 Hz | timestamp가 현재이면 `offboard_control_signal_lost` false, `now - 2 s`이면 true, 다시 현재이면 false. 각 단계 3회 연속(서로 다른 timestamp), 단계마다 대기 상한 5 s. 내내 ARMED 표본 없음 |
 
@@ -39,7 +39,7 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 `artifacts/runs/<실행 id>/` 아래. 실패하면 이 디렉터리 전체를, 성공하면 `sitl/junit.xml`, `sitl/trace.jsonl`, `sitl/summary.md`를 CI가 올린다.
 
 - `compose.yaml`, `stack.json`, `params/`, `px4-N/log/*.ulg`, `ros_log/`
-- `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록), `summary.md`, `steps.tsv`(단계별 벽시계 초, 서비스 종료 상태 `stop_exit_*`, ULog 끝 경계 `ulog`, 회차별 종료 코드 `rc_*` 줄), `raw_status_A.jsonl`, `armed_a.json`, `ps_before_stop.jsonl`(stop 전 서비스 상태), `logs/<서비스>.log`, `health_<서비스>.txt`(실패한 회나 unhealthy 서비스만), `crosscheck_a.json`
+- `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록), `summary.md`, `steps.tsv`(단계별 벽시계 초, 서비스 종료 상태 `stop_exit_*`, ULog 끝 경계 `ulog`, 회차별 종료 코드 `rc_*` 줄), `raw_status_A.jsonl`, `raw_status_D.jsonl`, `armed_a.json`, `ps_before_stop.jsonl`(stop 전 서비스 상태), `logs/<서비스>.log`, `health_<서비스>.txt`(실패한 회나 unhealthy 서비스만), `crosscheck_a.json`
 
 유지 구간(A의 LOITER, D의 취소 뒤 유지)의 기준 고도로부터의 최대 편차는 통과한 회에도 `trace.jsonl`(`hold_deviation`), `verdict.json`(`hold_deviation_m`), `repeat_summary.tsv`(`hold_dev_*_m`)에 남는다. 항목별 임계값(A의 LOITER 0.4 m, D의 유지 0.25 m)을 넘으면 `summary.md`와 `armed_criterion.json`의 `hold_deviation_notes`에 note가 붙는다(판정 상수 0.5 m 재검토의 근거. 임계값은 `tests/support/sitl_summary.py`의 `HOLD_DEV_NOTE_M`).
 

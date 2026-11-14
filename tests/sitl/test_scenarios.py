@@ -131,6 +131,10 @@ def _record_armed_a(s, t_goal, run):
 
     vehicle_status 원시 표본(KEEP_ALL 기록기)에서 센다. 노드의 tick 모델과 무관하다. 구간은 PX4 timestamp 축이다.
     TAKEOFF 시작을 보지 못한 실행은 지금까지를 구간으로 잡는다(그때 A는 이미 실패했다).
+    구간 경계는 Executor stamp이고 PX4 hrt는 노드 ROS 시각보다 8-20 ms 크므로(docs/interface.md) 끝 경계
+    end가 PX4 축에서 이르게 잡혀 TAKEOFF 직전 수십 ms의 ARMED 표본이 빠질 수 있다. 생길 수 있는 것은
+    오탐이 아니라 미탐(armed_non_offboard 과소 집계, armed3_reached 거짓 false)이고, 여유가 약 1 s라
+    위험이 작다. armed3_reached는 armed_criterion 집계에만 쓰이고 시나리오 판정에는 쓰이지 않는다.
     """
     raw = s.raw
     fb = first_feedback(s.mission.feedbacks_of(run), sj.TYPE_TAKEOFF) if run.goal_id else None
@@ -187,10 +191,12 @@ def test_a_normal_flight(session):
                       ("disarmed", seq_ts.get("disarmed_ts")), ("result", run.result.recv_us)):
         s.mark("A", name, val)
     findings = list(seq)
+    # 순서 비교는 모두 이 테스트 노드의 ROS 시계(수신 시각)로 한다. Executor stamp(accepted, feedback)와 PX4
+    # timestamp는 다른 시계라 노드 사이에서 /clock 한 step(4 ms)까지 어긋나므로 섞지 않는다. 위 표의 값은 stamp다
     findings += sj.milestones_ordered([
-        ("goal_sent", t_goal), ("accepted", acc.stamp_us), ("armed", seq_ts.get("armed_ts")),
-        ("takeoff_start", fb_take.stamp_us), ("reached", reached), ("land_start", fb_land.stamp_us),
-        ("auto_land", seq_ts.get("land_ts")), ("disarmed", seq_ts.get("disarmed_ts")),
+        ("goal_sent", t_goal), ("accepted", acc.recv_us), ("armed", seq_ts.get("armed_recv_us")),
+        ("takeoff_start", fb_take.recv_us), ("reached", reached), ("land_start", fb_land.recv_us),
+        ("auto_land", seq_ts.get("land_recv_us")), ("disarmed", seq_ts.get("disarmed_recv_us")),
         ("result", run.result.recv_us)])
     if fb_loiter.stamp_us < fb_take.stamp_us:
         findings.append((sw.WRONG_RESULT, "LOITER가 TAKEOFF보다 먼저 시작했다"))
@@ -216,11 +222,32 @@ def test_d_cancel_in_air_then_land_only_mission(session):
     이어서 [LAND] 한 항목 미션: SUCCEEDED와 DISARMED."""
     s = session
     raw = s.raw
+    t_start = raw.now_us()
     try:
         _scenario_d(s, raw)
     except BaseException:
-        s.emergency_cleanup()
+        try:
+            s.dump_raw_status("raw_status_D.jsonl", t_start)     # 실패 원인 분석용(ULog 대조)
+        except Exception as e:                                   # D의 원래 실패를 가리지 않는다
+            s.trace.event("dump_raw_status_failed", error=repr(e))
+        finally:
+            s.emergency_cleanup()
         raise
+
+
+def _wait_d_reached(s, raw, run, z0, t_goal):
+    """D의 고도 도달 대기. 도달 전에 goal result가 오면 기다리지 않고 실패시키고, 못 닿으면 원인 설명을 붙인다."""
+    def reached():
+        return sj.first_reached(raw.pos, z0, TAKEOFF_M, ACCEPTANCE_M, after_recv_us=t_goal) is not None
+
+    try:
+        s.waiter.wait_until(lambda: reached() or run.result is not None, 60.0, "D 고도 도달")
+    except sw.SitlFailure as e:
+        desc = sj.unreached_description(run.result, s.mission.feedbacks_of(run), raw.last_status())
+        raise sw.SitlFailure(e.category, "%s (%s)" % (e.message, desc)) from e
+    if not reached():
+        raise sw.SitlFailure(sw.WRONG_RESULT, "D 고도 도달 전에 goal이 끝났다 (%s)" % sj.unreached_description(
+            run.result, s.mission.feedbacks_of(run), raw.last_status()))
 
 
 def _scenario_d(s, raw):
@@ -229,9 +256,7 @@ def _scenario_d(s, raw):
     t_goal = raw.now_us()
     mission = [takeoff_item(), loiter_item(30.0, 40.0), land_item()]
     run = send(s, s.vehicle_id, "d-takeoff-cancel", mission)
-    s.waiter.wait_until(
-        lambda: sj.first_reached(raw.pos, z0, TAKEOFF_M, ACCEPTANCE_M, after_recv_us=t_goal) is not None,
-        60.0, "D 고도 도달")
+    _wait_d_reached(s, raw, run, z0, t_goal)
     t_cancel = raw.now_us()
     code = s.mission.cancel(s.waiter, run)
     s.trace.event("cancel_sent", at_us=t_cancel, return_code=code)

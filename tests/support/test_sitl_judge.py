@@ -13,6 +13,8 @@
 # limitations under the License.
 
 """sitl_judge 단위 테스트. 합성 표본으로 각 판정의 통과와 실패를 고정한다."""
+import dataclasses
+
 from tests.support import measure_judge as mj
 from tests.support import sitl_judge as sj
 from tests.support import sitl_wait as sw
@@ -187,6 +189,42 @@ def test_milestones_ordered():
     assert sj.milestones_ordered([("a", 1), ("b", 1), ("c", 5)]) == []
     assert "순서" in sj.milestones_ordered([("a", 5), ("b", 2)])[0][1]
     assert "관측되지" in sj.milestones_ordered([("a", 5), ("b", None)])[0][1]
+
+
+def test_milestones_same_clock_tolerates_px4_ts_skew():
+    # PX4 timestamp가 ROS /clock보다 4 ms 앞서도(/clock 지연) 수신 시각으로 비교하면 순서가 맞는다
+    D = mj.ARMING_STATE_DISARMED
+    land = mj.NAV_STATE_AUTO_LAND
+    s = [st(100, D, recv=100), st(200, recv=200), st(300, nav=land, recv=300), st(400, D, nav=land, recv=400),
+         st(500, D, nav=land, recv=500), st(600, D, nav=land, recv=596)]     # 마지막: PX4 stamp 600, ROS 수신 596
+    f, m = sj.sequence_findings(s, 0)
+    assert f == [] and m["disarmed_recv_us"] == 596
+    result_recv = 597                            # PX4 stamp(600)와 섞어 비교하면 3 앞이라 위반으로 보이는 값
+    assert result_recv < m["disarmed_ts"]
+    assert sj.milestones_ordered([("auto_land", m["land_recv_us"]), ("disarmed", m["disarmed_recv_us"]),
+                                  ("result", result_recv)]) == []
+    # 실제 순서 위반(result가 3회 확인 수신보다 앞)은 여전히 잡는다
+    bad = sj.milestones_ordered([("disarmed", m["disarmed_recv_us"]), ("result", 595)])
+    assert len(bad) == 1 and "순서 위반" in bad[0][1]
+
+
+def test_milestones_use_receiver_clock_for_executor_stamps():
+    # Executor stamp(다른 노드 시계)가 테스트 노드의 goal_sent보다 4 ms 앞서 보여도 수신 시각끼리는 순서가 맞는다
+    acc = dataclasses.replace(ev(sj.STATUS_ACCEPTED), recv_us=1004, stamp_us=996)
+    goal_sent = 1000
+    assert acc.stamp_us < goal_sent < acc.recv_us
+    assert "순서 위반" in sj.milestones_ordered([("goal_sent", goal_sent), ("accepted", acc.stamp_us)])[0][1]
+    assert sj.milestones_ordered([("goal_sent", goal_sent), ("accepted", acc.recv_us)]) == []
+
+
+def test_unreached_description():
+    res = sj.ResultRec(recv_us=1, status=sj.STATUS_ABORTED, reason=3, items_completed=0, last_item_index=0, detail="x")
+    fb = sj.FeedbackRec(recv_us=1, goal_id="g", stamp_us=1, item_index=0, item_count=3, item_type=1,
+                        phase=sj.PHASE_PREPARING)
+    d = sj.unreached_description(res, [fb], st(100, mj.ARMING_STATE_DISARMED))
+    assert "ABORTED" in d and "phase=1" in d and "arming_state=%d" % mj.ARMING_STATE_DISARMED in d
+    d0 = sj.unreached_description(None, [], None)
+    assert "result 없음" in d0 and "feedback 없음" in d0
 
 
 def test_sequence_requires_armed_before_disarmed():
