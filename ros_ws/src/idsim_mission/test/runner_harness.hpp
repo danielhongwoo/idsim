@@ -25,6 +25,7 @@
 // - auto_px4와 auto_offboard_ack가 둘 다 true이면 가짜 PX4가 Offboard 전환(DO_SET_MODE)마다
 //   ACCEPTED ack를 낸다(명령을 낸 tick의 다음 tick에 받은 것으로 snapshot.ack에 둔다). 지상 arm
 //   진입은 이 ack가 있어야 P6으로 간다(1b decisions.md 쟁점 12). 다른 명령에는 ack를 내지 않는다.
+//   끄면 ack 없음(1a 가짜 PX4와 같음).
 // - 만드는 MissionRunner에 전이 기록기(transition_recorder.hpp)를 넘긴다. 기록기는 test_runner
 //   실행 파일에서만 켜져 있고, 칸 목록 대조는 test_transition_coverage.cpp가 한다. 기록기가 켜져
 //   있으면 Harness는 자기 runner의 기록을 edges()에도 모은다(expect_cell이 한 시나리오의 칸을

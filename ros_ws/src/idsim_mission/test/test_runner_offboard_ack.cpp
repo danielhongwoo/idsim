@@ -43,6 +43,7 @@ namespace
 {
 
 // P5에 들어간 tick(S)까지 간다. 가짜 PX4 반응을 끄고 S의 전송에 대한 ack를 지운다. S를 돌려준다.
+// tick_no는 다음 tick 번호라 S = tick_no - 1이다.
 std::uint64_t reach_offboard_without_ack(Harness & h)
 {
   EXPECT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kOffboard; }, 400));
