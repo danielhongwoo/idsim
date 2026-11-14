@@ -103,7 +103,7 @@
   - CI `sitl` job이 통과한다. 단계별 시간과 판정 구간 RTF를 PR 본문에 남긴다. 15분(U11)을 넘으면 겹치는 비행 구간 -> 순회 waypoint 수 -> Hold 유지 시간 순으로 줄이고(U15), 그래도 넘으면 판정 기준을 느슨하게 하지 않고 측정값과 함께 architect와 사용자에게 올린다.
   - b와 `R_home`이 근거(값, 부팅 30회 이상, 사건 수, `mean(s)`, `std(s)`, 최댓값, `s_track` 통계, 실행 id)와 함께 판정 상수 머리말에 있고 모형 검증(GOTO와 `s_track` 각각의 최댓값 점검과 Shapiro-Wilk, `s_track` 허용한계가 b 이하)을 통과했다. m과 m_home이 시나리오의 사건 수와 같다는 단위 테스트가 있다. b가 0.5 m 이하이고(시험 미션의 `acceptance_radius_m = 1.0 - b`가 0.5 m 이상) `R_home`이 1 m 이하다. 넘거나 모형 검증에 실패하면 올린다(쟁점 5). (나)의 확인 실행에서 모든 도달 사건이 1.0 m 안이다.
   - R1, R3가 `verdict.json`에 `recorded_only`로 남는다. F2, F4 trace로 표적 접근의 L(0.2 s)이 맞는지와 R3 판단 기준(나이 99.9% 분위수, 신선하지 않은 tick 비율)을 확인한 결과가 PR 본문에 있다.
-- B12: M4 결과(ogre2와 ogre, 재접속, 120 s 생존)가 PR 본문에 있다.
+- B12: M4 결과(ogre2와 ogre, 재접속, 120 s 생존)와 궤적 길이 합 상한 월드의 기록이 PR 본문에 있다.
 - B13: `docs/interface.md`의 1b 계약이 고정되고 "고정 전" 표시가 1b 몫에서 빠진다. 계약 테스트 golden과 type hash가 그대로다. reviewer가 확인했다.
 - 1b 전체(roadmap 1b 완료 기준): 합친 미션 F4를 포함한 미션 통합 테스트가 headless로 로컬 3회 연속과 CI에서 통과, 상태기 단위 테스트가 승인된 전이 칸 전부를 덮음, `TargetState`와 GOTO, TRACK_ENTITY, RTL 항목(`GoToItem`, `TrackEntityItem` 포함)과 공중에서 끝나는 미션의 종료 동작의 계약 고정.
 
