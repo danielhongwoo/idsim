@@ -18,7 +18,7 @@
 //   PREPARING.AIR_SIGNAL, PREPARING.AIR_OFFBOARD, PREPARING.AIR_OFFBOARD_SEEN 행과, 공중 진입이
 //   새로 닿는 기존 정리 칸이다.
 // - 기호: P는 발행을 시작한 tick(READY_AIR_OFFBOARD), S는 DO_SET_MODE(OFFBOARD)를 처음 보낸
-//   tick(SIGNAL_CONFIRMED)이다. 하네스 기본값에서 P = 1, S = P + 10이다(발행 10회가 P..P+9의
+//   tick(SIGNAL_CONFIRMED)이다. harness 기본값에서 P = 1, S = P + 10이다(발행 10회가 P..P+9의
 //   finalize에서 찬다). offboard_signal_timeout은 P+40, mode_confirm_timeout은 S+60이다.
 // - 기본 미션은 [LOITER 5 s, timeout 10 s]이고 기체는 start_in_air()(ARMED, landed false, z -5,
 //   AUTO_LOITER, 의도 AUTO_LOITER, failsafe false, heading 0.25)에서 시작한다.
@@ -42,7 +42,7 @@ namespace idsim_mission::core::test
 namespace
 {
 
-constexpr std::uint64_t kP = 1;                  // 발행 시작 tick(하네스 기본값)
+constexpr std::uint64_t kP = 1;                  // 발행 시작 tick(harness 기본값)
 constexpr std::uint64_t kSignalTicks = 40;       // offboard_signal_timeout 2 s
 constexpr std::uint64_t kModeConfirmTicks = 60;  // mode_confirm_timeout 3 s
 constexpr std::uint64_t kResendTicks = 10;       // command_resend_period 0.5 s
@@ -174,6 +174,7 @@ TEST(AirEntry, A1_NormalEntryToLoiterAndMissionEnd)
   expect_cell(
     h, "PREPARING.AIR_OFFBOARD", Event::kOffboardFirstSample, "PREPARING.AIR_OFFBOARD_SEEN", "-",
     {}, before);
+  EXPECT_FALSE(h.view().pending_active);  // 첫 OFFBOARD 표본의 tick에 대기 명령을 지운다
   EXPECT_TRUE(h.tick().commands.empty());  // S+2
   EXPECT_EQ(h.view().prep, PrepStep::kAirOffboardSeen);
   before = h.edges().size();
@@ -1084,6 +1085,58 @@ TEST(AirEntry, A21_StaleSampleIsNotMonitored)
   EXPECT_EQ(h.tick().commands, kOffboardOnly);  // S+10: 재전송 주기 그대로
   EXPECT_EQ(h.view().prep, PrepStep::kAirOffboard);
   EXPECT_FALSE(h.runner().done());
+}
+
+// P+1에 P 표본보다 묵은 vehicle_status만 오면 감시 표는 P tick의 표본(신뢰 표본)을 다시 보고 끝나지
+// 않는다(명세 2.3). 감시 구간의 landed 이력은 P tick부터라 P 전에 받은 landed false 표본은 넣지
+// 않는다(view().landed_false_seen. 공중 goal의 판정에는 쓰이지 않는다).
+TEST(AirEntry, A21b_StaleSampleRightAfterPublishStart)
+{
+  Harness h(air_loiter_mission());
+  h.start_in_air();
+  h.world.ekf_ready = false;
+  h.tick();  // WAIT_READY: landed false 표본(received_tick 1)
+  ASSERT_TRUE(h.snapshot.land.has_value());
+  const LandSample old_land = *h.snapshot.land;
+  h.world.ekf_ready = true;
+  h.auto_samples = false;
+  // P: 이 tick 뒤로는 vehicle_land_detected가 새로 오지 않는다.
+  h.push_world_samples();
+  h.snapshot.land = old_land;
+  const std::uint64_t p_stamp = h.snapshot.status->timestamp_us;
+  std::size_t before = h.edges().size();
+  h.step_only();
+  expect_cell(
+    h, "PREPARING.WAIT_READY", Event::kReadyAirOffboard, "PREPARING.AIR_SIGNAL", "-", {}, before);
+  // P+1: P 표본보다 묵은 DISARMED landed 표본.
+  h.world.arming = Arming::kDisarmed;
+  h.push_world_samples();
+  h.push_status(p_stamp - 1000U);
+  h.snapshot.land = old_land;
+  before = h.edges().size();
+  const StepOutput out = h.step_only();
+  EXPECT_FALSE(h.runner().done()) << termination_or_empty(h).detail;
+  EXPECT_EQ(h.edges().size(), before);
+  EXPECT_EQ(h.view().prep, PrepStep::kAirSignal);
+  EXPECT_TRUE(out.setpoint.has_value());
+  EXPECT_FALSE(h.view().landed_false_seen);
+}
+
+// 첫 OFFBOARD 표본 뒤에는 대기 명령이 없어 DO_SET_MODE의 거부 ack를 보지 않는다(N1 impossible).
+TEST(AirEntry, A16b_RejectionAckAfterFirstOffboardSampleIsIgnored)
+{
+  Harness h(air_loiter_mission());
+  h.auto_offboard_ack = false;
+  const std::uint64_t s = h.drive_to_air_seen();  // S+1: O3
+  EXPECT_FALSE(h.view().pending_active);
+  h.push_ack(AckCommand::kSetMode, AckResult::kTemporarilyRejected);
+  EXPECT_TRUE(h.tick().commands.empty());  // S+2
+  const std::size_t before = h.edges().size();
+  h.tick();  // S+3
+  expect_cell(
+    h, "PREPARING.AIR_OFFBOARD_SEEN", Event::kOffboardConfirmed, "ITEM.LOITER", "-", {}, before);
+  EXPECT_EQ(h.tick_no - 1, s + 3);
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 0);
 }
 
 // ---- A22 P3 tick의 Px4Timestamp ----
