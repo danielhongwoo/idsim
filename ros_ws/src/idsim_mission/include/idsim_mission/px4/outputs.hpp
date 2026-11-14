@@ -31,10 +31,12 @@
 //   채운다(core 불변식 위반이라 노드 버그다).
 // - setpoint는 position만 true인 offboard_control_mode와 trajectory_setpoint의 짝이다. kGround이면
 //   z에 kGroundSetpointOffsetDownM을 더한다. yaw는 frames::wrap_pi로 [-pi, pi)에 넣는다(core가 이미
-//   그 범위로 주므로 보통 그대로다). 위치나 yaw가 비유한이면 그 tick의 짝을 둘 다 버리고 error를
-//   채운다. 명령은 그대로 내보낸다.
+//   그 범위로 주므로 보통 그대로다). velocity_valid이면 velocity(로컬 NED, m/s)를
+//   trajectory_setpoint.velocity에 싣고(feedforward), 아니면 velocity는 NaN이다.
+//   offboard_control_mode는 velocity_valid와 무관하게 position만 true다. 위치, yaw, 또는 싣기로
+//   한 velocity가 비유한이면 그 tick의 짝을 둘 다 버리고 error를 채운다. 명령은 그대로 내보낸다.
 // - CommandKind -> VehicleCommandBuilder: kSetModeOffboard -> set_mode_offboard, kSetModeHold ->
-//   set_mode_hold, kArm -> arm, kDisarm -> disarm(강제가 아님), kNavLand -> land.
+//   set_mode_hold, kArm -> arm, kDisarm -> disarm(강제가 아님), kNavLand -> land, kNavRtl -> rtl.
 
 #ifndef IDSIM_MISSION__PX4__OUTPUTS_HPP_
 #define IDSIM_MISSION__PX4__OUTPUTS_HPP_
@@ -69,7 +71,7 @@ struct SetpointMessages
 // 지상 오프셋을 적용한 PX4로 보낼 위치(NED). kTarget이면 그대로, kGround이면 z + 0.5.
 core::SetpointOut apply_ground_offset(const core::SetpointOut & setpoint);
 
-// SetpointOut 하나 -> 메시지 짝. 비유한이면 nullopt.
+// SetpointOut 하나 -> 메시지 짝. 위치, yaw, 싣기로 한 velocity 중 비유한이 있으면 nullopt.
 std::optional<SetpointMessages> to_setpoint_messages(
   const core::SetpointOut & setpoint, idsim_common::Px4Timestamp timestamp);
 

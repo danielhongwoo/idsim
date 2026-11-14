@@ -31,6 +31,7 @@
 #include "idsim_mission/core/mission_runner.hpp"
 #include "idsim_mission/core/snapshot.hpp"
 #include "idsim_mission/px4/clock_port.hpp"
+#include "idsim_mission/px4/inputs.hpp"
 #include "idsim_mission/px4/outputs.hpp"
 #include "rcl/time.h"
 #include "rclcpp/clock.hpp"
@@ -172,6 +173,85 @@ TEST(Px4Outputs, TargetSetpointMessages)
   EXPECT_TRUE(std::isnan(tr.yawspeed));
 }
 
+// ---- 속도 feedforward(decisions.md 쟁점 8) ----
+
+TEST(Px4Outputs, VelocityNotValidGivesNaNEvenIfFieldIsSet)
+{
+  // velocity_valid가 false이면 velocity 필드 값과 무관하게 NaN이다(feedforward 없음).
+  SetpointOut sp = setpoint(SetpointKind::kTarget, 1.0, 2.0, -5.0, 0.0);
+  sp.velocity = core::Vec3{1.0, 2.0, 3.0};
+  sp.velocity_valid = false;
+  const auto msgs = to_setpoint_messages(sp, stamp_at(kStampUs));
+  ASSERT_TRUE(msgs.has_value());
+  for (const float v : msgs->trajectory.velocity) {
+    EXPECT_TRUE(std::isnan(v));
+  }
+  // 싣지 않는 속도는 비유한이어도 짝을 버리지 않는다.
+  sp.velocity = core::Vec3{kNaN, kInf, -kInf};
+  EXPECT_TRUE(to_setpoint_messages(sp, stamp_at(kStampUs)).has_value());
+}
+
+TEST(Px4Outputs, VelocityValidIsFeedforwardAndModeStaysPositionOnly)
+{
+  SetpointOut sp = setpoint(SetpointKind::kTarget, 1.0, 2.0, -5.0, 0.5);
+  sp.velocity_valid = true;
+  sp.velocity = core::Vec3{1.5, -0.25, 0.125};  // 로컬 NED, m/s. 어댑터는 축을 바꾸지 않는다
+  const auto msgs = to_setpoint_messages(sp, stamp_at(kStampUs));
+  ASSERT_TRUE(msgs.has_value());
+  const auto & tr = msgs->trajectory;
+  EXPECT_FLOAT_EQ(tr.velocity[0], 1.5F);
+  EXPECT_FLOAT_EQ(tr.velocity[1], -0.25F);
+  EXPECT_FLOAT_EQ(tr.velocity[2], 0.125F);
+  EXPECT_FLOAT_EQ(tr.position[0], 1.0F);
+  EXPECT_FLOAT_EQ(tr.position[1], 2.0F);
+  EXPECT_FLOAT_EQ(tr.position[2], -5.0F);
+  for (const float a : tr.acceleration) {
+    EXPECT_TRUE(std::isnan(a));
+  }
+  // offboard_control_mode는 속도를 실어도 position만 true다.
+  EXPECT_TRUE(msgs->mode.position);
+  EXPECT_FALSE(msgs->mode.velocity);
+  EXPECT_FALSE(msgs->mode.acceleration);
+}
+
+TEST(Px4Outputs, ZeroVelocityValidIsZeroNotNaN)
+{
+  // 정지한 표적의 유효 속도 0은 "제어하지 않음"(NaN)과 다르다. 0 그대로 싣는다.
+  SetpointOut sp = setpoint(SetpointKind::kTarget, 0.0, 0.0, -5.0, 0.0);
+  sp.velocity_valid = true;
+  const auto msgs = to_setpoint_messages(sp, stamp_at(kStampUs));
+  ASSERT_TRUE(msgs.has_value());
+  for (const float v : msgs->trajectory.velocity) {
+    EXPECT_EQ(v, 0.0F);
+  }
+}
+
+TEST(Px4Outputs, NonFiniteValidVelocityRejectsWholePair)
+{
+  // 싣기로 한 속도에 비유한 성분이 하나라도 있으면 일부 축만 NaN으로 보내지 않고 짝을 버린다.
+  const Px4Timestamp ts = stamp_at(kStampUs);
+  for (const double bad : {kNaN, kInf, -kInf}) {
+    for (int axis = 0; axis < 3; ++axis) {
+      SetpointOut sp = setpoint(SetpointKind::kTarget, 0.0, 0.0, -5.0, 0.0);
+      sp.velocity_valid = true;
+      sp.velocity = core::Vec3{axis == 0 ? bad : 1.0, axis == 1 ? bad : 1.0, axis == 2 ? bad : 1.0};
+      EXPECT_FALSE(to_setpoint_messages(sp, ts)) << "axis " << axis;
+    }
+  }
+}
+
+TEST(Px4Outputs, VelocityWithGroundKindKeepsOffsetOnPositionOnly)
+{
+  // core는 지상 setpoint에 속도를 싣지 않는다. 그래도 어댑터는 오프셋을 위치 z에만 더한다.
+  SetpointOut sp = setpoint(SetpointKind::kGround, 0.0, 0.0, -0.1, 0.0);
+  sp.velocity_valid = true;
+  sp.velocity = core::Vec3{0.0, 0.0, 0.25};
+  const auto msgs = to_setpoint_messages(sp, stamp_at(kStampUs));
+  ASSERT_TRUE(msgs.has_value());
+  EXPECT_FLOAT_EQ(msgs->trajectory.position[2], static_cast<float>(-0.1 + 0.5));
+  EXPECT_FLOAT_EQ(msgs->trajectory.velocity[2], 0.25F);
+}
+
 TEST(Px4Outputs, YawIsWrappedToMinusPiPi)
 {
   // core는 [-pi, pi)로 주지만, 범위 밖 값이 와도 PX4에는 감은 값이 간다.
@@ -205,6 +285,7 @@ TEST(Px4Outputs, CommandKindMapsToBuilderMethod)
   expect_same_command(to_vehicle_command(CommandKind::kArm, b, ts), b.arm(ts));
   expect_same_command(to_vehicle_command(CommandKind::kDisarm, b, ts), b.disarm(ts));
   expect_same_command(to_vehicle_command(CommandKind::kNavLand, b, ts), b.land(ts));
+  expect_same_command(to_vehicle_command(CommandKind::kNavRtl, b, ts), b.rtl(ts));
 }
 
 TEST(Px4Outputs, CommandKindFieldsAndAckGroup)
@@ -222,6 +303,7 @@ TEST(Px4Outputs, CommandKindFieldsAndAckGroup)
     {CommandKind::kArm, VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM},
     {CommandKind::kDisarm, VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM},
     {CommandKind::kNavLand, VehicleCommand::VEHICLE_CMD_NAV_LAND},
+    {CommandKind::kNavRtl, VehicleCommand::VEHICLE_CMD_NAV_RETURN_TO_LAUNCH},
   };
   for (const Row & row : rows) {
     const VehicleCommand cmd = to_vehicle_command(row.kind, b, ts);
@@ -230,6 +312,24 @@ TEST(Px4Outputs, CommandKindFieldsAndAckGroup)
     EXPECT_EQ(cmd.target_system, 2);
     EXPECT_EQ(cmd.source_system, 254);
     EXPECT_EQ(cmd.source_component, 1);
+    // 어댑터가 내는 명령 번호와 그 ack를 묶는 표(inputs.cpp)가 core의 ack_command_of와 같다.
+    EXPECT_EQ(ack_command_from_px4(cmd.command), core::ack_command_of(row.kind))
+      << core::command_name(row.kind);
+  }
+}
+
+TEST(Px4Outputs, RtlCommandHasAllParamsZero)
+{
+  // 20 NAV_RETURN_TO_LAUNCH는 param을 쓰지 않는다. 0으로 보낸다(VehicleCommandBuilder::rtl).
+  const VehicleCommand cmd =
+    to_vehicle_command(CommandKind::kNavRtl, builder(), stamp_at(kStampUs));
+  EXPECT_EQ(cmd.command, 20U);
+  // param5, param6은 float64, 나머지는 float32다.
+  for (const double p :
+       {static_cast<double>(cmd.param1), static_cast<double>(cmd.param2),
+        static_cast<double>(cmd.param3), static_cast<double>(cmd.param4), cmd.param5, cmd.param6,
+        static_cast<double>(cmd.param7)}) {
+    EXPECT_EQ(p, 0.0);
   }
 }
 

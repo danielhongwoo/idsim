@@ -39,6 +39,8 @@ core::NavMode nav_mode_from_px4(std::uint8_t nav_state)
       return core::NavMode::kHold;
     case VehicleStatus::NAVIGATION_STATE_AUTO_LAND:
       return core::NavMode::kLand;
+    case VehicleStatus::NAVIGATION_STATE_AUTO_RTL:
+      return core::NavMode::kRtl;
     default:
       return core::NavMode::kOther;
   }
@@ -59,6 +61,8 @@ core::AckCommand ack_command_from_px4(std::uint32_t command)
       return core::AckCommand::kArmDisarm;
     case VehicleCommand::VEHICLE_CMD_NAV_LAND:
       return core::AckCommand::kNavLand;
+    case VehicleCommand::VEHICLE_CMD_NAV_RETURN_TO_LAUNCH:
+      return core::AckCommand::kNavRtl;
     default:
       return core::AckCommand::kOther;
   }
@@ -131,10 +135,12 @@ core::PositionSample to_position_sample(
   const px4_msgs::msg::VehicleLocalPosition & msg, std::uint64_t received_tick)
 {
   core::PositionSample sample;
+  sample.timestamp_us = msg.timestamp;  // timestamp_sample이 아니다(snapshot.hpp 머리 주석)
   sample.x = static_cast<double>(msg.x);
   sample.y = static_cast<double>(msg.y);
   sample.z = static_cast<double>(msg.z);
   sample.heading = static_cast<double>(msg.heading);
+  sample.xy_valid = msg.xy_valid;
   sample.z_valid = msg.z_valid;
   sample.received_tick = received_tick;
   return sample;

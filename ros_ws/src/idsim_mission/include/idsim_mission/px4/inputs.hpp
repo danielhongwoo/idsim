@@ -59,7 +59,8 @@ struct Received
 // ---- enum 해석(전수 시험 대상) ----
 
 // nav_state와 nav_state_user_intention에 같이 쓴다. OFFBOARD -> kOffboard, AUTO_LOITER -> kHold,
-// AUTO_LAND -> kLand, 그 밖(DESCEND, AUTO_RTL, TERMINATION, 정의되지 않은 값 포함) -> kOther.
+// AUTO_LAND -> kLand, AUTO_RTL -> kRtl, 그 밖(DESCEND, TERMINATION, 정의되지 않은 값 포함)
+// -> kOther.
 // DESCEND를 kLand로 접지 않는다: 위치가 무효일 때 NAV_LAND가 DESCEND로 대체되며, 그것은 AUTO_LAND
 // 확인이 아니다(PX4 Commander.cpp의 NAV_LAND 처리. decisions.md 쟁점 4 `[LAND]` 단서와 같은 동작).
 core::NavMode nav_mode_from_px4(std::uint8_t nav_state);
@@ -68,7 +69,7 @@ core::NavMode nav_mode_from_px4(std::uint8_t nav_state);
 core::Arming arming_from_px4(std::uint8_t arming_state);
 
 // VEHICLE_CMD_DO_SET_MODE -> kSetMode, VEHICLE_CMD_COMPONENT_ARM_DISARM -> kArmDisarm,
-// VEHICLE_CMD_NAV_LAND -> kNavLand, 그 밖 -> kOther.
+// VEHICLE_CMD_NAV_LAND -> kNavLand, VEHICLE_CMD_NAV_RETURN_TO_LAUNCH -> kNavRtl, 그 밖 -> kOther.
 core::AckCommand ack_command_from_px4(std::uint32_t command);
 
 // VEHICLE_CMD_RESULT_* 0-6을 이름 그대로, 그 밖 -> kOther.
@@ -89,7 +90,8 @@ core::StatusSample to_status_sample(
 core::LandSample to_land_sample(
   const px4_msgs::msg::VehicleLandDetected & msg, std::uint64_t received_tick);
 
-// x, y, z, heading은 float32 -> double 그대로(NaN 유지). z_valid 그대로.
+// timestamp_us <- timestamp(timestamp_sample이 아니다). x, y, z, heading은 float32 -> double
+// 그대로(NaN 유지). xy_valid, z_valid 그대로. 기준(ref_*)은 읽지 않는다(frame_port.hpp).
 core::PositionSample to_position_sample(
   const px4_msgs::msg::VehicleLocalPosition & msg, std::uint64_t received_tick);
 
@@ -97,7 +99,8 @@ core::FlagsSample to_flags_sample(
   const px4_msgs::msg::FailsafeFlags & msg, std::uint64_t received_tick);
 
 // ack의 target_system, target_component가 source와 같을 때만 값이 있다. 아니면 nullopt(다른
-// 송신자, 예를 들면 테스트의 px4_raw나 QGC의 명령에 대한 ack. 버린다).
+// 송신자, 예를 들면 테스트의 px4_raw나 QGC, 또는 Navigator가 내부에서 낸 명령에 대한 ack. 버린다).
+// 필터는 명령 종류와 무관하다(NAV_RETURN_TO_LAUNCH도 같다).
 std::optional<core::AckSample> to_ack_sample(
   const px4_msgs::msg::VehicleCommandAck & msg, const idsim_common::CommandSource & source,
   std::uint64_t received_tick);

@@ -37,10 +37,16 @@ std::optional<SetpointMessages> to_setpoint_messages(
   const core::SetpointOut & setpoint, idsim_common::Px4Timestamp timestamp)
 {
   const core::SetpointOut target = apply_ground_offset(setpoint);
+  // velocity_valid가 false이면 nullopt를 넘겨 velocity가 NaN(feedforward 없음)이 된다. true이면
+  // 세 성분 모두 유한해야 하고, 아니면 position_setpoint가 짝 전체를 거부한다.
+  std::optional<Eigen::Vector3d> velocity;
+  if (target.velocity_valid) {
+    velocity = Eigen::Vector3d(target.velocity.x, target.velocity.y, target.velocity.z);
+  }
   // wrap_pi는 비유한 값을 NaN으로 두므로 아래 position_setpoint가 거부한다.
   auto trajectory = idsim_common::px4::position_setpoint(
     timestamp, Eigen::Vector3d(target.x, target.y, target.z),
-    idsim_common::frames::wrap_pi(target.yaw_ned));
+    idsim_common::frames::wrap_pi(target.yaw_ned), velocity);
   if (!trajectory) {
     return std::nullopt;
   }
@@ -62,6 +68,8 @@ px4_msgs::msg::VehicleCommand to_vehicle_command(
       return builder.disarm(timestamp);  // 강제가 아닌 disarm
     case core::CommandKind::kNavLand:
       return builder.land(timestamp);
+    case core::CommandKind::kNavRtl:
+      return builder.rtl(timestamp);
   }
   // enum 밖의 값은 core가 만들지 않는다. 경고 없이 컴파일되도록 둔 도달 불가 경로.
   return builder.disarm(timestamp);

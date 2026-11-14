@@ -84,12 +84,13 @@ FailsafeFlags ready_flags()
 
 // ---- nav_state 전수 ----
 
-TEST(Px4Inputs, NavStateMapsOnlyOffboardLoiterLandAllOthersAreOther)
+TEST(Px4Inputs, NavStateMapsOnlyOffboardLoiterLandRtlAllOthersAreOther)
 {
   const std::map<int, NavMode> mapped{
     {VehicleStatus::NAVIGATION_STATE_OFFBOARD, NavMode::kOffboard},
     {VehicleStatus::NAVIGATION_STATE_AUTO_LOITER, NavMode::kHold},
     {VehicleStatus::NAVIGATION_STATE_AUTO_LAND, NavMode::kLand},
+    {VehicleStatus::NAVIGATION_STATE_AUTO_RTL, NavMode::kRtl},
   };
   for (int v = 0; v <= 255; ++v) {
     const auto it = mapped.find(v);
@@ -102,6 +103,7 @@ TEST(Px4Inputs, NavStateNumericValuesMatchPx4V117)
 {
   // 상수 이름으로 비교하지만, px4_msgs가 바뀌어 값이 움직이면 알아차리게 한 번 고정한다.
   EXPECT_EQ(VehicleStatus::NAVIGATION_STATE_AUTO_LOITER, 4);
+  EXPECT_EQ(VehicleStatus::NAVIGATION_STATE_AUTO_RTL, 5);
   EXPECT_EQ(VehicleStatus::NAVIGATION_STATE_DESCEND, 12);
   EXPECT_EQ(VehicleStatus::NAVIGATION_STATE_OFFBOARD, 14);
   EXPECT_EQ(VehicleStatus::NAVIGATION_STATE_AUTO_LAND, 18);
@@ -112,10 +114,18 @@ TEST(Px4Inputs, DescendIsNotLand)
   // 위치가 무효일 때 NAV_LAND는 DESCEND로 대체된다. AUTO_LAND 확인으로 세지 않는다.
   EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_DESCEND), NavMode::kOther);
   EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_AUTO_PRECLAND), NavMode::kOther);
-  EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_AUTO_RTL), NavMode::kOther);
   EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_AUTO_TAKEOFF), NavMode::kOther);
   EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_TERMINATION), NavMode::kOther);
   EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_POSCTL), NavMode::kOther);
+}
+
+TEST(Px4Inputs, RtlIsOnlyAutoRtl)
+{
+  // RTL 확인은 AUTO_RTL 하나다. RTL이 착륙 단계로 넘어가면 PX4 v1.17은 nav_state를 AUTO_RTL로 둔 채
+  // 내부 단계만 바꾸므로 AUTO_LAND로 접지 않는다(추정. RTL 항목 SITL 실측에서 확인한다).
+  EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_AUTO_RTL), NavMode::kRtl);
+  EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_AUTO_LAND), NavMode::kLand);
+  EXPECT_EQ(nav_mode_from_px4(VehicleStatus::NAVIGATION_STATE_AUTO_PRECLAND), NavMode::kOther);
 }
 
 TEST(Px4Inputs, NavStateAndUserIntentionUseTheSameTable)
@@ -183,6 +193,7 @@ TEST(Px4Inputs, AckCommandGroups)
     {VehicleCommand::VEHICLE_CMD_DO_SET_MODE, AckCommand::kSetMode},
     {VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, AckCommand::kArmDisarm},
     {VehicleCommand::VEHICLE_CMD_NAV_LAND, AckCommand::kNavLand},
+    {VehicleCommand::VEHICLE_CMD_NAV_RETURN_TO_LAUNCH, AckCommand::kNavRtl},
   };
   // VehicleCommand 상수는 uint16 범위다. 그 전부와 범위 밖 몇 값을 본다.
   for (std::uint32_t v = 0; v <= 0xFFFFU; ++v) {
@@ -209,6 +220,15 @@ TEST(Px4Inputs, AckCommandGroups)
   EXPECT_EQ(
     ack_command_from_px4(VehicleCommand::VEHICLE_CMD_NAV_LAND),
     core::ack_command_of(core::CommandKind::kNavLand));
+  EXPECT_EQ(
+    ack_command_from_px4(VehicleCommand::VEHICLE_CMD_NAV_RETURN_TO_LAUNCH),
+    core::ack_command_of(core::CommandKind::kNavRtl));
+}
+
+TEST(Px4Inputs, CommandNumericValuesMatchMavlink)
+{
+  EXPECT_EQ(VehicleCommand::VEHICLE_CMD_NAV_RETURN_TO_LAUNCH, 20U);
+  EXPECT_EQ(VehicleCommand::VEHICLE_CMD_NAV_LAND, 21U);
 }
 
 // ---- vehicle_command_ack 표본 ----
@@ -249,6 +269,27 @@ TEST(Px4Inputs, AckForAnotherSenderIsDropped)
   msg.target_system = kTargetSysid;
   msg.target_component = idsim_common::kAutopilotComponentId;
   EXPECT_FALSE(to_ack_sample(msg, source(), 1).has_value()) << "autopilot itself";
+}
+
+TEST(Px4Inputs, RtlAckUsesTheSameTargetFilter)
+{
+  // NAV_RETURN_TO_LAUNCH는 이 Executor 말고도(운용자, PX4 내부) 낼 수 있다. 필터는 명령과 무관하다.
+  VehicleCommandAck msg;
+  msg.command = VehicleCommand::VEHICLE_CMD_NAV_RETURN_TO_LAUNCH;
+  msg.result = VehicleCommandAck::VEHICLE_CMD_RESULT_DENIED;
+  msg.target_system = kSourceSystem;
+  msg.target_component = kSourceComponent;
+  const std::optional<core::AckSample> ack = to_ack_sample(msg, source(), 3);
+  ASSERT_TRUE(ack.has_value());
+  EXPECT_EQ(ack->command, AckCommand::kNavRtl);
+  EXPECT_EQ(ack->result, AckResult::kDenied);
+
+  msg.target_system = kTargetSysid;
+  msg.target_component = idsim_common::kAutopilotComponentId;
+  EXPECT_FALSE(to_ack_sample(msg, source(), 3).has_value()) << "autopilot itself";
+  msg.target_system = kSourceSystem;
+  msg.target_component = kSourceComponent + 1;
+  EXPECT_FALSE(to_ack_sample(msg, source(), 3).has_value()) << "other component";
 }
 
 // ---- failsafe_flags와 ekf_ready 술어 ----
@@ -381,18 +422,52 @@ TEST(Px4Inputs, LandSample)
 TEST(Px4Inputs, PositionSampleFields)
 {
   VehicleLocalPosition msg;
+  msg.timestamp = 9'000'500;
+  msg.timestamp_sample = 9'000'100;
   msg.x = 1.5F;
   msg.y = -2.25F;
   msg.z = -10.0F;
   msg.heading = -3.0F;
+  msg.xy_valid = true;
   msg.z_valid = true;
   const core::PositionSample s = to_position_sample(msg, 11);
+  EXPECT_EQ(s.timestamp_us, 9'000'500U);  // timestamp_sample이 아니다
+  EXPECT_TRUE(s.xy_valid);
   EXPECT_DOUBLE_EQ(s.x, 1.5);
   EXPECT_DOUBLE_EQ(s.y, -2.25);
   EXPECT_DOUBLE_EQ(s.z, -10.0);
   EXPECT_DOUBLE_EQ(s.heading, static_cast<double>(-3.0F));
   EXPECT_TRUE(s.z_valid);
   EXPECT_EQ(s.received_tick, 11U);
+}
+
+TEST(Px4Inputs, PositionValidFlagsAreIndependent)
+{
+  VehicleLocalPosition msg;
+  for (const bool xy : {false, true}) {
+    for (const bool z : {false, true}) {
+      msg.xy_valid = xy;
+      msg.z_valid = z;
+      const core::PositionSample s = to_position_sample(msg, 1);
+      EXPECT_EQ(s.xy_valid, xy);
+      EXPECT_EQ(s.z_valid, z);
+    }
+  }
+}
+
+TEST(Px4Inputs, PositionTimestampIgnoresTimestampSample)
+{
+  // core는 timestamp_us로 서로 다른 표본을 가른다. 같은 timestamp_sample을 가진 두 표본이라도
+  // timestamp가 다르면 다른 값이, timestamp가 같으면 같은 값이 나와야 한다.
+  VehicleLocalPosition a;
+  a.timestamp = 100;
+  a.timestamp_sample = 50;
+  VehicleLocalPosition b = a;
+  b.timestamp = 150;
+  EXPECT_NE(to_position_sample(a, 1).timestamp_us, to_position_sample(b, 1).timestamp_us);
+  VehicleLocalPosition c = a;
+  c.timestamp_sample = 99;
+  EXPECT_EQ(to_position_sample(a, 1).timestamp_us, to_position_sample(c, 1).timestamp_us);
 }
 
 TEST(Px4Inputs, PositionNaNPassesThrough)
