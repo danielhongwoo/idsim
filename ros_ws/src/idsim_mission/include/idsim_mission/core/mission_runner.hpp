@@ -18,8 +18,9 @@
 //
 // 쓰는 법(노드, P3d)
 // - screen_goal(mission_validation.hpp)을 통과한 goal마다 MissionRunner를 하나 만든다.
-// - 20 Hz timer tick마다 step(TickInput, Snapshot, Px4ClockPort)을 한 번 부른다. 입력과 출력의
-//   뜻은 snapshot.hpp 머리 주석에 있다.
+// - 20 Hz timer tick마다 step(TickInput, Snapshot, Px4ClockPort, FramePort)를 한 번 부른다. 입력과
+//   출력의 뜻은 snapshot.hpp 머리 주석에 있다. FramePort는 GOTO 항목만 부른다(1a type 미션은 부르지
+//   않는다).
 // - 출력의 setpoint가 있으면 그 tick에 offboard_control_mode와 trajectory_setpoint를 발행하고,
 //   commands를 순서대로 보내고, feedback이 있으면 publish_feedback, termination이 있으면 그 값으로
 //   goal을 끝내고 종료 사건을 낸다(termination.hpp). termination은 정확히 한 번 나온다. 그 뒤의
@@ -115,7 +116,9 @@ public:
     MissionSpec mission, Config config, std::int64_t accept_ns,
     TransitionObserver * observer = nullptr);
 
-  StepOutput step(const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock);
+  StepOutput step(
+    const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock,
+    const FramePort & frame);
 
   bool done() const { return stage_ == Stage::kDone; }
   RunnerView view() const;
@@ -126,7 +129,8 @@ private:
   friend class MissionRunnerTestAccess;
   // 지금 tick에 취소의 정리를 시작한다(step의 단계 처리 없이). MissionRunnerTestAccess만 부른다.
   StepOutput begin_cancel_without_stage(
-    const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock);
+    const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock,
+    const FramePort & frame);
   // 전이 관측의 untagged 검출을 시험하려고 둔다(TransitionTestAccess만 부른다). 한 tick 안에서
   // steps를 차례로(꼬리표 달기 또는 set_state) 한 뒤 그 tick의 기록을 넘긴다. 상태기의 단계 처리는
   // 하지 않는다.
@@ -139,7 +143,7 @@ private:
   };
   StepOutput run_test_steps(
     const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock,
-    const std::vector<TestStep> & steps);
+    const FramePort & frame, const std::vector<TestStep> & steps);
 
   struct Tick;
   struct AckView

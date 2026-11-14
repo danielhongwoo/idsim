@@ -42,9 +42,9 @@ class MissionRunnerTestAccess
 public:
   static StepOutput begin_cancel(
     MissionRunner & runner, const TickInput & input, const Snapshot & snapshot,
-    Px4ClockPort & clock)
+    Px4ClockPort & clock, const FramePort & frame)
   {
-    return runner.begin_cancel_without_stage(input, snapshot, clock);
+    return runner.begin_cancel_without_stage(input, snapshot, clock, frame);
   }
 };
 
@@ -667,8 +667,8 @@ TEST(UntrustedSample, FirstCleanupTickEndsAndDisarmsIfArmSent)
     input.cancel_requested = true;
     h.clock.now_ns = h.now_ns;
     h.clock.fail = stamp_fails;
-    const StepOutput out =
-      MissionRunnerTestAccess::begin_cancel(h.mutable_runner(), input, h.snapshot, h.clock);
+    const StepOutput out = MissionRunnerTestAccess::begin_cancel(
+      h.mutable_runner(), input, h.snapshot, h.clock, h.frame);
     ASSERT_TRUE(out.termination.has_value());
     EXPECT_EQ(out.termination->status, Status::kAborted);
     EXPECT_EQ(out.termination->reason, Reason::kInternal);

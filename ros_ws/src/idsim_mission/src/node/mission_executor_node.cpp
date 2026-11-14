@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -58,6 +59,25 @@ std::int64_t seconds_to_ns(double seconds)
 double ns_to_seconds(std::int64_t ns) { return static_cast<double>(ns) / 1e9; }
 
 std::size_t ack_index(core::AckCommand command) { return static_cast<std::size_t>(command); }
+
+// 값을 주지 않는 임시 FramePort. 점 변환은 늘 nullopt이고 벡터 변환은 세 성분 모두 quiet NaN이다
+// (0 벡터는 feedback 거리나 feedforward에 그럴듯한 값으로 섞일 수 있어 쓰지 않는다). goal 접수의
+// 1a 미션 제한이 GOTO와 TRACK_ENTITY를 거르므로 이 노드에서는 불리지 않는다.
+// docs-for-agent/plan-1b-mission-target/README.md의 B10에서 px4::Px4FramePort로 바꾸고 지운다.
+class FramePortUntilB10 final : public core::FramePort
+{
+public:
+  std::optional<core::Vec3> world_to_local(const core::Vec3 & /*world_enu*/) const override
+  {
+    return std::nullopt;
+  }
+
+  core::Vec3 world_velocity_to_local(const core::Vec3 & /*world_enu*/) const override
+  {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    return core::Vec3{nan, nan, nan};
+  }
+};
 
 }  // namespace
 
@@ -522,7 +542,8 @@ void MissionExecutorNode::on_tick()
   input.now_ns = get_clock()->now().nanoseconds();
   input.cancel_requested = goal_->is_canceling();
   clock_port_->begin_tick();
-  const core::StepOutput out = runner_->step(input, snapshot_, *clock_port_);
+  const FramePortUntilB10 frame;
+  const core::StepOutput out = runner_->step(input, snapshot_, *clock_port_, frame);
   const px4::Px4Messages msgs = px4::to_px4_messages(out, builder, clock_port_->stamp());
   if (!msgs.error.empty()) {
     RCLCPP_ERROR(get_logger(), "px4 output dropped: %s", msgs.error.c_str());

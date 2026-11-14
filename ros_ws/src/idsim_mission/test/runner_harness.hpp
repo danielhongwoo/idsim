@@ -33,6 +33,10 @@
 //   실행 파일에서만 켜져 있고, 칸 목록 대조는 test_transition_coverage.cpp가 한다. 기록기가 켜져
 //   있으면 Harness는 자기 runner의 기록을 edges()에도 모은다(expect_cell이 한 시나리오의 칸을
 //   단정할 때 쓴다). 꺼져 있으면 runner에 observer를 넘기지 않는다.
+// - FramePort는 HarnessFramePort(frame)다. 기본 모드 kFail은 부르면 테스트를 실패시킨다. 그래서
+//   GOTO가 없는 미션의 모든 사례가 "1a type 미션은 FramePort를 부르지 않는다"(1b decisions.md
+//   쟁점 12)를 함께 단정한다. GOTO 사례는 kAxis(축 치환)나 kNone(값 없음)으로 바꾸거나 tick마다
+//   값을 고르는 hook을 둔다.
 // - 방어 경로(PX4 v1.17.0에서 나오지 않는 조합과 ack)는 합성 표본과 합성 ack로만 시험한다.
 //   해당 테스트에 그렇게 적는다.
 
@@ -45,6 +49,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
@@ -208,6 +213,82 @@ public:
   std::int64_t now_ns{kStartNs};
   bool fail{false};
   int calls{0};
+};
+
+// FramePort의 시험 구현. 호출을 센다(const 메서드라 mutable).
+enum class FrameMode : std::uint8_t
+{
+  kFail,  // 부르면 ADD_FAILURE()하고 값 없음(점은 nullopt, 벡터는 NaN)
+  kAxis,  // world ENU -> 로컬 NED 축 치환에 shift를 더한다(원점 이동 없음)
+  kNone,  // 점 변환은 늘 nullopt(기준 무효)
+};
+
+class HarnessFramePort final : public FramePort
+{
+public:
+  struct PointCall
+  {
+    std::uint64_t tick{0};
+    Vec3 world;
+  };
+
+  // (world.y, world.x, -world.z) + shift.
+  static Vec3 axis(const Vec3 & world, const Vec3 & shift = Vec3{})
+  {
+    return Vec3{world.y + shift.x, world.x + shift.y, -world.z + shift.z};
+  }
+
+  std::optional<Vec3> world_to_local(const Vec3 & world_enu) const override
+  {
+    point_calls.push_back(PointCall{tick, world_enu});
+    if (hook) {
+      return hook(tick, world_enu);
+    }
+    switch (mode) {
+      case FrameMode::kAxis:
+        return axis(world_enu, shift);
+      case FrameMode::kNone:
+        return std::nullopt;
+      case FrameMode::kFail:
+        break;
+    }
+    ADD_FAILURE() << "FramePort::world_to_local called at tick " << tick;
+    return std::nullopt;
+  }
+
+  Vec3 world_velocity_to_local(const Vec3 & world_enu) const override
+  {
+    ++vector_calls;
+    if (mode == FrameMode::kFail && !hook) {
+      ADD_FAILURE() << "FramePort::world_velocity_to_local called at tick " << tick;
+      const double nan = std::numeric_limits<double>::quiet_NaN();
+      return Vec3{nan, nan, nan};
+    }
+    return Vec3{world_enu.y, world_enu.x, -world_enu.z};
+  }
+
+  // 이 tick의 점 변환 호출 수.
+  int point_calls_at(std::uint64_t at) const
+  {
+    return static_cast<int>(std::count_if(
+      point_calls.begin(), point_calls.end(), [at](const PointCall & c) { return c.tick == at; }));
+  }
+
+  // tick이 from 이상인 점 변환 호출 수.
+  int point_calls_from(std::uint64_t from) const
+  {
+    return static_cast<int>(std::count_if(
+      point_calls.begin(), point_calls.end(),
+      [from](const PointCall & c) { return c.tick >= from; }));
+  }
+
+  FrameMode mode{FrameMode::kFail};
+  Vec3 shift;
+  // 있으면 mode 대신 tick 번호와 입력으로 점 변환 값을 고른다.
+  std::function<std::optional<Vec3>(std::uint64_t tick, const Vec3 & world)> hook;
+  std::uint64_t tick{0};  // Harness가 step 직전에 그 tick 번호로 둔다
+  mutable std::vector<PointCall> point_calls;
+  mutable int vector_calls{0};
 };
 
 // 가짜 PX4가 보고하는 기체 상태.
@@ -405,7 +486,8 @@ public:
     input.tick = tick_no;
     input.now_ns = now_ns;
     input.cancel_requested = cancel || cancel_sticky;
-    StepOutput out = runner_.step(input, snapshot, clock);
+    frame.tick = tick_no;
+    StepOutput out = runner_.step(input, snapshot, clock, frame);
     // 불변식: feedback의 stamp는 그 tick의 입력 시각이다(Px4ClockPort가 본 시각이 아니다).
     if (out.feedback.has_value()) {
       EXPECT_EQ(out.feedback->stamp_ns, input.now_ns) << "tick " << input.tick;
@@ -548,6 +630,7 @@ public:
   World world;
   Snapshot snapshot;
   FakeClock clock;
+  HarnessFramePort frame;
   std::uint64_t tick_no{1};
   std::int64_t now_ns{kStartNs};
   // Px4ClockPort가 보는 시각 - tick 입력 시각(ns). 노드에서 두 시각은 따로 읽혀 tick마다 0 또는

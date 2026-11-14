@@ -16,7 +16,7 @@
 //
 // 노드(P3d)의 tick 처리 순서:
 //   clock_port.begin_tick();
-//   const auto out = runner.step(input, snapshot, clock_port);
+//   const auto out = runner.step(input, snapshot, clock_port, frame);
 //   const auto msgs = to_px4_messages(out, builder, clock_port.stamp());
 //   if (!msgs.error.empty()) { RCLCPP_ERROR(...); }
 //   if (msgs.setpoint) { mode_pub->publish(msgs.setpoint->mode);

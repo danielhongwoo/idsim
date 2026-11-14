@@ -47,8 +47,9 @@ namespace idsim_mission::core
 struct MissionRunner::Tick
 {
   Tick(
-    const TickInput & in, const Snapshot & snapshot, Px4ClockPort & clock_port, StepOutput & output)
-  : input(in), clock(clock_port), out(output)
+    const TickInput & in, const Snapshot & snapshot, Px4ClockPort & clock_port,
+    const FramePort & frame_port, StepOutput & output)
+  : input(in), clock(clock_port), frame(frame_port), out(output)
   {
     status = snapshot.status.has_value() ? &*snapshot.status : nullptr;
     land = snapshot.land.has_value() ? &*snapshot.land : nullptr;
@@ -59,6 +60,7 @@ struct MissionRunner::Tick
 
   const TickInput & input;
   Px4ClockPort & clock;
+  const FramePort & frame;  // GOTO 항목만 부른다
   StepOutput & out;
   const StatusSample * status{nullptr};
   const LandSample * land{nullptr};
@@ -153,13 +155,13 @@ RunnerView MissionRunner::view() const
 }
 
 StepOutput MissionRunner::step(
-  const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock)
+  const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock, const FramePort & frame)
 {
   StepOutput out;
   if (stage_ == Stage::kDone) {
     return out;
   }
-  Tick t(input, snapshot, clock, out);
+  Tick t(input, snapshot, clock, frame, out);
   t.checkpoint = state_key();
   step_tick(t);
   flush_records(t);
@@ -203,11 +205,11 @@ void MissionRunner::step_tick(Tick & t)
 }
 
 StepOutput MissionRunner::run_test_steps(
-  const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock,
+  const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock, const FramePort & frame,
   const std::vector<TestStep> & steps)
 {
   StepOutput out;
-  Tick t(input, snapshot, clock, out);
+  Tick t(input, snapshot, clock, frame, out);
   t.checkpoint = state_key();
   for (const TestStep & step : steps) {
     if (step.is_tag) {
@@ -221,13 +223,13 @@ StepOutput MissionRunner::run_test_steps(
 }
 
 StepOutput MissionRunner::begin_cancel_without_stage(
-  const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock)
+  const TickInput & input, const Snapshot & snapshot, Px4ClockPort & clock, const FramePort & frame)
 {
   StepOutput out;
   if (stage_ == Stage::kDone) {
     return out;
   }
-  Tick t(input, snapshot, clock, out);
+  Tick t(input, snapshot, clock, frame, out);
   t.checkpoint = state_key();
   begin_cleanup(Event::kCancel, t, CleanupCause::kCancel, Reason::kNone, "");
   finalize(t);

@@ -79,7 +79,8 @@ public:
     input.now_ns = 0;
     Snapshot snapshot;
     test::FakeClock clock;
-    return runner.run_test_steps(input, snapshot, clock, steps);
+    const test::HarnessFramePort frame;
+    return runner.run_test_steps(input, snapshot, clock, frame, steps);
   }
 };
 
