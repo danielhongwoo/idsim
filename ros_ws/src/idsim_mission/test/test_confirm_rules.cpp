@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 순수 규칙: N회 연속 계수, "disarm 전송 뒤 받은 표본"의 기준, 정리 분기 고르기, yaw 변환.
+// 순수 규칙: N회 연속 계수, "disarm 전송 뒤 받은 표본"의 기준, 착지 뒤 대비책의 기한, 정리 분기
+// 고르기, yaw 변환.
 // 결정: decisions.md 쟁점 3 M5 "arm을 보낸 뒤의 지상 분기"(표본 기준), 쟁점 3 M3-M5, 쟁점 6
 // "단위 테스트의 구성"(교차표).
 // 단위 테스트는 합성 timestamp만 검사한다. vehicle_status.timestamp와 Px4Timestamp의 실제 시계
@@ -137,6 +138,39 @@ TEST(DisarmConfirm, BeginResets)
   EXPECT_EQ(d.count(), 0);
   EXPECT_FALSE(d.stamp_known());
   EXPECT_EQ(d.first_send_tick(), 20U);
+}
+
+// ---- 착지 뒤 대비책 disarm의 기한 ----
+
+constexpr std::int64_t kDelayNs = 5'000'000'000;
+
+TEST(LandedArmedFallback, DueAfterDelayFromFirstObservation)
+{
+  LandedArmedFallback f;
+  EXPECT_FALSE(f.due(0, kDelayNs));  // 관측 전
+  f.observe(true, 1'000);
+  f.observe(true, 2'000'000'000);  // 이어지는 관측은 기준 시각을 바꾸지 않는다
+  EXPECT_FALSE(f.due(1'000 + kDelayNs - 1, kDelayNs));
+  EXPECT_TRUE(f.due(1'000 + kDelayNs, kDelayNs));
+  f.mark_sent();
+  EXPECT_TRUE(f.sent());
+  EXPECT_FALSE(f.due(1'000 + kDelayNs, kDelayNs));  // 한 번만 보낸다
+}
+
+TEST(LandedArmedFallback, InterruptionRestartsAndSkippedTicksKeepBase)
+{
+  LandedArmedFallback f;
+  f.observe(true, 0);
+  f.observe(false, 1'000'000'000);  // 끊김
+  EXPECT_FALSE(f.due(kDelayNs, kDelayNs));
+  f.observe(true, 2'000'000'000);  // 다시 잰다
+  // observe를 부르지 않은 tick(부르는 쪽이 반영하지 않기로 한 tick)은 기준 시각을 유지한다.
+  EXPECT_FALSE(f.due(2'000'000'000 + kDelayNs - 1, kDelayNs));
+  EXPECT_TRUE(f.due(2'000'000'000 + kDelayNs, kDelayNs));
+  f.mark_sent();
+  f.reset();
+  EXPECT_FALSE(f.sent());
+  EXPECT_FALSE(f.due(10 * kDelayNs, kDelayNs));
 }
 
 // ---- 정리 분기 고르기: snapshot 유형 5종 ----

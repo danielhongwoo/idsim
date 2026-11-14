@@ -261,7 +261,7 @@ TEST(TransitionCells, RecorderIsOnInThisExecutable)
 // 기록기를 켜고 끈 두 실행의 tick별 출력이 같다(계측이 동작을 바꾸지 않는다). 시나리오는 정상
 // 경로, 공중 취소(Hold), 지상 취소(arm 뒤 disarm), Px4Timestamp 실패, ITEM_TIMEOUT 정리의 Land
 // 경로, 감시 표로 끝나는 setpoint 항목(행끼리 겹침, 완료와 겹침), LAND 항목의 이탈과 [LAND]
-// 미션이다.
+// 미션, RTL 항목, 공중 종료 단계(공중 Hold 확인, 지상 대기에서 Land 경로)다.
 // 겹침 시나리오는 기록에 겹침 칸이 실제로 생겼는지도 본다(조건 선계산과 matched가 닿는 경로).
 void expect_same_outputs(const Harness & on, const Harness & off)
 {
@@ -313,6 +313,8 @@ enum class Scenario
   kLandOnly,
   kRtlSuccess,
   kRtlRejectedLandPath,
+  kMissionEndAirHold,
+  kMissionEndGroundReentry,
 };
 
 bool expects_overlap(Scenario scenario)
@@ -329,8 +331,10 @@ Reason expected_reason(Scenario scenario)
     case Scenario::kCancelGround:
     case Scenario::kLandOnly:
     case Scenario::kRtlSuccess:
+    case Scenario::kMissionEndAirHold:
       return Reason::kNone;
     case Scenario::kRtlRejectedLandPath:
+    case Scenario::kMissionEndGroundReentry:
       return Reason::kModeSwitchFailed;
     case Scenario::kStampFailure:
       return Reason::kInternal;
@@ -353,6 +357,18 @@ MissionSpec mission_for(Scenario scenario)
     case Scenario::kRtlSuccess:
     case Scenario::kRtlRejectedLandPath:
       return takeoff_loiter_rtl_mission();
+    case Scenario::kMissionEndAirHold: {
+      MissionSpec m;
+      m.mission_id = "end2";
+      m.items = {takeoff_item(), loiter_item()};
+      return m;
+    }
+    case Scenario::kMissionEndGroundReentry: {
+      MissionSpec m;
+      m.mission_id = "end1";
+      m.items = {takeoff_item(0.2)};
+      return m;
+    }
     default:
       return standard_mission();
   }
@@ -434,6 +450,18 @@ void run_scenario(Harness & h, Scenario scenario)
       h.rtl_response = RtlResponse::kReject;
       h.drive_to_land();
       break;
+    case Scenario::kMissionEndAirHold:
+      // [TAKEOFF, LOITER]: 마지막 LOITER 완료 뒤 종료 단계의 공중 Hold 확인.
+      h.drive_to_loiter();
+      break;
+    case Scenario::kMissionEndGroundReentry:
+      // [TAKEOFF] 지상 도달, Hold 거부로 지상 대기, ARMED landed false로 Land 경로, AUTO_LAND 관측.
+      h.hold_response = HoldResponse::kReject;
+      h.drive_to_takeoff();
+      h.run_until([&h] { return h.view().branch == Branch::kGroundWait; }, 10);
+      h.tick();
+      h.world.landed = false;
+      break;
   }
   h.run_until([&h] { return h.runner().done(); }, 600);
   h.tick();
@@ -445,7 +473,8 @@ TEST(TransitionObserver, RecorderDoesNotChangeOutputs)
        {Scenario::kSuccess, Scenario::kCancelAir, Scenario::kCancelGround, Scenario::kStampFailure,
         Scenario::kItemTimeoutLandPath, Scenario::kMonitorRowsOverlap,
         Scenario::kMonitorWithCompletion, Scenario::kLandLeftMode, Scenario::kLandOnly,
-        Scenario::kRtlSuccess, Scenario::kRtlRejectedLandPath}) {
+        Scenario::kRtlSuccess, Scenario::kRtlRejectedLandPath, Scenario::kMissionEndAirHold,
+        Scenario::kMissionEndGroundReentry}) {
     SCOPED_TRACE(static_cast<int>(scenario));
     TransitionRecorder * const saved = active_transition_recorder();
     TransitionRecorder local;

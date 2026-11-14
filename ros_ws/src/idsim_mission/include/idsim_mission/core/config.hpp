@@ -48,11 +48,12 @@ struct Timeouts
   // 첫 ARMED 표본을 본 시각부터 mode_confirm_timeout이다(decisions.md 쟁점 4 "P6에서 ARMED를
   // 처음 관측한 뒤").
   std::int64_t arm_timeout_ns{5 * kNsPerSecond};
-  // 공중 정리의 Hold 확인. Hold를 처음 보낸 시각부터.
+  // 공중 정리와 공중 종료 단계의 Hold 확인. Hold를 처음 보낸 시각부터.
   std::int64_t hold_confirm_timeout_ns{3 * kNsPerSecond};
   // vehicle_status를 이 시간 동안 받지 못하면 상태 끊김(마지막 수신 ROS 시각부터).
   std::int64_t link_timeout_ns{2 * kNsPerSecond};
-  // LAND 항목에서 landed이고 ARMED인 채 이 시간이 지나면 강제가 아닌 disarm을 보낸다.
+  // LAND, RTL 항목(확인 뒤)과 공중 종료 단계의 지상 대기에서 landed이고 ARMED인 채 이 시간이
+  // 지나면 강제가 아닌 disarm을 보낸다(rules.hpp LandedArmedFallback).
   std::int64_t land_disarm_fallback_delay_ns{5 * kNsPerSecond};
   // 확인을 기다리는 명령의 재전송 주기.
   std::int64_t command_resend_period_ns{kNsPerSecond / 2};
@@ -69,8 +70,8 @@ struct Config
   Timeouts timeouts;
 };
 
-// 정리(취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패, RTL 실패) 전체의 상한(decisions.md
-// 쟁점 3 M6).
+// 정리(취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패, RTL 실패, 공중 종료 단계) 전체의
+// 상한(decisions.md 쟁점 3 M6, 1b decisions.md 쟁점 10).
 // 정리를 시작한 tick부터 ROS 시각으로 잰다. 노드 파라미터가 아니라 분기 타임아웃의 파생값이다:
 // 정당한 경로 중 가장 긴 것(지상 -> Hold 실패 -> Land 경로 -> 다시 지상)의 합. 기본 12 s.
 constexpr std::int64_t cleanup_cap_ns(const Timeouts & t)

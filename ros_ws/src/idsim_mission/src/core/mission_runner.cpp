@@ -20,7 +20,9 @@
 // 3. 취소(실패나 완료로 끝나지 않았고 정리 중이 아닐 때만)
 // 4. 출력 마무리(timestamp, setpoint, feedback)
 // 정리 중의 순서는 따로 있다(쟁점 3 M6): 상태 끊김 -> 공중 DISARMED -> 정리할 것 없음 -> 정리의
-// 상한 -> 그 분기의 실행. step_cleanup 머리 주석.
+// 상한 -> 그 분기의 실행. step_cleanup 머리 주석. 마지막 setpoint 항목 뒤의 공중 종료 단계(1b
+// decisions.md 쟁점 10)는 같은 정리 단계 안의 원인 kMissionEnd이고 순서는 step_mission_end 머리
+// 주석에 있다.
 
 #include "idsim_mission/core/mission_runner.hpp"
 
@@ -184,8 +186,8 @@ void MissionRunner::step_tick(Tick & t)
     case Stage::kDone:
       break;
   }
-  // 취소는 실패와 완료 뒤에 본다. 정리 중(취소, ITEM_TIMEOUT, PREPARING 실패, RTL 실패)이면
-  // 무시한다.
+  // 취소는 실패와 완료 뒤에 본다. 정리 중(취소, ITEM_TIMEOUT, PREPARING 실패, RTL 실패, 공중 종료
+  // 단계)이면 무시한다(종료 단계 중의 취소는 결과를 바꾸지 않는다. 1b decisions.md 쟁점 10).
   if (t.input.cancel_requested && (stage_ == Stage::kPreparing || stage_ == Stage::kItem)) {
     begin_cleanup(Event::kCancel, t, CleanupCause::kCancel, Reason::kNone, "");
   } else if (t.input.cancel_requested && in_flow_at_start) {
@@ -674,8 +676,10 @@ void MissionRunner::complete_item(Event event, Tick & t)
   ++items_completed_;
   const std::uint32_t next = item_index_ + 1;
   if (next >= mission_.items.size()) {
-    // validate_mission_runnable이 마지막을 LAND나 RTL로 두므로 setpoint 항목에서는 닿지 않는다.
-    terminate(event, t, succeeded());
+    // 마지막 setpoint 항목의 완료는 종료 단계로 간다(1b decisions.md 쟁점 10).
+    // items_completed는 N이고 결과는 종료 단계가 정한다. 모드 명령 항목(LAND, RTL)은
+    // complete_item을 부르지 않는다.
+    begin_cleanup(event, t, CleanupCause::kMissionEnd, Reason::kNone, "");
     return;
   }
   start_item(event, t, next);
@@ -832,19 +836,12 @@ void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
   }
   // 대비책: landed이고 ARMED인 채 land_disarm_fallback_delay가 지나면 강제가 아닌 disarm.
   // 확인 대상 모드를 확인한 뒤에만 보낸다(대기 중인 명령은 한 번에 하나다).
-  if (s->arming == Arming::kArmed && landed) {
-    if (!mode_item_.landed_armed_known) {
-      mode_item_.landed_armed_known = true;
-      mode_item_.landed_armed_since_ns = t.input.now_ns;
-    }
-  } else {
-    mode_item_.landed_armed_known = false;
-  }
+  // 이어짐은 매 tick 그 tick의 표본으로 갱신한다(같은 표본을 다시 본 tick도).
+  mode_item_.fallback.observe(s->arming == Arming::kArmed && landed, t.input.now_ns);
   if (
-    mode_item_.confirmed && !mode_item_.fallback_started && mode_item_.landed_armed_known &&
-    elapsed(t, mode_item_.landed_armed_since_ns) >=
-      config_.timeouts.land_disarm_fallback_delay_ns) {
-    mode_item_.fallback_started = true;
+    mode_item_.confirmed &&
+    mode_item_.fallback.due(t.input.now_ns, config_.timeouts.land_disarm_fallback_delay_ns)) {
+    mode_item_.fallback.mark_sent();
     send(t, CommandKind::kDisarm);
     return;
   }
@@ -876,7 +873,7 @@ void MissionRunner::mode_item_timeout(Tick & t, const ModeItemSpec & spec, bool 
   terminate(Event::kModeItemTimeout, t, aborted(Reason::kItemTimeout, detail));
 }
 
-// ---- 정리(취소, ITEM_TIMEOUT, PREPARING 실패, RTL 실패) ----
+// ---- 정리(취소, ITEM_TIMEOUT, PREPARING 실패, RTL 실패, 공중 종료 단계) ----
 
 void MissionRunner::begin_cleanup(
   Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail)
@@ -896,6 +893,11 @@ void MissionRunner::begin_cleanup(
   cleanup_start_ns_ = t.input.now_ns;
   hold_failed_ = false;
   hold_observed_ = false;
+  if (cause == CleanupCause::kMissionEnd) {
+    counter_.reset();
+    ground_disarm_counter_.reset();
+    ground_wait_fallback_.reset();
+  }
   step_cleanup(t);
 }
 
@@ -904,6 +906,11 @@ void MissionRunner::step_cleanup(Tick & t)
   // 한 tick의 순서(decisions.md 쟁점 3 M6): (1) 상태 끊김 (2) 공중 DISARMED (3) 정리할 것 없음
   // (4) 정리의 상한 (5) 그 분기의 실행(분기 타임아웃, 확인). (1)-(3)은 표본 하나로 정해지는
   // 관측이라 상한보다 앞이고, (4)가 (5)보다 앞이라 상한 tick의 확인 표본은 세지 않는다.
+  // 공중 종료 단계는 순서와 분기 고르기가 따로 있다(step_mission_end).
+  if (cause_ == CleanupCause::kMissionEnd) {
+    step_mission_end(t);
+    return;
+  }
   const StatusSample * const s = t.status;
   if (s == nullptr || t.land == nullptr || (!acted_ && link_lost(t))) {
     // 아무것도 하지 않았고 판단할 표본도 없다.
@@ -1014,6 +1021,9 @@ void MissionRunner::end_at_cleanup_cap(Tick & t, bool on_ground)
     case Branch::kGround:
       last_branch = "ground (disarm)";
       break;
+    case Branch::kGroundWait:
+      last_branch = "ground (wait for disarm)";
+      break;
   }
   publishing_ = false;
   clear_pending();
@@ -1077,6 +1087,7 @@ void MissionRunner::cleanup_with_untrusted_sample(Tick & t)
       run_air_land(t);
       return;
     case Branch::kNone:
+    case Branch::kGroundWait:
       return;
   }
 }
@@ -1220,8 +1231,278 @@ void MissionRunner::run_air_land(Tick & t)
   resend_due(t);
 }
 
+// ---- 공중 종료 단계(마지막 항목이 setpoint 항목인 미션. 1b decisions.md 쟁점 10, 쟁점 11) ----
+
+void MissionRunner::step_mission_end(Tick & t)
+{
+  // 한 tick의 순서: (1) 표본 없음(방어) (2) 식별 불일치 (3) 표본 반영 (4) 상태 끊김 (5) 공중
+  // DISARMED (6) 정리의 상한 (6a) disarm 분류가 지상이면(규칙 R) 지상 DISARMED 3회만 보고 끝
+  // (7) 분기의 실패, 기한, 이동과 표본 하나로 정하는 관측 (8) Hold 3회 (9) 지상 대기의 대비책
+  // (10) 재전송. 표본은 감시 표와 같은 신뢰 표본 규칙(monitored_status)이라 첫 tick의 표본은 같은
+  // tick의 감시 표가 통과시킨 것과 같다. 분기가 정해진 뒤의 식별 불일치 tick은 표본 없이(분류,
+  // 계수, 대비책의 이어짐을 바꾸지 않고) 이어 가고 상태 끊김을 보지 않는다.
+  const StatusSample * s = monitored_status(t);
+  if (s == nullptr || t.land == nullptr) {
+    publishing_ = false;
+    clear_pending();
+    terminate(
+      Event::kCleanupNoSample, t,
+      aborted(Reason::kInternal, "mission end: no vehicle_status or vehicle_land_detected"));
+    return;
+  }
+  if (s->identity == IdentityCheck::kMismatch) {
+    if (branch_ == Branch::kNone) {
+      publishing_ = false;
+      clear_pending();
+      terminate(
+        Event::kCleanupIdentityMismatch, t,
+        aborted(
+          Reason::kInternal,
+          "mission end: vehicle_status identity mismatch: " + s->identity_detail));
+      return;
+    }
+    s = nullptr;
+  }
+  const bool landed = t.land->landed;
+  const bool was_ground_wait = branch_ == Branch::kGroundWait;
+  bool first_ground_disarm = false;
+  if (s != nullptr) {
+    // (3) 표본 반영. 묵은 표본 tick은 직전 신뢰 표본을 다시 보므로 계수는 timestamp로 건너뛴다.
+    if (s->nav != NavMode::kOffboard || s->arming == Arming::kDisarmed) {
+      publishing_ = false;
+    }
+    const DisarmClass before = disarm_class_;
+    if (s->arming == Arming::kDisarmed) {
+      if (disarm_class_ == DisarmClass::kUnknown) {
+        disarm_class_ = landed ? DisarmClass::kGround : DisarmClass::kAir;
+      }
+    } else {
+      disarm_class_ = DisarmClass::kUnknown;
+    }
+    first_ground_disarm = before != DisarmClass::kGround && disarm_class_ == DisarmClass::kGround;
+    if (s->nav == NavMode::kHold) {
+      hold_observed_ = true;
+    }
+    const bool fresh = counter_.observe(
+      s->timestamp_us, s->arming == Arming::kArmed && s->nav == NavMode::kHold && !landed);
+    if (ground_wait_fallback_.sent()) {
+      disarm_confirm_.observe(*s);
+    } else {
+      ground_disarm_counter_.observe(
+        s->timestamp_us, s->arming == Arming::kDisarmed && disarm_class_ == DisarmClass::kGround);
+    }
+    if (fresh && was_ground_wait) {
+      ground_wait_fallback_.observe(s->arming == Arming::kArmed && landed, t.input.now_ns);
+    }
+    // (4) 상태 끊김
+    if (t.input.now_ns - s->received_ns >= config_.timeouts.link_timeout_ns) {
+      publishing_ = false;
+      clear_pending();
+      if (branch_ == Branch::kGroundWait && ground_wait_fallback_.sent()) {
+        std::string what = "vehicle_status lost during ground wait";
+        send_final(t, CommandKind::kDisarm, what);
+        finish(Event::kCleanupLinkLost, t, Outcome::kLinkLost, what);
+      } else {
+        finish(Event::kCleanupLinkLost, t, Outcome::kLinkLost, "vehicle_status lost");
+      }
+      return;
+    }
+    // (5) 공중 DISARMED
+    if (disarm_class_ == DisarmClass::kAir) {
+      publishing_ = false;
+      clear_pending();
+      finish(Event::kCleanupAirDisarm, t, Outcome::kAirDisarm, "disarmed while not landed");
+      return;
+    }
+  }
+  // (6) 정리의 상한. 지상은 신뢰 표본이 ARMED이고 landed이거나 분류 지상의 DISARMED다. 식별 불일치
+  // tick이면 분류가 지상이면 지상, 아니면 분기로 정한다(지상 대기는 지상, 그 밖은 공중).
+  if (cleanup_cap_reached(t)) {
+    const bool on_ground =
+      disarm_class_ == DisarmClass::kGround ||
+      (s != nullptr ? s->arming == Arming::kArmed && landed : branch_ == Branch::kGroundWait);
+    end_at_cleanup_cap(t, on_ground);
+    return;
+  }
+  // (6a) 규칙 R(쟁점 10 A2): 분류가 지상인 동안은 분기의 거부 ack, 기한, 이동, AUTO_LAND 관측,
+  // 대비책, 재전송을 보지 않는다. 첫 지상 DISARMED 표본의 tick에 대기 명령을 지우고, 그 동안 받은
+  // ack는 버린다(뒤 tick에 다시 보지 않는다).
+  if (disarm_class_ == DisarmClass::kGround) {
+    if (first_ground_disarm) {
+      clear_pending();
+    }
+    if (t.ack != nullptr && t.ack->received_tick > last_ack_tick_) {
+      last_ack_tick_ = t.ack->received_tick;
+    }
+    if (mission_end_ground_disarm_count() >= kConfirmSamples) {
+      publishing_ = false;
+      clear_pending();
+      finish(Event::kGroundDisarmConfirmed, t, Outcome::kSuccess, "ended on ground");
+    }
+    return;
+  }
+  // (7)-(10)
+  switch (branch_) {
+    case Branch::kNone: {
+      // 첫 tick은 늘 Hold다(지상 ARMED여도. 쟁점 10). 발행 중인 마지막 항목의 setpoint를 유지한다.
+      tag(Event::kEnterAir, t);
+      StateKey next = state_key();
+      next.branch = Branch::kAir;
+      set_state(t, next);
+      clear_pending();
+      send(t, CommandKind::kSetModeHold);
+      branch_first_ns_ = t.input.now_ns;
+      return;
+    }
+    case Branch::kAir: {
+      const AckView ack = take_ack(t);
+      if (ack.fresh && is_rejection(ack.result)) {
+        mission_end_hold_failed(
+          Event::kHoldRejected, t, s, std::string("Hold rejected: ") + ack_result_name(ack.result));
+        return;
+      }
+      if (elapsed(t, branch_first_ns_) >= config_.timeouts.hold_confirm_timeout_ns) {
+        // 같은 tick의 Hold 3회째보다 앞이다(만료가 이긴다).
+        mission_end_hold_failed(
+          Event::kHoldTimeout, t, s, "Hold not confirmed within hold_confirm_timeout");
+        return;
+      }
+      if (counter_.count() >= kConfirmSamples) {
+        publishing_ = false;
+        clear_pending();
+        finish(Event::kHoldConfirmed, t, Outcome::kSuccess, "");
+        return;
+      }
+      resend_due(t);
+      return;
+    }
+    case Branch::kAirLand:
+      take_ack(t);
+      if (s != nullptr && s->arming == Arming::kArmed && s->nav == NavMode::kLand) {
+        publishing_ = false;
+        clear_pending();
+        finish(
+          Event::kLandPathModeObserved, t, Outcome::kHoldFailed,
+          land_path_why_ + "; Land sent, AUTO_LAND observed");
+        return;
+      }
+      if (elapsed(t, branch_first_ns_) >= config_.timeouts.mode_confirm_timeout_ns) {
+        publishing_ = false;
+        clear_pending();
+        finish(
+          Event::kLandPathTimeout, t, Outcome::kHoldFailed,
+          land_path_why_ + "; Land sent, AUTO_LAND not confirmed");
+        return;
+      }
+      resend_due(t);
+      return;
+    case Branch::kGroundWait:
+      take_ack(t);
+      if (s != nullptr && s->arming == Arming::kArmed && !landed) {
+        // 지상 대기에서 공중으로 돌아가면 늘 Land 경로다(Hold 실패 표시가 남아 있다).
+        mission_end_enter_air_land(
+          Event::kEnterAir, t, hold_failed_why_ + "; air re-entered after Hold failure");
+        return;
+      }
+      if (
+        s != nullptr &&
+        ground_wait_fallback_.due(t.input.now_ns, config_.timeouts.land_disarm_fallback_delay_ns)) {
+        // 대비책: 지상 대기 안에서 ARMED이고 landed인 상태가 land_disarm_fallback_delay 이어졌다.
+        // 강제가 아닌 disarm을 대기 명령으로 보내고, 그 뒤의 지상 DISARMED는 전송 뒤의 표본으로
+        // 센다(쟁점 11. 첫 전송 stamp는 finalize가 둔다).
+        ground_wait_fallback_.mark_sent();
+        clear_pending();
+        send(t, CommandKind::kDisarm);
+        disarm_confirm_.begin(t.input.tick);
+        return;
+      }
+      resend_due(t);
+      return;
+    case Branch::kGround:
+      // 종료 단계는 취소의 지상 disarm 분기를 쓰지 않는다.
+      return;
+  }
+}
+
+void MissionRunner::mission_end_hold_failed(
+  Event event, Tick & t, const StatusSample * s, const std::string & why)
+{
+  // Hold 실패(거부, 기한)는 공중이든 지상이든 Hold 실패 표시를 세운다. 그 tick의 최신 landed가
+  // false면 Land 경로, true면 지상 대기(명령 없음)다.
+  if (!hold_failed_) {
+    hold_failed_why_ = why;
+  }
+  hold_failed_ = true;
+  if (!t.land->landed) {
+    mission_end_enter_air_land(event, t, why);
+    return;
+  }
+  mission_end_enter_ground_wait(event, t, s);
+}
+
+void MissionRunner::mission_end_enter_air_land(Event event, Tick & t, const std::string & why)
+{
+  tag(event, t);
+  StateKey next = state_key();
+  next.branch = Branch::kAirLand;
+  set_state(t, next);
+  land_path_why_ = why;
+  clear_pending();
+  send(t, CommandKind::kNavLand);
+  branch_first_ns_ = t.input.now_ns;
+}
+
+void MissionRunner::mission_end_enter_ground_wait(Event event, Tick & t, const StatusSample * s)
+{
+  // 지상 대기 진입 tick: Hold 재전송을 멈추고, 발행 중이면 지상 setpoint로 바꾸고, 명령은 보내지
+  // 않는다(PX4 자동 disarm을 기다린다). 대비책의 이어짐은 지우고 이 tick의 신뢰 표본으로 바로
+  // 관측한다(식별 불일치 tick이면 관측하지 않는다).
+  tag(event, t);
+  StateKey next = state_key();
+  next.branch = Branch::kGroundWait;
+  set_state(t, next);
+  clear_pending();
+  if (publishing_) {
+    setpoint_ = ground_setpoint(t);
+  }
+  ground_wait_fallback_.reset();
+  if (s != nullptr) {
+    ground_wait_fallback_.observe(s->arming == Arming::kArmed && t.land->landed, t.input.now_ns);
+  }
+}
+
+int MissionRunner::mission_end_ground_disarm_count() const
+{
+  return ground_wait_fallback_.sent() ? disarm_confirm_.count() : ground_disarm_counter_.count();
+}
+
 void MissionRunner::finish(Event event, Tick & t, Outcome outcome, const std::string & what)
 {
+  if (cause_ == CleanupCause::kMissionEnd) {
+    // 종료 단계에는 유지할 원래 실패 사유가 없다(1b decisions.md 쟁점 10 결과 표). SUCCEEDED의
+    // detail은 what 그대로다(Hold 확인은 빈 문자열, 지상 DISARMED 3회는 "ended on ground").
+    switch (outcome) {
+      case Outcome::kSuccess: {
+        Termination term = succeeded();
+        term.detail = what;
+        terminate(event, t, std::move(term));
+        return;
+      }
+      case Outcome::kLinkLost:
+        terminate(event, t, aborted(Reason::kLinkLost, "mission end: " + what));
+        return;
+      case Outcome::kAirDisarm:
+        terminate(event, t, aborted(Reason::kFailsafe, "mission end: " + what));
+        return;
+      case Outcome::kHoldFailed:
+      case Outcome::kDisarmFailed:
+      case Outcome::kCapGround:
+      case Outcome::kCapAir:
+        terminate(event, t, aborted(Reason::kModeSwitchFailed, "mission end: " + what));
+        return;
+    }
+    return;
+  }
   if (cause_ != CleanupCause::kCancel) {
     // ITEM_TIMEOUT, PREPARING 실패, RTL 실패: reason은 원래 것을 유지하고 정리 결과는 detail에만
     // 적는다.
@@ -1271,21 +1552,24 @@ void MissionRunner::finalize(Tick & t)
   if (publishing_ || !t.out.commands.empty()) {
     if (!query_stamp(t)) {
       t.out.commands.clear();
-      const bool keep_reason = stage_ == Stage::kCleanup && cause_ != CleanupCause::kCancel;
+      const bool keep_reason = stage_ == Stage::kCleanup && cause_ != CleanupCause::kCancel &&
+                               cause_ != CleanupCause::kMissionEnd;
       // 명령을 만들 수 없으므로 기체 상태를 모른다(decisions.md 쟁점 4 "Px4Timestamp 공급이 실패한
       // tick").
       const std::string what =
         std::string("Px4Timestamp unavailable") +
         (acted_ ? "; vehicle state unknown, may remain armed on ground" : "");
+      const std::string prefix =
+        stage_ == Stage::kCleanup && cause_ == CleanupCause::kMissionEnd ? "mission end: " : "";
       terminate(
         Event::kStampUnavailable, t,
         keep_reason ? aborted(cleanup_reason_, cleanup_detail_ + "; " + what)
-                    : aborted(Reason::kInternal, what));
+                    : aborted(Reason::kInternal, prefix + what));
       return;
     }
     t.out.px4_timestamp_us = t.stamp_us;
     if (
-      stage_ == Stage::kCleanup && branch_ == Branch::kGround &&
+      stage_ == Stage::kCleanup && (branch_ == Branch::kGround || branch_ == Branch::kGroundWait) &&
       disarm_confirm_.first_send_tick() == t.input.tick && !disarm_confirm_.stamp_known()) {
       disarm_confirm_.set_first_stamp(t.stamp_us);
     }

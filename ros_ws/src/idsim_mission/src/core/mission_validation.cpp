@@ -297,12 +297,6 @@ MissionCheck validate_mission_runnable(const MissionSpec & mission)
         " is not supported by the runner yet (TAKEOFF, LOITER, LAND, RTL only)");
     }
   }
-  const std::uint8_t last = mission.items.back().type;
-  if (last != item_type::kLand && last != item_type::kRtl) {
-    return invalid(
-      "last item must be LAND or RTL (missions ending in the air are not supported by the runner "
-      "yet)");
-  }
   const std::uint8_t first = mission.items.front().type;
   if (first != item_type::kTakeoff && first != item_type::kLand && first != item_type::kRtl) {
     return invalid("first item must be TAKEOFF, LAND or RTL");
