@@ -51,6 +51,8 @@ const char * cause_name(CleanupCause cause)
       return "ITEM_TIMEOUT";
     case CleanupCause::kPreparingFailure:
       return "PREPARING_FAILURE";
+    case CleanupCause::kRtlFailure:
+      return "RTL_FAILURE";
   }
   return "UNKNOWN";
 }
@@ -141,6 +143,8 @@ const char * event_name(Event event)
       return "MODE_ITEM_DISARMED_IN_AIR";
     case Event::kModeItemLeftMode:
       return "MODE_ITEM_LEFT_MODE";
+    case Event::kModeItemRejected:
+      return "MODE_ITEM_REJECTED";
     case Event::kModeItemModeTimeout:
       return "MODE_ITEM_MODE_TIMEOUT";
     case Event::kModeItemTimeout:

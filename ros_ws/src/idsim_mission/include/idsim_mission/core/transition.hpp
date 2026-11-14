@@ -49,7 +49,7 @@ enum class Stage : std::uint8_t
 {
   kPreparing,
   kItem,
-  kCleanup,  // 취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패 뒤의 정리
+  kCleanup,  // 취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패, RTL 실패 뒤의 정리
   kDone,
 };
 
@@ -70,14 +70,15 @@ enum class CleanupCause : std::uint8_t
   kCancel,
   kItemTimeout,
   kPreparingFailure,
+  kRtlFailure,  // RTL 항목의 거부 ack나 mode_confirm_timeout. 공중이면 Hold 없이 Land 경로
 };
 
 enum class Branch : std::uint8_t
 {
   kNone,
   kAir,      // Hold를 보내고 AUTO_LOITER 확인
-  kAirLand,  // Hold가 거부되거나 확인되지 않아 NAV_LAND
-  kGround,   // 지상 setpoint + disarm
+  kAirLand,  // Hold가 거부되거나 확인되지 않아(원인이 RTL 실패이면 바로) NAV_LAND
+  kGround,  // 지상 setpoint + disarm
 };
 
 // 사건 꼬리표. 값은 0부터 빈틈없이 늘어난다(kAllEvents의 순서와 같다).
@@ -91,7 +92,7 @@ enum class Event : std::uint8_t
   kPreconditionFailed,     // P1 시작 조건
   kReadyTimeout,           // ready_timeout
   kReadyTakeoff,           // 첫 항목 TAKEOFF: P3 발행 시작
-  kReadyModeItem,          // 첫 항목이 모드 명령 항목(LAND): 항목 시작
+  kReadyModeItem,          // 첫 항목이 모드 명령 항목(LAND, RTL): 항목 시작
   // P3-P4
   kSignalTimeout,
   kSignalConfirmed,
@@ -119,14 +120,16 @@ enum class Event : std::uint8_t
   kItemTimeout,
   kTakeoffReached,
   kLoiterElapsed,
-  // 모드 명령 항목(LAND)
+  // 모드 명령 항목(LAND, RTL). 칸은 상태 key(ITEM.LAND, ITEM.RTL)로 갈린다
   kModeItemIdentityMismatch,  // 식별 불일치
   kModeItemLinkLost,          // 상태 끊김
   kModeItemDisarmedInAir,     // 공중 DISARMED
-  kModeItemLeftMode,          // 확인 뒤 ARMED인 채 확인 대상 모드(AUTO_LAND) 이탈
-  kModeItemModeTimeout,       // mode_confirm_timeout 안에 확인 대상 모드 미확인
-  kModeItemTimeout,           // 모드 명령 항목의 timeout
-  kModeItemDisarmConfirmed,   // 지상 DISARMED 3회
+  kModeItemLeftMode,  // 확인 뒤 ARMED인 채 확인 대상 모드(AUTO_LAND, AUTO_RTL) 이탈
+  // 확인 전 그 항목의 명령에 대한 거부 ack(RTL만. LAND는 거부 ack로 끝내지 않는다)
+  kModeItemRejected,
+  kModeItemModeTimeout,      // mode_confirm_timeout 안에 확인 대상 모드 미확인
+  kModeItemTimeout,          // 모드 명령 항목의 timeout
+  kModeItemDisarmConfirmed,  // 지상 DISARMED 3회
   // 취소(단계 처리 뒤)
   kCancel,
   // 정리
@@ -137,7 +140,7 @@ enum class Event : std::uint8_t
   kCleanupNothingToDo,  // 지상 DISARMED이고 arm을 보낸 적이 없다
   kCleanupCap,          // 정리의 상한
   kEnterGround,
-  kEnterAir,  // Hold 분기(Hold가 이미 실패했으면 Land 경로)
+  kEnterAir,  // Hold 분기(Hold가 이미 실패했거나 원인이 RTL 실패이면 Land 경로)
   kGroundDisarmTimeout,
   kGroundDisarmConfirmed,
   kHoldRejected,
@@ -149,7 +152,7 @@ enum class Event : std::uint8_t
   kStampUnavailable,  // Px4Timestamp 공급 실패
 };
 
-inline constexpr std::array<Event, 53> kAllEvents = {
+inline constexpr std::array<Event, 54> kAllEvents = {
   Event::kInvalidMission,
   Event::kPreparingIdentityMismatch,
   Event::kReadyIdentityMismatch,
@@ -183,6 +186,7 @@ inline constexpr std::array<Event, 53> kAllEvents = {
   Event::kModeItemLinkLost,
   Event::kModeItemDisarmedInAir,
   Event::kModeItemLeftMode,
+  Event::kModeItemRejected,
   Event::kModeItemModeTimeout,
   Event::kModeItemTimeout,
   Event::kModeItemDisarmConfirmed,

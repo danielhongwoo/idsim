@@ -95,11 +95,11 @@ struct RunnerView
   CleanupCause cleanup_cause{CleanupCause::kCancel};
   Branch branch{Branch::kNone};
   DisarmClass disarm_class{DisarmClass::kUnknown};
-  bool land_confirmed{false};
+  bool land_confirmed{false};  // 모드 명령 항목(LAND, RTL)의 확인 대상 모드를 확인했다
   bool failsafe_history{false};
   bool armed_seen{false};         // P6에서 첫 ARMED 표본을 봤다
   bool landed_false_seen{false};  // 첫 ARMED 표본 뒤에 landed false를 받은 적이 있다
-  bool hold_failed{false};        // 이 정리에서 Hold가 한 번 실패했다
+  bool hold_failed{false};  // 이 정리에서 Hold가 한 번 실패했다(RTL 실패의 정리는 늘 false)
 };
 
 class MissionRunner
@@ -206,8 +206,8 @@ private:
   void complete_item(Event event, Tick & t);
   void step_item(Tick & t);
   void step_setpoint_item(Tick & t);
-  void step_mode_item(Tick & t);
-  void mode_item_timeout(Tick & t, bool landed);
+  void step_mode_item(Tick & t, const ModeItemSpec & spec);
+  void mode_item_timeout(Tick & t, const ModeItemSpec & spec, bool landed);
   void begin_cleanup(Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail);
   void step_cleanup(Tick & t);
   bool cleanup_cap_reached(const Tick & t) const;
@@ -295,6 +295,7 @@ private:
   std::uint32_t items_completed_{0};
   std::uint32_t publish_count_{0};
   bool mission_valid_{false};
+  EntryPlan entry_plan_{EntryPlan::kGroundArm};  // 첫 항목 type에서 정한 진입 방식
   std::string invalid_detail_;  // mission_valid_가 false일 때 validate_mission_runnable의 detail
   Stage stage_{Stage::kPreparing};
   PrepStep prep_{PrepStep::kWaitReady};

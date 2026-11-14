@@ -112,7 +112,35 @@ struct MonitorDisarmInput
 
 bool monitor_sends_disarm(MonitorRow row, const MonitorDisarmInput & input);
 
-// ---- 정리 분기 고르기(취소, ITEM_TIMEOUT, PREPARING 실패가 같이 쓴다) ----
+// ---- 준비 단계의 진입 방식과 모드 명령 항목(1b decisions.md 쟁점 9, 12) ----
+
+// 진입 방식은 첫 항목 type에서 정한다.
+enum class EntryPlan : std::uint8_t
+{
+  kGroundArm,  // 첫 항목 TAKEOFF: landed이고 DISARMED에서 Offboard로 들어가 arm(P3-P6)
+  kModeCommand,  // 첫 항목 LAND, RTL: landed가 아니고 ARMED에서 P2 뒤 바로 그 항목을 시작
+};
+
+// 그 밖의 type은 nullopt(runner가 아직 실행하지 않는 진입).
+std::optional<EntryPlan> entry_plan(std::uint8_t first_item_type);
+
+// 모드 명령 항목의 type별 값. 판정 순서와 규칙은 LAND와 RTL이 같고 아래 값만 다르다.
+struct ModeItemSpec
+{
+  CommandKind command{CommandKind::kNavLand};  // 항목 시작 tick에 보내고 확인 전까지 재전송
+  NavMode mode{NavMode::kLand};                // 확인 대상 모드
+  const char * mode_name{""};                  // detail의 모드 이름
+  const char * command_name{""};               // detail의 명령 이름
+  // 확인 전 거부 ack와 mode_confirm_timeout이 RTL 실패의 정리(Land fallback)로 가는가. false이면
+  // 거부 ack를 보지 않고(재전송 계속) mode_confirm_timeout에 MODE_SWITCH_FAILED로 바로
+  // 끝낸다(LAND).
+  bool land_fallback{false};
+};
+
+// LAND, RTL이 아니면 nullopt.
+std::optional<ModeItemSpec> mode_item_spec(std::uint8_t type);
+
+// ---- 정리 분기 고르기(취소, ITEM_TIMEOUT, PREPARING 실패, RTL 실패가 같이 쓴다) ----
 
 // disarm의 지상 대 공중 분류. 처음 관측한 DISARMED 표본의 tick에 그때까지 받은 최신 landed로
 // 정하고 고정한다(뒤의 landed 표본으로 바꾸지 않는다). ARMED 표본을 보면 kUnknown으로 되돌린다.

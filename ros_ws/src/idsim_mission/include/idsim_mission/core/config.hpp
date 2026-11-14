@@ -69,7 +69,8 @@ struct Config
   Timeouts timeouts;
 };
 
-// 정리(취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패) 전체의 상한(decisions.md 쟁점 3 M6).
+// 정리(취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패, RTL 실패) 전체의 상한(decisions.md
+// 쟁점 3 M6).
 // 정리를 시작한 tick부터 ROS 시각으로 잰다. 노드 파라미터가 아니라 분기 타임아웃의 파생값이다:
 // 정당한 경로 중 가장 긴 것(지상 -> Hold 실패 -> Land 경로 -> 다시 지상)의 합. 기본 12 s.
 constexpr std::int64_t cleanup_cap_ns(const Timeouts & t)

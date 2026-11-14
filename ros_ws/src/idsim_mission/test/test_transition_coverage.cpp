@@ -311,6 +311,8 @@ enum class Scenario
   kMonitorWithCompletion,
   kLandLeftMode,
   kLandOnly,
+  kRtlSuccess,
+  kRtlRejectedLandPath,
 };
 
 bool expects_overlap(Scenario scenario)
@@ -326,7 +328,10 @@ Reason expected_reason(Scenario scenario)
     case Scenario::kCancelAir:
     case Scenario::kCancelGround:
     case Scenario::kLandOnly:
+    case Scenario::kRtlSuccess:
       return Reason::kNone;
+    case Scenario::kRtlRejectedLandPath:
+      return Reason::kModeSwitchFailed;
     case Scenario::kStampFailure:
       return Reason::kInternal;
     case Scenario::kItemTimeoutLandPath:
@@ -342,7 +347,15 @@ Reason expected_reason(Scenario scenario)
 
 MissionSpec mission_for(Scenario scenario)
 {
-  return scenario == Scenario::kLandOnly ? land_only_mission() : standard_mission();
+  switch (scenario) {
+    case Scenario::kLandOnly:
+      return land_only_mission();
+    case Scenario::kRtlSuccess:
+    case Scenario::kRtlRejectedLandPath:
+      return takeoff_loiter_rtl_mission();
+    default:
+      return standard_mission();
+  }
 }
 
 void run_scenario(Harness & h, Scenario scenario)
@@ -409,6 +422,18 @@ void run_scenario(Harness & h, Scenario scenario)
       h.world.landed = true;
       h.world.arming = Arming::kDisarmed;
       break;
+    case Scenario::kRtlSuccess:
+      // [TAKEOFF, LOITER, RTL]: AUTO_RTL 확인, 착지 뒤 DISARMED.
+      h.drive_to_land();
+      h.run_until([&h] { return h.view().land_confirmed; }, 10);
+      h.world.landed = true;
+      h.world.arming = Arming::kDisarmed;
+      break;
+    case Scenario::kRtlRejectedLandPath:
+      // NAV_RTL 거부 ack로 RTL 실패의 정리, Land 경로, AUTO_LAND 관측.
+      h.rtl_response = RtlResponse::kReject;
+      h.drive_to_land();
+      break;
   }
   h.run_until([&h] { return h.runner().done(); }, 600);
   h.tick();
@@ -419,7 +444,8 @@ TEST(TransitionObserver, RecorderDoesNotChangeOutputs)
   for (const Scenario scenario :
        {Scenario::kSuccess, Scenario::kCancelAir, Scenario::kCancelGround, Scenario::kStampFailure,
         Scenario::kItemTimeoutLandPath, Scenario::kMonitorRowsOverlap,
-        Scenario::kMonitorWithCompletion, Scenario::kLandLeftMode, Scenario::kLandOnly}) {
+        Scenario::kMonitorWithCompletion, Scenario::kLandLeftMode, Scenario::kLandOnly,
+        Scenario::kRtlSuccess, Scenario::kRtlRejectedLandPath}) {
     SCOPED_TRACE(static_cast<int>(scenario));
     TransitionRecorder * const saved = active_transition_recorder();
     TransitionRecorder local;

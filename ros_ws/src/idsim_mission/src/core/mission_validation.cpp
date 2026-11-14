@@ -194,7 +194,12 @@ bool supported_in_1a(std::uint8_t type)
   return type == item_type::kTakeoff || type == item_type::kLoiter || type == item_type::kLand;
 }
 
-// 계약 + 1a 임시 제한. validate_mission_1a_goal과 validate_mission_runnable이 함께 쓴다.
+bool supported_by_runner(std::uint8_t type)
+{
+  return supported_in_1a(type) || type == item_type::kRtl;
+}
+
+// 계약 + 1a 임시 제한. validate_mission_1a_goal이 쓴다.
 MissionCheck check_1a_limits(const MissionSpec & mission)
 {
   MissionCheck check = validate_mission_contract(mission);
@@ -278,7 +283,31 @@ MissionCheck validate_mission_1a_goal(const MissionSpec & mission)
 
 MissionCheck validate_mission_runnable(const MissionSpec & mission)
 {
-  return check_1a_limits(mission);
+  // 계약 + runner가 아직 실행하지 못하는 미션의 제한. 1b decisions.md 쟁점 12의 PR마다 푼다.
+  MissionCheck check = validate_mission_contract(mission);
+  if (!check.valid) {
+    return check;
+  }
+  const std::size_t count = mission.items.size();
+  for (std::size_t i = 0; i < count; ++i) {
+    const std::uint8_t type = mission.items[i].type;
+    if (!supported_by_runner(type)) {
+      return invalid(
+        field(i, "type") + " " + item_type_name(type) +
+        " is not supported by the runner yet (TAKEOFF, LOITER, LAND, RTL only)");
+    }
+  }
+  const std::uint8_t last = mission.items.back().type;
+  if (last != item_type::kLand && last != item_type::kRtl) {
+    return invalid(
+      "last item must be LAND or RTL (missions ending in the air are not supported by the runner "
+      "yet)");
+  }
+  const std::uint8_t first = mission.items.front().type;
+  if (first != item_type::kTakeoff && first != item_type::kLand && first != item_type::kRtl) {
+    return invalid("first item must be TAKEOFF, LAND or RTL");
+  }
+  return check;
 }
 
 std::optional<Termination> screen_goal(

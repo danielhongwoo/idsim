@@ -20,8 +20,10 @@
 // - 표본의 timestamp는 합성 값이다. 기본은 "수신 시각 - 1 ms"(us)라 명령에 실린 Px4Timestamp(그
 //   tick의 시각)보다 다음 tick의 표본이 늘 뒤다. 실제 시계 관계는 재실측 (5)만 확인한다.
 // - auto_px4가 true이면 간단한 가짜 PX4가 명령에 반응한다(다음 tick의 표본에 보인다):
-//   Offboard -> OFFBOARD, Hold -> HOLD, NAV_LAND -> LAND, ARM -> ARMED, DISARM -> landed이면
-//   DISARMED. 반응을 끄고 tick 열(feed)로 표본을 직접 주는 테스트도 있다.
+//   Offboard -> OFFBOARD, Hold -> HOLD, NAV_LAND -> LAND, NAV_RTL -> RTL(rtl_response),
+//   ARM -> ARMED, DISARM -> landed이면 DISARMED. 반응을 끄고 tick 열(feed)로 표본을 직접 주는
+//   테스트도 있다. RTL이 고도를 올리고 돌아와 착지하는 것은 흉내 내지 않는다(착지와 disarm은
+//   테스트가 world를 직접 바꾼다).
 // - auto_px4와 auto_offboard_ack가 둘 다 true이면 가짜 PX4가 Offboard 전환(DO_SET_MODE)마다
 //   ACCEPTED ack를 낸다(명령을 낸 tick의 다음 tick에 받은 것으로 snapshot.ack에 둔다). 지상 arm
 //   진입은 이 ack가 있어야 P6으로 간다(1b decisions.md 쟁점 12). 다른 명령에는 ack를 내지 않는다.
@@ -102,6 +104,32 @@ inline MissionSpec standard_mission()
   MissionSpec m;
   m.mission_id = "m1";
   m.items = {takeoff_item(), loiter_item(), land_item()};
+  return m;
+}
+
+inline ItemSpec rtl_item(std::int32_t timeout_s = 60)
+{
+  ItemSpec item;
+  item.type = item_type::kRtl;
+  item.timeout = seconds(timeout_s);
+  return item;
+}
+
+// [RTL] 한 항목 미션.
+inline MissionSpec rtl_only_mission(std::int32_t timeout_s = 60)
+{
+  MissionSpec m;
+  m.mission_id = "rtl1";
+  m.items = {rtl_item(timeout_s)};
+  return m;
+}
+
+// [TAKEOFF 5 m, LOITER 5 s, RTL].
+inline MissionSpec takeoff_loiter_rtl_mission()
+{
+  MissionSpec m;
+  m.mission_id = "rtl3";
+  m.items = {takeoff_item(), loiter_item(), rtl_item()};
   return m;
 }
 
@@ -201,6 +229,16 @@ inline Sample disarmed(bool landed, NavMode nav = NavMode::kOffboard)
   s.landed = landed;
   return s;
 }
+
+// 가짜 PX4의 NAV_RTL 반응. kAccept는 AUTO_RTL로 바꾼다(ack 없음. 1a LAND와 같다). kReject는 nav를
+// 바꾸지 않고 TEMPORARILY_REJECTED ack를 다음 tick에 받은 것으로 둔다([소스] v1.17.0의 RTL ack는
+// ACCEPTED와 TEMPORARILY_REJECTED뿐이다). kIgnore는 아무것도 하지 않는다.
+enum class RtlResponse : std::uint8_t
+{
+  kAccept,
+  kReject,
+  kIgnore,
+};
 
 inline Sample no_new_sample()
 {
@@ -378,7 +416,17 @@ public:
     ASSERT_TRUE(run_until([this] { return view().item_index == 1U; }, 100));
   }
 
-  // LOITER를 지나 LAND 항목이 시작될 때까지.
+  // 공중 ARMED, Hold에서 시작한다([LAND], [RTL] 미션의 시작 조건).
+  void start_in_air()
+  {
+    world.arming = Arming::kArmed;
+    world.landed = false;
+    world.z = -5.0;
+    world.nav = NavMode::kHold;
+    world.intention = NavMode::kHold;
+  }
+
+  // LOITER를 지나 세 번째 항목(LAND나 RTL)이 시작될 때까지.
   void drive_to_land()
   {
     drive_to_loiter();
@@ -425,6 +473,7 @@ public:
   bool auto_px4{true};
   bool auto_offboard_ack{true};
   bool cancel_sticky{false};
+  RtlResponse rtl_response{RtlResponse::kAccept};
 
 private:
   void record(const StepOutput & out)
@@ -468,8 +517,16 @@ private:
           world.intention = NavMode::kLand;
           break;
         case CommandKind::kNavRtl:
-          world.nav = NavMode::kRtl;
-          world.intention = NavMode::kRtl;
+          if (rtl_response == RtlResponse::kAccept) {
+            world.nav = NavMode::kRtl;
+            world.intention = NavMode::kRtl;
+          } else if (rtl_response == RtlResponse::kReject) {
+            AckSample ack;
+            ack.command = AckCommand::kNavRtl;
+            ack.result = AckResult::kTemporarilyRejected;
+            ack.received_tick = tick_no + 1;
+            snapshot.ack = ack;
+          }
           break;
         case CommandKind::kArm:
           world.arming = Arming::kArmed;

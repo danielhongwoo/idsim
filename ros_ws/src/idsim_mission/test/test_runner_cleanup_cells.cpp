@@ -28,6 +28,9 @@
 //   kPrepArm: P6의 첫 ARMED 표본 전 거부 ack(ARM_REJECTED). reason ARM_REJECTED, arm을 보냈다.
 //   PREPARING 실패는 reason이 칸을 가르므로 원인을 둘로 나눈다(칸 목록의 from은 같은
 //   CLEANUP.PREPARING_FAILURE).
+//   kRtlFailure: 공중 ARMED Hold에서 시작한 [RTL]의 NAV_RTL 거부 ack(S+1, 합성). reason
+//   MODE_SWITCH_FAILED, arm을 보내지 않았다. 공중이면 Hold 없이 Land 경로라 kAirLand가 정리 첫
+//   tick에 닿고, Hold 실패 표시는 끝까지 서지 않는다(1b decisions.md 쟁점 9).
 // - 분기(Reach): kNone은 정리 첫 tick에 끝나는 칸이라 사건이 시작 표본을 정한다(표본 없음, 상태
 //   끊김, 공중 DISARMED). kAir는 ARMED이고 landed false, kGround는 ARMED이고 landed true로
 //   시작한다. kAirLand는 kAir에서 Hold 거부 ack로 Land 경로에 간 상태, kGroundAfterHoldFailure는
@@ -78,6 +81,7 @@ enum class Cause : std::uint8_t
   kItemTimeout,
   kPrepModeSwitch,
   kPrepArm,
+  kRtlFailure,
 };
 
 enum class Reach : std::uint8_t
@@ -133,6 +137,8 @@ const char * cause_state(Cause cause)
     case Cause::kPrepModeSwitch:
     case Cause::kPrepArm:
       return "PREPARING_FAILURE";
+    case Cause::kRtlFailure:
+      return "RTL_FAILURE";
   }
   return "?";
 }
@@ -169,6 +175,8 @@ const char * cause_tag(Cause cause)
       return "PrepModeSwitch";
     case Cause::kPrepArm:
       return "PrepArm";
+    case Cause::kRtlFailure:
+      return "RtlFailure";
   }
   return "Unknown";
 }
@@ -245,6 +253,9 @@ public:
       case Cause::kPrepArm:
         enter_prep_arm(start);
         break;
+      case Cause::kRtlFailure:
+        enter_rtl_failure(start);
+        break;
     }
     h_.auto_samples = true;
     if (reach != Reach::kNone) {
@@ -264,6 +275,11 @@ public:
         ASSERT_EQ(h_.view().branch, Branch::kGround);
         return;
       case Reach::kAirLand:
+        if (cause_ == Cause::kRtlFailure) {
+          // RTL 실패의 공중 진입은 바로 Land 경로다.
+          ASSERT_EQ(h_.view().branch, Branch::kAirLand);
+          return;
+        }
         ASSERT_EQ(h_.view().branch, Branch::kAir);
         reject_hold();
         ASSERT_EQ(h_.view().branch, Branch::kAirLand);
@@ -314,6 +330,12 @@ public:
       case Event::kStampUnavailable:
         h_.clock.fail = true;
         h_.tick();
+        // [RTL]은 발행하지 않으므로 Px4Timestamp는 명령(재전송)이 있는 tick에만 묻는다.
+        for (int i = 0;
+             i < ticks_of(h_.config().timeouts.command_resend_period_ns) && !h_.runner().done();
+             ++i) {
+          h_.tick();
+        }
         return;
       case Event::kEnterGround:
         set_world(Arming::kArmed, true);
@@ -360,6 +382,9 @@ private:
     if (cause == Cause::kItemTimeout) {
       m.items[0] = takeoff_item(5.0, 2);
     }
+    if (cause == Cause::kRtlFailure) {
+      m = rtl_only_mission();
+    }
     return m;
   }
 
@@ -375,8 +400,16 @@ private:
         } else if (event == Event::kCleanupAirDisarm) {
           start.arming = Arming::kDisarmed;
           start.landed = false;
-          // ITEM_TIMEOUT은 감시 표가 같은 tick에 먼저 보므로, 정리만 보는 묵은 표본이어야 닿는다.
-          start.stale_timestamp = cause_ == Cause::kItemTimeout;
+          // ITEM_TIMEOUT은 감시 표가, RTL 실패는 모드 명령 항목 처리가 같은 tick에 먼저 보므로,
+          // 정리만 보는 묵은 표본이어야 닿는다.
+          start.stale_timestamp = cause_ == Cause::kItemTimeout || cause_ == Cause::kRtlFailure;
+        } else if (event == Event::kCleanupNothingToDo) {
+          start.arming = Arming::kDisarmed;
+          start.landed = true;
+        } else if (event == Event::kEnterGround) {
+          start.landed = true;
+        } else if (event == Event::kEnterAir) {
+          start.landed = false;
         } else {
           ADD_FAILURE() << "no start sample for NONE " << event_name(event);
         }
@@ -498,6 +531,30 @@ private:
     h_.step_only();
   }
 
+  void enter_rtl_failure(const StartSample & start)
+  {
+    // S: 공중 ARMED Hold에서 [RTL]을 시작하고 NAV_RTL을 보낸다. S+1(묵은 표본이면 S+2)에 거부
+    // ack와 시작 표본.
+    h_.start_in_air();
+    h_.auto_px4 = false;
+    h_.tick();
+    ASSERT_EQ(h_.view().stage, Stage::kItem);
+    if (start.stale_timestamp) {
+      // 모드 명령 항목이 처리한 표본이 있어야 그보다 묵은 표본을 건너뛴다(S에는 처리하지 않는다).
+      h_.tick();
+      h_.push_ack(AckCommand::kNavRtl, AckResult::kTemporarilyRejected);
+      mark_start();
+      Sample stale = disarmed(start.landed);
+      stale.timestamp_us = 1;
+      h_.feed({stale});
+      return;
+    }
+    h_.push_ack(AckCommand::kNavRtl, AckResult::kTemporarilyRejected);
+    mark_start();
+    set_world(start.arming, start.landed);
+    h_.tick();
+  }
+
   void reject_hold()
   {
     h_.push_ack(AckCommand::kSetMode, AckResult::kDenied);
@@ -596,6 +653,11 @@ TEST_P(CleanupCellTest, ObservesCell)
         out->feedback->stamp_ns - sent->feedback->stamp_ns,
         h.config().timeouts.hold_confirm_timeout_ns);
     }
+  }
+  if (cell.cause == Cause::kRtlFailure) {
+    // RTL 실패의 정리는 Hold를 보내지 않으므로 Hold 실패 표시가 서지 않는다.
+    EXPECT_FALSE(h.view().hold_failed);
+    EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 0);
   }
   if (done) {
     expect_terminated_once_as(rig.h(), cell.reason);
@@ -704,6 +766,30 @@ const CleanupCell kCleanupCells[] = {
   {Cause::kPrepModeSwitch, Reach::kGround, Event::kGroundDisarmConfirmed, kDone, kMsf,
    Sent::kNothing},
   {Cause::kPrepModeSwitch, Reach::kGround, Event::kGroundDisarmTimeout, kDone, kMsf, Sent::kDisarm},
+  // RTL 실패(S2). 칸 목록의 CLEANUP.RTL_FAILURE.* covered 19칸이다.
+  {Cause::kRtlFailure, Reach::kNone, Event::kCleanupAirDisarm, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kNone, Event::kCleanupNothingToDo, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kNone, Event::kEnterGround, "CLEANUP.RTL_FAILURE.GROUND", "-",
+   Sent::kDisarm},
+  {Cause::kRtlFailure, Reach::kNone, Event::kEnterAir, "CLEANUP.RTL_FAILURE.AIR_LAND", "-",
+   Sent::kNavLand},
+  {Cause::kRtlFailure, Reach::kAirLand, Event::kCleanupLinkLost, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kAirLand, Event::kCleanupAirDisarm, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kAirLand, Event::kCleanupNothingToDo, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kAirLand, Event::kCleanupCap, kDone, kMsf, Sent::kNavLand, false},
+  {Cause::kRtlFailure, Reach::kAirLand, Event::kStampUnavailable, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kAirLand, Event::kEnterGround, "CLEANUP.RTL_FAILURE.GROUND", "-",
+   Sent::kDisarm},
+  {Cause::kRtlFailure, Reach::kAirLand, Event::kLandPathModeObserved, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kAirLand, Event::kLandPathTimeout, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kGround, Event::kCleanupLinkLost, kDone, kMsf, Sent::kDisarm},
+  {Cause::kRtlFailure, Reach::kGround, Event::kCleanupAirDisarm, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kGround, Event::kCleanupCap, kDone, kMsf, Sent::kDisarm, true},
+  {Cause::kRtlFailure, Reach::kGround, Event::kStampUnavailable, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kGround, Event::kEnterAir, "CLEANUP.RTL_FAILURE.AIR_LAND", "-",
+   Sent::kNavLand},
+  {Cause::kRtlFailure, Reach::kGround, Event::kGroundDisarmConfirmed, kDone, kMsf, Sent::kNothing},
+  {Cause::kRtlFailure, Reach::kGround, Event::kGroundDisarmTimeout, kDone, kMsf, Sent::kDisarm},
 };
 
 INSTANTIATE_TEST_SUITE_P(

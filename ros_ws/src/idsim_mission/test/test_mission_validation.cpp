@@ -64,14 +64,6 @@ ItemSpec track_item()
   return item;
 }
 
-ItemSpec rtl_item()
-{
-  ItemSpec item;
-  item.type = item_type::kRtl;
-  item.timeout = seconds(60);
-  return item;
-}
-
 TEST(ItemClassification, EveryTypeIsInExactlyOneKind)
 {
   // 모든 TYPE_*가 정확히 한 분류에 속한다(5단계 넘김).
@@ -492,6 +484,11 @@ TEST(MissionRunner, UnvalidatedMissionEndsInternalOnFirstStep)
   ASSERT_FALSE(check.valid);
   EXPECT_EQ(
     h.termination()->detail, "mission did not pass validate_mission_runnable: " + check.detail);
+  EXPECT_EQ(
+    h.termination()->detail.rfind(
+      "mission did not pass validate_mission_runnable: last item must be LAND or RTL", 0),
+    0U)
+    << h.termination()->detail;
   expect_terminated_once(h, Status::kAborted, Reason::kInternal);
 }
 
@@ -543,8 +540,8 @@ TEST(ValidateMission, OneAGoalAcceptsOnlyWhatRunnerAccepts)
   }
   // goal 접수: [LAND], [TAKEOFF, LAND], [TAKEOFF, LOITER, LAND], [TAKEOFF, LOITER, LOITER, LAND].
   EXPECT_EQ(goal_valid, 4);
-  // runner: 아직 goal 접수와 같다.
-  EXPECT_EQ(runnable_valid, 4);
+  // runner: 위 넷과 [RTL], [TAKEOFF, RTL], [TAKEOFF, LOITER, RTL], [TAKEOFF, LOITER, LOITER, RTL].
+  EXPECT_EQ(runnable_valid, 8);
 }
 
 // 1b decisions.md 쟁점 12 "미션 제한의 두 자리"의 단위 테스트 (1). B9 동안 goal 접수는 1a
@@ -560,6 +557,8 @@ TEST(ScreenGoal, MissionsNewToRunnerStayInvalidMission)
     MissionSpec m;
     m.mission_id = "new";
     m.items = items;
+    EXPECT_TRUE(validate_mission_runnable(m).valid)
+      << order_name(m) << ": " << validate_mission_runnable(m).detail;
     const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
     ASSERT_TRUE(term.has_value()) << order_name(m);
     EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
