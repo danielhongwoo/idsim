@@ -29,7 +29,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 | 6. 항목 순서 규칙 | "TAKEOFF는 첫 항목에만, LAND와 RTL은 마지막에만"을 계약으로 | 1a 임시 제한 문장을 계약 문장으로 | 확정 |
 | 7. 공중 시작 미션 | Hold이고 failsafe가 아닌 공중 ARMED 기체만 받는다. 감시는 P3부터, 첫 OFFBOARD 표본 전의 AUTO_LOITER 면제는 순위 7, 8에만. P4에서 먼저 본 OFFBOARD는 MODE_SWITCH_FAILED | 준비 단계, 발행 규칙, 감시 시작, reason "나오는 곳", "끝난 뒤 기체 상태"의 준비 단계 MODE_SWITCH_FAILED 행 | 확정 |
 | 8. GOTO, TRACK_ENTITY | 도달은 서로 다른 위치 표본 3개 연속. TRACK_ENTITY는 표적 속도를 feedforward로 싣는다. `target_fresh_age` 0.1 s, `target_timeout` 1.0 s. float32에 실을 수 없는 값은 `FramePort`가 값 없음으로 거른다. GOTO `position`과 TRACK_ENTITY `offset`의 성분은 절댓값 1e6 m 이하 | "정리"와 "정리의 상한"의 원인 목록, "종료의 충돌 규칙", feedback의 `PHASE_EXECUTING`, "Offboard setpoint"의 `velocity`, "좌표계"의 원점 이동 | 확정 |
-| 9. RTL과 SITL 파라미터 | 모드 명령 항목. 실패 fallback은 Land. 파라미터 일곱을 계약 표에 더한다. F3, F4 RTL `timeout` 60 s | SITL 파라미터 표, "LAND 항목" 절, "용어"의 명령과 확인 대상 | 확정 |
+| 9. RTL과 SITL 파라미터 | 모드 명령 항목. 실패 fallback은 Land(RTL 실패의 정리. Hold를 거치지 않는다). RTL 중 취소는 Hold. 파라미터 일곱을 계약 표에 더한다. F3, F4 RTL `timeout` 60 s | SITL 파라미터 표, "LAND 항목" 절, "정리"와 "정리의 상한"의 원인 목록, "끝난 뒤 기체 상태"의 MODE_SWITCH_FAILED와 ITEM_TIMEOUT 행, "용어"의 명령과 확인 대상 | 확정 |
 | 10. 공중에서 끝나는 미션 | 공중 Hold 3회 확인이면 SUCCEEDED. 지상에서는 세지 않고 지상 대기 뒤 지상 DISARMED 3회로 SUCCEEDED | "끝난 뒤 기체 상태" SUCCEEDED 행, "정리의 상한"의 원인과 결과, feedback의 `PHASE_EXECUTING` | 확정 |
 | 11. 지상 취소의 disarm 확인 | 1a 규칙(tick 조건, timestamp 조건, 3회 연속)을 유지한다. 처리 전 표본의 창은 arm 처리 전(폭 W_arm)이고 publish 간격 두 개보다 좁다. Phase 2 다중 스택 부하에서 다시 본다 | "시간 기준" 예외 문장의 근거 서술(사실 갱신. 규칙은 그대로) | 확정 |
 | 12. snapshot과 core 구조 | 헤더 추가는 한 PR, px4-engineer 조건부 승인 네 조건과 `SetpointOut` 속도. 지상 arm 진입의 arm 순서 불변식. 상태기 PR은 여섯(S1-S6)이고 goal 접수가 받는 미션은 B10까지 1a 그대로. S마다 로컬 `run_sitl.sh`로 1a 동작을 본다 | 준비 단계 표의 Offboard 전환 행((t)) | 확정 |
@@ -269,12 +269,28 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 결정
 - RTL은 모드 명령 항목이다. `docs/interface.md`의 "LAND 항목" 절을 "모드 명령 항목(LAND, RTL)" 절로 넓히고 LAND의 규칙을 그대로 쓴다.
 
-| 항목 | 명령 | 확인할 모드 | 확인 전 | 확인 뒤 이탈 | 완료 |
-| --- | --- | --- | --- | --- | --- |
-| LAND | NAV_LAND(21) | AUTO_LAND | 이탈 판정 없음 | EXTERNAL_MODE_CHANGE, failsafe이면 FAILSAFE | 지상 DISARMED 3회 |
-| RTL | NAV_RETURN_TO_LAUNCH(20) | AUTO_RTL | 이탈 판정 없음 | 같다 | 지상 DISARMED 3회. `nav_state`는 보지 않는다 |
+| 항목 | 명령 | 확인할 모드 | 확인 전 | 확인 전의 거부 ack | `mode_confirm_timeout` 안에 미확인 | 확인 뒤 이탈 | 완료 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| LAND | NAV_LAND(21) | AUTO_LAND | 이탈 판정 없음 | 끝내지 않는다. 재전송을 이어 간다(1a 그대로) | 정리 없이 ABORTED, REASON_MODE_SWITCH_FAILED(1a 그대로) | EXTERNAL_MODE_CHANGE, failsafe이면 FAILSAFE | 지상 DISARMED 3회 |
+| RTL | NAV_RETURN_TO_LAUNCH(20) | AUTO_RTL | 이탈 판정 없음 | 실패 fallback | 실패 fallback | 같다 | 지상 DISARMED 3회. `nav_state`는 보지 않는다 |
 
-- 실패 fallback: RTL 거부 ack 또는 `mode_confirm_timeout` 안에 AUTO_RTL 미확인이면 취소의 Hold 실패 뒤와 같은 Land 경로로 가고 ABORTED, REASON_MODE_SWITCH_FAILED다. `detail`에 "RTL not confirmed, Land sent". 새 reason은 더하지 않는다. 모든 실패 fallback은 Land로 모이고 RTL은 명령 항목으로만 쓴다.
+- "LAND의 규칙을 그대로 쓴다"의 예외는 위 표의 두 열(거부 ack, 미확인)뿐이다. LAND에는 정리 분기가 없고 RTL에는 실패 fallback의 정리가 있다.
+
+- 실패 fallback: RTL 항목에서 AUTO_RTL 확인 전에 NAV_RETURN_TO_LAUNCH의 거부 ack(ACCEPTED와 IN_PROGRESS가 아닌 결과 모두. 준비 단계의 거부 ack와 같은 뜻이다)를 받거나, 항목 시작부터 `mode_confirm_timeout` 안에 AUTO_RTL이 확인되지 않으면 정리(RTL 실패의 정리)로 들어가고 결과는 ABORTED, REASON_MODE_SWITCH_FAILED다. 새 reason은 더하지 않는다. 모든 실패 fallback은 Land로 모이고 RTL은 명령 항목으로만 쓴다.
+- RTL 실패의 정리는 `docs/interface.md` "정리"와 "정리의 상한" 절의 규칙(분기 고르기, 한 tick의 순서, 발행 규칙, 상한, 정리 중에 온 cancel은 결과를 바꾸지 않는다)을 그대로 쓰고 하나만 다르다. 공중 분기에서 Hold를 보내지 않고 바로 취소의 Hold 실패 뒤와 같은 Land 경로로 간다(NAV_LAND를 재전송하고, AUTO_LAND를 처음 관측하거나 `mode_confirm_timeout`이 지나면 발행을 멈추고 끝낸다). 지상 분기에서 공중으로 돌아갈 때도 Land 경로다. 분기별 동작은 아래와 같다.
+
+| 정리 첫 tick의 기체 | 동작 | 끝난 뒤 기체 상태 |
+| --- | --- | --- |
+| 공중 ARMED | NAV_LAND 재전송. 발행 중이었으면(RTL이 거부되어 OFFBOARD로 남은 기체) AUTO_LAND를 처음 관측할 때까지 발행을 유지한다 | 보통 AUTO_LAND로 내려오는 중이고 PX4가 착지 뒤 자동 disarm한다. AUTO_LAND를 확인하지 못했으면 `detail`에 적는다 |
+| 지상 ARMED, 또는 이 goal이 arm을 보낸 지상 DISARMED | 지상 disarm 분기(1a 그대로) | 보통 지상 DISARMED. disarm이 확인되지 않았으면 `detail`에 적는다 |
+| 이 goal이 arm을 보내지 않은(`[RTL]`) 지상 DISARMED | 아무것도 보내지 않는다 | 지상 DISARMED |
+| 공중 DISARMED | 아무것도 보내지 않는다 | 공중 disarm(추락했을 수 있다) |
+
+- RTL 실패의 정리는 어떻게 끝나든(Land 경로의 관측과 미확인, 지상 disarm의 확인과 미확인, 정리할 것 없음, 상한, 정리 중의 상태 끊김과 공중 DISARMED) reason이 REASON_MODE_SWITCH_FAILED이고 정리 결과는 `detail`에만 적는다("정리" 절의 "reason은 원래 실패 사유를 유지한다"를 그대로 따른다. REASON_DISARM_FAILED, REASON_LINK_LOST, REASON_FAILSAFE로 바꾸지 않는다). 정리 중 feedback의 `phase`는 실패한 단계의 것인 `PHASE_WAITING_MODE`이고 `item_type`은 RTL이다.
+- `detail`은 실패 원인 뒤에 `; cleanup: `과 정리 결과를 잇는다. 실패 원인은 거부이면 `NAV_RETURN_TO_LAUNCH rejected: <ack 결과>`, 미확인이면 `mode_confirm_timeout: AUTO_RTL not confirmed`를 담는다. Land 경로의 정리 결과는 취소의 Land 경로와 같은 형식(`<이유>; Land sent, <결과>`)이라 "RTL not confirmed; Land sent, "로 시작한다(거부와 미확인 모두).
+- RTL 항목에서 같은 tick에 겹칠 때: 식별 불일치, 상태 끊김, 공중 DISARMED, 확인 뒤 이탈이 실패 fallback보다 앞이다. AUTO_RTL 3회 확인이 난 tick의 거부 ack는 보지 않는다(확인이 이긴다). AUTO_RTL 3회 확인과 `mode_confirm_timeout`이 같은 tick이어도 확인이 이긴다(LAND 항목의 AUTO_LAND 확인과 같은 순서이고 S2는 이 순서를 바꾸지 않는다). 거부 ack가 `mode_confirm_timeout`보다 앞이고(결과는 같고 `detail`만 거부 문구다), 실패 fallback이 ITEM_TIMEOUT과 완료(지상 DISARMED 3회)보다 앞이다(LAND의 "MODE_SWITCH_FAILED가 ITEM_TIMEOUT보다 먼저"와 같은 방향).
+- RTL 항목의 ITEM_TIMEOUT은 LAND와 같다. NAV_RETURN_TO_LAUNCH 재전송을 멈추고, 아직 발행 중이면 발행을 멈추고, Hold도 Land도 보내지 않는다(실패 fallback을 거치지 않는다). 항목 `timeout`이 `mode_confirm_timeout`보다 짧아 확인 전에 먼저 오는 경우도 같다. 그 뒤는 PX4가 맡는다(AUTO_RTL을 확인했으면 그 귀환과 착륙, OFFBOARD였으면 offboard 손실 Land, `[RTL]` 미션이면 있던 모드에 남을 수 있다). 어느 쪽인지 `detail`에 적는다.
+- RTL 항목 중의 취소는 1a 취소 규칙 그대로다(LAND 항목 중의 취소와 같다). 공중이면 Hold를 보내 귀환을 멈추고, 기체는 그 자리(귀환 경로 위일 수 있다)에 Hold로 남는다. 내리거나 다시 귀환시키는 것은 취소를 요청한 쪽이 `[LAND]`나 `[RTL]` 미션으로 한다. 실패 fallback의 정리가 시작된 뒤에 온 취소는 결과를 바꾸지 않는다.
 - `[RTL]` 미션의 시작 조건은 `[LAND]`와 같다(ARMED이고 공중).
 - 목적지는 PX4 home이다. 계약 문장: "RTL은 그 기체가 마지막으로 arm하거나 이륙한 지점으로 돌아가 착륙한다. 공중 시작 미션의 RTL 목적지는 그 미션이 아니라 앞선 비행의 지점이다." `RtlItem`이나 목적지 필드는 두지 않는다.
 - 계약 SITL 파라미터 표에 더하는 것(`config/px4/sitl_params.env`).
@@ -297,6 +313,10 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 근거
 - [소스] 귀환 고도: `rtl.cpp` 471-478행. 멀티콥터에서 `RTL_LAND_DELAY` 0이면 MOVE_TO_LOITER 다음이 LAND이고(`rtl_direct.cpp` 163-184행, `_updateRtlState` 머리 163행과 MOVE_TO_LOITER 분기 `break` 184행). `RTL_DESCEND_ALT`의 직접 참조는 587행(`sanitizeLandApproach`) 하나지만, 거기서 만든 값을 233행 `loiter_altitude = min(_land_approach.height_m, _rtl_alt)`이 받아 LOITER_DOWN과 LOITER_HOLD 상태에서 쓰고 452-454행 시간 추정에서도 쓴다. 우리 경로(CLIMBING -> MOVE_TO_LOITER -> LAND)는 이 상태들을 지나지 않고 MOVE_TO_LOITER는 `_rtl_alt`만 쓰므로 결론은 같다. RTL은 착륙까지 AUTO_RTL이고, disarm 때 사용자 의도 모드가 arm을 막지 않는 마지막 사용자 의도 모드(`_nav_state_after_disarming`)로 돌아간다(`UserModeIntention.cpp`의 `onDisarm` 94-102행, 그 값을 저장하는 77-84행). 그래서 완료에서 `nav_state`를 보지 않는다.
 - RTL을 실패 fallback으로 쓰면 다대에서 같은 귀환 고도의 경로가 교차한다(`COM_OBL_RC_ACT=4`의 이유와 같다).
+- 거부 ack의 비대칭: LAND 항목이 확인 전에 보는 것은 `mode_confirm_timeout`, 상태 끊김, 항목 `timeout`뿐이라는 것이 1a 고정 문장이고, Land는 마지막 수단이라 거부 ack로 일찍 끝내도 갈 곳이 없다(재전송을 이어 가는 쪽이 낫다). RTL은 갈 곳(Land)이 있고, [소스] NAV_RETURN_TO_LAUNCH의 ack는 ACCEPTED와 TEMPORARILY_REJECTED뿐이며(`Commander.cpp` 1050-1061행) 거부는 ARMED에서 AUTO_RTL의 모드 요구(위치, 고도, home)가 맞지 않을 때다(`UserModeIntention.cpp` 55-59행, `mode_requirements.cpp` 126-141행). 그 상태로 `mode_confirm_timeout`까지 재전송해도 끝은 같은 Land라 거부에서 바로 넘어간다.
+- 실패 fallback이 Hold를 거치지 않는 이유: 미션이 요청한 것은 귀환과 착륙이고, Hold로 끝내면 내려오지 않은 기체가 공중에 남는다. 발행을 유지하는 이유: RTL이 거부된 기체는 OFFBOARD로 남으므로 그 tick에 발행을 멈추면 `COM_OF_LOSS_T` 뒤 offboard 손실 failsafe가 걸린다. AUTO_LAND를 관측할 때까지 발행을 유지하는 정리의 발행 규칙이 이를 막는다.
+- RTL 실패의 정리를 지상 분기와 "정리할 것 없음"까지 정리 규칙 그대로 두는 이유: 실패를 정한 tick의 기체가 공중이라는 보장이 없고(확인 전에 다른 주체가 내렸을 수 있다), 분기를 따로 정의하면 "끝난 뒤 기체 상태"가 다른 정리와 갈린다.
+- RTL 중 취소가 Hold인 근거: `docs/interface.md` "취소" 절은 취소를 상황(LAND 항목 중 포함)을 가리지 않고 같은 분기로 처리하고, CANCELED 뒤의 기체 상태(공중 Hold 또는 지상 disarm)를 goal이 무엇을 하던 중이었는지와 무관하게 보장하며, 취소 뒤 동작을 고르는 필드를 두지 않는다(Land나 RTL은 운용 정책이고 취소 뒤 미션 하나로 표현된다). RTL만 취소를 받지 않거나 귀환을 이어 가게 하면 이 보장이 항목 type에 따라 갈린다.
 
 ## 쟁점 10. 공중에서 끝나는 미션(U3)
 
@@ -383,7 +403,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 | S5 | `step()`이 `FramePort`를 받는다. 첫 커밋은 `step()` 시그니처, 테스트 harness의 호출부, 노드의 임시 port만 바꾼다(동작 무변경). 이어서 `Px4FramePort` 점 변환의 float32 술어와 `fits_float32` 공개(쟁점 4, 14), 좌표 상한과 GOTO(쟁점 8). 1a의 type(TAKEOFF, LOITER, LAND)만 든 미션에서 `FramePort`를 부르지 않음을 단정하는 단위 테스트를 둔다(부르면 실패하는 port) | GOTO |
 | S6 | core가 `Snapshot.targets`를 읽는다. `world_velocity_to_local`의 반환형과 벡터 변환의 float32 술어(헤더 변경, 쟁점 4), TRACK_ENTITY, TARGET_LOST와 그 정리, 속도 feedforward(쟁점 8) | TRACK_ENTITY |
 
-- 순서의 이유: S1은 1a가 받던 미션의 결과와 `/fmu/in` 출력을 바꾸려는 유일한 변경이라 미덮임 0인 1a 칸 목록만을 기준으로 먼저 대조한다. B8b에서 넘어온 테스트 수정 둘은 그 대조에 쓰는 도구의 수정이라 첫 칸 목록 diff보다 앞에 둔다. S2-S4는 있는 항목 type(TAKEOFF, LOITER, LAND)으로 구조(모드 명령 항목, 종료 단계, 진입 방식)를 먼저 넣어 diff를 구조 변경에 한정하고, S5와 S6은 그 위에 항목 type을 더해 type마다의 칸(쟁점 13의 tick 순서 겹침)을 낸다. `EntryPlan`은 S2가 `[RTL]`을 받으려면 준비 단계의 `[LAND]` 분기를 고쳐야 하므로 S2에 두 갈래로 넣고 S4는 공중 Offboard 갈래만 더한다. `FramePort`와 표적은 S5, S6에서 처음 쓰이므로 `step()` 인자는 S5에, 벡터 변환의 반환형은 속도를 처음 쓰는 S6에 바꾼다(쓰지 않는 인자를 먼저 넣지 않는다). `Event`나 칸의 이름을 바꾸는 것(LAND 전용 이름의 일반화 등)은 동작 변경과 다른 커밋으로 하고, 그 커밋의 칸 목록 diff는 이름 치환뿐이다. 이름을 바꿀지 새 사건을 더할지는 칸 명세가 정한다.
+- 순서의 이유: S1은 1a가 받던 미션의 결과와 `/fmu/in` 출력을 바꾸려는 유일한 변경이라 미덮임 0인 1a 칸 목록만을 기준으로 먼저 대조한다. B8b에서 넘어온 테스트 수정 둘은 그 대조에 쓰는 도구의 수정이라 첫 칸 목록 diff보다 앞에 둔다. S2-S4는 있는 항목 type(TAKEOFF, LOITER, LAND)으로 구조(모드 명령 항목, 종료 단계, 진입 방식)를 먼저 넣어 diff를 구조 변경에 한정하고, S5와 S6은 그 위에 항목 type을 더해 type마다의 칸(쟁점 13의 tick 순서 겹침)을 낸다. `EntryPlan`은 S2가 `[RTL]`을 받으려면 준비 단계의 `[LAND]` 분기를 고쳐야 하므로 S2에 두 갈래로 넣고 S4는 공중 Offboard 갈래만 더한다. `FramePort`와 표적은 S5, S6에서 처음 쓰이므로 `step()` 인자는 S5에, 벡터 변환의 반환형은 속도를 처음 쓰는 S6에 바꾼다(쓰지 않는 인자를 먼저 넣지 않는다). `Event`나 칸의 이름을 바꾸는 것(LAND 전용 이름의 일반화 등)은 동작 변경과 다른 커밋으로 하고, 그 커밋의 칸 목록 diff는 이름 치환뿐이다. S2는 LAND 전용 사건 여덟(`READY_LAND`와 `LAND_*` 일곱)을 모드 명령 항목의 이름(`READY_MODE_ITEM`, `MODE_ITEM_*`)으로 바꾸고 RTL 전용 사건을 따로 두지 않는다(칸은 상태 key `ITEM.LAND`, `ITEM.RTL`로 갈린다). 정리의 Land 경로 사건(`LAND_PATH_*`)은 그대로다. S2가 더하는 사건은 `MODE_ITEM_REJECTED` 하나이고(S2에서는 `ITEM.RTL`에서만 난다), RTL 실패의 정리는 정리 원인 `RTL_FAILURE`(`CleanupCause::kRtlFailure`)다. 이 원인에서 `CLEANUP.RTL_FAILURE.AIR`(Hold를 기다리는 공중 분기)에는 닿지 않는다.
 - 1a 동작의 보존: 1a가 받던 미션의 결과(status, reason)와 `/fmu/in` 출력이 바뀌도록 의도한 것은 S1뿐이다. S2-S6은 1a 미션이 지나는 코드(LAND 처리의 일반화, 착지 뒤 처리, `EntryPlan` 재구성, `step()` 호출부와 `to_setpoint_messages`, `idsim_common`의 `px4_setpoint.cpp`)를 고치므로 동작이 그대로임을 PR마다 두 겹으로 보인다. (가) 칸 목록 diff에서 1a 미션이 지나는 덮임 칸의 from, 사건, to, reason이 그대로임을 PR 본문(로컬 branch는 merge 커밋 메시지)에 적는다. 예외는 S1의 P5 칸, 이름 바꾸기 커밋, 새로 받는 미션이 닿게 되어 "불가능"에서 부류가 바뀌는 칸이다. (나) S1-S6 모두 머지 전에 로컬 `tests/sitl/run_sitl.sh`(1a 시나리오)가 통과한다. 로컬 branch에서는 CI `sitl`이 돌지 않고, 칸 목록은 core 전이만 보기 때문이다.
 - goal 접수에서 달라지는 것은 INVALID_MISSION의 `detail` 문구뿐이다(status와 reason은 그대로다). S2는 계약 순서 규칙의 문구를 1a 임시 제한 문구의 앞부분과 같게 쓰고(`items[i].type TAKEOFF is allowed only as the first item`, `... LAND is allowed only as the last item`. 끝의 "in 1a"가 빠진다), 1a 제한 쪽에서 닿지 않게 되는 TAKEOFF와 LAND 위치 검사를 지운다. S5의 좌표 상한도 1a 접수가 이미 거부하던 미션의 `detail`만 바꾼다. S2에서 기대값이 바뀌는 테스트(순서를 어긴 미션에 `validate_mission_contract`가 valid라고 단정하던 `test_mission_validation.cpp`의 두 곳)는 S2 칸 명세에 적고 같은 PR에서 고친다.
 - 미션 제한의 두 자리: `validate_mission`을 S2의 첫 커밋에서 둘로 나누고 그 이름은 남기지 않는다. `validate_mission_1a_goal`은 goal 접수(`screen_goal`)가 쓰고, 받는 미션 집합은 그대로 두고(닿지 않는 코드를 지우는 것만 예외) B10에서 지운다. `validate_mission_runnable`은 runner 생성자가 쓰고, 위 표의 PR마다 그 PR이 구현한 만큼 풀며, S6에서 계약 검증과 같아지면 지우고 runner가 `validate_mission_contract`를 부른다. 그래서 goal 접수가 받는 미션은 B9 동안 1a 그대로이고 B10에서 계약 검증으로 바뀐다. 단위 테스트 둘을 둔다. (1) PR마다 그 PR이 새로 받는 미션에 `validate_mission_runnable`이 valid이고 `screen_goal`이 INVALID_MISSION임을 같은 PR에서 단정한다. (2) 항목 type 여섯으로 만든 길이 4 이하의 모든 순서(1554개)에서 `validate_mission_1a_goal`이 받는 미션은 `validate_mission_runnable`도 받는다. 칸 목록의 "불가능" 근거(쟁점 13)는 runner가 실제로 부르는 검증 함수를 가리키게 적는다.
@@ -505,18 +525,18 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 | --- | --- | --- | --- |
 | (a) | "끝난 뒤 기체 상태"의 SUCCEEDED 행 "지상 DISARMED(마지막 항목 LAND의 완료 조건)" | 공중 종료(쟁점 10)와 RTL(쟁점 9). 마지막 항목별로 행을 나눈다: LAND와 RTL은 지상 DISARMED, setpoint 항목은 공중 Hold이거나 지상 DISARMED(마지막 목표가 지면에 닿은 경우). 지상 ARMED는 SUCCEEDED의 끝 상태가 아니다 | 행 분할. LAND로 끝나는 미션의 보장은 같다 |
 | (b) | "GoalStatus와 reason" 표의 "나오는 곳" 열(MODE_SWITCH_FAILED, FAILSAFE, EXTERNAL_MODE_CHANGE, LINK_LOST, ITEM_TIMEOUT)과 PRECONDITION_FAILED, EXTERNAL_DISARM 의미 칸의 괄호 | RTL, 공중 Offboard 진입, 공중 종료가 같은 reason을 낸다(쟁점 7, 9, 10) | 적용 경로의 열거 확장. reason의 핵심 의미는 그대로 |
-| (c) | 용어 "정리"와 "정리" 절 첫 문장의 원인 목록(취소, setpoint 항목의 ITEM_TIMEOUT, 준비 단계의 실패) | TARGET_LOST가 같은 정리를 거친다(쟁점 8). 공중 종료 단계는 정리와 같은 장치를 쓰되 결과 표가 따로다(쟁점 10) | 원인 추가 |
+| (c) | 용어 "정리"와 "정리" 절 첫 문장의 원인 목록(취소, setpoint 항목의 ITEM_TIMEOUT, 준비 단계의 실패) | TARGET_LOST가 같은 정리를 거친다(쟁점 8). RTL 항목의 실패(거부 ack, AUTO_RTL 미확인)도 정리를 거치되 공중 분기가 Hold 없이 Land 경로다(쟁점 9). "정리" 절의 phase 문장("EXECUTING 또는 PREPARING")에 RTL 실패의 `PHASE_WAITING_MODE`를 더한다. "정리할 것 없음" 문장("준비 단계의 실패에서")에 `[RTL]` 미션의 RTL 실패를 더한다. 공중 종료 단계는 정리와 같은 장치를 쓰되 결과 표가 따로다(쟁점 10) | 원인 추가 |
 | (d) | "비행 중 감시" 첫 문장의 시작 시점과 "(TAKEOFF, LOITER)", 순위 5의 failsafe 이력 구간 | 공중 Offboard 진입은 P3부터, 모드 행 7, 8은 첫 OFFBOARD 표본 전 AUTO_LOITER 면제(순위 6은 면제 없음), setpoint 항목 전체로(쟁점 7, 8) | 범위 확장 |
 | (e) | "발행 규칙"의 "Offboard로 들어가는 중(준비 단계의 발행 시작부터 arm 확인까지)" | 공중 Offboard 진입은 Hold 중에 OFFBOARD 확인까지 현재 위치 setpoint를 발행한다(쟁점 7) | 예외 구간 추가 |
 | (f) | "준비 단계" 절 첫 문장("첫 항목이 TAKEOFF인 미션은")과 `[LAND]` 문단 | 공중 Offboard 진입 문단 추가, `[LAND]` 문단을 `[LAND]`와 `[RTL]`로(쟁점 7, 9) | 문단 추가 |
-| (g) | "LAND 항목" 절, feedback 표의 `PHASE_WAITING_MODE`(1a는 LAND) | 모드 명령 항목(LAND, RTL)으로 넓힌다(쟁점 9) | 구조 변경. LAND 규칙은 그대로 |
+| (g) | "LAND 항목" 절, feedback 표의 `PHASE_WAITING_MODE`(1a는 LAND) | 모드 명령 항목(LAND, RTL)으로 넓힌다(쟁점 9). "LAND 항목에는 정리 분기가 없다"는 LAND에 한정하고 RTL의 실패 fallback(거부 ack와 미확인)을 적는다. RTL의 ITEM_TIMEOUT과 RTL 중 취소는 LAND와 같다 | 구조 변경. LAND 규칙은 그대로 |
 | (h) | 미션 정의 절의 "1a 노드의 임시 제한(계약 문장이 아니다. 1b에서 푼다)"과 `MissionItem.timeout`, `YawSetpoint.mode`, `TakeoffItem.height_m`의 "1b에서 정한다" 괄호. `docs/architecture.md` 인터페이스 계약 절의 "다음 setpoint 항목에서 Offboard 재진입 절차를 다시 밟는다" | 순서 규칙이 계약이 된다(쟁점 6, U7) | 임시 제한의 계약화와 1b 몫 닫기 |
 | (i) | "SITL 파라미터"의 계약 표 | `RTL_TYPE`, `RTL_CONE_ANG`, `RTL_RETURN_ALT`, `RTL_LAND_DELAY`, `COM_DISARM_LAND`, `COM_LOW_BAT_ACT`, `EKF2_HGT_REF` 행 추가(쟁점 9, U8, U9) | 행 추가 |
 | (j) | 공통 규칙 "이름과 식별자"의 "Python은 `tests/support`가 한다" | Python 생산자(표적 어댑터)가 생긴다(쟁점 3) | 위치 추가 |
 | (k) | "시간 기준"의 "1a는 `/clock`만 브리지한다", 그리고 "예외 하나: 취소의 지상 분기"의 근거 서술("지연 크기는 미측정", "3개가 되려면 표본 간격 약 0.5 s로 arm이 약 1 s 동안 처리되지 않아야 한다") | 1b도 bridge는 `/clock` 하나이고 표적과 정답 pose는 bridge를 거치지 않는다(쟁점 2, 5). 처리 전 표본의 창은 W_arm 이하이고 잘못된 확인에는 그 창 안에 publish 간격 두 개가 들어가야 한다(쟁점 11의 유지 조건과 실측) | 사실 갱신. 확인 규칙은 그대로 |
 | (l) | "Offboard setpoint" 절의 "`velocity`, `acceleration`, `jerk`, `yawspeed`는 NaN"과 "1a는 position 제어만 쓴다" | TRACK_ENTITY는 표적 속도를 `velocity` feedforward로 싣는다. `offboard_control_mode`는 그대로 position만 true다(쟁점 8) | 예외 추가. 1a 항목의 setpoint는 그대로 |
-| (m) | "끝난 뒤 기체 상태"의 `MODE_SWITCH_FAILED(준비 단계)` 행("arm 전이므로 지상 DISARMED"), `MODE_SWITCH_FAILED(LAND 항목)`과 `ITEM_TIMEOUT(LAND 항목)` 행, `ITEM_TIMEOUT(setpoint 항목)` 행 | 공중 Offboard 진입의 P4, P5 실패는 정리의 공중 분기를 거쳐 공중 Hold(또는 Hold 실패 뒤 Land 진행 중)로 끝난다(쟁점 7). RTL 항목의 실패는 Land fallback 뒤 끝나 LAND 항목 행과 상태가 다르다(쟁점 9). TARGET_LOST 행을 더한다(ITEM_TIMEOUT(setpoint 항목)과 같은 정리, 쟁점 8) | 행 분할과 추가. 지상 arm 진입의 행은 그대로 |
-| (n) | "정리의 상한" 절 첫 문장의 원인 목록(취소, setpoint 항목의 ITEM_TIMEOUT, 준비 단계의 실패)과 상한에서의 결과 문장("ITEM_TIMEOUT과 준비 단계 실패의 정리이면 같은 동작에 원래 reason을 유지") | TARGET_LOST의 정리는 원래 reason을 유지한다(쟁점 8). 공중 종료 단계도 같은 상한을 쓰고 상한에서 공중 NAV_LAND 1회, 지상 ARMED disarm 1회 뒤 ABORTED, MODE_SWITCH_FAILED다(쟁점 10의 결과 표) | 원인과 결과 대응 추가 |
+| (m) | "끝난 뒤 기체 상태"의 `MODE_SWITCH_FAILED(준비 단계)` 행("arm 전이므로 지상 DISARMED"), `MODE_SWITCH_FAILED(LAND 항목)`과 `ITEM_TIMEOUT(LAND 항목)` 행, `ITEM_TIMEOUT(setpoint 항목)` 행 | 공중 Offboard 진입의 P4, P5 실패는 정리의 공중 분기를 거쳐 공중 Hold(또는 Hold 실패 뒤 Land 진행 중)로 끝난다(쟁점 7). RTL 항목의 실패는 Land fallback 뒤 끝나 LAND 항목 행과 상태가 다르다: `MODE_SWITCH_FAILED(RTL 항목)` 행을 더하고 쟁점 9의 분기별 표(공중이면 NAV_LAND를 보내 보통 AUTO_LAND로 내려오는 중, 지상이면 disarm 분기, 확인되지 않은 것과 상한, 끊김은 `detail`)를 옮긴다. `ITEM_TIMEOUT(LAND 항목)` 행은 모드 명령 항목(LAND, RTL)으로 넓힌다(쟁점 9). TARGET_LOST 행을 더한다(ITEM_TIMEOUT(setpoint 항목)과 같은 정리, 쟁점 8) | 행 분할과 추가. 지상 arm 진입의 행은 그대로 |
+| (n) | "정리의 상한" 절 첫 문장의 원인 목록(취소, setpoint 항목의 ITEM_TIMEOUT, 준비 단계의 실패)과 상한에서의 결과 문장("ITEM_TIMEOUT과 준비 단계 실패의 정리이면 같은 동작에 원래 reason을 유지") | TARGET_LOST의 정리는 원래 reason을 유지한다(쟁점 8). RTL 실패의 정리도 같은 상한을 쓰고 원래 reason(MODE_SWITCH_FAILED)을 유지한다(쟁점 9). 공중 종료 단계도 같은 상한을 쓰고 상한에서 공중 NAV_LAND 1회, 지상 ARMED disarm 1회 뒤 ABORTED, MODE_SWITCH_FAILED다(쟁점 10의 결과 표) | 원인과 결과 대응 추가 |
 | (o) | "종료의 충돌 규칙"의 "감시 표의 행은 ITEM_TIMEOUT을 이긴다" | 같은 tick의 순서가 감시 표 -> TARGET_LOST -> ITEM_TIMEOUT -> 완료다(쟁점 8) | 순서에 사건 하나 추가 |
 | (p) | "용어"의 "명령"(Offboard 전환, arm, disarm, Hold 전환, Land)과 "N회 연속 확인"의 확인 대상(OFFBOARD, ARMED, Hold, Land 모드, DISARMED) | RTL(NAV_RETURN_TO_LAUNCH) 명령과 AUTO_RTL 확인이 더해진다(쟁점 9) | 열거 확장 |
 | (q) | feedback 표의 `PHASE_EXECUTING` 행("setpoint 항목 실행 중. 그 항목의 ITEM_TIMEOUT 정리 중") | TARGET_LOST의 정리 중과 공중 종료 단계 중도 `PHASE_EXECUTING`이다(쟁점 8, 10) | 적용 구간 추가 |
