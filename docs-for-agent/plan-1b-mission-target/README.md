@@ -40,14 +40,14 @@
 | B7. 정답 pose | sim-engineer(`sim_oracle.py`, 오프셋 합성과 구독 토픽 단위 테스트), devops-engineer(`sim-oracle` 서비스와 healthcheck) | 쟁점 5. S1-a | B3 |
 | B8. 전이 관측 계측 | ros2-engineer(계측, `transition.hpp`, 칸 목록 파일), px4-engineer(1a 칸 목록 승인), test-engineer(테스트 실행 파일 통합의 구조 승인), architect(`docs-for-agent/file-ownership.md`에 `Event` 목록과 칸 목록 파일의 px4 승인 한 줄. U16) | 쟁점 13. 동작 무변경 | B0 |
 | B8b. 1a 미덮임 칸 덮기 | ros2-engineer(runner 테스트와 정리 칸 파라미터화 하네스, 칸 목록의 부류 갱신), px4-engineer(칸 목록 diff와 새 테스트의 필수 승인), test-engineer(하네스 구조 승인) | 쟁점 13. 테스트만 더한다. `idsim_mission_core` 소스 무변경 | B8 |
-| B9. `idsim_mission` core와 px4 어댑터 | ros2-engineer(core, 단위 테스트), px4-engineer(`px4/` 어댑터, snapshot 헤더와 전이 표의 필수 승인, K1-K4 확인) | 쟁점 6-10, 12. 헤더 PR 하나와 상태기 PR들(칸 목록 diff로 승인). 지상 arm 진입의 arm 순서 불변식과 ack 대기 구간(쟁점 12), 단위 테스트 다섯 사례 | B4, B8. 상태기 PR은 B8b 뒤 |
-| B10. 노드 껍질과 YAML 로더 | ros2-engineer(노드, 표적 구독과 변환, 로더, CLI), devops-engineer(`ops-N` params의 `world.origin`) | 쟁점 4의 노드 쪽, 8의 표적 구독, 14 | B9 |
+| B9. `idsim_mission` core와 px4 어댑터 | ros2-engineer(core, 단위 테스트), px4-engineer(`px4/` 어댑터, snapshot 헤더와 전이 표의 필수 승인, K1-K4 확인) | 쟁점 6-10, 12. 헤더 PR 하나와 상태기 PR 여섯(S1-S6, 순서와 범위는 `decisions.md` 쟁점 12. 칸 목록 diff로 승인). 지상 arm 진입의 arm 순서 불변식과 ack 대기 구간(쟁점 12), 단위 테스트 다섯 사례. 경계: `step()`이 `FramePort`를 받고 core가 `Snapshot.targets`를 읽는 것까지이고, 노드는 호출부만 맞춰 늘 값 없음인 port와 빈 표적 맵을 넘기며 goal 접수가 받는 미션은 1a 그대로다 | B4, B8. 상태기 PR은 B8b 뒤 |
+| B10. 노드 껍질과 YAML 로더 | ros2-engineer(노드, 표적 구독과 변환, 로더, CLI), devops-engineer(`ops-N` params의 `world.origin`) | 쟁점 4의 노드 쪽, 8의 표적 구독, 14. 경계: 노드가 진짜 `Px4FramePort`를 넘기고(`to_local_position_input` 채택, 원점 변경 WARN, `world.origin`) 표적을 구독하며, goal 접수의 1a 미션 제한을 지워 계약 검증만 남긴다 | B9 |
 | B11. 통합 테스트 | test-engineer(판정, 시나리오 F1-F4, 미션 YAML, gate 기록, 비행 단위 fixture), sim-engineer(정답 pose 경로 확인), devops-engineer(compose와 `sitl.yml`) | 쟁점 5, 11의 gate 기록, 15. R1-R4, 공중 시작, RTL 실측 | B5, B6, B7, B10 |
 | B12. viz 확인 | sim-engineer | 쟁점 17. M4 | B6 |
 | B13. 계약 고정 문서 | architect | `decisions.md` "1a 고정 계약 영향" (a)-(t)((r)과 (k) 앞부분은 B3)와 "문서 반영 목록"의 B13 항목. `idsim_interfaces` 의미 주석 | B11의 완료 기준 충족 |
 
 커밋은 담당자 소유 단위로 나눈다. PR은 단위마다 하나이고, 담당이 여럿인 단위는 담당자별 커밋으로 나눈다. 생성기 golden을 바꾸는 PR(B3, B5, B6, B7)은 나중에 머지되는 쪽이 main에 rebase한 뒤 golden을 생성기로 다시 만든다(손으로 합치지 않는다. 재생성은 devops-engineer). 예외 둘:
-- B9의 snapshot 헤더 변경(`SetpointOut` 속도 포함)은 한 PR로 묶는다(쟁점 12). 상태기 변경은 px4-engineer가 먼저 바뀌는 칸과 칸마다 기대 명령의 표를 쓰고 ros2-engineer가 그 표대로 테스트와 구현을 한 뒤 px4-engineer가 대조한다. 상태기 변경은 B8b로 1a 칸 목록의 미덮임이 0이 된 뒤 PR마다 칸 목록 diff를 함께 내고, 새 칸은 그 PR에서 덮는다.
+- B9의 snapshot 헤더 변경(`SetpointOut` 속도 포함)은 한 PR로 묶는다(쟁점 12). 상태기 변경은 px4-engineer가 먼저 바뀌는 칸과 칸마다 기대 명령의 표를 쓰고 ros2-engineer가 그 표대로 테스트와 구현을 한 뒤 px4-engineer가 대조한다. 상태기 변경은 B8b로 1a 칸 목록의 미덮임이 0이 된 뒤 PR마다 칸 목록 diff를 함께 내고, 새 칸은 그 PR에서 덮는다. 상태기 PR은 S1-S6 여섯이고 순서대로 하나씩 머지한다(`decisions.md` 쟁점 12). 로컬 branch로 진행하고 PR마다 reviewer 최종 검토를 받는다.
 - B11은 한 PR 안에서 커밋 둘로 나눈다. (가) F1-F4의 trace에 R2와 R4를 기록하는 커밋. b와 `R_home`이 빈 보정 상태(`decisions.md` 쟁점 5)이고 시험 미션의 `acceptance_radius_m`은 보정 값 0.5 m다. 보정 상태에서는 `R_home`에 기대는 단정만 `recorded_only`이고 나머지 판정은 그대로 실패로 세므로, F1이 통과하면 F2-F4가 돌아 표본이 모인다. 로컬 `run_sitl.sh --repeat 30`으로만 돌리고 CI 시나리오 목록에는 F1-F4를 모두 넣지 않는다. (가)는 머지되지 않는 중간 상태다. (나) b와 `R_home`을 근거(`decisions.md` 쟁점 5의 항목)와 함께 `tests/support/sitl_judge.py` 머리말에 적고, 시험 미션 YAML의 `acceptance_radius_m`을 `1.0 - b`로 바꾸고, F1-F4를 CI 목록에 넣는 커밋. (나)의 상태로 로컬 부팅 10회 이상의 확인 실행을 한다. 머지되는 상태는 (나)뿐이다. 이렇게 해서 CI가 상수 없는 판정으로 시작하지 않고, 상수를 통과와 실패를 보고 정하지 않는다.
 
 실험용 스택 번호: px4 5, ros2 6, test 7, devops 8, sim 9. 사용자가 띄운 스택(보통 0)은 건드리지 않는다.
@@ -75,8 +75,8 @@
 | B7 | test-engineer(판정이 쓰는 형식), devops-engineer, px4-engineer(기준점이 PX4 로컬 위치와 같은지, K4) | base_link 오프셋 합성, `dynamic_pose` 금지 단정, 표시 파일 healthcheck |
 | B8 | px4-engineer(필수 승인: 1a 칸 목록과 `Event` 목록), test-engineer(구조 승인) | 동작 무변경(기존 runner 테스트 본문 무변경), untagged 검출, 겹침 칸의 열거 범위(쟁점 13), `test_monitor_table`의 행 쌍 단정(`row`와 `matched`) |
 | B8b | px4-engineer(필수 승인: 칸 목록 diff, 새 테스트), test-engineer(구조 승인), reviewer | 미덮임 0, "불가능"으로 옮긴 칸의 [소스] 이유, 대표 취소 칸의 명령 미발행 단정, core 소스 무변경 |
-| B9 | px4-engineer(필수 승인: snapshot 헤더, 전이 표, 상태기 단위 테스트), test-engineer(칸 목록 diff), architect(계약 문장과 구현의 일치) | 진입 방식 셋, 지상 arm 진입의 순서 불변식(쟁점 12), 감시 표 면제 구간, RTL과 Land 폴백, 공중 종료 결과 표, 속도 feedforward 조건, 순서 규칙, core가 `idsim_common`과 px4_msgs에 의존하지 않는지 |
-| B10 | px4-engineer(`px4/` 어댑터와 `FramePort` 연결, 같은 표본에서 기준 읽기, `target_fresh_age` 0.1 s와 `target_timeout` 1.0 s 기본값), test-engineer(로더 출력) | 표적 구독 수명, TARGET_LOST 뒤 Hold 확인까지 발행 유지, `world.origin` 누락 시 configure 실패(embedded 변형에는 `ops-N`이 없어 해당 없음. `decisions.md` 쟁점 4) |
+| B9 | px4-engineer(필수 승인: snapshot 헤더, 전이 표, 상태기 단위 테스트), test-engineer(칸 목록 diff), architect(계약 문장과 구현의 일치) | 진입 방식 셋, 지상 arm 진입의 순서 불변식(쟁점 12), 감시 표 면제 구간(첫 OFFBOARD 표본까지)과 그 뒤 재전송 중단, RTL과 Land 폴백, 공중 종료 결과 표, 속도 feedforward 조건, 변환 값 없음의 처리와 `Px4FramePort`의 float32 술어, 순서 규칙, goal 접수가 받는 미션이 1a 그대로인지, core가 `idsim_common`과 px4_msgs에 의존하지 않는지 |
+| B10 | px4-engineer(`px4/` 어댑터와 `FramePort` 연결, 같은 표본에서 기준 읽기, `target_fresh_age` 0.1 s와 `target_timeout` 1.0 s 기본값), test-engineer(로더 출력) | 값 없는 임시 port와 goal 접수의 1a 미션 제한이 지워졌는지, 표적 구독 수명, TARGET_LOST 뒤 Hold 확인까지 발행 유지, `world.origin` 누락 시 configure 실패(embedded 변형에는 `ops-N`이 없어 해당 없음. `decisions.md` 쟁점 4) |
 | B11 | px4-engineer(판정 필드와 timeout), sim-engineer(정답 pose 경로), devops-engineer(wrapper와 `sitl.yml`), architect(판정이 `decisions.md` 쟁점 5, 15와 같은지) | 계약 판정과 정답 판정의 분리, `ORACLE_ABSENT`, `ORACLE_STALE`, `UPSTREAM_FAILED`, b와 `R_home`의 근거와 모형 검증, 시험 미션 반경과 판정 상수의 대조 테스트, L과 `target_fresh_age`의 대조 테스트, `/targets/*/state` 발행자 QoS를 계약 상태 행과 대조하는 통합 테스트, 두 커밋 절차 |
 | B12 | devops-engineer | 서버 생존 기록 |
 | B13 | reviewer(필수), px4-engineer(SITL 파라미터 표, 전이 문장, "Offboard setpoint" 절의 속도 예외), ros2-engineer | golden 무변경, 1a 미션에 대한 의미가 그대로인지 |
@@ -96,7 +96,7 @@
 - B7: `sim_oracle.py` 단위 테스트(오프셋 합성, 구독 토픽) 통과, `sim-oracle` healthcheck 통과. S1-a 결과가 PR 본문에 있다.
 - B8: `tools/ros_ws.sh ci` 통과. 1a 칸 목록이 쟁점 13의 열거 범위대로 있고 px4-engineer가 승인했다. `test_monitor_table`이 모든 행 쌍에서 `row`와 `matched`(배타 쌍은 함께 맞지 않음)를 단정한다. untagged 기록이 0이다. 기존 runner 테스트 본문이 바뀌지 않았다.
 - B8b: `tools/ros_ws.sh ci` 통과. 1a 칸 목록의 미덮임이 0이고 덮음 테스트가 "미덮임" 부류의 칸을 거부한다. `idsim_mission_core` 소스가 바뀌지 않았다. px4-engineer가 승인했다.
-- B9: `tools/ros_ws.sh ci` 통과. 승인된 전이 칸 목록에 대해 미덮임이 0이고 목록에 없는 변이 관측되지 않는다. px4-engineer가 승인했다. K1-K4 결과가 PR 본문에 있다. `idsim_interfaces` golden 무변경.
+- B9: `tools/ros_ws.sh ci` 통과. 승인된 전이 칸 목록에 대해 미덮임이 0이고 목록에 없는 변이 관측되지 않는다. px4-engineer가 승인했다. S6 뒤 runner의 검증은 계약 검증과 같고 goal 접수가 받는 미션은 1a 그대로다. S1 머지 전에 로컬 `tests/sitl/run_sitl.sh`(1a 시나리오)가 통과했다. K1-K4 결과가 PR 본문에 있다. `idsim_interfaces` golden 무변경.
 - B10: `tools/ros_ws.sh ci` 통과. 로더가 시험 미션 YAML을 `Mission`으로 바꾸는 단위 테스트가 있다.
 - B11
   - `tests/sitl/run_sitl.sh --repeat 3`이 같은 commit, 같은 이미지 key에서 3회 연속 통과한다. 시나리오는 B, C, A, D, F1, F2, F3, F4, T다.
