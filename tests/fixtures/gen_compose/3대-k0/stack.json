@@ -24,7 +24,7 @@
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",
-      "sha256": "f6dd00dc17188ff1f1e17f39d92f2901cc4244c723e0847c44b6e3b247bfba5b"
+      "sha256": "5a83ea552c36de3faa3b94e59cce5be15d2434f8f927fd2ef650167fce389f5d"
     },
     "versions_env": {
       "path": "docker/versions.env",
@@ -211,6 +211,7 @@
         "COM_OF_LOSS_T": "1.0",
         "COM_RC_IN_MODE": "4",
         "EKF2_HGT_REF": "1",
+        "IMU_GYRO_CAL_EN": "0",
         "NAV_DLL_ACT": "0",
         "RTL_CONE_ANG": "0",
         "RTL_LAND_DELAY": "0.0",
@@ -269,6 +270,7 @@
         "COM_OF_LOSS_T": "1.0",
         "COM_RC_IN_MODE": "4",
         "EKF2_HGT_REF": "1",
+        "IMU_GYRO_CAL_EN": "0",
         "MPC_XY_VEL_MAX": "7.5",
         "NAV_DLL_ACT": "0",
         "RTL_CONE_ANG": "0",
@@ -328,6 +330,7 @@
         "COM_OF_LOSS_T": "1.0",
         "COM_RC_IN_MODE": "4",
         "EKF2_HGT_REF": "1",
+        "IMU_GYRO_CAL_EN": "0",
         "NAV_DLL_ACT": "0",
         "RTL_CONE_ANG": "0",
         "RTL_LAND_DELAY": "0.0",
