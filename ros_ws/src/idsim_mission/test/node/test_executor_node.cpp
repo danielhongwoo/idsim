@@ -221,6 +221,8 @@ public:
   std::uint8_t nav_state() const { return nav_; }
   bool react_offboard{
     true};  // false면 Offboard 요청에 반응하지 않고 ack도 내지 않는다(P5에 머문다)
+  // true면 Offboard ack 뒤에 core가 모르는 command(DO_REPOSITION)의 ack도 같은 target으로 낸다.
+  bool ack_other_command{false};
 
 private:
   void on_command(const px4_msgs::msg::VehicleCommand & cmd)
@@ -246,6 +248,10 @@ private:
         ack.target_system = cmd.source_system;
         ack.target_component = cmd.source_component;
         ack_->publish(ack);
+        if (ack_other_command) {
+          ack.command = VC::VEHICLE_CMD_DO_REPOSITION;
+          ack_->publish(ack);
+        }
       }
     } else if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 4.0F) {
       nav_ = VS::NAVIGATION_STATE_AUTO_LOITER;
@@ -498,6 +504,31 @@ TEST_F(ExecutorNodeTest, WiringNormalPathSucceeds)
   EXPECT_FALSE(px4.armed());
   expect_events_match_result(client.events(), client.result_, MissionEvent::STATUS_SUCCEEDED);
   EXPECT_FALSE(node->goal_active());
+}
+
+TEST_F(ExecutorNodeTest, AckOfOtherCommandIsKeptWithoutBreakingTheGoal)
+{
+  // core가 모르는 command의 ack(AckCommand::kOther)도 묶음별 최신 하나로 둔다. 대기 중인 명령의
+  // 묶음이 아니므로 core에는 가지 않고 goal은 그대로 끝난다.
+  auto node = make_executor(true);
+  auto test_node = std::make_shared<rclcpp::Node>("test_client");
+  Client client(test_node);
+  FakePx4 px4(test_node, *clock_);
+  px4.ack_other_command = true;
+  executor_->add_node(node->get_node_base_interface());
+  executor_->add_node(test_node);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      return state_of(node) == State::PRIMARY_STATE_ACTIVE &&
+             client.client()->action_server_is_ready() &&
+             test_node->count_publishers("/px4_1/mission_event") >= 1;
+    },
+    std::chrono::seconds(10), &px4));
+  client.send(standard_goal());
+  ASSERT_TRUE(spin_until([&] { return client.has_result_; }, std::chrono::seconds(40), &px4))
+    << "events " << client.events().size() << " commands " << px4.commands();
+  EXPECT_EQ(client.result_.code, rclcpp_action::ResultCode::SUCCEEDED);
+  EXPECT_EQ(state_of(node), State::PRIMARY_STATE_ACTIVE);
 }
 
 TEST_F(ExecutorNodeTest, WiringInvalidMissionAbortsWithoutFeedback)

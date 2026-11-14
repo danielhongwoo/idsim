@@ -95,19 +95,20 @@ struct RunnerView
   CleanupCause cleanup_cause{CleanupCause::kCancel};
   Branch branch{Branch::kNone};
   DisarmClass disarm_class{DisarmClass::kUnknown};
-  bool land_confirmed{false};
+  bool land_confirmed{false};  // 모드 명령 항목(LAND, RTL)의 확인 대상 모드를 확인했다
   bool failsafe_history{false};
   bool armed_seen{false};         // P6에서 첫 ARMED 표본을 봤다
   bool landed_false_seen{false};  // 첫 ARMED 표본 뒤에 landed false를 받은 적이 있다
-  bool hold_failed{false};        // 이 정리에서 Hold가 한 번 실패했다
+  bool hold_failed{false};  // 이 정리에서 Hold가 한 번 실패했다(RTL 실패의 정리는 늘 false)
 };
 
 class MissionRunner
 {
 public:
-  // mission은 validate_mission을 통과한 것이어야 한다. 통과하지 않으면 첫 step에서 INTERNAL로
-  // 끝낸다. accept_ns는 goal 접수 ROS 시각(ready_timeout의 기준). observer가 있으면 step마다
-  // 그 tick의 전이 기록을 넘긴다(transition.hpp. 테스트가 쓴다). 없으면 기록하지 않고 동작은 같다.
+  // mission은 validate_mission_runnable을 통과한 것이어야 한다. 통과하지 않으면 첫 step에서
+  // INTERNAL로 끝낸다. accept_ns는 goal 접수 ROS 시각(ready_timeout의 기준). observer가 있으면
+  // step마다 그 tick의 전이 기록을 넘긴다(transition.hpp. 테스트가 쓴다). 없으면 기록하지 않고
+  // 동작은 같다.
   MissionRunner(
     MissionSpec mission, Config config, std::int64_t accept_ns,
     TransitionObserver * observer = nullptr);
@@ -157,12 +158,12 @@ private:
     // 마지막으로 받은 비거부 ack(ACCEPTED, IN_PROGRESS)의 received_tick. 없으면 0.
     std::uint64_t accepted_ack_tick{0};
   };
-  struct LandState
+  struct ModeItemState
   {
     std::int64_t first_send_ns{0};
     bool confirmed{false};
     bool mode_seen{false};
-    bool nav_land_accepted{false};
+    bool command_accepted{false};
     int mode_count{0};
     int disarm_count{0};
     std::uint64_t last_timestamp_us{0};
@@ -205,8 +206,8 @@ private:
   void complete_item(Event event, Tick & t);
   void step_item(Tick & t);
   void step_setpoint_item(Tick & t);
-  void step_land(Tick & t);
-  void land_item_timeout(Tick & t, bool landed);
+  void step_mode_item(Tick & t, const ModeItemSpec & spec);
+  void mode_item_timeout(Tick & t, const ModeItemSpec & spec, bool landed);
   void begin_cleanup(Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail);
   void step_cleanup(Tick & t);
   bool cleanup_cap_reached(const Tick & t) const;
@@ -288,12 +289,14 @@ private:
   Pending pending_;        // 대기 중인 명령은 한 번에 하나
   DisarmConfirm disarm_confirm_;
   MissionSpec mission_;
-  LandState land_;
+  ModeItemState mode_item_;
   Config config_;
   std::uint32_t item_index_{0};
   std::uint32_t items_completed_{0};
   std::uint32_t publish_count_{0};
   bool mission_valid_{false};
+  EntryPlan entry_plan_{EntryPlan::kGroundArm};  // 첫 항목 type에서 정한 진입 방식
+  std::string invalid_detail_;  // mission_valid_가 false일 때 validate_mission_runnable의 detail
   Stage stage_{Stage::kPreparing};
   PrepStep prep_{PrepStep::kWaitReady};
   bool acted_{false};  // 발행이나 명령을 한 번이라도 했는가

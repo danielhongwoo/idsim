@@ -176,6 +176,42 @@ bool monitor_sends_disarm(MonitorRow row, const MonitorDisarmInput & input)
   return false;
 }
 
+std::optional<EntryPlan> entry_plan(std::uint8_t first_item_type)
+{
+  switch (first_item_type) {
+    case item_type::kTakeoff:
+      return EntryPlan::kGroundArm;
+    case item_type::kLand:
+    case item_type::kRtl:
+      return EntryPlan::kModeCommand;
+    default:
+      return std::nullopt;
+  }
+}
+
+std::optional<ModeItemSpec> mode_item_spec(std::uint8_t type)
+{
+  ModeItemSpec spec;
+  switch (type) {
+    case item_type::kLand:
+      spec.command = CommandKind::kNavLand;
+      spec.mode = NavMode::kLand;
+      spec.mode_name = "AUTO_LAND";
+      spec.command_name = "NAV_LAND";
+      spec.land_fallback = false;
+      return spec;
+    case item_type::kRtl:
+      spec.command = CommandKind::kNavRtl;
+      spec.mode = NavMode::kRtl;
+      spec.mode_name = "AUTO_RTL";
+      spec.command_name = "NAV_RETURN_TO_LAUNCH";
+      spec.land_fallback = true;
+      return spec;
+    default:
+      return std::nullopt;
+  }
+}
+
 const char * cleanup_choice_name(CleanupChoice choice)
 {
   switch (choice) {

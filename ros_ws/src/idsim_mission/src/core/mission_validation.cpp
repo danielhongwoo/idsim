@@ -194,6 +194,37 @@ bool supported_in_1a(std::uint8_t type)
   return type == item_type::kTakeoff || type == item_type::kLoiter || type == item_type::kLand;
 }
 
+bool supported_by_runner(std::uint8_t type)
+{
+  return supported_in_1a(type) || type == item_type::kRtl;
+}
+
+// 계약 + 1a 임시 제한. validate_mission_1a_goal이 쓴다.
+MissionCheck check_1a_limits(const MissionSpec & mission)
+{
+  MissionCheck check = validate_mission_contract(mission);
+  if (!check.valid) {
+    return check;
+  }
+  const std::size_t count = mission.items.size();
+  for (std::size_t i = 0; i < count; ++i) {
+    const std::uint8_t type = mission.items[i].type;
+    if (!supported_in_1a(type)) {
+      return invalid(
+        field(i, "type") + " " + item_type_name(type) +
+        " is not supported in 1a (TAKEOFF, LOITER, LAND only)");
+    }
+  }
+  if (mission.items.back().type != item_type::kLand) {
+    return invalid("last item must be LAND in 1a (missions ending in the air are 1b)");
+  }
+  const std::uint8_t first = mission.items.front().type;
+  if (first != item_type::kTakeoff && first != item_type::kLand) {
+    return invalid("first item must be TAKEOFF or LAND in 1a");
+  }
+  return check;
+}
+
 }  // namespace
 
 bool is_valid_mission_id(const std::string & mission_id)
@@ -222,10 +253,22 @@ MissionCheck validate_mission_contract(const MissionSpec & mission)
   if (mission.items.empty()) {
     return invalid("mission has no items");
   }
-  for (std::size_t i = 0; i < mission.items.size(); ++i) {
+  const std::size_t count = mission.items.size();
+  for (std::size_t i = 0; i < count; ++i) {
     std::string error = check_item(mission.items[i], i);
     if (!error.empty()) {
       return invalid(std::move(error));
+    }
+  }
+  // 순서 규칙(1b decisions.md 쟁점 6). 필드 검사 뒤에 보므로 필드 오류의 detail은 그대로다.
+  for (std::size_t i = 0; i < count; ++i) {
+    const std::uint8_t type = mission.items[i].type;
+    if (type == item_type::kTakeoff && i != 0) {
+      return invalid(field(i, "type") + " TAKEOFF is allowed only as the first item");
+    }
+    if ((type == item_type::kLand || type == item_type::kRtl) && i + 1 != count) {
+      return invalid(
+        field(i, "type") + " " + item_type_name(type) + " is allowed only as the last item");
     }
   }
   MissionCheck ok;
@@ -233,8 +276,14 @@ MissionCheck validate_mission_contract(const MissionSpec & mission)
   return ok;
 }
 
-MissionCheck validate_mission(const MissionSpec & mission)
+MissionCheck validate_mission_1a_goal(const MissionSpec & mission)
 {
+  return check_1a_limits(mission);
+}
+
+MissionCheck validate_mission_runnable(const MissionSpec & mission)
+{
+  // 계약 + runner가 아직 실행하지 못하는 미션의 제한. 1b decisions.md 쟁점 12의 PR마다 푼다.
   MissionCheck check = validate_mission_contract(mission);
   if (!check.valid) {
     return check;
@@ -242,25 +291,21 @@ MissionCheck validate_mission(const MissionSpec & mission)
   const std::size_t count = mission.items.size();
   for (std::size_t i = 0; i < count; ++i) {
     const std::uint8_t type = mission.items[i].type;
-    if (!supported_in_1a(type)) {
+    if (!supported_by_runner(type)) {
       return invalid(
         field(i, "type") + " " + item_type_name(type) +
-        " is not supported in 1a (TAKEOFF, LOITER, LAND only)");
-    }
-    if (type == item_type::kLand && i + 1 != count) {
-      return invalid(field(i, "type") + " LAND is allowed only as the last item in 1a");
-    }
-    if (type == item_type::kTakeoff && i != 0) {
-      // 첫 항목이 아닌 TAKEOFF의 기준 위치, heading, timeout 기준 시각은 1b에서 정한다.
-      return invalid(field(i, "type") + " TAKEOFF is allowed only as the first item in 1a");
+        " is not supported by the runner yet (TAKEOFF, LOITER, LAND, RTL only)");
     }
   }
-  if (mission.items.back().type != item_type::kLand) {
-    return invalid("last item must be LAND in 1a (missions ending in the air are 1b)");
+  const std::uint8_t last = mission.items.back().type;
+  if (last != item_type::kLand && last != item_type::kRtl) {
+    return invalid(
+      "last item must be LAND or RTL (missions ending in the air are not supported by the runner "
+      "yet)");
   }
   const std::uint8_t first = mission.items.front().type;
-  if (first != item_type::kTakeoff && first != item_type::kLand) {
-    return invalid("first item must be TAKEOFF or LAND in 1a");
+  if (first != item_type::kTakeoff && first != item_type::kLand && first != item_type::kRtl) {
+    return invalid("first item must be TAKEOFF, LAND or RTL");
   }
   return check;
 }
@@ -277,7 +322,7 @@ std::optional<Termination> screen_goal(
       "goal vehicle_id '" + goal_vehicle_id + "' is not this executor '" + own_vehicle_id + "'";
     return termination;
   }
-  MissionCheck check = validate_mission(mission);
+  MissionCheck check = validate_mission_1a_goal(mission);
   if (!check.valid) {
     termination.reason = Reason::kInvalidMission;
     termination.detail = std::move(check.detail);

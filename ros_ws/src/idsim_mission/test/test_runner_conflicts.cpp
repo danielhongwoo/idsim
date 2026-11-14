@@ -40,7 +40,7 @@ TEST(Conflict, ThirdDisarmedAndCancelSameTickIsSucceeded)
   const std::vector<StepOutput> outs = h.feed({disarmed(true, NavMode::kLand)}, true);
   EXPECT_TRUE(outs[0].commands.empty());
   expect_cell(
-    h, "ITEM.LAND", Event::kLandDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {Event::kCancel},
+    h, "ITEM.LAND", Event::kModeItemDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {Event::kCancel},
     before);
   expect_terminated_once(h, Status::kSucceeded, Reason::kNone);
 }
