@@ -463,7 +463,7 @@ void MissionRunner::prepare_offboard_ack(Tick & t)
 bool MissionRunner::has_valid_offboard_ack() const
 {
   // 유효 ack: 대기 명령(DO_SET_MODE) 묶음의 비거부 ack이고 마지막 전송 tick보다 뒤의 tick에 받았다.
-  // 같은 tick에 받은 ack는 그 tick의 전송보다 앞이다(스냅숏은 tick 시작의 것).
+  // 같은 tick에 받은 ack는 그 tick의 전송보다 앞이다(snapshot은 tick 시작의 것).
   return pending_.accepted_ack_tick > pending_.last_send_tick;
 }
 

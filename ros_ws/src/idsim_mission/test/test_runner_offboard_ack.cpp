@@ -692,10 +692,29 @@ TEST(OffboardAck, ConfirmTickCancelOnResendDueTickSendsNothing)
   expect_no_arm_disarm_hold(h, 0);
 }
 
+TEST(OffboardAck, AckOnResendDueTickWhileWaitingArmsWithoutResend)
+{
+  // 대기 중(확인 S+3 뒤) 재전송 주기가 찬 tick(S+10)에 유효 ack를 받으면 arm 판정이 재전송보다
+  // 앞이라 재전송 없이 그 ack로 arm한다. 그 tick의 출력은 [ARM] 하나다.
+  Harness h(standard_mission());
+  const std::uint64_t s = reach_offboard_ack(h);
+  feed_through(h, offboard_ground(), s + 9);
+  h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
+  ASSERT_EQ(h.tick_no, s + 10);
+  const std::size_t before = h.edges().size();
+  const StepOutput arm = h.feed({offboard_ground()})[0];  // S+10
+  expect_cell(
+    h, "PREPARING.OFFBOARD_ACK", Event::kOffboardAckAccepted, "PREPARING.ARM", "-", {}, before);
+  EXPECT_EQ(arm.commands, std::vector<CommandKind>{CommandKind::kArm});
+  expect_resends_only_at(h, s + 4, s + 9, {});
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeOffboard), 1);
+  EXPECT_EQ(h.count_command(CommandKind::kArm), 1);
+}
+
 TEST(OffboardAck, ValidAckBeforeConfirmThenModeLostTimesOutWithoutResend)
 {
   // 유효 ack(S+1) 뒤 OFFBOARD가 확인되지 않으면 재전송 없이 S+60에 P5의 timeout으로 끝난다(다른
-  // 주체가 바꾼 모드를 다시 덮지 않는다). 1a에서는 주기마다 재전송해 DO_SET_MODE가 6회였다.
+  // 주체가 바꾼 모드를 다시 덮지 않는다).
   Harness h(standard_mission());
   const std::uint64_t s = reach_offboard_without_ack(h);
   h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
