@@ -301,6 +301,9 @@ TEST(Px4FramePort, ReturnedPointIsNeverDroppedBySetpointOutput)
   }
   EXPECT_GE(with_value, 1);
   EXPECT_GE(without_value, 1);
+  // 계약 좌표 상한의 꼭짓점은 값이 있다(상한 안의 미션 좌표는 변환에서 버려지지 않는다).
+  EXPECT_TRUE(frame.world_to_local(Vec3{1e6, 1e6, 5.0}).has_value());
+  EXPECT_TRUE(frame.world_to_local(Vec3{-1e6, -1e6, -1e6}).has_value());
 }
 
 TEST(Px4FramePort, VelocityDelegatesToFramesAndIgnoresReference)

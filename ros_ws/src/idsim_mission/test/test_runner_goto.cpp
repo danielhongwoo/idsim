@@ -427,6 +427,23 @@ TEST(Goto, BoundaryDistanceIsNotReachedAndTimesOut)
   expect_end(h, "ABORTED/ITEM_TIMEOUT", 1, 1);
 }
 
+// 완료는 항목 시작 다음 tick부터 센다. 시작 tick K 전부터 목표점에 있어도 K의 표본은 세지 않아
+// K+1, K+2, K+3의 세 표본으로 K+3에 끝난다.
+TEST(Goto, CountingStartsOnTickAfterItemStart)
+{
+  Harness h(takeoff_goto_land_mission());
+  h.frame.mode = FrameMode::kAxis;
+  const std::uint64_t k = prepare_goto_start(h);
+  at_target(h);
+  tick_goto_start(h, k);
+  expect_distance(out_at(h, k), 0.0, "K");
+  const std::size_t before = h.edges().size();
+  EXPECT_EQ(run_goto(h, k, kTimeoutTicks), 3U);
+  expect_cell(h, "ITEM.GOTO", Event::kGotoReached, "ITEM.LAND", "-", {}, before);
+  land_and_disarm(h);
+  expect_end(h, "SUCCEEDED/NONE", 3, 2);
+}
+
 // ---- 점 변환 값 없음 ----
 
 TEST(Goto, WaitsForFirstTransformThenCounts)
@@ -546,6 +563,69 @@ TEST(Goto, ItemTimeoutWithTransformHasNoSuffix)
   EXPECT_EQ(detail, "item 1 (GOTO) timeout; cleanup: Hold confirmed");
   EXPECT_EQ(detail.rfind("item 1 (GOTO) timeout", 0), 0U);
   expect_end(h, "ABORTED/ITEM_TIMEOUT", 1, 1);
+}
+
+// 처음 변환 값을 얻은 tick이 ITEM_TIMEOUT tick이나 취소 tick인 경우. 그 tick의 판정 앞에서 변환을
+// 하므로 "변환 값을 얻었다"가 참이라 detail에 꼬리가 없고, setpoint는 그 tick에 GOTO 점으로 바뀐 채
+// 정리 동안 유지된다(발행은 AUTO_LOITER 관측에서 멈춘다).
+TEST(Goto, FirstTransformOnEndingTick)
+{
+  {
+    SCOPED_TRACE("ITEM_TIMEOUT tick");
+    Harness h(takeoff_goto_land_mission());
+    const std::uint64_t k = prepare_goto_start(h);
+    h.frame.hook = [k](std::uint64_t tick, const Vec3 & w) -> std::optional<Vec3> {
+      if (tick < k + kTimeoutTicks) {
+        return std::nullopt;
+      }
+      return HarnessFramePort::axis(w);
+    };
+    tick_goto_start(h, k);
+    const std::size_t before = h.edges().size();
+    EXPECT_EQ(run_goto(h, k, kTimeoutTicks), kTimeoutTicks);
+    expect_cell(h, "ITEM.GOTO", Event::kItemTimeout, "CLEANUP.ITEM_TIMEOUT.NONE", "-", {}, before);
+    expect_setpoint(out_at(h, k + kTimeoutTicks - 1), 1.0, 2.0, -5.0, 0.25, "K+199");
+    const StepOutput & end_tick = out_at(h, k + kTimeoutTicks);
+    EXPECT_EQ(end_tick.commands, kHoldOnly);
+    expect_setpoint(end_tick, 20.0, 10.0, -5.0, 0.25, "K+200");
+    ASSERT_TRUE(h.run_until(
+      [&h] {
+        EXPECT_DOUBLE_EQ(h.view().setpoint.x, 20.0);
+        EXPECT_DOUBLE_EQ(h.view().setpoint.y, 10.0);
+        return h.runner().done();
+      },
+      10));
+    EXPECT_EQ(h.frame.point_calls_from(k + kTimeoutTicks + 1), 0);
+    EXPECT_EQ(termination_or_empty(h).detail, "item 1 (GOTO) timeout; cleanup: Hold confirmed");
+    expect_end(h, "ABORTED/ITEM_TIMEOUT", 1, 1);
+  }
+  {
+    SCOPED_TRACE("cancel tick");
+    Harness h(takeoff_goto_land_mission());
+    const std::uint64_t k = prepare_goto_start(h);
+    h.frame.hook = [k](std::uint64_t tick, const Vec3 & w) -> std::optional<Vec3> {
+      if (tick < k + 3) {
+        return std::nullopt;
+      }
+      return HarnessFramePort::axis(w);
+    };
+    tick_goto_start(h, k);
+    const std::size_t before = h.edges().size();
+    EXPECT_EQ(
+      run_goto(h, k, kTimeoutTicks, [&h](std::uint64_t n) { h.cancel_sticky = n >= 3; }), 3U);
+    expect_cell(h, "ITEM.GOTO", Event::kCancel, "CLEANUP.CANCEL.NONE", "-", {}, before);
+    const StepOutput & cancel = out_at(h, k + 3);
+    EXPECT_EQ(cancel.commands, kHoldOnly);
+    expect_setpoint(cancel, 20.0, 10.0, -5.0, 0.25, "K+3");
+    ASSERT_TRUE(h.run_until(
+      [&h] {
+        EXPECT_DOUBLE_EQ(h.view().setpoint.x, 20.0);
+        return h.runner().done();
+      },
+      10));
+    EXPECT_EQ(h.frame.point_calls_from(k + 4), 0);
+    expect_end(h, "CANCELED/NONE", 1, 1);
+  }
 }
 
 // ---- 같은 tick의 만료와 완료(만료가 이긴다) ----
