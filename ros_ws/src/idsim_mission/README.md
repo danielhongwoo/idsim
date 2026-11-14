@@ -68,7 +68,7 @@ action 서버(P3d)
 
 | decisions.md | 구현 |
 | --- | --- |
-| 쟁점 4 미션의 정적 검증, 1a 임시 제한 | `validate_mission_contract`, `validate_mission` |
+| 쟁점 4 미션의 정적 검증, 1a 임시 제한 | `validate_mission_contract`, `validate_mission_1a_goal`(goal 접수), `validate_mission_runnable`(runner) |
 | 쟁점 3 M1 즉시 판정 순서 | `screen_goal` |
 | 쟁점 4 PREPARING P0-P2(TAKEOFF와 LAND 분기) | `MissionRunner::prepare_wait_ready` |
 | P3 발행 시작과 목표점 | `start_signal` |

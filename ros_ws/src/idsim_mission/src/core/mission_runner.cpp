@@ -110,7 +110,9 @@ MissionRunner::MissionRunner(
   MissionSpec mission, Config config, std::int64_t accept_ns, TransitionObserver * observer)
 : accept_ns_(accept_ns), observer_(observer), mission_(std::move(mission)), config_(config)
 {
-  mission_valid_ = validate_mission(mission_).valid;
+  MissionCheck check = validate_mission_runnable(mission_);
+  mission_valid_ = check.valid;
+  invalid_detail_ = std::move(check.detail);
 }
 
 RunnerView MissionRunner::view() const
@@ -155,7 +157,8 @@ void MissionRunner::step_tick(Tick & t)
   if (!mission_valid_) {
     terminate(
       Event::kInvalidMission, t,
-      aborted(Reason::kInternal, "mission did not pass validate_mission"));
+      aborted(
+        Reason::kInternal, "mission did not pass validate_mission_runnable: " + invalid_detail_));
     if (t.input.cancel_requested) {
       note_ignored_cancel(t);
     }
@@ -638,7 +641,7 @@ void MissionRunner::complete_item(Event event, Tick & t)
   ++items_completed_;
   const std::uint32_t next = item_index_ + 1;
   if (next >= mission_.items.size()) {
-    // validate_mission이 마지막을 LAND로 두므로 setpoint 항목에서는 닿지 않는다.
+    // validate_mission_runnable이 마지막을 LAND로 두므로 setpoint 항목에서는 닿지 않는다.
     terminate(event, t, succeeded());
     return;
   }
@@ -663,7 +666,8 @@ void MissionRunner::step_setpoint_item(Tick & t)
   bool completed = false;
   Event completion = Event::kLoiterElapsed;
   if (item.type == item_type::kTakeoff) {
-    // validate_mission이 TAKEOFF를 첫 항목에만 두므로 takeoff_target_z_는 이 항목의 목표다.
+    // validate_mission_runnable이 TAKEOFF를 첫 항목에만 두므로 takeoff_target_z_는 이 항목의
+    // 목표다.
     const PositionSample * const p = t.position;
     completed = p != nullptr && p->z_valid && std::isfinite(p->z) &&
                 std::abs(p->z - takeoff_target_z_) < item.takeoff.acceptance_m;

@@ -584,8 +584,9 @@ TEST(FlowCells, LoiterElapsedStartsNextLoiter)
 
 TEST(FlowCells, LoiterTimeoutWithElapsedIsItemTimeout)
 {
-  // duration < timeout(validate_mission)이라 한 tick 사이에 경과가 duration과 timeout을 함께 넘을
-  // 때만(tick 간격이 벌어짐) ITEM_TIMEOUT에 닿는다. 같은 tick이면 ITEM_TIMEOUT이 완료를 이긴다.
+  // duration < timeout(validate_mission_contract)이라 한 tick 사이에 경과가 duration과
+  // timeout을 함께 넘을 때만(tick 간격이 벌어짐) ITEM_TIMEOUT에 닿는다. 같은 tick이면
+  // ITEM_TIMEOUT이 완료를 이긴다.
   Harness h(standard_mission());
   ASSERT_NO_FATAL_FAILURE(h.drive_to_loiter());
   h.auto_px4 = false;

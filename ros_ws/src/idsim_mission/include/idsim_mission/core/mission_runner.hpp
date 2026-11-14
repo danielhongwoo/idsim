@@ -105,9 +105,10 @@ struct RunnerView
 class MissionRunner
 {
 public:
-  // mission은 validate_mission을 통과한 것이어야 한다. 통과하지 않으면 첫 step에서 INTERNAL로
-  // 끝낸다. accept_ns는 goal 접수 ROS 시각(ready_timeout의 기준). observer가 있으면 step마다
-  // 그 tick의 전이 기록을 넘긴다(transition.hpp. 테스트가 쓴다). 없으면 기록하지 않고 동작은 같다.
+  // mission은 validate_mission_runnable을 통과한 것이어야 한다. 통과하지 않으면 첫 step에서
+  // INTERNAL로 끝낸다. accept_ns는 goal 접수 ROS 시각(ready_timeout의 기준). observer가 있으면
+  // step마다 그 tick의 전이 기록을 넘긴다(transition.hpp. 테스트가 쓴다). 없으면 기록하지 않고
+  // 동작은 같다.
   MissionRunner(
     MissionSpec mission, Config config, std::int64_t accept_ns,
     TransitionObserver * observer = nullptr);
@@ -294,6 +295,7 @@ private:
   std::uint32_t items_completed_{0};
   std::uint32_t publish_count_{0};
   bool mission_valid_{false};
+  std::string invalid_detail_;  // mission_valid_가 false일 때 validate_mission_runnable의 detail
   Stage stage_{Stage::kPreparing};
   PrepStep prep_{PrepStep::kWaitReady};
   bool acted_{false};  // 발행이나 명령을 한 번이라도 했는가

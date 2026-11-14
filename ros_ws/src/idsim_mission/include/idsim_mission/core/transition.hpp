@@ -84,7 +84,7 @@ enum class Branch : std::uint8_t
 enum class Event : std::uint8_t
 {
   // PREPARING 전체
-  kInvalidMission,             // validate_mission을 통과하지 않은 미션의 첫 step
+  kInvalidMission,             // validate_mission_runnable 미통과 미션의 첫 step
   kPreparingIdentityMismatch,  // 발행 시작 뒤, 첫 ARMED 표본 전의 식별 불일치
   // P0-P2
   kReadyIdentityMismatch,  // P0 식별 불일치

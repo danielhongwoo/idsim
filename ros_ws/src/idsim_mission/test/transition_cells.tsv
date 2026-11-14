@@ -70,8 +70,8 @@ PREPARING.ARM	MONITOR_MODE_FAILSAFE	DONE	ABORTED/FAILSAFE	covered	CANCEL	바로 
 ITEM.TAKEOFF	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	-	-
 ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.LOITER	-	covered	-	-
 ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.LAND	-	covered	-	미션 [TAKEOFF, LAND]
-ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.TAKEOFF	-	impossible	-	validate_mission이 TAKEOFF를 첫 항목에만 둔다
-ITEM.TAKEOFF	TAKEOFF_REACHED	DONE	SUCCEEDED/NONE	impossible	-	validate_mission이 마지막 항목을 LAND로 둔다
+ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.TAKEOFF	-	impossible	-	validate_mission_runnable이 TAKEOFF를 첫 항목에만 둔다
+ITEM.TAKEOFF	TAKEOFF_REACHED	DONE	SUCCEEDED/NONE	impossible	-	validate_mission_runnable이 마지막 항목을 LAND로 둔다
 ITEM.TAKEOFF	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 ITEM.TAKEOFF	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	setpoint 항목은 감시 표가 판정 맨 앞에서 Px4Timestamp를 묻고 실패하면 MONITOR_TIMESTAMP_FAILURE로 끝난다. finalize는 같은 tick의 값을 다시 쓴다
 ITEM.TAKEOFF	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	TAKEOFF_REACHED	-
@@ -95,10 +95,10 @@ ITEM.TAKEOFF	MONITOR_TIMESTAMP_FAILURE	DONE	ABORTED/INTERNAL	covered	TAKEOFF_REA
 ITEM.TAKEOFF	MONITOR_LINK_LOST	DONE	ABORTED/LINK_LOST	covered	TAKEOFF_REACHED	setpoint 순서의 대표 행
 ITEM.TAKEOFF	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/EXTERNAL_DISARM	covered	TAKEOFF_REACHED	setpoint 순서의 대표 행
 ITEM.TAKEOFF	MONITOR_MODE_EXTERNAL	DONE	ABORTED/EXTERNAL_MODE_CHANGE	covered	TAKEOFF_REACHED	setpoint 순서의 대표 행
-ITEM.LOITER	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	impossible	-	validate_mission이 loiter.duration < timeout을 요구하므로 timeout이 지난 tick에는 LOITER_ELAPSED도 참이다(겹침 칸으로만 나온다)
+ITEM.LOITER	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	impossible	-	validate_mission_runnable이 부르는 계약 검사가 loiter.duration < timeout을 요구하므로 timeout이 지난 tick에는 LOITER_ELAPSED도 참이다(겹침 칸으로만 나온다)
 ITEM.LOITER	LOITER_ELAPSED	ITEM.LAND	-	covered	-	-
 ITEM.LOITER	LOITER_ELAPSED	ITEM.LOITER	-	covered	-	LOITER 둘 이상인 미션
-ITEM.LOITER	LOITER_ELAPSED	DONE	SUCCEEDED/NONE	impossible	-	validate_mission이 마지막 항목을 LAND로 둔다
+ITEM.LOITER	LOITER_ELAPSED	DONE	SUCCEEDED/NONE	impossible	-	validate_mission_runnable이 마지막 항목을 LAND로 둔다
 ITEM.LOITER	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 ITEM.LOITER	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	setpoint 항목은 감시 표가 판정 맨 앞에서 Px4Timestamp를 묻고 실패하면 MONITOR_TIMESTAMP_FAILURE로 끝난다. finalize는 같은 tick의 값을 다시 쓴다
 ITEM.LOITER	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	LOITER_ELAPSED	한 tick 사이에 경과가 duration과 timeout을 함께 넘을 때(tick 간격이 벌어짐)
