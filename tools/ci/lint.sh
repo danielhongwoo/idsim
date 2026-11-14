@@ -3,7 +3,7 @@
 #
 # 사용법: tools/ci/lint.sh <검사>... | all
 #   검사: charset shellcheck ruff hadolint actionlint yamllint pytest compose-config
-#         clang-format px4-api cargo
+#         clang-format px4-api sim-topic cargo
 #   clang-tidy와 ament_lint는 compile_commands.json과 ROS 헤더가 필요해서 여기에 없다. unit job의 tools/ros_ws.sh ci 안에서 돈다.
 #
 # 대상 파일은 git이 추적하거나 무시 목록에 없는 새 파일이다(git ls-files -co --exclude-standard).
@@ -260,6 +260,26 @@ check_px4_api() {
   return 1
 }
 
+check_sim_topic() {
+  # 운용 패키지(idsim_common, idsim_mission, 앞으로의 idsim_telemetry, idsim_fleet, gateway/)의 소스, launch, params YAML에
+  # `/sim/`이 없어야 한다(SITL 정답 pose 토픽은 시뮬레이터 전용이다. decisions 쟁점 5). 대상 선별과 판정은 check_sim_topic.py가 한다
+  # (test, tests 디렉터리와 문서는 제외, 생성기 golden의 ops-N params는 포함). 여기서는 후보 경로만 넘긴다.
+  local files
+  mapfile -t files < <(list_files 'ros_ws/src/idsim_common/*' 'ros_ws/src/idsim_mission/*' 'ros_ws/src/idsim_telemetry/*' \
+    'ros_ws/src/idsim_fleet/*' 'gateway/*' 'tests/fixtures/gen_compose/*/params/ops-*.yaml')
+  if [ "${#files[@]}" -eq 0 ]; then result sim-topic PASS-NO-TARGETS "(0 files)"; return 0; fi
+  local out rc=0 n
+  out="$(drun "$LINT_PYTHON_IMAGE" -e PYTHONDONTWRITEBYTECODE=1 --network none -- python3 tools/ci/check_sim_topic.py "${files[@]}")" || rc=$?
+  n="$(printf '%s\n' "$out" | sed -n 's/^scanned=//p' | tail -n 1)"
+  if [ "$rc" -eq 0 ]; then
+    if [ "${n:-0}" -eq 0 ]; then result sim-topic PASS-NO-TARGETS "(0 files)"; else result sim-topic PASS "(${n} files)"; fi
+    return 0
+  fi
+  printf '%s\n' "$out"
+  result sim-topic FAIL "운용 패키지에 /sim/ 토픽 문자열이 있다 (exit ${rc})"
+  return 1
+}
+
 # 아직 대상 코드가 없는 검사. 대상이 0개면 PASS-NO-TARGETS, 생기면 FAIL-NOT-WIRED로 연결을 강제한다.
 not_wired() {
   local name="$1"; shift
@@ -274,7 +294,7 @@ not_wired() {
 # cargo fmt --check, cargo clippy -D warnings: gateway/ 크레이트가 생기면 연결
 check_cargo() { not_wired cargo 'Cargo.toml'; }
 
-all_checks=(charset shellcheck ruff hadolint actionlint yamllint pytest compose-config clang-format px4-api cargo)
+all_checks=(charset shellcheck ruff hadolint actionlint yamllint pytest compose-config clang-format px4-api sim-topic cargo)
 
 run_check() {
   case "$1" in
@@ -288,6 +308,7 @@ run_check() {
     compose-config) check_compose_config ;;
     clang-format) check_clang_format ;;
     px4-api) check_px4_api ;;
+    sim-topic) check_sim_topic ;;
     cargo) check_cargo ;;
     *) echo "모르는 검사: $1 (가능: ${all_checks[*]} all)" >&2; return 2 ;;
   esac

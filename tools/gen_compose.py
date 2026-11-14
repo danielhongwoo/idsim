@@ -91,6 +91,11 @@ TARGET_ADAPTER_PKG = "idsim_sim"
 TARGET_ADAPTER_EXEC = "target_adapter"
 TARGETS_PARAMS_FILE = f"{PARAMS_DIR}/targets.yaml"
 TARGETS_READY_FILE = "/tmp/idsim/targets_ready"
+# sim-oracle(SITL 전용 정답 pose 공급자, decisions.md 쟁점 5). sim-base 이미지에 마운트한 idsim_sim/scripts/sim_oracle.py를 돌린다.
+# standalone이면 표적과 무관하게 항상 만들고 embedded에는 없다.
+ORACLE_SERVICE = "sim-oracle"
+ORACLE_SCRIPT = "scripts/sim_oracle.py"  # SIM_PKG_IN_CONTAINER 기준
+ORACLE_READY_FILE = "/tmp/idsim/oracle_ready"
 TARGET_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}\Z")
 TARGET_KEYS = ("id", "start_s", "loop", "waypoints")
 WAYPOINT_KEYS = ("t", "x", "y", "z")
@@ -117,7 +122,8 @@ ACTOR_FORBIDDEN_DESCENDANTS = ("plugin", "skin", "animation", "collision")
 
 # 이미지 레이아웃(컨테이너 안 경로). 이미지가 바뀌면 여기와 Dockerfile을 함께 고친다.
 REPO_IN_CONTAINER = "/opt/idsim"
-CYCLONEDDS_URI = "file:///opt/idsim/config/cyclonedds.xml"
+CYCLONEDDS_IN_CONTAINER = "/opt/idsim/config/cyclonedds.xml"
+CYCLONEDDS_URI = f"file://{CYCLONEDDS_IN_CONTAINER}"
 SIM_PKG_REL = "ros_ws/src/idsim_sim"
 SIM_PKG_IN_CONTAINER = "/opt/idsim/sim"
 PX4_ROOTFS = "/opt/PX4-Autopilot/build/px4_sitl_default/rootfs"
@@ -978,6 +984,16 @@ def _base(image):
     return {"image": image, "network_mode": "host", "restart": "no"}
 
 
+def oracle_vehicles(vehicle_out):
+    """IDSIM_ORACLE_VEHICLES 값: 공백으로 이은 `<vehicle_id>=<gz 모델 이름>`(px4_1=x500_1 px4_2=x500_2)."""
+    return " ".join(f"{v['vehicle_id']}={v['gz_model_name']}" for v in vehicle_out)
+
+
+def oracle_command():
+    """sim-oracle의 bash -c 본문. ROS 환경을 읽고 sim-base의 python3으로 마운트된 sim_oracle.py를 실행한다."""
+    return f". /opt/ros/$${{ROS_DISTRO}}/setup.sh && exec python3 {SIM_PKG_IN_CONTAINER}/{ORACLE_SCRIPT}"
+
+
 def ops_healthcheck(fqn):
     """ops-N의 healthcheck 명령. lifecycle 상태가 active로 시작하면 통과한다.
 
@@ -1243,7 +1259,33 @@ def build(fleet_norm, ctx):
                 "depends_on": _healthy("bridge"),
             })
             services[TARGETS_SERVICE] = tsvc
-    node_services = ops_services + ([TARGETS_SERVICE] if targets else [])
+
+        # sim-oracle: SITL 전용 정답 pose 공급자(sim-base 이미지). gz-transport로 pose/info를 직접 구독하므로 bridge를 거치지 않는다.
+        # 모델이 스폰된 뒤라야 준비 조건이 성립하므로 gazebo와 px4-N 전부를 기다린다. 노드 단계에서 ops-N, targets와 병렬로 올린다.
+        oenv = dict(ros_env)
+        oenv.update(gz_env)
+        oenv.update({
+            "ROS_LOG_DIR": f"{run_in_container}/ros_log/{ORACLE_SERVICE}",
+            "IDSIM_WORLD_NAME": world["name"],
+            "IDSIM_ORACLE_VEHICLES": oracle_vehicles(vehicle_out),
+        })
+        services[ORACLE_SERVICE] = dict(_base(images["sim-base"]), **{
+            "user": user,
+            "environment": oenv,
+            # ROS 환경은 /opt/ros의 setup.sh만 읽는다. $$는 compose에서 리터럴 $다
+            "command": ["bash", "-c", oracle_command()],
+            "init": True,
+            "volumes": [_bind(sim_pkg_host, SIM_PKG_IN_CONTAINER, True),
+                        _bind(f"{repo}/{CYCLONEDDS_REL}", CYCLONEDDS_IN_CONTAINER, True),
+                        _bind(f"{run_dir}/ros_log/{ORACLE_SERVICE}", f"{run_in_container}/ros_log/{ORACLE_SERVICE}", False)],
+            "healthcheck": {
+                "test": ["CMD-SHELL", f"test -f {ORACLE_READY_FILE}"],
+                "interval": "10s", "timeout": "5s", "retries": 2,
+                "start_period": "20s", "start_interval": "2s",
+            },
+            "depends_on": _healthy("gazebo", *px4_services),
+        })
+    node_services = ops_services + ([TARGETS_SERVICE] if targets else []) + ([ORACLE_SERVICE] if standalone else [])
 
     runner = ros_ws_service("runner", {"IDSIM_STACK_FILE": f"{run_in_container}/stack.json"})
     runner.update({
@@ -1358,7 +1400,7 @@ def build(fleet_norm, ctx):
             "runner": "runner",
             "gz_gui": "gz-gui" if standalone else None,
             "targets": TARGETS_SERVICE if targets else None,
-            "sim_oracle": None,
+            "sim_oracle": ORACLE_SERVICE if standalone else None,
             "foxglove": "foxglove" if standalone else None,
             "lichtblick": "lichtblick" if standalone else None,
             "profiles": profiles,
@@ -1447,7 +1489,7 @@ def render_files(compose, stack, world_sdf=None):
 def render_dirs(compose, stack):
     """실행 디렉터리에 빈 채로 만드는 디렉터리. px4 rootfs는 실행마다 새로 만들고, ros_log는 서비스별 하위를 호스트 사용자 소유로 만든다."""
     dirs = [v["rootfs_dir"] for v in stack["vehicles"]]
-    logs = ["bridge"] + [f"ops-{v['id']}" for v in stack["vehicles"]] + [TARGETS_SERVICE, "foxglove", "runner"]
+    logs = ["bridge"] + [f"ops-{v['id']}" for v in stack["vehicles"]] + [TARGETS_SERVICE, ORACLE_SERVICE, "foxglove", "runner"]
     dirs += [f"ros_log/{name}" for name in logs if name in compose["services"]]
     return dirs
 
@@ -1600,6 +1642,48 @@ def assert_invariants(compose, stack):
             problems.append("targets: 프로필 서비스다")
         if any(TARGETS_SERVICE in stage for stage in stack["startup"]["stages"]):
             problems.append("targets가 인프라 단계(startup.stages)에 있다")
+    # sim-oracle: standalone이면 항상 있고 embedded에는 없다
+    oname = stack["services"]["sim_oracle"]
+    if (oname is None) != (stack["variant"] == "embedded") or (oname is not None and oname != ORACLE_SERVICE):
+        problems.append("services.sim_oracle이 variant와 맞지 않는다(standalone은 sim-oracle, embedded는 null)")
+    if (ORACLE_SERVICE in services) != (oname is not None):
+        problems.append("sim-oracle 서비스와 services.sim_oracle이 일치하지 않는다")
+    if ORACLE_SERVICE in services:
+        osvc = services[ORACLE_SERVICE]
+        oenv = osvc.get("environment", {})
+        odeps = osvc.get("depends_on", {})
+        run_in = f"{REPO_IN_CONTAINER}/artifacts/runs/{stack['run']['id']}"
+        if osvc.get("image") != stack["images"]["sim_base"]:
+            problems.append("sim-oracle: 이미지가 sim-base가 아니다")
+        if osvc.get("user") != f"{stack['user']['uid']}:{stack['user']['gid']}":
+            problems.append("sim-oracle: user가 호스트 uid:gid가 아니다")
+        if osvc.get("init") is not True:
+            problems.append("sim-oracle: init: true가 아니다")
+        if set(odeps) != {"gazebo", *stack["services"]["px4"]} or any(d.get("condition") != "service_healthy" for d in odeps.values()):
+            problems.append("sim-oracle: depends_on이 gazebo와 px4-N 전부의 healthy가 아니다")
+        if osvc.get("command") != ["bash", "-c", oracle_command()]:
+            problems.append(f"sim-oracle: command가 sim_oracle.py 실행이 아니다: {osvc.get('command')}")
+        for key, val in (("GZ_PARTITION", st["gz_partition"]), ("GZ_IP", st["gz_ip"]), ("RMW_IMPLEMENTATION", RMW),
+                         ("CYCLONEDDS_URI", CYCLONEDDS_URI), ("ROS_DOMAIN_ID", str(st["ros_domain_id"])),
+                         ("IDSIM_WORLD_NAME", stack["world"]["name"]), ("ROS_LOG_DIR", f"{run_in}/ros_log/{ORACLE_SERVICE}"),
+                         ("IDSIM_ORACLE_VEHICLES", oracle_vehicles(stack["vehicles"]))):
+            if oenv.get(key) != val:
+                problems.append(f"sim-oracle: {key}={oenv.get(key)!r} != {val!r}")
+        if [k for k in oenv if k.startswith("IDSIM_ORIGIN")]:
+            problems.append("sim-oracle에 IDSIM_ORIGIN_*가 있다(원점은 월드 SDF로만 넣는다)")
+        host = stack["run"]["host_dir"]
+        vols = sorted((v["source"], v["target"], v["read_only"]) for v in osvc.get("volumes", []))
+        want = sorted([(f"{host.rsplit('/artifacts/runs/', 1)[0]}/{SIM_PKG_REL}", SIM_PKG_IN_CONTAINER, True),
+                       (f"{host.rsplit('/artifacts/runs/', 1)[0]}/{CYCLONEDDS_REL}", CYCLONEDDS_IN_CONTAINER, True),
+                       (f"{host}/ros_log/{ORACLE_SERVICE}", f"{run_in}/ros_log/{ORACLE_SERVICE}", False)])
+        if vols != want:
+            problems.append(f"sim-oracle: 볼륨이 idsim_sim(읽기 전용), cyclonedds.xml 파일 하나(읽기 전용), ros_log/sim-oracle(쓰기)이 아니다: {vols}")
+        if osvc.get("healthcheck", {}).get("test") != ["CMD-SHELL", f"test -f {ORACLE_READY_FILE}"]:
+            problems.append("sim-oracle: healthcheck가 표시 파일 검사가 아니다")
+        if service_profiles(osvc):
+            problems.append("sim-oracle: 프로필 서비스다")
+        if any(ORACLE_SERVICE in stage for stage in stack["startup"]["stages"]):
+            problems.append("sim-oracle이 인프라 단계(startup.stages)에 있다")
     if any("dynamic_pose" in text for text in _strings(compose)):
         problems.append("compose에 dynamic_pose 문자열이 있다(정답 pose는 bridge를 거치지 않는다)")
     wt = stack["inputs"].get("world_template")
@@ -1642,11 +1726,11 @@ def assert_invariants(compose, stack):
         if set(ops.get("depends_on", {})) != {"bridge", v["service"]}:
             problems.append(f"{name}: depends_on이 bridge와 {v['service']}가 아니다")
     if ops_names:
-        node_names = ops_names + ([tname] if tname is not None else [])
+        node_names = ops_names + ([tname] if tname is not None else []) + ([oname] if oname is not None else [])
         if set(services["runner"].get("depends_on", {})) != set(node_names):
-            problems.append("runner의 depends_on이 ops 서비스 전부와 targets(있으면)가 아니다")
+            problems.append("runner의 depends_on이 ops 서비스 전부, targets(있으면), sim-oracle이 아니다")
         if stack["startup"]["node_stages"] != [node_names]:
-            problems.append("startup.node_stages가 [ops 서비스 전부, targets(있으면)]가 아니다")
+            problems.append("startup.node_stages가 [ops 서비스 전부, targets(있으면), sim-oracle]이 아니다")
     elif stack["startup"]["node_stages"]:
         problems.append("ops 서비스가 없는데 startup.node_stages가 비어 있지 않다")
     for name in ops_names:

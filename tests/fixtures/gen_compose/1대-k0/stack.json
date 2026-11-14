@@ -70,7 +70,7 @@
       "px4-1"
     ],
     "runner": "runner",
-    "sim_oracle": null,
+    "sim_oracle": "sim-oracle",
     "targets": null
   },
   "stack": {
@@ -98,7 +98,8 @@
     "model_precheck": true,
     "node_stages": [
       [
-        "ops-1"
+        "ops-1",
+        "sim-oracle"
       ]
     ],
     "stages": [

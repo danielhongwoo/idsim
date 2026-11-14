@@ -235,7 +235,8 @@ def test_golden_stack_loads_with_support_loader(case):
             assert v.raw["params_file"] == f"params/ops-{v.id}.yaml"
             assert v.raw["executor_node"] == f"{v.ns}/mission_executor"
             assert s.services["ops"] == [f"ops-{x.id}" for x in s.vehicles]
-            node = s.services["ops"] + (["targets"] if s.raw["targets"] else [])
+            node = s.services["ops"] + (["targets"] if s.raw["targets"] else []) + ["sim-oracle"]
+            assert s.raw["services"]["sim_oracle"] == "sim-oracle"
             assert s.raw["startup"]["node_stages"] == [node]
             assert (s.raw["services"]["targets"] == "targets") == bool(s.raw["targets"])
             assert s.raw["run"]["params_dir"] == "params"
@@ -343,7 +344,8 @@ def test_properties(kw):
 def test_standalone_services_and_healthchecks():
     compose, stack, _ = gen()
     s = compose["services"]
-    assert list(s) == ["xrce-agent", "gazebo", "px4-1", "bridge", "ops-1", "runner", "gz-gui", "foxglove", "lichtblick"]
+    assert list(s) == ["xrce-agent", "gazebo", "px4-1", "bridge", "ops-1", "sim-oracle", "runner", "gz-gui", "foxglove",
+                       "lichtblick"]
     hc = s["gazebo"]["healthcheck"]["test"][1]
     assert hc == ('gz service -i --service /world/default/scene/info | grep -q "Service providers"'
                   " && test -f /tmp/idsim/ready")
@@ -372,8 +374,9 @@ def test_standalone_services_and_healthchecks():
     assert s["runner"]["environment"]["IDSIM_STACK_FILE"] == \
         "/opt/idsim/artifacts/runs/20261109-090000-k0/stack.json"
     assert stack["startup"]["stages"] == [["xrce-agent", "gazebo"], ["px4-1"], ["bridge"]]
-    assert stack["startup"]["node_stages"] == [["ops-1"]]
-    assert s["runner"]["depends_on"] == {"ops-1": {"condition": "service_healthy"}}
+    assert stack["startup"]["node_stages"] == [["ops-1", "sim-oracle"]]
+    assert s["runner"]["depends_on"] == {"ops-1": {"condition": "service_healthy"},
+                                         "sim-oracle": {"condition": "service_healthy"}}
 
 
 def test_viz_foxglove_and_lichtblick():
@@ -568,7 +571,7 @@ def test_ops_service_details():
     compose, stack, _ = gen(f=three_vehicles(), k=2)
     s = compose["services"]
     assert list(s) == ["xrce-agent", "gazebo", "px4-1", "px4-2", "px4-3", "bridge", "ops-1", "ops-2", "ops-3",
-                       "runner", "gz-gui", "foxglove", "lichtblick"]
+                       "sim-oracle", "runner", "gz-gui", "foxglove", "lichtblick"]
     ops = s["ops-2"]
     assert ops["command"] == ["ros2", "launch", "idsim_mission", "vehicle_ops.launch.py", "namespace:=/px4_2",
                               "executor_name:=mission_executor",
@@ -578,8 +581,9 @@ def test_ops_service_details():
     assert ops["restart"] == "no" and ops["network_mode"] == "host"
     assert ops["depends_on"] == {"bridge": {"condition": "service_healthy"},
                                  "px4-2": {"condition": "service_healthy"}}
-    assert s["runner"]["depends_on"] == {f"ops-{i}": {"condition": "service_healthy"} for i in (1, 2, 3)}
-    assert stack["startup"]["node_stages"] == [["ops-1", "ops-2", "ops-3"]]
+    assert s["runner"]["depends_on"] == {n: {"condition": "service_healthy"}
+                                         for n in ("ops-1", "ops-2", "ops-3", "sim-oracle")}
+    assert stack["startup"]["node_stages"] == [["ops-1", "ops-2", "ops-3", "sim-oracle"]]
     assert stack["services"]["ops"] == ["ops-1", "ops-2", "ops-3"]
     for v in stack["vehicles"]:
         assert v["vehicle_id"] == v["ns"][1:] == v["px4_ns"]
@@ -591,7 +595,8 @@ def test_ops_service_details():
 def test_render_dirs():
     compose, stack, _ = gen(f=three_vehicles())
     assert gc.render_dirs(compose, stack) == ["px4-1", "px4-2", "px4-3", "ros_log/bridge", "ros_log/ops-1",
-                                              "ros_log/ops-2", "ros_log/ops-3", "ros_log/foxglove", "ros_log/runner"]
+                                              "ros_log/ops-2", "ros_log/ops-3", "ros_log/sim-oracle", "ros_log/foxglove",
+                                              "ros_log/runner"]
     compose, stack, _ = gen(variant="embedded")
     assert gc.render_dirs(compose, stack) == ["px4-1", "ros_log/runner"]
 
@@ -609,6 +614,7 @@ def test_assert_invariants_catches_ops_tampering():
         lambda c, st: st["vehicles"][0].update(vehicle_id="px4_2"),
         lambda c, st: c["services"]["runner"].update(depends_on={"bridge": {"condition": "service_healthy"}}),
         lambda c, st: st["startup"].update(node_stages=[]),
+        lambda c, st: st["startup"].update(node_stages=[["ops-1"]]),
     ):
         compose, stack, _ = gc.build(norm, make_ctx())
         mutate(compose, stack)
@@ -840,7 +846,7 @@ def test_cli_writes_params_and_log_dirs(tmp_path):
     assert sorted(os.listdir(out)) == ["compose.yaml", "params", "px4-1", "ros_log", "stack.json", "world"]
     assert os.listdir(out / "world") == ["default.sdf"]
     assert os.listdir(out / "params") == ["ops-1.yaml"]
-    assert sorted(os.listdir(out / "ros_log")) == ["bridge", "foxglove", "ops-1", "runner"]
+    assert sorted(os.listdir(out / "ros_log")) == ["bridge", "foxglove", "ops-1", "runner", "sim-oracle"]
     assert _read(str(out / "params" / "ops-1.yaml")) == gc.render_ops_params(_stack_of(out)["vehicles"][0])
 
 
@@ -1019,7 +1025,7 @@ def test_stack_json_world_and_v5_keys():
     assert stack["world"] == {"name": "default", "template": FIXTURE_TEMPLATE, "file": "world/default.sdf",
                               "origin": {"lat": 37.5665, "lon": 126.978, "alt": 38.0}, "speed_factor": None}
     assert stack["inputs"]["world_template"] == {"path": FIXTURE_TEMPLATE, "sha256": "b" * 64}
-    assert stack["targets"] == [] and stack["services"]["targets"] is None and stack["services"]["sim_oracle"] is None
+    assert stack["targets"] == [] and stack["services"]["targets"] is None and stack["services"]["sim_oracle"] == "sim-oracle"
     assert stack["vehicles"][0]["expect_gps"] == {"lat": 37.5665, "lon": 126.978, "alt": 38.24}
 
 
@@ -1264,8 +1270,8 @@ def target_fleet():
 def test_targets_service_details():
     compose, stack, _ = gen(f=target_fleet(), k=2)
     s = compose["services"]
-    assert list(s) == ["xrce-agent", "gazebo", "px4-1", "bridge", "ops-1", "targets", "runner", "gz-gui", "foxglove",
-                       "lichtblick"]
+    assert list(s) == ["xrce-agent", "gazebo", "px4-1", "bridge", "ops-1", "targets", "sim-oracle", "runner", "gz-gui",
+                       "foxglove", "lichtblick"]
     t = s["targets"]
     assert t["command"] == ["ros2", "run", "idsim_sim", "target_adapter", "--ros-args", "--params-file",
                             "/opt/idsim/artifacts/runs/20261109-090000-k2/params/targets.yaml"]
@@ -1281,9 +1287,9 @@ def test_targets_service_details():
     assert t["environment"]["ROS_DOMAIN_ID"] == "22" and t["environment"]["ROS_LOG_DIR"].endswith("/ros_log/targets")
     assert "GZ_PARTITION" not in t["environment"]
     assert stack["services"]["targets"] == "targets"
-    assert stack["startup"]["node_stages"] == [["ops-1", "targets"]]
+    assert stack["startup"]["node_stages"] == [["ops-1", "targets", "sim-oracle"]]
     assert "targets" not in [n for stage in stack["startup"]["stages"] for n in stage]
-    assert s["runner"]["depends_on"] == {n: {"condition": "service_healthy"} for n in ("ops-1", "targets")}
+    assert s["runner"]["depends_on"] == {n: {"condition": "service_healthy"} for n in ("ops-1", "targets", "sim-oracle")}
     assert [x["id"] for x in stack["targets"]] == ["target_a", "target_b"]
     assert stack["targets"][0]["waypoints"][0] == {"t": 0.0, "x": 20.0, "y": 0.0, "z": 3.0}
     assert stack["generator"]["version"] == gc.GENERATOR_VERSION
@@ -1293,7 +1299,7 @@ def test_targets_absent_makes_no_service_params_or_log_dir():
     compose, stack, _ = gen()
     assert "targets" not in compose["services"]
     assert stack["services"]["targets"] is None and stack["targets"] == []
-    assert stack["startup"]["node_stages"] == [["ops-1"]]
+    assert stack["startup"]["node_stages"] == [["ops-1", "sim-oracle"]]
     files = gc.render_files(compose, stack, gen_world())
     assert "params/targets.yaml" not in files
     assert "ros_log/targets" not in gc.render_dirs(compose, stack)
@@ -1372,6 +1378,7 @@ def test_targets_invariants_catch_tampering():
         lambda c, st: st["startup"]["stages"][-1].append("targets"),
         lambda c, st: st["startup"].update(node_stages=[["ops-1"]]),
         lambda c, st: c["services"]["runner"]["depends_on"].pop("targets"),
+        lambda c, st: st["startup"].update(node_stages=[["ops-1", "sim-oracle", "targets"]]),
         lambda c, st: st["services"].update(targets=None),
         lambda c, st: c["services"].pop("targets"),
         lambda c, st: st["targets"].append(dict(st["targets"][0])),
@@ -1382,13 +1389,113 @@ def test_targets_invariants_catch_tampering():
             gc.assert_invariants(compose, stack)
 
 
+# ------------------------------------------------------------------ sim-oracle(SITL 전용 정답 pose, decisions.md 쟁점 5)
+def test_oracle_service_details():
+    compose, stack, _ = gen(f=three_vehicles(), k=2)
+    o = compose["services"]["sim-oracle"]
+    assert stack["services"]["sim_oracle"] == "sim-oracle"
+    assert o["image"] == stack["images"]["sim_base"] and o["network_mode"] == "host" and o["restart"] == "no"
+    assert o["user"] == f"{FIXED['uid']}:{FIXED['gid']}" and o["init"] is True and "profiles" not in o
+    assert o["depends_on"] == {n: {"condition": "service_healthy"} for n in ("gazebo", "px4-1", "px4-2", "px4-3")}
+    assert o["command"] == ["bash", "-c", ". /opt/ros/$${ROS_DISTRO}/setup.sh && exec python3 /opt/idsim/sim/scripts/sim_oracle.py"]
+    env = o["environment"]
+    assert env["GZ_PARTITION"] == "idsim-2" and env["GZ_IP"] == "127.0.0.1"
+    assert env["RMW_IMPLEMENTATION"] == "rmw_cyclonedds_cpp" and env["ROS_DOMAIN_ID"] == "22"
+    assert env["CYCLONEDDS_URI"] == "file:///opt/idsim/config/cyclonedds.xml"
+    assert env["IDSIM_WORLD_NAME"] == "default"
+    assert env["IDSIM_ORACLE_VEHICLES"] == "px4_1=x500_1 px4_2=x500_2 px4_3=x500_3"
+    assert env["ROS_LOG_DIR"] == f"/opt/idsim/artifacts/runs/{stack['run']['id']}/ros_log/sim-oracle"
+    assert not [k for k in env if k.startswith("IDSIM_ORIGIN")]
+    run = stack["run"]["host_dir"]
+    assert [(v["source"], v["target"], v["read_only"]) for v in o["volumes"]] == [
+        ("/work/idsim/ros_ws/src/idsim_sim", "/opt/idsim/sim", True),
+        ("/work/idsim/config/cyclonedds.xml", "/opt/idsim/config/cyclonedds.xml", True),
+        (f"{run}/ros_log/sim-oracle", f"/opt/idsim/artifacts/runs/{stack['run']['id']}/ros_log/sim-oracle", False)]
+    assert o["healthcheck"]["test"] == ["CMD-SHELL", "test -f /tmp/idsim/oracle_ready"]
+    assert stack["startup"]["node_stages"] == [["ops-1", "ops-2", "ops-3", "sim-oracle"]]
+    assert set(compose["services"]["runner"]["depends_on"]) == {"ops-1", "ops-2", "ops-3", "sim-oracle"}
+    assert all("sim-oracle" not in stage for stage in stack["startup"]["stages"])
+    assert "dynamic_pose" not in gc.dump_compose(compose)
+
+
+def test_oracle_is_always_in_standalone_regardless_of_targets():
+    for f in (fleet(), target_fleet()):
+        compose, stack, _ = gen(f=f)
+        assert "sim-oracle" in compose["services"] and stack["services"]["sim_oracle"] == "sim-oracle"
+    compose, stack, _ = gen(f=target_fleet())
+    assert stack["startup"]["node_stages"] == [["ops-1", "targets", "sim-oracle"]]
+    assert set(compose["services"]["runner"]["depends_on"]) == {"ops-1", "targets", "sim-oracle"}
+
+
+def test_oracle_absent_in_embedded():
+    compose, stack, _ = gen(variant="embedded")
+    assert "sim-oracle" not in compose["services"] and stack["services"]["sim_oracle"] is None
+    assert gc.render_dirs(compose, stack) == ["px4-1", "ros_log/runner"]
+
+
+def test_oracle_vehicles_follow_vehicles_list():
+    f = three_vehicles()
+    f["vehicles"] = [f["vehicles"][2], f["vehicles"][0]]
+    compose, stack, _ = gen(f=f)
+    ids = [v["vehicle_id"] for v in stack["vehicles"]]
+    assert ids == ["px4_1", "px4_3"]
+    assert compose["services"]["sim-oracle"]["environment"]["IDSIM_ORACLE_VEHICLES"] == "px4_1=x500_1 px4_3=x500_3"
+
+
+def _oracle(c):
+    return c["services"]["sim-oracle"]
+
+
+def test_oracle_invariants_catch_tampering():
+    for mutate in (
+        lambda c, st: _oracle(c).update(init=False),
+        lambda c, st: _oracle(c).update(user="0:0"),
+        lambda c, st: _oracle(c).update(image="idsim/ros-ws:local"),
+        lambda c, st: _oracle(c).update(profiles=["viz"]),
+        lambda c, st: _oracle(c).update(command=["true"]),
+        lambda c, st: _oracle(c)["depends_on"].pop("px4-2"),
+        lambda c, st: _oracle(c)["depends_on"].pop("gazebo"),
+        lambda c, st: _oracle(c)["depends_on"]["px4-1"].update(condition="service_started"),
+        lambda c, st: _oracle(c)["environment"].update(IDSIM_ORACLE_VEHICLES="px4_1=x500_1"),
+        lambda c, st: _oracle(c)["environment"].update(IDSIM_ORACLE_VEHICLES="px4_1=x500_1 px4_2=x500_3 px4_3=x500_3"),
+        lambda c, st: _oracle(c)["environment"].pop("IDSIM_ORACLE_VEHICLES"),
+        lambda c, st: _oracle(c)["environment"].update(IDSIM_WORLD_NAME="other"),
+        lambda c, st: _oracle(c)["environment"].update(GZ_PARTITION="idsim-1"),
+        lambda c, st: _oracle(c)["environment"].update(IDSIM_ORIGIN_LAT="1"),
+        lambda c, st: _oracle(c)["environment"].update(CYCLONEDDS_URI="file:///x.xml"),
+        lambda c, st: _oracle(c)["volumes"][0].update(read_only=False),
+        lambda c, st: _oracle(c)["volumes"][1].update(read_only=False),
+        lambda c, st: _oracle(c)["volumes"][2].update(read_only=True),
+        lambda c, st: _oracle(c)["volumes"].pop(1),
+        lambda c, st: _oracle(c)["volumes"].append(dict(_oracle(c)["volumes"][0], target="/x")),
+        lambda c, st: _oracle(c)["healthcheck"].update(test=["CMD-SHELL", "true"]),
+        lambda c, st: st["startup"]["stages"][-1].append("sim-oracle"),
+        lambda c, st: st["startup"].update(node_stages=[["ops-1", "ops-2", "ops-3"]]),
+        lambda c, st: c["services"]["runner"]["depends_on"].pop("sim-oracle"),
+        lambda c, st: st["services"].update(sim_oracle=None),
+        lambda c, st: c["services"].pop("sim-oracle"),
+        lambda c, st: _oracle(c)["command"].__setitem__(2, _oracle(c)["command"][2] + " --dynamic_pose"),
+    ):
+        compose, stack, _ = gen(f=three_vehicles())
+        mutate(compose, stack)
+        with pytest.raises(gc.FleetError, match="단정 실패"):
+            gc.assert_invariants(compose, stack)
+
+
+def test_oracle_invariants_catch_it_in_embedded():
+    compose, stack, _ = gen(variant="embedded")
+    stack["services"]["sim_oracle"] = "sim-oracle"
+    with pytest.raises(gc.FleetError, match="단정 실패"):
+        gc.assert_invariants(compose, stack)
+
+
 def test_targets_stack_json_loads_with_support_loader(tmp_path):
     _, stack, _ = gen(f=target_fleet())
     path = tmp_path / "stack.json"
     path.write_text(gc.dump_stack(stack), encoding="utf-8")
     s = stk.load(str(path))
     assert s.targets_service == "targets" and [t["id"] for t in s.targets] == ["target_a", "target_b"]
-    assert s.node_stages == [["ops-1", "targets"]]
+    assert s.node_stages == [["ops-1", "targets", "sim-oracle"]]
 
 
 # ------------------------------------------------------------------ targets의 시간 규칙과 상한
