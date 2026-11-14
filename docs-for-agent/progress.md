@@ -7,7 +7,7 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 1a 완료 범위의 계약은 `docs/interface.md`에 고정되어 있다 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1, B2, B3(원점과 월드: 생성기 판 5, fleet schema 2, 원점은 월드 SDF로만), B4, B6(표적 어댑터 `targets` 서비스, Actor 생성, 궤적 상한), B8 반영됨 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1, B2, B3(원점과 월드: 생성기 판 5, fleet schema 2, 원점은 월드 SDF로만), B4, B5(RTL과 실패 폴백 SITL 파라미터 일곱), B6(표적 어댑터 `targets` 서비스, Actor 생성, 궤적 상한), B8 반영됨 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
@@ -67,12 +67,13 @@ Phase 1a의 단계별 위치(단계 번호는 `docs/roadmap.md`).
 
 ## 다음 작업
 
-1. 1b: README 진행 순서대로 B5, B8b, B7, B12를 진행한다. B4(`idsim_common`의 원점 이동 변환, `TargetId`, 상태 QoS, `position_setpoint` 속도 인자), B6(표적 어댑터, Actor 생성, 궤적 상한), B8(전이 관측 계측, 1a 칸 목록)은 끝났다. B8b는 1a 칸 목록의 미덮임을 테스트만 더해 0으로 만들고, B9 상태기 PR의 선행이다(B9 헤더 PR은 B4, B8 뒤 바로). B8b 테스트 본문에서 챙길 것(px4-engineer): WAIT_READY의 READY_TIMEOUT과 취소가 겹치면 NOT_READY로 끝나고 Hold나 disarm이 나가지 않음, ARM의 MONITOR_MODE_FAILSAFE와 취소가 겹치면 disarm이 두 번 나가지 않음. 지상 arm 진입의 arm 순서 불변식은 B9가 구현한다. B5, B7은 생성기 golden을 바꾸므로 main에 rebase한 뒤 golden을 생성기로 다시 만든다. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다. `target_id` 사례 표의 단일 출처(test-engineer 제안 위치 `idsim_interfaces/test/cases/`, architect)는 `tests/support`에 이름 조립이 들어올 때 정한다. B11 표적 소실 시험은 같은 `targets` 컨테이너를 stop/start하면 컨테이너 레이어의 `/tmp/idsim/targets_ready`가 남아 healthcheck가 새 노드 기동 전에 통과할 수 있으므로([추정]) `/tmp/idsim`을 tmpfs로 두거나 재시작 뒤 stamp로 판정한다.
+1. 1b: README 진행 순서대로 B8b, B7, B12를 진행한다. B4(`idsim_common`의 원점 이동 변환, `TargetId`, 상태 QoS, `position_setpoint` 속도 인자), B5(SITL 파라미터 일곱), B6(표적 어댑터, Actor 생성, 궤적 상한), B8(전이 관측 계측, 1a 칸 목록)은 끝났다. B8b는 1a 칸 목록의 미덮임을 테스트만 더해 0으로 만들고, B9 상태기 PR의 선행이다(B9 헤더 PR은 B4, B8 뒤 바로). B8b 테스트 본문에서 챙길 것(px4-engineer): WAIT_READY의 READY_TIMEOUT과 취소가 겹치면 NOT_READY로 끝나고 Hold나 disarm이 나가지 않음, ARM의 MONITOR_MODE_FAILSAFE와 취소가 겹치면 disarm이 두 번 나가지 않음. 지상 arm 진입의 arm 순서 불변식은 B9가 구현한다. B7은 생성기 golden을 바꾸므로 main에 rebase한 뒤 golden을 생성기로 다시 만든다. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다. `target_id` 사례 표의 단일 출처(test-engineer 제안 위치 `idsim_interfaces/test/cases/`, architect)는 `tests/support`에 이름 조립이 들어올 때 정한다. B11 표적 소실 시험은 같은 `targets` 컨테이너를 stop/start하면 컨테이너 레이어의 `/tmp/idsim/targets_ready`가 남아 healthcheck가 새 노드 기동 전에 통과할 수 있으므로([추정]) `/tmp/idsim`을 tmpfs로 두거나 재시작 뒤 stamp로 판정한다.
 
 ## 미해결 사항
 
 1a 6단계.
 
+- CI `sitl`(1a 시나리오)이 간헐적으로 실패한다. 관측한 두 종류: 시나리오 D의 "D 고도 도달" `TIMEOUT_SIM`(60 s, #49 머지 뒤 main과 #54 첫 실행), 이정표 순서 위반 "result가 disarmed보다 앞"(4 ms 차, #50 머지 뒤 main). #54는 같은 commit의 재실행에서 통과했고, main은 다음 머지의 실행에서 통과했다. 장애 분석(test-engineer, px4-engineer)을 할지는 사용자가 정한다.
 - CI `sitl` job의 기록은 첫 1회뿐이다(PR #36: 전체 5분 43초, 이미지 pull 약 3분 20초, 스택 올리기부터 정리까지 약 2분 13초, runner Docker Engine 28.0.4). 실패 때 `artifacts/runs/`가 job artifact로 올라가는지는 아직 보지 못했다. 판정 상수의 재검토(쟁점 9)는 CI 기록이 쌓이면 한다.
 - 스모크 images 단계(`tests/smoke/run_smoke.sh`의 check_s0)가 `LLVM_MAJOR`와 `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다. `tools/ros_ws.sh`의 대조는 이미지에 있는 ENV만 돌아서 그 ENV가 없는 옛 ros-ws 이미지가 통과한다. 옛 `:local` 이미지로 `sim_stack.sh up --viz`를 하면 foxglove만 죽는다. images 단계에 넣는다(test-engineer). `ros_ws.sh`에 `versions.env`의 이름 기준 존재 검사를 둘지는 devops-engineer와 test-engineer가 정한다.
 - foxglove_bridge의 판은 `FOXGLOVE_BRIDGE_VERSION` 접두 단정까지만 고정된다. ROS sync로 새 판이 오면 ros-ws key가 바뀌는 PR의 빌드가 실패한다(의도한 동작). 같은 판 안의 revision과 의존 패키지는 고정되지 않는다.
