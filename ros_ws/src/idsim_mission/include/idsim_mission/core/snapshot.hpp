@@ -23,7 +23,8 @@
 //   tick의 ROS 시각, 아래 Snapshot, Px4ClockPort다. 출력은 StepOutput(mission_runner.hpp)이다.
 // - 구독 callback은 토픽마다 최신 표본 하나만 저장한다(덮어쓴다). 그래서 tick당 토픽마다 표본은
 //   최대 1개이고, 같은 표본이 다음 tick에 다시 보일 수 있다. core는 vehicle_status의 timestamp로
-//   같은 표본을 가른다.
+//   같은 표본을 가른다. vehicle_local_position의 timestamp(PositionSample.timestamp_us)도 같은
+//   쓰임이다(GOTO와 TRACK_ENTITY 완료의 "서로 다른 표본 3개 연속").
 // - received_tick의 정의: 표본을 처음 볼 수 있는 step()의 tick 번호. 노드는 "다음에 부를 step의
 //   tick 번호"를 하나 두고, callback은 그 값을 표본에 적고, timer는 그 번호로 step을 부른 뒤 번호를
 //   1 올린다. 그러면 step k에서 낸 명령에 대한 응답 표본은 received_tick > k다("전송 tick 뒤에
@@ -210,8 +211,8 @@ struct Snapshot
 };
 
 // world ENU -> 기체 로컬 NED 변환 port. 노드는 tick마다 Snapshot.position과 같은 표본의 기준으로
-// 구현을 만든다(위 "어댑터가 채울 것"의 FramePort). 기준이 무효면 점 변환은 nullopt다. 벡터 변환은
-// 기준에 의존하지 않는 축 치환(ENU -> NED)이라 늘 값이 있다.
+// 구현을 만든다(위 "어댑터가 채울 것"의 FramePort). 기준이 무효이거나 입력 또는 결과가 비유한이면
+// 점 변환은 nullopt다. 벡터 변환은 기준에 의존하지 않는 축 치환(ENU -> NED)이라 늘 값이 있다.
 class FramePort
 {
 public:
@@ -222,7 +223,7 @@ public:
   FramePort & operator=(FramePort &&) = delete;
   virtual ~FramePort() = default;
 
-  // world ENU 점(m) -> 로컬 NED 점(m). 기준이 무효면 nullopt.
+  // world ENU 점(m) -> 로컬 NED 점(m). 기준이 무효이거나 입력 또는 결과가 비유한이면 nullopt.
   virtual std::optional<Vec3> world_to_local(const Vec3 & world_enu) const = 0;
 
   // world ENU 벡터(m/s) -> 로컬 NED 벡터(m/s).
