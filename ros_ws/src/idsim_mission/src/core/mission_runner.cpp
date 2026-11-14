@@ -20,7 +20,12 @@
 // 3. 취소(실패나 완료로 끝나지 않았고 정리 중이 아닐 때만)
 // 4. 출력 마무리(timestamp, setpoint, feedback)
 // 정리 중의 순서는 따로 있다(쟁점 3 M6): 상태 끊김 -> 공중 DISARMED -> 정리할 것 없음 -> 정리의
-// 상한 -> 그 분기의 실행. step_cleanup 머리 주석. 마지막 setpoint 항목 뒤의 공중 종료 단계(1b
+// 상한 -> 그 분기의 실행. step_cleanup 머리 주석.
+// 공중 Offboard 진입(첫 항목 LOITER. 1b decisions.md 쟁점 7)의 순서: P4는 감시 표 -> 먼저 본
+// OFFBOARD -> offboard_signal_timeout -> 신호 확인, P5는 감시 표 -> 거부 ack -> 첫 OFFBOARD 표본의
+// 관측 -> mode_confirm_timeout -> OFFBOARD 3회 확인이고 취소는 그 뒤다. 첫 OFFBOARD 표본의 관측은
+// 종료를 정하지 않으므로 같은 tick의 mode_confirm_timeout이 그대로 끝낸다(확인과 만료가 같은
+// tick이면 만료가 이긴다). 마지막 setpoint 항목 뒤의 공중 종료 단계(1b
 // decisions.md 쟁점 10)는 같은 정리 단계 안의 원인 kMissionEnd이고 순서는 step_mission_end 머리
 // 주석에 있다.
 
@@ -141,6 +146,7 @@ RunnerView MissionRunner::view() const
   v.land_confirmed = mode_item_.confirmed;
   v.failsafe_history = failsafe_history_;
   v.armed_seen = armed_seen_;
+  v.monitor_active = monitor_active_;
   v.landed_false_seen = landed_false_seen_;
   v.hold_failed = hold_failed_;
   return v;
@@ -234,14 +240,15 @@ StepOutput MissionRunner::begin_cancel_without_stage(
 void MissionRunner::step_preparing(Tick & t)
 {
   if (
-    prep_ != PrepStep::kWaitReady && !armed_seen_ && t.status != nullptr &&
+    prep_ != PrepStep::kWaitReady && !monitor_active_ && t.status != nullptr &&
     t.status->identity == IdentityCheck::kMismatch) {
-    // 발행을 시작한 뒤, 첫 ARMED 표본 전의 식별 불일치(decisions.md 쟁점 3 M2). 입력을 믿을 수
-    // 없으므로 정리 분기를 고르지 않는다. arm을 보냈으면 강제가 아닌 disarm을 한 번 보낸다.
-    // vehicle_command는 target_system으로 주소가 정해져 status의 식별과 무관하고, 강제가 아닌
-    // disarm은 공중에서 거부되므로 공중 기체를 끄지 않는다. 이륙 이력이 없으면 자동 disarm이 없다.
-    // reason은 INTERNAL이다. NOT_READY는 기체에 아무것도 보내지 않은 goal에만 쓴다(P0-P2).
-    // 첫 ARMED 표본 뒤는 감시 표 순위 2다(prepare_arm).
+    // 지상 arm 진입에서 발행을 시작한 뒤, 첫 ARMED 표본 전의 식별 불일치(decisions.md 쟁점 3 M2).
+    // 입력을 믿을 수 없으므로 정리 분기를 고르지 않는다. arm을 보냈으면 강제가 아닌 disarm을 한 번
+    // 보낸다. vehicle_command는 target_system으로 주소가 정해져 status의 식별과 무관하고, 강제가
+    // 아닌 disarm은 공중에서 거부되므로 공중 기체를 끄지 않는다. 이륙 이력이 없으면 자동 disarm이
+    // 없다. reason은 INTERNAL이다. NOT_READY는 기체에 아무것도 보내지 않은 goal에만 쓴다(P0-P2).
+    // 감시 구간(지상 arm 진입은 첫 ARMED 표본 뒤(prepare_arm), 공중 Offboard 진입은 P3 tick부터.
+    // 1b decisions.md 쟁점 7)은 감시 표 순위 2다.
     std::string detail =
       "vehicle_status identity mismatch during preparing: " + t.status->identity_detail;
     if (arm_sent_) {
@@ -266,13 +273,27 @@ void MissionRunner::step_preparing(Tick & t)
     case PrepStep::kArm:
       prepare_arm(t);
       break;
+    case PrepStep::kAirSignal:
+      prepare_air_signal(t);
+      break;
+    case PrepStep::kAirOffboard:
+      prepare_air_offboard(t);
+      break;
+    case PrepStep::kAirOffboardSeen:
+      prepare_air_offboard_seen(t);
+      break;
   }
 }
 
 void MissionRunner::prepare_wait_ready(Tick & t)
 {
+  // 진입 방식(첫 항목 type)마다 P1과 P2의 조건이 다르다. 지상 arm 진입(TAKEOFF)은 landed이고
+  // DISARMED, 모드 명령 진입(LAND, RTL)은 landed가 아니고 ARMED, 공중 Offboard 진입(LOITER)은
+  // landed가 아니고 ARMED이고 nav_state와 의도가 AUTO_LOITER이고 failsafe가 없어야 한다(1b
+  // decisions.md 쟁점 7. 이미 OFFBOARD, AUTO_RTL, AUTO_LAND이거나 failsafe인 기체는 받지 않는다).
   const ItemSpec & first = mission_.items.front();
   const bool takeoff_first = entry_plan_ == EntryPlan::kGroundArm;
+  const bool air_offboard = entry_plan_ == EntryPlan::kAirOffboard;
   const StatusSample * const s = t.status;
   // P0: 식별 불일치가 확정되면 그 tick에 NOT_READY.
   if (s != nullptr && s->identity == IdentityCheck::kMismatch) {
@@ -297,8 +318,25 @@ void MissionRunner::prepare_wait_ready(Tick & t)
     // P1: 시작 조건. P0을 통과한 tick마다 다시 본다.
     const bool landed = t.land->landed;
     const bool armed = s->arming == Arming::kArmed;
+    if (air_offboard) {
+      const bool start_ok = !landed && armed && s->nav == NavMode::kHold &&
+                            s->nav_user_intention == NavMode::kHold && !s->failsafe;
+      if (!start_ok) {
+        terminate(
+          Event::kPreconditionFailed, t,
+          aborted(
+            Reason::kPreconditionFailed,
+            std::string(item_type_name(first.type)) +
+              " needs not landed, ARMED, nav_state and user intention AUTO_LOITER, no failsafe "
+              "(landed=" +
+              (landed ? "true" : "false") + ", arming=" + arming_name(s->arming) + ", nav_state=" +
+              nav_mode_name(s->nav) + ", intention=" + nav_mode_name(s->nav_user_intention) +
+              ", failsafe=" + (s->failsafe ? "true" : "false") + ")"));
+        return;
+      }
+    }
     const bool start_ok = takeoff_first ? (landed && !armed) : (!landed && armed);
-    if (!start_ok) {
+    if (!air_offboard && !start_ok) {
       const std::string need =
         std::string(item_type_name(first.type)) +
         (takeoff_first ? " needs landed and DISARMED" : " needs not landed and ARMED");
@@ -309,15 +347,18 @@ void MissionRunner::prepare_wait_ready(Tick & t)
                                          ", arming=" + arming_name(s->arming) + ")"));
       return;
     }
-    // P2: EKF gate. TAKEOFF는 P3이 목표점을 만들 위치 값도 유한해야 한다.
+    // P2: EKF gate. TAKEOFF는 P3이 목표점을 만들 위치 값도 유한해야 한다. 공중 Offboard 진입은
+    // 진입 setpoint에 쓰는 위치와 heading이 늘 유한해야 한다(LOITER에는 yaw 필드가 없다).
     const bool position_ok = t.position != nullptr && position_finite(*t.position);
     const bool heading_ok = t.position != nullptr && std::isfinite(t.position->heading);
-    const bool needs_heading = first.takeoff.yaw.mode == yaw_mode::kKeep;
+    const bool needs_position = takeoff_first || air_offboard;
+    const bool needs_heading =
+      air_offboard || (takeoff_first && first.takeoff.yaw.mode == yaw_mode::kKeep);
     if (!t.flags->ekf_ready) {
       waiting = "EKF gate (failsafe_flags position/altitude/home)";
-    } else if (takeoff_first && !position_ok) {
+    } else if (needs_position && !position_ok) {
       waiting = "finite vehicle_local_position";
-    } else if (takeoff_first && needs_heading && !heading_ok) {
+    } else if (needs_heading && !heading_ok) {
       waiting = "finite heading";
     }
   }
@@ -334,6 +375,8 @@ void MissionRunner::prepare_wait_ready(Tick & t)
   }
   if (takeoff_first) {
     start_signal(Event::kReadyTakeoff, t);
+  } else if (air_offboard) {
+    start_air_signal(Event::kReadyAirOffboard, t);
   } else {
     start_item(Event::kReadyModeItem, t, 0);
   }
@@ -510,6 +553,7 @@ void MissionRunner::prepare_arm(Tick & t)
       return;
     }
     armed_seen_ = true;
+    monitor_active_ = true;
     first_armed_ns_ = t.input.now_ns;
     first_armed_tick_ = t.input.tick;
     first_armed_timestamp_us_ = s->timestamp_us;
@@ -565,7 +609,170 @@ void MissionRunner::prepare_arm_before_armed(Tick & t)
   resend_due(t);
 }
 
-// ---- 비행 중 감시(P6의 첫 ARMED 표본부터 setpoint 항목이 끝날 때까지) ----
+// ---- 공중 Offboard 진입(첫 항목 LOITER. 1b decisions.md 쟁점 7) ----
+
+namespace
+{
+const char * const kAirEntryLabel = "preparing (air offboard entry)";
+}  // namespace
+
+void MissionRunner::start_air_signal(Event event, Tick & t)
+{
+  // P3: 이 tick의 위치와 heading을 진입 setpoint로 발행을 시작하고 감시 구간을 연다. 진입
+  // setpoint는 OFFBOARD 3회 확인까지 바꾸지 않고 첫 항목 LOITER도 그대로 쓴다(LOITER는 직전
+  // setpoint를 유지한다). 이 tick은 감시 표를 보지 않는다(P0, P1이 같은 표본으로 순위 2-8에
+  // 걸리지 않음을 봤다). 그래서 이 tick의 Px4Timestamp 실패는 finalize의 STAMP_UNAVAILABLE이고
+  // 다음 tick부터는 감시 표 순위 1이다.
+  const PositionSample * const p = t.position;
+  const StatusSample * const s = t.status;
+  if (p == nullptr || s == nullptr) {
+    return;
+  }
+  const double yaw = wrap_pi(p->heading);
+  reference_ = SetpointOut{SetpointKind::kGround, p->x, p->y, p->z, yaw, false, Vec3{}};
+  setpoint_ = SetpointOut{SetpointKind::kTarget, p->x, p->y, p->z, yaw, false, Vec3{}};
+  publishing_ = true;
+  acted_ = true;
+  publish_count_ = 0;
+  signal_start_ns_ = t.input.now_ns;
+  signal_start_tick_ = t.input.tick;
+  // 감시 시작. 지상 arm 진입이 첫 ARMED 표본에서 두는 필드를 이 tick의 표본으로 같은 이름 그대로
+  // 둔다(이름의 "armed"는 지상 arm 진입에서 온 것이고 뜻은 감시 구간의 시작이다). 신뢰 표본은 이
+  // 표본이라 다음 tick에 묵은 표본만 오면 이 표본을 다시 본다. 순위 5의 이력 구간은 이 tick부터
+  // 첫 항목이 끝날 때까지 한 구간이다. arm을 보내지 않은 goal이라 지상 disarm 1회는 늘 거짓이다.
+  first_armed_tick_ = t.input.tick;
+  first_armed_timestamp_us_ = s->timestamp_us;
+  trusted_status_ = *s;
+  history_after_tick_ = t.input.tick - 1;
+  failsafe_history_ = false;
+  landed_false_seen_ = false;
+  counter_.reset();
+  monitor_active_ = true;
+  enter_prep(event, t, PrepStep::kAirSignal);
+}
+
+void MissionRunner::prepare_air_signal(Tick & t)
+{
+  // P4: 감시 표(AUTO_LOITER 면제) -> 먼저 본 OFFBOARD -> offboard_signal_timeout -> 신호 확인.
+  // 신호 확인은 지상 arm 진입의 P4와 같다(발행 10회 이상이고 발행 시작 뒤에 받은 failsafe_flags가
+  // 신호 있음).
+  if (monitor_flight(t, kAirEntryLabel, {}, true)) {
+    return;
+  }
+  const bool timed_out =
+    elapsed(t, signal_start_ns_) >= config_.timeouts.offboard_signal_timeout_ns;
+  const bool signal_ok = t.flags != nullptr && t.flags->received_tick > signal_start_tick_ &&
+                         !t.flags->offboard_signal_lost;
+  const bool confirmed = publish_count_ >= kOffboardSignalMinPublishes && signal_ok;
+  const StatusSample * const s = trusted_status_.has_value() ? &*trusted_status_ : nullptr;
+  if (s != nullptr && s->nav == NavMode::kOffboard) {
+    // 이 goal이 DO_SET_MODE를 보내기 전에 본 OFFBOARD(다른 주체의 전환). 감시를 지난 표본이라
+    // 순위 1-6에 걸리지 않았다(failsafe 값과 무관하다). DO_SET_MODE를 보내지 않고 정리를 거친다.
+    if (observer_ != nullptr) {
+      std::vector<Event> also_true;
+      if (timed_out) {
+        also_true.push_back(Event::kSignalTimeout);
+      }
+      if (confirmed) {
+        also_true.push_back(Event::kSignalConfirmed);
+      }
+      tag(Event::kOffboardBeforeSetMode, t, also_true);
+    }
+    begin_cleanup(
+      Event::kOffboardBeforeSetMode, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      "OFFBOARD before DO_SET_MODE(OFFBOARD): nav_state OFFBOARD observed before this goal sent "
+      "the mode command");
+    return;
+  }
+  if (timed_out) {
+    begin_cleanup(
+      Event::kSignalTimeout, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      "offboard_signal_timeout: offboard signal not confirmed (published " +
+        std::to_string(publish_count_) + ")");
+    return;
+  }
+  if (confirmed) {
+    enter_prep(Event::kSignalConfirmed, t, PrepStep::kAirOffboard);
+    step_start_ns_ = t.input.now_ns;
+    counter_.reset();
+    send(t, CommandKind::kSetModeOffboard);
+  }
+}
+
+void MissionRunner::prepare_air_offboard(Tick & t)
+{
+  // P5의 첫 OFFBOARD 표본 전: 감시 표(AUTO_LOITER 면제) -> 거부 ack -> 첫 OFFBOARD 표본 ->
+  // mode_confirm_timeout -> 재전송. 호출 순서는 monitor_flight -> take_ack -> clear_pending으로
+  // 고정한다. 첫 OFFBOARD 표본과 같은 tick에 온 거부 ack가 대기 명령에 묶여 거부로 끝나게 하려는
+  // 것이다(지상 P6의 첫 ARMED 표본은 반대로 대기 명령을 먼저 지운다. 그 함수를 본뜨지 않는다).
+  // 재전송은 수락 ack로 멈추지 않고(지상 arm 진입 전용 resend_offboard_until_acked를 쓰지 않는다)
+  // 첫 OFFBOARD 표본에서 멈춘다(1b decisions.md 쟁점 7, 쟁점 12 "명령과 ack의 유실").
+  if (monitor_flight(t, kAirEntryLabel, {}, true)) {
+    return;
+  }
+  const AckView ack = take_ack(t);
+  const StatusSample * const s = trusted_status_.has_value() ? &*trusted_status_ : nullptr;
+  if (s != nullptr) {
+    // 감시를 지난 표본만 센다. 첫 OFFBOARD 표본이 계수 1이다.
+    counter_.observe(s->timestamp_us, s->nav == NavMode::kOffboard);
+  }
+  if (ack.fresh && is_rejection(ack.result)) {
+    begin_cleanup(
+      Event::kOffboardRejected, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      std::string("DO_SET_MODE(OFFBOARD) rejected: ") + ack_result_name(ack.result));
+    return;
+  }
+  if (s != nullptr && s->nav == NavMode::kOffboard) {
+    // 첫 OFFBOARD 표본: 대기 명령을 지워 재전송을 멈추고(그 뒤 ack는 받지 않는다) AUTO_LOITER
+    // 면제를 끈다(다음 상태는 면제 없이 감시 표를 본다). 표본 하나로 정해지는 관측이라 종료를
+    // 정하지 않고, 같은 tick에 기한과 3회 확인을 이어서 본다.
+    clear_pending();
+    enter_prep(Event::kOffboardFirstSample, t, PrepStep::kAirOffboardSeen);
+    air_offboard_seen_checks(t);
+    return;
+  }
+  if (elapsed(t, step_start_ns_) >= config_.timeouts.mode_confirm_timeout_ns) {
+    begin_cleanup(
+      Event::kOffboardTimeout, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      "mode_confirm_timeout: OFFBOARD not observed");
+    return;
+  }
+  resend_due(t);
+}
+
+void MissionRunner::prepare_air_offboard_seen(Tick & t)
+{
+  // P5의 첫 OFFBOARD 표본 뒤: 감시 표(면제 없음) -> mode_confirm_timeout -> OFFBOARD 3회 확인. 대기
+  // 명령이 없으므로 거부 ack를 받지 않고 재전송도 없다. OFFBOARD가 아닌 ARMED 표본은 감시 표 순위
+  // 6-8 가운데 하나가 끝내므로 계수가 0으로 돌아가는 길은 없다.
+  if (monitor_flight(t, kAirEntryLabel, {}, false)) {
+    return;
+  }
+  if (trusted_status_.has_value()) {
+    counter_.observe(trusted_status_->timestamp_us, trusted_status_->nav == NavMode::kOffboard);
+  }
+  air_offboard_seen_checks(t);
+}
+
+void MissionRunner::air_offboard_seen_checks(Tick & t)
+{
+  // mode_confirm_timeout의 기준은 DO_SET_MODE를 처음 보낸 tick이다(첫 OFFBOARD 표본에서 바뀌지
+  // 않는다). 3회째와 기한이 같은 tick이면 기한이 이긴다.
+  if (elapsed(t, step_start_ns_) >= config_.timeouts.mode_confirm_timeout_ns) {
+    begin_cleanup(
+      Event::kOffboardTimeout, t, CleanupCause::kPreparingFailure, Reason::kModeSwitchFailed,
+      "mode_confirm_timeout: OFFBOARD observed but not confirmed");
+    return;
+  }
+  if (counter_.count() >= kConfirmSamples) {
+    // 진입 setpoint를 유지한 채 첫 항목을 시작한다. 감시 구간에서 넘어온 첫 항목이라 이력을 지우지
+    // 않는다(start_item).
+    start_item(Event::kOffboardConfirmed, t, 0);
+  }
+}
+
+// ---- 비행 중 감시(지상 arm 진입은 P6의 첫 ARMED 표본부터, 공중 Offboard 진입은 P3 다음 tick부터
+// setpoint 항목이 끝날 때까지) ----
 
 const StatusSample * MissionRunner::monitored_status(const Tick & t)
 {
@@ -584,7 +791,7 @@ const StatusSample * MissionRunner::monitored_status(const Tick & t)
 }
 
 bool MissionRunner::monitor_flight(
-  Tick & t, const std::string & label, const std::vector<Event> & later)
+  Tick & t, const std::string & label, const std::vector<Event> & later, bool hold_exempt)
 {
   // 비행 중 감시 표(rules.hpp). 순위 1을 보려고 timestamp를 판정 맨 앞에서 묻는다. 끝냈으면 true.
   MonitorInput monitor;
@@ -595,6 +802,7 @@ bool MissionRunner::monitor_flight(
   monitor.link_lost =
     s == nullptr || t.input.now_ns - s->received_ns >= config_.timeouts.link_timeout_ns;
   monitor.failsafe_history = failsafe_history_;
+  monitor.hold_exempt = hold_exempt;
   // 지상 disarm 1회의 조건 2: 첫 ARMED 표본을 본 tick부터(그 tick 포함) 받은 landed가 false인 적이
   // 있는가. goal 동안 유지하고 항목이 바뀌어도 지우지 않는다.
   if (t.land != nullptr && t.land->received_tick >= first_armed_tick_ && !t.land->landed) {
@@ -658,8 +866,9 @@ void MissionRunner::start_item(Event event, Tick & t, std::uint32_t index)
   set_state(t, next);
   item_start_ns_ = t.input.now_ns;
   item_start_tick_ = t.input.tick;
-  if (index != 0 || !armed_seen_) {
-    // P6에서 넘어온 첫 항목(TAKEOFF)은 P6의 ARMED 확인 구간과 한 이력 구간이다.
+  if (index != 0 || !monitor_active_) {
+    // 감시 구간에서 넘어온 첫 항목(지상 arm 진입: P6 -> TAKEOFF, 공중 Offboard 진입: P5 ->
+    // LOITER)은 그 구간과 한 이력 구간이다. 모드 명령 진입의 첫 항목은 지운다.
     failsafe_history_ = false;
     history_after_tick_ = t.input.tick;
   }

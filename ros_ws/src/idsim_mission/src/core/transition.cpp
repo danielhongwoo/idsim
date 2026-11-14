@@ -38,6 +38,12 @@ const char * prep_name(PrepStep prep)
       return "OFFBOARD_ACK";
     case PrepStep::kArm:
       return "ARM";
+    case PrepStep::kAirSignal:
+      return "AIR_SIGNAL";
+    case PrepStep::kAirOffboard:
+      return "AIR_OFFBOARD";
+    case PrepStep::kAirOffboardSeen:
+      return "AIR_OFFBOARD_SEEN";
   }
   return "UNKNOWN";
 }
@@ -95,10 +101,14 @@ const char * event_name(Event event)
       return "READY_TAKEOFF";
     case Event::kReadyModeItem:
       return "READY_MODE_ITEM";
+    case Event::kReadyAirOffboard:
+      return "READY_AIR_OFFBOARD";
     case Event::kSignalTimeout:
       return "SIGNAL_TIMEOUT";
     case Event::kSignalConfirmed:
       return "SIGNAL_CONFIRMED";
+    case Event::kOffboardBeforeSetMode:
+      return "OFFBOARD_BEFORE_SET_MODE";
     case Event::kOffboardRejected:
       return "OFFBOARD_REJECTED";
     case Event::kOffboardTimeout:
@@ -109,6 +119,8 @@ const char * event_name(Event event)
       return "OFFBOARD_ACK_ACCEPTED";
     case Event::kOffboardLeft:
       return "OFFBOARD_LEFT";
+    case Event::kOffboardFirstSample:
+      return "OFFBOARD_FIRST_SAMPLE";
     case Event::kArmRejected:
       return "ARM_REJECTED";
     case Event::kArmTimeout:

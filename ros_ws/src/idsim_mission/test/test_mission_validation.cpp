@@ -546,8 +546,11 @@ TEST(ValidateMission, OneAGoalAcceptsOnlyWhatRunnerAccepts)
   EXPECT_EQ(goal_valid, 4);
   // runner: 위 넷과 [RTL], [TAKEOFF, RTL], [TAKEOFF, LOITER, RTL], [TAKEOFF, LOITER, LOITER, RTL],
   // 마지막이 setpoint 항목인 [TAKEOFF], [TAKEOFF, LOITER], [TAKEOFF, LOITER, LOITER],
-  // [TAKEOFF, LOITER, LOITER, LOITER](B9 S3 공중 종료 단계).
-  EXPECT_EQ(runnable_valid, 12);
+  // [TAKEOFF, LOITER, LOITER, LOITER](B9 S3 공중 종료 단계), 첫 항목이 LOITER인 [LOITER],
+  // [LOITER, LOITER], [LOITER, LAND], [LOITER, RTL], [LOITER, LOITER, LOITER],
+  // [LOITER, LOITER, LAND], [LOITER, LOITER, RTL], [LOITER x 4], [LOITER, LOITER, LOITER, LAND],
+  // [LOITER, LOITER, LOITER, RTL](B9 S4 공중 Offboard 진입).
+  EXPECT_EQ(runnable_valid, 22);
 }
 
 // 1b decisions.md 쟁점 12 "미션 제한의 두 자리"의 단위 테스트 (1). B9 동안 goal 접수는 1a
@@ -598,17 +601,50 @@ TEST(ScreenGoal, AirEndingMissionsNewToRunnerStayInvalidMission)
   }
 }
 
-// 첫 항목 LOITER는 S4까지 runner가 받지 않는다. 마지막 항목 검사가 없어져 첫 항목 문구가 나온다.
-TEST(ValidateMission, LoiterFirstStaysNotRunnable)
+// 같은 단위 테스트 (1)의 S4 몫. 첫 항목이 LOITER인 미션(공중 Offboard 진입)은 runner가 받고 goal
+// 접수는 1a 그대로 INVALID_MISSION으로 끝낸다(공중 Offboard 진입은 노드와 SITL에서 닿지 않는다).
+TEST(ScreenGoal, LoiterFirstMissionsNewToRunnerStayInvalidMission)
 {
-  for (const auto & items :
-       std::vector<std::vector<ItemSpec>>{{loiter_item()}, {loiter_item(), land_item()}}) {
+  struct Case
+  {
+    std::vector<ItemSpec> items;
+    const char * detail;
+  };
+  const std::vector<Case> cases = {
+    {{loiter_item()}, "last item must be LAND in 1a"},
+    {{loiter_item(), land_item()}, "first item must be TAKEOFF or LAND in 1a"},
+    {{loiter_item(), rtl_item()}, "RTL is not supported in 1a"},
+    {{loiter_item(), loiter_item()}, "last item must be LAND in 1a"},
+  };
+  for (const Case & c : cases) {
     MissionSpec m;
     m.mission_id = "lf";
+    m.items = c.items;
+    EXPECT_TRUE(validate_mission_runnable(m).valid)
+      << order_name(m) << ": " << validate_mission_runnable(m).detail;
+    const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
+    ASSERT_TRUE(term.has_value()) << order_name(m);
+    EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
+    EXPECT_EQ(term->reason, Reason::kInvalidMission) << order_name(m);
+    EXPECT_NE(term->detail.find(c.detail), std::string::npos)
+      << order_name(m) << ": " << term->detail;
+  }
+}
+
+// runner가 아직 실행하지 않는 type(GOTO, TRACK_ENTITY)은 type 검사가 거른다. 첫 항목 검사는 없다.
+TEST(ValidateMission, GotoFirstIsNotRunnableByType)
+{
+  for (const auto & items :
+       std::vector<std::vector<ItemSpec>>{{goto_item()}, {goto_item(), land_item()}}) {
+    MissionSpec m;
+    m.mission_id = "gf";
     m.items = items;
     const MissionCheck check = validate_mission_runnable(m);
     EXPECT_FALSE(check.valid) << order_name(m);
-    EXPECT_EQ(check.detail, "first item must be TAKEOFF, LAND or RTL") << order_name(m);
+    EXPECT_EQ(
+      check.detail,
+      "items[0].type GOTO is not supported by the runner yet (TAKEOFF, LOITER, LAND, RTL only)")
+      << order_name(m);
   }
 }
 
