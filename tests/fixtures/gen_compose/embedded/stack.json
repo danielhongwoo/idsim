@@ -24,7 +24,7 @@
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",
-      "sha256": "232245890c75d07cbe9e9bced1ca9e27e21137e5193227f0435e769c95dd907e"
+      "sha256": "8ff691453deb87e69a4bba505ed18b14d8b52c9c5d7e760f9af5cd1846061395"
     },
     "versions_env": {
       "path": "docker/versions.env",
@@ -119,11 +119,18 @@
       "executor_node": null,
       "expect_gps": null,
       "expected_params": {
+        "COM_DISARM_LAND": "2.0",
         "COM_DISARM_PRFLT": "-1.0",
+        "COM_LOW_BAT_ACT": "2",
         "COM_OBL_RC_ACT": "4",
         "COM_OF_LOSS_T": "1.0",
         "COM_RC_IN_MODE": "4",
+        "EKF2_HGT_REF": "1",
         "NAV_DLL_ACT": "0",
+        "RTL_CONE_ANG": "0",
+        "RTL_LAND_DELAY": "0.0",
+        "RTL_RETURN_ALT": "10.0",
+        "RTL_TYPE": "0",
         "SDLOG_MODE": "2",
         "UXRCE_DDS_SYNCT": "0"
       },
