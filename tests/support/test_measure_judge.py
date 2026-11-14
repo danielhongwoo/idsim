@@ -23,10 +23,6 @@ def st(ts, recv, arming=mj.ARMING_STATE_ARMED, nav=mj.NAV_STATE_OFFBOARD, clock=
                            intention)
 
 
-def ld(recv, landed):
-    return mj.LandedSample(recv, recv, landed)
-
-
 # --- ConsecutiveConfirm ---------------------------------------------------
 
 
@@ -126,9 +122,8 @@ def test_armed_non_offboard_zero_is_empty_pass_flag():
 # --- 실행 요약 ------------------------------------------------------------
 
 
-def row(verdict="PASS", reached=False, bad=0, item="3", cls=mj.CLASS_DIRECT):
-    return {"verdict": verdict, "armed3_reached": reached, "armed_non_offboard": bad,
-            "item": item, "class": cls}
+def row(reached=False, bad=0, cls=mj.CLASS_DIRECT):
+    return {"armed3_reached": reached, "armed_non_offboard": bad, "class": cls}
 
 
 def test_armed_criterion_needs_ten_reached_and_zero_violations():
@@ -151,7 +146,7 @@ def test_armed_criterion_single_violation_fails_even_when_not_reached():
 
 def test_armed_criterion_is_judged_per_class():
     rows = ([row(reached=True)] * 10
-            + [row(reached=True, cls=mj.CLASS_EXECUTOR, item="armed")] * 4)
+            + [row(reached=True, cls=mj.CLASS_EXECUTOR)] * 4)
     r = mj.judge_armed_criterion(rows)
     assert r["passed"]                                       # 최상위는 PX4 직접 부류
     assert r["classes"][mj.CLASS_DIRECT]["n_reached"] == 10
@@ -170,14 +165,14 @@ def test_armed_criterion_without_direct_rows_still_has_direct_class_entry():
 
 def test_judge_armed_criterion_missing_key_raises():
     with pytest.raises(KeyError):
-        mj.judge_armed_criterion([{"armed3_reached": True, "item": "3", "class": "px4_direct"}])
+        mj.judge_armed_criterion([{"armed3_reached": True, "class": "px4_direct"}])
     with pytest.raises(KeyError):
-        mj.judge_armed_criterion([{"armed_non_offboard": 0, "item": "3", "class": "px4_direct"}])
+        mj.judge_armed_criterion([{"armed_non_offboard": 0, "class": "px4_direct"}])
 
 
 def test_judge_armed_criterion_missing_class_raises():
     with pytest.raises(KeyError):
-        mj.judge_armed_criterion([{"armed3_reached": True, "armed_non_offboard": 0, "item": "3"}])
+        mj.judge_armed_criterion([{"armed3_reached": True, "armed_non_offboard": 0}])
 
 
 def test_armed_criterion_unmeasured_rows_are_not_read_as_zero():

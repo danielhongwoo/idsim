@@ -21,7 +21,7 @@
 #   4. 노드 단계: stack.json의 startup.node_stages(standalone은 ops-N 전부, targets(표적이 있으면), sim-oracle이 한 단계)를 `up -d --wait`한다.
 #      ops-N의 healthcheck는 Mission Executor 노드가 lifecycle active인지 본다(노드가 스스로 전이한다).
 #      targets와 sim-oracle의 healthcheck는 각 노드가 만드는 표시 파일이다(sim-oracle은 sim-base 이미지에서 마운트한 sim_oracle.py를 돌리므로 ros_ws 빌드가 필요 없다).
-#      --infra-only면 이 단계를 건너뛴다(Executor, 표적 어댑터, sim-oracle 없이 인프라만. 스모크와 측정 스크립트가 쓴다).
+#      --infra-only면 이 단계를 건너뛴다(Executor, 표적 어댑터, sim-oracle 없이 인프라만. 스모크가 쓴다).
 #      ros_ws/install/idsim_mission/이 없으면(표적이 있으면 ros_ws/install/idsim_sim/도) 아무것도 올리기 전에
 #      안내와 함께 실패한다(tools/ros_ws.sh build). sim-oracle이 있으면 ros_ws/src/idsim_sim/scripts/sim_oracle.py가 없을 때도 같다.
 #      embedded 변형에는 노드 단계가 없다.

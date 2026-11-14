@@ -46,7 +46,7 @@ def row(window=(1000, 3000), end=None, arm_ts=1000, item="5"):
     return {"item": item, "attempt": 1, "verdict": "PASS", "facts": f}
 
 
-def test_empty_ulog_is_a_failure_not_a_pass():
+def test_empty_ulog_reports_all_ros_samples_missing():
     samples = [ros(1100), ros(1600), ros(2100)]
     res = mc.check_row(row(), samples, *index([]))
     assert res["ulog_samples_in_range"] == 0 and res["ros_missing_in_ulog"] == 3
@@ -58,13 +58,13 @@ def test_all_present_passes():
     assert res["ulog_samples_in_range"] == 3 and res["ros_missing_in_ulog"] == 0
 
 
-def test_partial_missing_in_ulog_is_failure():
+def test_partial_missing_in_ulog_is_counted():
     u = [ul(1100), ul(2100)]
     res = mc.check_row(row(), [ros(1100), ros(1600), ros(2100)], *index(u))
     assert res["ros_missing_in_ulog"] == 1
 
 
-def test_field_mismatch_is_failure():
+def test_field_mismatch_lists_fields():
     u = [ul(1100), ul(1600, nav=LOI), ul(2100)]
     res = mc.check_row(row(), [ros(1100), ros(1600), ros(2100)], *index(u))
     assert {m["field"] for m in res["ros_field_mismatch"]} == {"nav_state", "nav_state_user_intention"}
@@ -84,7 +84,7 @@ def test_violation_only_in_ulog_is_caught():
     assert res["ulog_armed_non_offboard"] == 1
 
 
-def test_ulog_only_sample_alone_is_minimum_status_one():
+def test_ulog_only_sample_is_counted_without_violation():
     u = [ul(1100), ul(1550), ul(1600)]
     res = mc.check_row(row(), [ros(1100), ros(1600)], *index(u))
     assert res["ulog_only"] == 1 and res["ulog_armed_non_offboard"] == 0
@@ -124,7 +124,7 @@ def test_flight_window_nav_land_violation_from_ulog_is_counted():
     samples = [ros(t, nav=n) for t, n in ((1100, OFF), (1600, OFF), (2100, OFF), (3000, LOI), (4900, LOI))]
     res = mc.check_row(r, samples, *index(u))
     assert res["ulog_flight_armed_non_offboard"] == 2 and res["ulog_armed_non_offboard"] == 0
-    # land_send가 없으면(3, 5, 2a) 구간 뒤 ARMED는 위반이 아니다
+    # land_send가 없으면(land_send가 없는 행) 구간 뒤 ARMED는 위반이 아니다
     f2 = {"armed_window_ros_us": [1000, 2000], "arm_send": [1000, 1000], "cleanup_end_ros_us": 5000}
     res2 = mc.check_row({"item": "3", "attempt": 1, "verdict": "PASS", "facts": f2}, samples, *index(u))
     assert res2["ulog_flight_armed_non_offboard"] == 0 and res2["ulog_armed_non_offboard_after_window"] == 2

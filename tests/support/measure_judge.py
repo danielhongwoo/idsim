@@ -148,7 +148,7 @@ def armed_non_offboard(samples, from_us, to_us, time_of="recv"):
     return n_armed, bad
 
 
-CLASS_DIRECT = "px4_direct"      # PX4에 직접 명령(Executor 없음)
+CLASS_DIRECT = "px4_direct"      # 부류 이름. 현재 행은 모두 CLASS_EXECUTOR이고 CLASS_DIRECT 행은 없다
 CLASS_EXECUTOR = "scenario_a"    # 시나리오 A(Executor 경유)
 
 
@@ -175,8 +175,8 @@ def judge_armed_criterion(rows, min_reached=10):
     rows: 합산 대상 시도 행(class, armed3_reached, armed_non_offboard 키를 색인으로 읽는다.
     없으면 KeyError). armed_non_offboard가 None인 행은 측정되지 않은 행이라
     n_unmeasured로 따로 세고 0으로 읽지 않는다. 어느 행을 넣을지는 호출자가 정한다.
-    부류(class): px4_direct(PX4에 직접 명령)와 scenario_a(Executor 경유. P4 머지 조건은 이 부류의 통과다).
-    부류마다 n_reached, violation_total, passed를 낸다(classes). 최상위 필드는 px4_direct 부류의 값이다.
+    부류(class)마다 n_reached, violation_total, passed를 낸다(classes). 호출자(sitl_summary)가 쓰는 행은
+    scenario_a 부류뿐이고, 최상위 필드는 행이 없어도 항상 있는 px4_direct 부류의 값이다.
     ARMED 3회 확인까지 간 실행이 min_reached 이상이고 그 전부에서 0개여야 통과다. 한 건이라도 나오면
     violated이고 호출자가 그 즉시 architect에게 올린다. ARMED 3회에 가지 못한 실행에서 나온 위반도 센다.
     """

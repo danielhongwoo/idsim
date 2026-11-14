@@ -39,8 +39,8 @@ def check_row(row, raw_status, ulog_by_ts, ulog_ts):
       위반 구간 [arm 전송의 Px4Timestamp, ARMED 구간 끝]: ULog 기준 비OFFBOARD ARMED를 센다.
       대조 구간 [arm 전송의 Px4Timestamp, max(ROS 마지막 표본의 ts, 정리 종료 시각, NAV_LAND 전송 시각)]:
         ROS 표본이 ULog에 있는지, ULog에만 있는 표본(ROS 유실)이 있는지 본다. 종료 시각은 ROS 수신
-        시각을 PX4 timestamp 축의 근사로 쓴다(두 축은 같은 sim 시간이고 차이의 분포는 distribution_*.json).
-    armed 항목(facts에 land_send)은 ARMED 3회 확인부터 NAV_LAND 전송까지(위반 구간 뒤)의 ULog 비OFFBOARD
+        시각을 PX4 timestamp 축의 근사로 쓴다(두 축은 같은 sim 시간이고 두 축의 차이는 이 함수가 따로 보지 않는다).
+    facts에 land_send가 있으면 ARMED 3회 확인부터 NAV_LAND 전송까지(위반 구간 뒤)의 ULog 비OFFBOARD
     ARMED도 위반으로 센다(ulog_flight_armed_non_offboard).
     """
     f = row["facts"]

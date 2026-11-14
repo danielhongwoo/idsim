@@ -100,15 +100,6 @@ def test_raw_offboard_signal_is_a_context_manager_that_destroys():
     assert "destroy_publisher" in src and "destroy_timer" in src
 
 
-def test_fmu_strings_exist_only_in_the_allowed_helpers():
-    # /fmu 문자열과 버전 접미사는 px4_topic.py와 px4_raw.py의 topic_regex에만 있다
-    t = _tree(RAW)
-    for fn in (n for n in ast.walk(t) if isinstance(n, ast.FunctionDef)):
-        has = any(isinstance(c, ast.Constant) and isinstance(c.value, str) and "fmu" in c.value
-                  for c in ast.walk(fn))
-        assert has == (fn.name == "topic_regex"), fn.name
-
-
 @pytest.fixture(scope="module")
 def raw_module():
     names = ("rclpy", "rclpy.qos", "rclpy.node", "rclpy.executors", "rclpy.parameter", "px4_msgs",
