@@ -16,8 +16,10 @@
 //
 // test_runner 실행 파일의 모든 상태기 테스트가 끝난 뒤 Environment::TearDown에서 단정한다.
 // (1) 관측한 칸 집합 == "covered" 부류 (2) "impossible" 칸은 관측되지 않았다 (3) 목록에 없는 칸은
-// 관측되지 않았다 (4) untagged 기록 0. Event 이름 집합 == 목록의 사건 집합과 파일 형식은 보통
-// 테스트로 본다. 일부만 돌면(--gtest_filter, sharding, DISABLED_, GTEST_SKIP) 대조 대신 실패한다.
+// 관측되지 않았다 (4) untagged 기록 0 (5) "uncovered" 부류의 칸이 목록에 없다(B8b부터.
+// 상태기를 바꾸는 PR은 새 칸을 같은 PR에서 덮는다). Event 이름 집합 == 목록의 사건 집합,
+// 파일 형식, (5)는 보통 테스트로도 본다(일부만 돌려도 보인다). 일부만 돌면(--gtest_filter,
+// sharding, DISABLED_, GTEST_SKIP) 대조 대신 실패한다.
 // 개발자가 일부만 돌릴 때는 환경변수 IDSIM_TRANSITION_PARTIAL_OK=1을 주면 대조를 건너뛰고 그 사실을
 // 출력한다.
 // 환경변수 IDSIM_TRANSITION_CELLS_DUMP에 경로를 주면 관측한 칸을 같은 형식(class는 covered)으로 그
@@ -25,8 +27,9 @@
 //
 // 칸 목록 파일 형식: 탭으로 나눈 7열(from, event, to, reason, class, also_true, note). '#'으로
 // 시작하는 줄과 빈 줄은 건너뛰고, 첫 데이터 줄은 머리줄이다. class는 covered(덮임),
-// impossible(불가능. note에 이유), uncovered(미덮임)다. also_true는 겹침 칸에서 이긴 사건과 함께
-// 참이던 사건 하나, 아니면 "-"다(한 기록에 함께 참이던 사건이 여럿이면 쌍마다 한 칸).
+// impossible(불가능. note에 이유), uncovered(미덮임. 형식으로는 읽지만 목록에 있으면
+// 실패한다)다. also_true는 겹침 칸에서 이긴 사건과 함께 참이던 사건 하나, 아니면 "-"다(한
+// 기록에 함께 참이던 사건이 여럿이면 쌍마다 한 칸).
 
 #include <gtest/gtest.h>
 
@@ -182,6 +185,19 @@ TEST(TransitionCells, FileIsWellFormed)
     ADD_FAILURE() << IDSIM_TRANSITION_CELLS << " " << error;
   }
   EXPECT_FALSE(list.cells.empty());
+}
+
+TEST(TransitionCells, NoUncoveredCell)
+{
+  // B8b부터 "uncovered" 부류의 칸이 목록에 있으면 실패한다(decisions.md 1b 쟁점 13). 새 칸은 같은
+  // PR에서 테스트로 덮거나, core 계약 안의 [소스] 이유가 있으면 impossible로 둔다.
+  const CellList list = load_cells();
+  for (const auto & [cell, info] : list.cells) {
+    if (info.cls == "uncovered") {
+      ADD_FAILURE() << "line " << info.line << ": uncovered cell is not allowed:\n"
+                    << cell_text(cell);
+    }
+  }
 }
 
 TEST(TransitionCells, EventNamesMatchList)
@@ -602,6 +618,12 @@ public:
       } else {
         ++impossible;
       }
+    }
+    // (5)
+    if (uncovered > 0) {
+      ADD_FAILURE() << "[transition coverage] " << uncovered
+                    << " cell(s) listed as uncovered; cover them or give a [source] reason as"
+                    << " impossible (see TransitionCells.NoUncoveredCell)";
     }
     std::cout << "[transition coverage] cells: covered " << covered << ", impossible " << impossible
               << ", uncovered " << uncovered << "; observed " << recorder_.cells.size()
