@@ -262,6 +262,8 @@ public:
   int disarms() const { return disarms_; }
   int offboards() const { return offboards_; }
   int holds() const { return holds_; }
+  // 첫 Hold 명령을 받은 sim 시각(ns). 없으면 0.
+  std::int64_t first_hold_ns() const { return first_hold_ns_; }
   bool landed() const { return landed_; }
   std::uint8_t nav_state() const { return nav_; }
   float setpoint_x() const { return setpoint_x_; }
@@ -291,6 +293,9 @@ private:
     // Hold = AUTO(param2 4) + AUTO_LOITER(param3 3). 다른 AUTO sub mode는 세지 않는다.
     if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 4.0F && cmd.param3 == 3.0F) {
       ++holds_;
+      if (first_hold_ns_ == 0) {
+        first_hold_ns_ = clock_.now_ns();
+      }
     }
     if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 6.0F) {
       ++offboards_;
@@ -355,6 +360,7 @@ private:
   int disarms_{0};
   int offboards_{0};
   int holds_{0};
+  std::int64_t first_hold_ns_{0};
 };
 
 class ExecutorNodeTest : public ::testing::Test
@@ -545,6 +551,7 @@ public:
     options.feedback_callback =
       [this](GoalHandle::SharedPtr, const std::shared_ptr<const ExecuteMission::Feedback> & fb) {
         ++feedback_;
+        feedbacks_.push_back(*fb);
         last_phase_ = fb->phase;
         last_item_ = fb->item_index;
         if (fb->phase == ExecuteMission::Feedback::PHASE_CANCELING) {
@@ -563,6 +570,7 @@ public:
   GoalHandle::WrappedResult result_;
   bool has_result_{false};
   int feedback_{0};
+  std::vector<ExecuteMission::Feedback> feedbacks_;
   std::uint8_t last_phase_{0};
   std::uint32_t last_item_{0};
   int canceling_feedback_{0};
@@ -744,6 +752,59 @@ TEST_F(ExecutorNodeTest, GotoSetpointGoesThroughFramePort)
   EXPECT_NEAR(px4.setpoint_z(), -5.0F, 0.01F);
   EXPECT_EQ(client.last_item_, 1U);
   EXPECT_EQ(node->shutdown().id(), State::PRIMARY_STATE_FINALIZED);
+}
+
+TEST_F(ExecutorNodeTest, FeedbackIsPublishedOnTheTickTheLastSetpointItemCompletes)
+{
+  // [TAKEOFF, GOTO]. GOTO 목표는 가짜 PX4가 내는 위치(로컬 NED (1, 2, -5) = world ENU (2, 1, 5))라
+  // 곧 완료되고 공중 종료 단계로 들어간다. 그 tick은 항목(1)과 phase(EXECUTING)가 그대로지만
+  // 항목이 완료됐으므로 feedback이 바로 나간다. 종료 단계는 들어가는 tick에 Hold를 보내므로, 거리가
+  // 없는 첫 항목 1 feedback의 stamp는 가짜 PX4가 첫 Hold를 받은 sim 시각과 tick 하나 안에 있다
+  // (주기 feedback만 있으면 최대 10 tick 늦다).
+  auto node = make_executor(true);
+  auto test_node = std::make_shared<rclcpp::Node>("test_client");
+  Client client(test_node);
+  FakePx4 px4(test_node, *clock_);
+  px4.global_ref = true;
+  executor_->add_node(node->get_node_base_interface());
+  executor_->add_node(test_node);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      return state_of(node) == State::PRIMARY_STATE_ACTIVE &&
+             client.client()->action_server_is_ready() &&
+             test_node->count_publishers("/px4_1/mission_event") >= 1;
+    },
+    std::chrono::seconds(10), &px4));
+  ExecuteMission::Goal goal = standard_goal();
+  goal.mission.items = {goal.mission.items[0], goto_item(2.0, 1.0, 5.0)};
+  client.send(goal);
+  ASSERT_TRUE(spin_until([&] { return client.has_result_; }, std::chrono::seconds(40), &px4))
+    << "item " << client.last_item_ << " phase " << static_cast<int>(client.last_phase_);
+  EXPECT_EQ(client.result_.code, rclcpp_action::ResultCode::SUCCEEDED);
+  EXPECT_EQ(client.result_.result->items_completed, 2U);
+  ASSERT_GT(px4.first_hold_ns(), 0);
+  // 항목 1에서 거리가 있던 feedback 뒤의 첫 거리 없는 feedback(종료 단계의 첫 feedback).
+  const ExecuteMission::Feedback * end_stage = nullptr;
+  bool seen_valid = false;
+  for (const ExecuteMission::Feedback & fb : client.feedbacks_) {
+    if (fb.item_index != 1U) {
+      continue;
+    }
+    if (fb.distance_valid) {
+      seen_valid = true;
+    } else if (seen_valid) {
+      end_stage = &fb;
+      break;
+    }
+  }
+  ASSERT_TRUE(seen_valid);
+  ASSERT_NE(end_stage, nullptr);
+  EXPECT_EQ(end_stage->phase, ExecuteMission::Feedback::PHASE_EXECUTING);
+  const std::int64_t stamp_ns = rclcpp::Time(end_stage->stamp).nanoseconds();
+  const std::int64_t lag_ns = px4.first_hold_ns() - stamp_ns;
+  EXPECT_GE(lag_ns, 0) << "feedback after the first Hold";
+  EXPECT_LT(lag_ns, kTickPeriodNs)
+    << "feedback stamp " << stamp_ns << " hold " << px4.first_hold_ns();
 }
 
 TEST_F(ExecutorNodeTest, TargetLostKeepsPublishingUntilHoldIsObserved)
