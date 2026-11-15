@@ -84,7 +84,7 @@ struct Config
 
 // 정리(취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패, RTL 실패, 공중 종료 단계) 전체의
 // 상한(decisions.md 쟁점 3 M6, 1b decisions.md 쟁점 10).
-// 정리를 시작한 tick부터 ROS 시각으로 잰다. 노드 파라미터가 아니라 분기 타임아웃의 파생값이다:
+// 정리를 시작한 tick부터 ROS 시각으로 잰다. 노드 파라미터가 아니라 분기 timeout의 파생값이다:
 // 정당한 경로 둘 가운데 긴 쪽이다. (1) 지상 -> Hold 실패 -> Land 경로 -> 다시 지상
 // (hold + 3 x mode). (2) 종료 단계의 지상 경로: 지상에서 hold_confirm_timeout -> 지상 대기 ->
 // 대비책 disarm의 지연 -> disarm 확인(hold + delay + mode). 대비책 지연이 붙는 경로는 (2)
