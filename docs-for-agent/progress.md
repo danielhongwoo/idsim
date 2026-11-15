@@ -7,15 +7,14 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 계약은 `docs/interface.md`에 고정 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6 반영. 칸 목록 covered 452, impossible 131, uncovered 0. runner는 계약 검증을 그대로 쓰고, goal 접수는 1a 미션만 받는다 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6과 B10 전 core 수정(모드 명령 항목의 같은 tick 순서, 정리 상한 식, 공중 진입 감시 하한, Px4Timestamp 실패 꼬리) 반영. 칸 목록 covered 452, impossible 131, uncovered 0. runner는 계약 검증을 그대로 쓰고, goal 접수는 1a 미션만 받는다 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
 ## 다음 작업
 
-1. B10 전 core 수정(`decisions.md` 쟁점 7, 9, 10, 12. goal 접수 제한은 그대로). (가) 모드 명령 항목의 tick 순서를 거부 ack -> 만료 -> 3회 확인으로: px4-engineer의 겹침 명세 -> ros2-engineer 구현과 테스트(LAND 1, RTL 2, 종료 단계 Hold 3회째 tick의 거부 ack 1) -> px4-engineer 대조. (나) 칸이 바뀌지 않는 셋은 ros2-engineer 구현, px4-engineer 승인: `cleanup_cap_ns`에 `land_disarm_fallback_delay`를 더하고(주석, 12 s를 가정한 테스트, 지연 음수 전제), 공중 Offboard 진입의 감시 하한을 첫 OFFBOARD 표본에서 올리고, Px4Timestamp 실패 `detail` 꼬리를 `landed`로 가른다.
-2. B10: 진짜 `Px4FramePort`(`to_local_position_input`, 비행 중 `ref_timestamp_us` 변경 WARN, `world.origin` 전달), 표적 구독(goal 접수 때 `Snapshot.targets`를 비우고 노드 테스트에 사례), goal 접수 제한 제거, 표적 표본 좌표 상한 1e5 m(WARN throttle)와 상한 술어의 core 헤더 공개(`snapshot.hpp` `TargetSample` 주석이 상수 이름을 가리키게). FramePort는 비유한, float32 밖이면 값 없음이라는 계약을 지킨다(core는 속도 유한을 이 계약에 기댄다). 같은 PR에서 시나리오 B와 노드 테스트의 무효 미션 사례를 1b 무효 사례로 바꾼다(B의 사례 범위는 test-engineer). 쟁점 12 승인 조건 (2)는 B10 검토 때 본다.
-3. B11, B12, B13은 README 순서대로. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다.
+1. B10: 진짜 `Px4FramePort`(`to_local_position_input`, 비행 중 `ref_timestamp_us` 변경 WARN, `world.origin` 전달), 표적 구독(goal 접수 때 `Snapshot.targets`만 비우고 `land`와 `status`는 두며 노드 테스트에 사례), goal 접수 제한 제거, 표적 표본 좌표 상한 1e5 m(WARN throttle)와 상한 술어의 core 헤더 공개(`snapshot.hpp` `TargetSample` 주석이 상수 이름을 가리키게). FramePort는 비유한, float32 밖이면 값 없음이라는 계약을 지킨다(core는 속도 유한을 이 계약에 기댄다). 같은 PR에서 시나리오 B와 노드 테스트의 무효 미션 사례를 1b 무효 사례로 바꾼다(B의 사례 범위는 test-engineer). 쟁점 12 승인 조건 (2)는 B10 검토 때 본다.
+2. B11, B12, B13은 README 순서대로. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다.
 
 ## 운영 규칙
 
