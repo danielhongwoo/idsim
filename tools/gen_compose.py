@@ -116,7 +116,7 @@ TARGET_START_S_MAX = 86400.0
 TARGET_GAP_MIN_MS = 100  # 인접 waypoint의 T 차 하한
 TARGETS_LENGTH_SUM_MAX_MS = 2400000  # 표적마다 마지막 T를 더한 합의 상한이자 T 하나의 상한(start_s와 끝 정지 꼬리는 넣지 않는다)
 # Gazebo Actor(화면 확인용. 표적 위치의 원천은 아니다). 요소의 형태와 값은 sim-engineer가 정한다(B6 Actor 명세 판 2).
-ACTOR_SAMPLE_DT_MS = 250  # waypoint 표본 간격 상한(ms). 잠정, M4 육안 확인 뒤 확정
+ACTOR_SAMPLE_DT_MS = 250  # waypoint 표본 간격 상한(ms). 250으로 확정(M4 화면 확인: ogre2/ogre, 재접속, golden과 상한 월드 모두 끊김 없음)
 ACTOR_TAIL_STEP_MS = 250  # loop false 꼬리의 첫 점이 마지막 점 뒤 얼마인가(접선을 0으로 만든다)
 ACTOR_HOLD_MS = 86400000  # loop false 꼬리의 둘째 점(시뮬레이션 시간 1일 뒤)
 ACTOR_SPHERE_RADIUS_M = "0.3"

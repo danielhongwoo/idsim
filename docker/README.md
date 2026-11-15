@@ -249,6 +249,9 @@ docker compose -p idsim-0 stop gz-gui   # GUI만 끈다. 서버는 계속 돈다
 - 호스트 셸에 `DISPLAY`와 `XAUTHORITY`가 있어야 한다. compose는 `${DISPLAY:-}`와 `${XAUTHORITY:-/dev/null}`을 넘기므로 비어 있으면 `gz_gui.sh`가 안내 메시지와 함께 끝난다. GNOME Wayland(Xwayland)에서는 로그인마다 이름이 바뀌는 `/run/user/<uid>/.mutter-Xwaylandauth.*`를 쓴다: `export XAUTHORITY=$(ls /run/user/$(id -u)/.mutter-Xwaylandauth.* | head -n 1)`.
 - GUI 렌더 엔진은 `IDSIM_GZ_GUI_ENGINE`(기본 ogre2), 깜빡임 시도용 `QSG_RENDER_LOOP`, `vblank_mode`는 호스트 셸에 있으면 그대로 넘어간다(예: `QSG_RENDER_LOOP=basic vblank_mode=1 tools/sim_stack.sh up --viz`).
 - `gui.config`는 WorldControl 플러그인을 뺐으므로 GUI에서 월드를 멈출 수 없다. 화면에서 실수로 일시정지하는 것을 막기 위해서다.
+- GUI 오른쪽 위 메뉴로 plugin을 더하거나 `IDSIM_GUI_CONFIG`로 다른 설정 파일을 주지 않는다. `gui.config`의 plugin 목록은 `idsim_sim` 단위 테스트가 고정하고, 목록 밖의 plugin(특히 `<topic>`으로 구독 대상을 받는 TopicEcho, TopicViewer, Plotting 계열)이 Actor 월드에서 `dynamic_pose/info`를 구독하면 gazebo 서버가 내려가고 lockstep 때문에 PX4가 멈춘다.
+- Actor 좌표는 GUI Component Inspector에 Pose로 나오지 않고 `pose/info`에도 없다. 표적 좌표는 `TargetState`로 본다.
+- GUI는 소프트웨어 렌더링에서 코어 2개 남짓을 쓰므로 SITL 테스트와 함께 띄우면 CPU를 다툰다.
 - `ipc: host`가 없으면 GPU 가속이 없는 호스트(소프트웨어 렌더링)에서 창이 검게 나온다. Mesa의 소프트웨어 경로가 X 서버와 MIT-SHM 공유 메모리로 화면을 전달하는데, 컨테이너의 IPC 네임스페이스가 분리되어 있으면 X 서버가 그 메모리에 붙지 못하기 때문이다. GPU 가속(DRI3) 경로에서는 없어도 되지만 항상 붙인다.
 - `gui.config`는 바닥 격자(GridConfig, 2m 간격, 500 x 500 m, 어두운 선)를 켠다. PX4 기본 월드는 배경과 바닥이 균일한 회색이라 격자가 없으면 기체 이동이 보이지 않는다. 왼쪽 패널의 "Grid config"에서 칸 수와 간격을 바꿀 수 있다.
 - 화면이 깜빡이면 `QSG_RENDER_LOOP=basic vblank_mode=1`을 호스트 셸에 두고 올려 본다. Qt 렌더 루프를 단일 스레드로 고정하고 Mesa 수직 동기를 켜 주사율 이하로 그린다. 가상머신에서의 효과는 확인되지 않았다.
