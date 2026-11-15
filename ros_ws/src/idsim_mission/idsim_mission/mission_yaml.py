@@ -13,12 +13,13 @@
 # limitations under the License.
 """미션 YAML 로더(1b decisions.md 쟁점 14).
 
-로더가 하는 일은 넷뿐이다. 구조 검사(모르는 key 거부, 같은 mapping 안의 중복 key와 merge key(<<) 거부,
-필수 key, 타입), 단위 변환(timeout_s, duration_s -> builtin_interfaces/Duration, ns 반올림, 음수와
-비유한 거부), 기본값 채움, mission_id(YAML 값 또는 파일 이름, 정규식 검사). 계약 검증(값의 범위, 항목 순서, 좌표 상한, target_id 형식 등)의 정본은 Executor의
-goal 검증이고 여기서 다시 하지 않는다. 그래서 계약에 어긋나는 미션도 구조만 맞으면 Mission이 되고,
-Executor가 INVALID_MISSION으로 끝낸다. YAML 문법 오류와 UTF-8이 아닌 파일, float 범위를 넘는 수도
-구조 오류와 같이 MissionYamlError다(send_mission의 종료 코드 2).
+로더가 하는 일은 넷뿐이다. 구조 검사(모르는 key 거부, 같은 mapping 안의 중복 key와
+merge key(<<) 거부, 필수 key, 타입), 단위 변환(timeout_s, duration_s -> builtin_interfaces/Duration,
+ns 반올림, 음수와 비유한 거부), 기본값 채움, mission_id(YAML 값 또는 파일 이름, 정규식 검사).
+계약 검증(값의 범위, 항목 순서, 좌표 상한, target_id 형식 등)의 정본은 Executor의 goal 검증이고
+여기서 다시 하지 않는다. 그래서 계약에 어긋나는 미션도 구조만 맞으면 Mission이 되고, Executor가
+INVALID_MISSION으로 끝낸다. YAML 문법 오류와 UTF-8이 아닌 파일, float 범위를 넘는 수도 구조
+오류와 같이 MissionYamlError다(send_mission의 종료 코드 2).
 
 형식(좌표는 world ENU m, 각은 rad, 시간은 s)
 

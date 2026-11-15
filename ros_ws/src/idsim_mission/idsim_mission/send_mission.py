@@ -20,7 +20,7 @@ Ctrl-C 한 번은 goal을 취소하고 결과를 기다린다(goal 응답 전이
 rclpy의 signal handler를 쓰지 않는다(SignalHandlerOptions.NO. 기본 handler는 SIGINT에 context를 내려
 취소와 결과를 받을 수 없다). 대신 모든 대기를 POLL_S(0.2 s) 간격으로 끊어 Ctrl-C가 그 안에 처리되게
 한다. 서버가 응답하지 않아 대기가 끝나지 않으면 두 번째 Ctrl-C로 끊는다.
-use_sim_time은 쓰지 않는다(시계는 대기 상한에만 쓰고 판정에 쓰지 않는다).
+use_sim_time은 쓰지 않는다(벽시계는 서버 대기 상한과 Ctrl-C poll에만 쓰고 판정에 쓰지 않는다).
 """
 
 import argparse
@@ -78,6 +78,7 @@ def main(argv=None):
 
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node = rclpy.create_node("send_mission")
+    goal_sent = False
     try:
         action = f"/{args.vehicle}/{Mission.ACTION_NAME}"
         client = ActionClient(node, ExecuteMission, action)
@@ -96,6 +97,7 @@ def main(argv=None):
 
         print(f"send_mission: {spec.mission_id} ({len(spec.items)} items) -> {action}", flush=True)
         send = client.send_goal_async(goal, feedback_callback=on_feedback)
+        goal_sent = True
         interrupted = False
         try:
             _wait(rclpy, node, send)
@@ -130,7 +132,10 @@ def main(argv=None):
               f"last_item_index {r.last_item_index} detail {r.detail!r}", flush=True)
         return EXIT_OK if wrapped.status == GoalStatus.STATUS_SUCCEEDED else EXIT_FAILED
     except KeyboardInterrupt:
-        print("send_mission: interrupted; goal state unknown", file=sys.stderr)
+        if goal_sent:
+            print("send_mission: interrupted; goal state unknown", file=sys.stderr)
+        else:
+            print("send_mission: interrupted before sending the goal", file=sys.stderr)
         return EXIT_INTERRUPTED
     finally:
         node.destroy_node()

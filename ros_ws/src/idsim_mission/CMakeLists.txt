@@ -197,6 +197,7 @@ if(BUILD_TESTING)
   # ---- 미션 YAML 로더 테스트(Python) ----
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_mission_yaml test/python/test_mission_yaml.py)
+  ament_add_pytest_test(test_send_mission_wait test/python/test_send_mission_wait.py)
 endif()
 
 ament_package()
