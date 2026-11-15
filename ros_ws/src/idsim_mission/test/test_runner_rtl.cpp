@@ -477,7 +477,7 @@ TEST(Rtl, ImmediateEndings)
     expect_terminated_once_as(h, "ABORTED/INTERNAL");
     EXPECT_EQ(
       termination_or_empty(h).detail,
-      "Px4Timestamp unavailable; vehicle state unknown, may remain armed on ground");
+      "Px4Timestamp unavailable; vehicle state unknown, may remain armed in air");
   }
 }
 

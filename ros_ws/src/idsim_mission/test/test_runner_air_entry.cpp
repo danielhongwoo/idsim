@@ -1182,7 +1182,7 @@ TEST(AirEntry, A22a_StampFailureOnPublishStartTick)
   EXPECT_FALSE(out.px4_timestamp_us.has_value());
   EXPECT_EQ(
     termination_or_empty(h).detail,
-    "Px4Timestamp unavailable; vehicle state unknown, may remain armed on ground");
+    "Px4Timestamp unavailable; vehicle state unknown, may remain armed in air");
   expect_prep_end(h, "ABORTED/INTERNAL");
 }
 
@@ -1197,6 +1197,44 @@ TEST(AirEntry, A22b_StampFailureAfterPublishStartIsMonitorRank1)
     h, "PREPARING.AIR_SIGNAL", Event::kMonitorTimestampFailure, "DONE", "ABORTED/INTERNAL", {},
     before);
   expect_prep_end(h, "ABORTED/INTERNAL");
+}
+
+// Px4Timestamp를 만들지 못해 끝난 goal의 detail 꼬리는 그 tick의 최신 landed로 가른다. land 표본이
+// 없는 경우는 Snapshot에서 표본을 지운 합성 입력이다(노드는 받은 표본을 tick 사이에 들고 있다).
+TEST(AirEntry, A22c_StampFailureTailFollowsLatestLanded)
+{
+  struct Case
+  {
+    const char * name;
+    bool landed;
+    bool drop_land;
+    const char * tail;
+  };
+  for (const Case & c :
+       {Case{"air", false, false, "; vehicle state unknown, may remain armed in air"},
+        Case{"ground", true, false, "; vehicle state unknown, may remain armed on ground"},
+        Case{"no land sample", false, true, "; vehicle state unknown"}}) {
+    SCOPED_TRACE(c.name);
+    Harness h(air_loiter_mission());
+    start_air(h);
+    h.world.landed = c.landed;
+    h.auto_samples = false;
+    h.push_world_samples();
+    if (c.drop_land) {
+      h.snapshot.land.reset();
+    }
+    h.clock.fail = true;
+    const std::size_t before = h.edges().size();
+    h.step_only();
+    expect_cell(
+      h, "PREPARING.AIR_SIGNAL", Event::kMonitorTimestampFailure, "DONE", "ABORTED/INTERNAL", {},
+      before);
+    const std::string detail = termination_or_empty(h).detail;
+    const std::string tail = c.tail;
+    ASSERT_GE(detail.size(), tail.size()) << detail;
+    EXPECT_EQ(detail.substr(detail.size() - tail.size()), tail) << detail;
+    EXPECT_EQ(detail.find("vehicle state unknown"), detail.rfind("vehicle state unknown"));
+  }
 }
 
 // ---- A23, A24 취소 ----

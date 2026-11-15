@@ -773,8 +773,10 @@ TEST(MissionEnd, T19AirDisarmInGroundWait)
 
 // ---- Px4Timestamp 실패 ----
 
-const char kStampDetail[] =
+const char kStampDetailGround[] =
   "mission end: Px4Timestamp unavailable; vehicle state unknown, may remain armed on ground";
+const char kStampDetailAir[] =
+  "mission end: Px4Timestamp unavailable; vehicle state unknown, may remain armed in air";
 
 TEST(MissionEnd, T20StampFailureInAir)
 {
@@ -787,7 +789,7 @@ TEST(MissionEnd, T20StampFailureInAir)
   EXPECT_TRUE(commands_at(h, st.s + 1).empty());
   EXPECT_FALSE(setpoint_at(h, st.s + 1));
   h.clock.fail = false;
-  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetail);
+  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetailAir);
 }
 
 TEST(MissionEnd, T20StampFailureOnLandPath)
@@ -802,7 +804,7 @@ TEST(MissionEnd, T20StampFailureOnLandPath)
   expect_cell(h, kAirLand, Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL", {}, before);
   EXPECT_TRUE(commands_at(h, st.s + 11).empty());
   h.clock.fail = false;
-  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetail);
+  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetailAir);
 }
 
 TEST(MissionEnd, T20StampFailureInGroundWait)
@@ -814,7 +816,7 @@ TEST(MissionEnd, T20StampFailureInGroundWait)
   expect_cell(h, kGroundWait, Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL", {}, before);
   EXPECT_TRUE(commands_at(h, st.s + 170).empty());
   h.clock.fail = false;
-  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetail);
+  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetailGround);
 }
 
 TEST(MissionEnd, T20StampFailureOnFirstTickIsMonitorRow)

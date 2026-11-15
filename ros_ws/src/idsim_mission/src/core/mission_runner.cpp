@@ -89,6 +89,19 @@ struct MissionRunner::Tick
 namespace
 {
 
+// Px4Timestamp를 만들지 못해 끝난 goal(이 goal이 발행이나 명령을 낸 뒤)의 detail 꼬리. 그 tick의
+// 최신 landed로 가른다. Snapshot은 최신 표본을 tick 사이에 들고 있으므로 land가 없으면 표본을 한
+// 번도 받지 못한 것이다. 아무것도 보내지 못한 종료라 PX4가 그 뒤에 할 동작은 적지 않는다(1b
+// decisions.md 쟁점 12).
+std::string state_unknown_tail(const LandSample * land)
+{
+  if (land == nullptr) {
+    return "vehicle state unknown";
+  }
+  return land->landed ? "vehicle state unknown, may remain armed on ground"
+                      : "vehicle state unknown, may remain armed in air";
+}
+
 bool position_finite(const PositionSample & p)
 {
   return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
@@ -881,7 +894,7 @@ void MissionRunner::end_by_monitor(
     send_final(t, CommandKind::kDisarm, detail);
   }
   if (verdict.row == MonitorRow::kTimestampFailure && acted_) {
-    detail += "; vehicle state unknown, may remain armed on ground";
+    detail += "; " + state_unknown_tail(t.land);
   }
   terminate(event, t, aborted(verdict.reason, detail));
 }
@@ -1944,9 +1957,8 @@ void MissionRunner::finalize(Tick & t)
                                cause_ != CleanupCause::kMissionEnd;
       // 명령을 만들 수 없으므로 기체 상태를 모른다(decisions.md 쟁점 4 "Px4Timestamp 공급이 실패한
       // tick").
-      const std::string what =
-        std::string("Px4Timestamp unavailable") +
-        (acted_ ? "; vehicle state unknown, may remain armed on ground" : "");
+      const std::string what = std::string("Px4Timestamp unavailable") +
+                               (acted_ ? "; " + state_unknown_tail(t.land) : std::string());
       const std::string prefix =
         stage_ == Stage::kCleanup && cause_ == CleanupCause::kMissionEnd ? "mission end: " : "";
       terminate(
