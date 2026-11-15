@@ -15,7 +15,7 @@
 """SITL 통합 테스트의 세션(rclpy). ros-ws 컨테이너(runner) 안에서 이미 떠 있는 스택에 붙는다.
 
 스택을 올리고 내리는 것은 호스트의 tests/sitl/run_sitl.sh다. 이 세션은 stack.json(IDSIM_STACK_FILE)을 읽고
-준비 상태를 검증만 한다. 준비 검증(gate)이 실패하면 skip이 아니라 오류다(tests/sitl/README.md "시나리오와 판정").
+준비 상태를 검증만 한다. 준비 검증(gate)이 실패하면 skip이 아니라 오류다(tests/sitl/README.md "실행").
 
 노드 둘이 한 프로세스(한 participant)에 있다: Px4Raw의 노드(PX4 토픽, /clock)와 미션 노드(mission_event 구독,
 action client, 1b의 정답 pose와 TargetState 구독). 미션 노드 안에서는 mission_event 구독이 action client보다 먼저
