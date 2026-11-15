@@ -208,3 +208,36 @@ def test_duplicate_keys_are_rejected(tmp_path, text, line):
 def test_same_key_in_different_items_is_not_duplicate(tmp_path):
     text = "mission_id: m\nitems:\n  - {type: LAND, timeout_s: 30}\n  - {type: LAND, timeout_s: 30}\n"
     assert len(my.load_mission(write(tmp_path, text)).items) == 2
+
+
+@pytest.mark.parametrize("text, match", [
+    # YAML 문법 오류
+    ("mission_id: m\nitems: [\n", r"YAML: "),
+    ("mission_id: m\nitems:\n  - type: LAND\n   timeout_s: 30\n", r"YAML: "),
+    # float 범위를 넘는 정수(OverflowError가 아니다)
+    ("mission_id: m\nitems:\n  - {type: GOTO, timeout_s: 10, position: [1" + "0" * 400 + ", 0, 0],"
+     " acceptance_radius_m: 1}\n", r"items\[0\]\.position\[0\]: too large for float64"),
+    ("mission_id: m\nitems:\n  - {type: TAKEOFF, timeout_s: 10, height_m: 1" + "0" * 400 + ","
+     " acceptance_m: 0.3}\n", r"items\[0\]\.height_m: too large for float64"),
+    ("mission_id: m\nitems:\n  - {type: LAND, timeout_s: 1" + "0" * 400 + "}\n",
+     r"items\[0\]\.timeout_s: too large for builtin_interfaces/Duration"),
+    # merge key
+    ("base: &b {type: LAND, timeout_s: 30}\nmission_id: m\nitems:\n  - <<: *b\n", r"merge key '<<' is not allowed at line 4"),
+])
+def test_yaml_errors_are_loader_errors(tmp_path, text, match):
+    with pytest.raises(my.MissionYamlError, match=match):
+        my.load_mission(write(tmp_path, text))
+
+
+def test_non_utf8_file_is_loader_error(tmp_path):
+    path = tmp_path / "m.yaml"
+    path.write_bytes(b"mission_id: m\nitems: []\n# \xff\n")
+    with pytest.raises(my.MissionYamlError, match="codec can't decode"):
+        my.load_mission(path)
+
+
+def test_send_mission_exits_2_on_loader_error(tmp_path, capsys):
+    from idsim_mission import send_mission
+    path = write(tmp_path, "mission_id: m\nitems: [\n")
+    assert send_mission.main([str(path), "--vehicle", "px4_1"]) == send_mission.EXIT_BAD_FILE
+    assert "YAML: " in capsys.readouterr().err

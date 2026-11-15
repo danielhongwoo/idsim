@@ -93,11 +93,15 @@ class MissionYamlError(ValueError):
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
-    """SafeLoader와 같고, 한 mapping 안에 같은 key가 두 번 나오면 거부한다(safe_load는 뒤의 값으로 덮는다)."""
+    """SafeLoader 위에 두 규칙을 더한다. 한 mapping 안의 같은 key는 거부한다(safe_load는 뒤의 값으로
+    덮는다). merge key(<<)도 거부한다(합쳐진 key와 중복 검사가 섞여 결과를 읽기 어렵다)."""
 
     def construct_mapping(self, node, deep=False):
         seen = set()
         for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise MissionYamlError(
+                    f"merge key '<<' is not allowed at line {key_node.start_mark.line + 1}")
             key = self.construct_object(key_node, deep=deep)
             try:
                 duplicate = key in seen
@@ -111,8 +115,15 @@ class _UniqueKeyLoader(yaml.SafeLoader):
 
 
 def load_yaml(stream):
-    """YAML 문서 하나를 읽는다(safe_load와 같고 중복 key를 거부한다)."""
-    return yaml.load(stream, Loader=_UniqueKeyLoader)
+    """YAML 문서 하나를 읽는다. SafeLoader에 중복 key와 merge key 거부를 더한 것이다(_UniqueKeyLoader).
+    YAML 문법과 생성 오류(yaml.YAMLError, 생성 중의 ValueError)는 MissionYamlError로 바꾼다."""
+    try:
+        return yaml.load(stream, Loader=_UniqueKeyLoader)
+    except MissionYamlError:
+        raise
+    except (yaml.YAMLError, ValueError) as e:
+        # ValueError: 생성 중의 int 변환(Python의 정수 자릿수 제한을 넘는 정수)과 UTF-8 해독 오류.
+        raise MissionYamlError(f"YAML: {e}") from None
 
 
 @dataclass(frozen=True)
@@ -152,7 +163,7 @@ class MissionSpec:
 def seconds_to_duration(value, where):
     """s -> Duration(ns 반올림). 음수, 비유한, int32 sec 초과는 거부한다."""
     seconds = _number(value, where)
-    if not math.isfinite(seconds):
+    if isinstance(seconds, float) and not math.isfinite(seconds):
         raise MissionYamlError(f"{where}: must be finite (got {value!r})")
     if seconds < 0:
         raise MissionYamlError(f"{where}: must not be negative (got {value!r})")
@@ -169,10 +180,19 @@ def _number(value, where):
     return value
 
 
+def _float(value, where):
+    """수 -> float. float 범위를 넘는 정수는 OverflowError가 아니라 MissionYamlError다."""
+    number = _number(value, where)
+    try:
+        return float(number)
+    except OverflowError:
+        raise MissionYamlError(f"{where}: too large for float64 (got {value!r})") from None
+
+
 def _vec3(value, where):
     if not isinstance(value, (list, tuple)) or len(value) != 3:
         raise MissionYamlError(f"{where}: must be a list of 3 numbers (got {value!r})")
-    return tuple(float(_number(v, f"{where}[{i}]")) for i, v in enumerate(value))
+    return tuple(_float(v, f"{where}[{i}]") for i, v in enumerate(value))
 
 
 def _string(value, where):
@@ -193,7 +213,7 @@ def _check_keys(data, required, optional, where):
 def _parse_yaw(data, where):
     if "yaw_rad" not in data:
         return YawSpec()
-    return YawSpec(fixed=True, yaw_rad=float(_number(data["yaw_rad"], f"{where}.yaw_rad")))
+    return YawSpec(fixed=True, yaw_rad=_float(data["yaw_rad"], f"{where}.yaw_rad"))
 
 
 def parse_item(data, index):
@@ -211,19 +231,17 @@ def parse_item(data, index):
     item = ItemSpec(type=ITEM_TYPES[name],
                     timeout=seconds_to_duration(data["timeout_s"], f"{where}.timeout_s"))
     if name == "TAKEOFF":
-        item.height_m = float(_number(data["height_m"], f"{where}.height_m"))
-        item.acceptance_m = float(_number(data["acceptance_m"], f"{where}.acceptance_m"))
+        item.height_m = _float(data["height_m"], f"{where}.height_m")
+        item.acceptance_m = _float(data["acceptance_m"], f"{where}.acceptance_m")
         item.yaw = _parse_yaw(data, where)
     elif name == "GOTO":
         item.position = _vec3(data["position"], f"{where}.position")
-        item.acceptance_radius_m = float(
-            _number(data["acceptance_radius_m"], f"{where}.acceptance_radius_m"))
+        item.acceptance_radius_m = _float(data["acceptance_radius_m"], f"{where}.acceptance_radius_m")
         item.yaw = _parse_yaw(data, where)
     elif name == "TRACK_ENTITY":
         item.target_id = _string(data["target_id"], f"{where}.target_id")
         item.offset = _vec3(data["offset"], f"{where}.offset")
-        item.acceptance_radius_m = float(
-            _number(data["acceptance_radius_m"], f"{where}.acceptance_radius_m"))
+        item.acceptance_radius_m = _float(data["acceptance_radius_m"], f"{where}.acceptance_radius_m")
         item.yaw = _parse_yaw(data, where)
     elif name == "LOITER":
         item.duration = seconds_to_duration(data["duration_s"], f"{where}.duration_s")
@@ -252,9 +270,12 @@ def parse_mission(data, default_mission_id: Optional[str] = None) -> MissionSpec
 
 
 def load_mission(path) -> MissionSpec:
-    """YAML 파일 -> MissionSpec. mission_id의 기본값은 파일 이름에서 확장자를 뺀 것이다."""
+    """YAML 파일 -> MissionSpec. mission_id의 기본값은 파일 이름에서 확장자를 뺀 것이다.
+
+    파일을 열 수 없으면 OSError, 그 밖의 로더 오류(YAML 문법, 구조, 타입, 단위 변환, mission_id)는 모두
+    MissionYamlError다."""
     with open(path, encoding="utf-8") as f:
-        data = load_yaml(f)
+        data = load_yaml(f)  # UTF-8이 아닌 파일의 UnicodeDecodeError(ValueError)도 MissionYamlError다
     stem = os.path.splitext(os.path.basename(os.fspath(path)))[0]
     return parse_mission(data, stem)
 

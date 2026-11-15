@@ -15,7 +15,9 @@
 
 action 이름은 /<vehicle_id>/execute_mission(Mission.ACTION_NAME)이다. 로더(mission_yaml)는 구조만 보고, 계약
 검증은 Executor가 한다. feedback과 result를 한 줄씩 출력하고, 종료 코드는 SUCCEEDED이면 0, 로더 오류이면 2,
-그 밖(서버 없음, ABORTED, CANCELED)은 1이다. Ctrl-C는 goal을 취소하고 결과를 기다린다.
+그 밖(서버 없음, ABORTED, CANCELED, 결과 없음)은 1, 두 번째 Ctrl-C로 끊으면 130이다.
+Ctrl-C 한 번은 goal을 취소하고 결과를 기다린다. 그러려고 rclpy의 signal handler를 쓰지 않는다
+(SignalHandlerOptions.NO. 기본 handler는 SIGINT에 context를 내려 취소와 결과를 받을 수 없다).
 use_sim_time은 쓰지 않는다(시계는 대기 상한에만 쓰고 판정에 쓰지 않는다).
 """
 
@@ -27,6 +29,7 @@ from idsim_mission.mission_yaml import MissionYamlError, load_mission, to_missio
 EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_BAD_FILE = 2
+EXIT_INTERRUPTED = 130
 
 
 def _parse_args(argv):
@@ -51,6 +54,7 @@ def main(argv=None):
     from idsim_interfaces.action import ExecuteMission
     from idsim_interfaces.msg import Mission
     from rclpy.action import ActionClient
+    from rclpy.signals import SignalHandlerOptions
 
     names = {
         GoalStatus.STATUS_SUCCEEDED: "SUCCEEDED",
@@ -60,7 +64,7 @@ def main(argv=None):
     reasons = {getattr(ExecuteMission.Result, n): n for n in dir(ExecuteMission.Result)
                if n.startswith("REASON_")}
 
-    rclpy.init()
+    rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node = rclpy.create_node("send_mission")
     try:
         action = f"/{args.vehicle}/{Mission.ACTION_NAME}"
@@ -80,24 +84,40 @@ def main(argv=None):
 
         print(f"send_mission: {spec.mission_id} ({len(spec.items)} items) -> {action}", flush=True)
         send = client.send_goal_async(goal, feedback_callback=on_feedback)
-        rclpy.spin_until_future_complete(node, send)
+        interrupted = False
+        try:
+            rclpy.spin_until_future_complete(node, send)
+        except KeyboardInterrupt:
+            # goal 응답을 받아야 취소할 수 있다.
+            interrupted = True
+            rclpy.spin_until_future_complete(node, send)
         handle = send.result()
         if handle is None or not handle.accepted:
             print("send_mission: goal not accepted", file=sys.stderr)
             return EXIT_FAILED
         result_future = handle.get_result_async()
-        try:
-            rclpy.spin_until_future_complete(node, result_future)
-        except KeyboardInterrupt:
-            print("send_mission: canceling", file=sys.stderr, flush=True)
+        if not interrupted:
+            try:
+                rclpy.spin_until_future_complete(node, result_future)
+            except KeyboardInterrupt:
+                interrupted = True
+        if interrupted:
+            print("send_mission: canceling (Ctrl-C again to stop waiting)", file=sys.stderr,
+                  flush=True)
             rclpy.spin_until_future_complete(node, handle.cancel_goal_async())
             rclpy.spin_until_future_complete(node, result_future)
         wrapped = result_future.result()
+        if wrapped is None:
+            print("send_mission: no result received", file=sys.stderr)
+            return EXIT_FAILED
         r = wrapped.result
         print(f"result {names.get(wrapped.status, wrapped.status)} reason "
               f"{reasons.get(r.reason, r.reason)} items_completed {r.items_completed} "
               f"last_item_index {r.last_item_index} detail {r.detail!r}", flush=True)
         return EXIT_OK if wrapped.status == GoalStatus.STATUS_SUCCEEDED else EXIT_FAILED
+    except KeyboardInterrupt:
+        print("send_mission: interrupted; goal state unknown", file=sys.stderr)
+        return EXIT_INTERRUPTED
     finally:
         node.destroy_node()
         rclpy.try_shutdown()
