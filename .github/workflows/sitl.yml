@@ -1,7 +1,7 @@
 # sitl: 이륙-호버-착륙 통합 테스트(시나리오 B, C, A, D, F1-F4, T). 실제 단계는 호스트 wrapper tests/sitl/run_sitl.sh 한 곳에
 # 있고 로컬에서도 같은 명령을 쓴다(스택은 tests/sitl/fleet.yaml, targets와 sim-oracle 포함). 이 workflow는 시나리오를 모른다.
 #
-# trigger(사용자 결정 U2): PR 머리 커밋마다(draft와 문서만 바뀐 PR 제외), main push, 수동 실행.
+# trigger: PR 머리 커밋마다(draft와 문서만 바뀐 PR 제외), main push, 수동 실행.
 #   같은 PR의 옛 실행은 취소한다. 자동 재시도는 없다(다시 돌릴 때는 re-run 또는 workflow_dispatch).
 #   3대 시나리오는 이 job에 넣지 않는다(Phase 3의 nightly 전용).
 # 문서만 바뀐 PR을 workflow 수준 paths로 거르지 않는 이유: 필수 검사로 걸었을 때 대기 상태로 남는다.
@@ -18,9 +18,9 @@
 #   요약     환경변수 GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
 #   산출물   artifacts/runs/<실행 id>/ 아래. 실패하면 이 디렉터리 전체를 올린다.
 #            compose.yaml, stack.json, params/, px4-N/log/*.ulg, ros_log/, 서비스별 로그,
-#            sitl/ (junit.xml, trace.jsonl, trace_1b.json, verdict.json, summary.md, steps.tsv, 원시 표본과 ULog 교차 확인 결과,
+#            sitl/ (junit.xml, trace.jsonl, trace_ulog.json, verdict.json, summary.md, steps.tsv, 원시 표본과 ULog 교차 확인 결과,
 #            logs/<서비스>.log. 전체 목록은 tests/sitl/README.md)
-#            성공하면 sitl/junit.xml, sitl/trace.jsonl, sitl/trace_1b.json, sitl/summary.md만 올린다.
+#            성공하면 sitl/junit.xml, sitl/trace.jsonl, sitl/trace_ulog.json, sitl/summary.md만 올린다.
 #   소유     artifacts/runs/ 아래 파일은 모두 호스트 사용자 소유다.
 name: sitl
 
@@ -144,7 +144,7 @@ jobs:
           path: |
             artifacts/runs/*/sitl/junit.xml
             artifacts/runs/*/sitl/trace.jsonl
-            artifacts/runs/*/sitl/trace_1b.json
+            artifacts/runs/*/sitl/trace_ulog.json
             artifacts/runs/*/sitl/summary.md
           if-no-files-found: warn
           retention-days: 7

@@ -118,8 +118,8 @@ TARGET_START_S_MAX = 86400.0
 # 시간 규칙은 정수 ms에서 판정한다(T = round(t x 1000)). gz-sim이 <time>을 int ms로 바꿔 map의 key로 쓰기 때문이다.
 TARGET_GAP_MIN_MS = 100  # 인접 waypoint의 T 차 하한
 TARGETS_LENGTH_SUM_MAX_MS = 2400000  # 표적마다 마지막 T를 더한 합의 상한이자 T 하나의 상한(start_s와 끝 정지 꼬리는 넣지 않는다)
-# Gazebo Actor(화면 확인용. 표적 위치의 원천은 아니다). 요소의 형태와 값은 sim-engineer가 정한다(B6 Actor 명세 판 2).
-ACTOR_SAMPLE_DT_MS = 250  # waypoint 표본 간격 상한(ms). 250으로 확정(M4 화면 확인: ogre2/ogre, 재접속, golden과 상한 월드 모두 끊김 없음)
+# Gazebo Actor(화면 확인용. 표적 위치의 원천은 아니다). 요소의 형태와 값은 sim-engineer가 정한다.
+ACTOR_SAMPLE_DT_MS = 250  # waypoint 표본 간격 상한(ms). 250으로 확정(화면 확인에서 ogre2/ogre, 재접속, golden과 상한 월드 모두 끊김 없음)
 ACTOR_TAIL_STEP_MS = 250  # loop false 꼬리의 첫 점이 마지막 점 뒤 얼마인가(접선을 0으로 만든다)
 ACTOR_HOLD_MS = 86400000  # loop false 꼬리의 둘째 점(시뮬레이션 시간 1일 뒤)
 ACTOR_SPHERE_RADIUS_M = "0.3"
@@ -151,12 +151,12 @@ CYCLONEDDS_REL = "config/cyclonedds.xml"
 # airframe 허용 목록. 이름에서 SYS_AUTOSTART, PX4_SIM_MODEL, Gazebo 모델 이름이 파생된다.
 ALLOWED_AIRFRAMES = ("4001_gz_x500",)
 # airframe별 GNSS 센서(base_link 기준 NavSat)의 지면 위 높이(m). x500 모델 SDF의 base_link 높이와 같아야 하고,
-# 스모크 images 단계(S0)가 sim-base 안의 모델과 --print-sensor-z 출력을 대조한다.
+# 스모크 images 단계가 sim-base 안의 모델과 --print-sensor-z 출력을 대조한다.
 AIRFRAME_SENSOR_Z_M = {"4001_gz_x500": 0.24}
 # WGS84 타원체(expect_gps의 국소 근사)
 WGS84_A_M = 6378137.0
 WGS84_E2 = 0.00669437999014
-# bridge 명령행의 토픽 인자. 1b의 bridge는 /clock 하나만 넘긴다(표적과 정답 pose는 bridge를 거치지 않는다).
+# bridge 명령행의 토픽 인자. bridge는 /clock 하나만 넘긴다(표적과 정답 pose는 bridge를 거치지 않는다).
 BRIDGE_TOPIC_ARGS = ("/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",)
 # 템플릿 world 직속에 있으면 거부하는 요소(plugin은 server config를 무시하게 하고, 나머지는 생성기가 넣는다)
 WORLD_FORBIDDEN_CHILDREN = ("plugin", "spherical_coordinates", "actor", "include")
@@ -565,7 +565,7 @@ def validate_fleet(fleet):
                 else:
                     out_world["origin"] = vals
         if world.get("speed_factor") is not None:
-            errors.append("world.speed_factor: 1a, 1b에서는 null이어야 한다(배속 기제는 Phase 3에서 정한다)")
+            errors.append("world.speed_factor: null이어야 한다(배속 기제는 Phase 3에서 정한다)")
 
     # px4
     px4 = fleet["px4"]
@@ -781,7 +781,7 @@ def _indent_tree(node, indent, step="  "):
 
 
 def build_actor(target, indent):
-    """표적 하나의 <actor> 요소(B6 Actor 명세 판 2). 이름은 target_id 그대로다.
+    """표적 하나의 <actor> 요소. 이름은 target_id 그대로다.
 
     link 하나에 visual 하나(충돌 없음, 물리 대상 아님)와 script 궤적뿐이고 plugin, skin, animation은 없다.
     actor pose는 0이고 waypoint pose가 world ENU 절대 좌표다(자세는 0). start_s는 delay_start로만 쓴다.
