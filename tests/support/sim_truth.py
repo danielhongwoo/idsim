@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""SITL 정답 pose와 표적 상태의 기록기(rclpy). ros-ws 컨테이너(runner) 안에서 쓴다. 1b decisions.md 쟁점 5.
+"""SITL 정답 pose와 표적 상태의 기록기(rclpy). ros-ws 컨테이너(runner) 안에서 쓴다. tests/sitl/README.md "시나리오와 판정".
 
 정답 pose(/sim/<vehicle_id>/pose)는 SITL 전용이고 계약이 아니다. TargetState(/targets/<id>/state)는 계약 토픽이다.
 판정 로직은 sitl_judge.py(순수 코드)의 정답 판정 절에 있고 이 모듈은 표본만 쌓는다(callback마다 하나).

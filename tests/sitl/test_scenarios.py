@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""미션 통합 테스트: 시나리오 B, C, A, D, F1, F2, F3, F4, T(1a decisions.md 쟁점 9, 1b decisions.md 쟁점 15).
+"""미션 통합 테스트: 시나리오 B, C, A, D, F1, F2, F3, F4, T(tests/sitl/README.md "시나리오와 판정").
 한 스택에서 이 순서로 돈다(로컬과 CI가 같다).
 
 판정 시간은 모두 ROS 시각이다. 계약 판정의 입력은 토픽에서만 읽는다(goal의 목표값과 vehicle_local_position,
@@ -88,7 +88,7 @@ def _category(exc):
 
 @contextmanager
 def flight(s, sid):
-    """비행 시나리오 한 번(1b decisions.md 쟁점 15). 앞 비행 시나리오가 실패했으면 실행하지 않고 UPSTREAM_FAILED다.
+    """비행 시나리오 한 번(tests/sitl/README.md "시나리오와 판정"). 앞 비행 시나리오가 실패했으면 실행하지 않고 UPSTREAM_FAILED다.
     실패하면 정리용 [LAND]를 한 번 시도하고(판정에 넣지 않는다) 뒤의 비행 시나리오를 막는다."""
     s.flights.check_upstream(sid)
     try:
@@ -345,7 +345,7 @@ def _scenario_d(s, raw):
 
 
 # ---------------------------------------------------------------------------
-# 1b 비행 시나리오 F1-F4(1b decisions.md 쟁점 5, 15). 미션은 tests/sitl/missions/의 YAML(로더 형식)이다.
+# 1b 비행 시나리오 F1-F4(tests/sitl/README.md "시나리오와 판정"). 미션은 tests/sitl/missions/의 YAML(로더 형식)이다.
 
 FLIGHT_SAMPLE_WAIT_S = 1.0        # result 뒤 늦게 도착하는 표본(vehicle_status, 정답 pose)을 기다리는 ROS 시각
 HOLD_CONFIRM_WAIT_S = 10.0        # 공중 종료 뒤 AUTO_LOITER 3회 연속을 기다리는 상한(D의 취소 뒤와 같다)

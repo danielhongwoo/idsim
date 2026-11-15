@@ -38,20 +38,20 @@ LOADER_PATH = REPO / "ros_ws" / "src" / "idsim_mission" / "idsim_mission" / "mis
 MISSIONS_DIR = REPO / "tests" / "sitl" / "missions"
 SITL_FLEET = REPO / "tests" / "sitl" / "fleet.yaml"
 
-# 1b 비행 시나리오와 미션 파일(tests/sitl/missions/). 끝 상태는 sitl_judge.TERMINAL_*(쟁점 15의 표)
+# 1b 비행 시나리오와 미션 파일(tests/sitl/missions/). 끝 상태는 sitl_judge.TERMINAL_*(README "시나리오와 판정"의 표)
 FLIGHT_MISSIONS = {"F1": "f1.yaml", "F2": "f2.yaml", "F3": "f3.yaml", "F4": "f4.yaml"}
 FLIGHT_TERMINAL = {"F1": sj.TERMINAL_LANDED_DISARMED, "F2": sj.TERMINAL_HOLD_AIRBORNE,
                    "F3": sj.TERMINAL_LANDED_DISARMED, "F4": sj.TERMINAL_LANDED_DISARMED}
 # 공중에서 시작하는 시나리오와 그 기준점을 넘겨주는 앞 비행(F3은 F2가 남긴 Hold에서 시작한다)
 AIR_START = {"F3": "F2"}
 
-# 시간 규칙(쟁점 15): 비행마다 항목 timeout 합 + FLIGHT_MARGIN_S가 FLIGHT_LIMIT_S(ROS 시각 3분)를 넘지 않는다.
+# 시간 규칙(README "시나리오와 판정"): 비행마다 항목 timeout 합 + FLIGHT_MARGIN_S가 FLIGHT_LIMIT_S(ROS 시각 3분)를 넘지 않는다.
 # FLIGHT_MARGIN_S는 새로 정한 값이다. 항목 timeout에 들지 않는 구간, 곧 준비 단계(식별, Offboard 진입, arm. 1a
 # 시나리오 A에서 goal 전송부터 TAKEOFF 시작까지 약 5 s)와 종료 단계(공중 종료의 Hold 확인, 착륙 뒤 disarm 확인과
 # 대비책 지연 5 s)에 여유를 더한 [추정]이다. 판정은 이 합을 goal 결과 대기의 ROS 시각 상한으로 쓴다.
 FLIGHT_LIMIT_S = 180.0
 FLIGHT_MARGIN_S = 30.0
-# TRACK_ENTITY timeout의 하한(쟁점 15): 항목 시작점(직전 GOTO 목표)에서 loop 궤적 위 가장 먼 점까지의 거리를
+# TRACK_ENTITY timeout의 하한(README "시나리오와 판정"): 항목 시작점(직전 GOTO 목표)에서 loop 궤적 위 가장 먼 점까지의 거리를
 # APPROACH_SPEED_MPS로 따라잡는 시간 + TRACK_COMPLETION_MARGIN_S. 둘 다 새로 정한 [추정]이다. 접근 속도는 표적
 # 최고 속도 2 m/s에서 기체가 적어도 그만큼 더 빨리 다가간다고 본 보수적 값이다(Offboard 위치 setpoint의 수평
 # 속도 상한 MPC_XY_VEL_MAX 기본 12 m/s보다 훨씬 작다). 완료 마진은 접근 뒤 반경 안 3표본 확인과 모서리에서의
@@ -134,7 +134,7 @@ def default_sub_item(item_type, timeout_s=30.0):
     return {"type": item_type, "timeout_s": timeout_s, "default_sub": True}
 
 
-# 시나리오 B의 1b 무효 사례(decisions.md 쟁점 15). 이 순서로 보낸다. (mission_id, 걸리는 검사, 기대 detail 조각, 항목)
+# 시나리오 B의 1b 무효 사례(README "시나리오와 판정"). 이 순서로 보낸다. (mission_id, 걸리는 검사, 기대 detail 조각, 항목)
 # 형식이 맞지만 없는 target_id는 계약상 유효하므로(TARGET_LOST로 드러난다) 넣지 않는다.
 # detail 조각은 계약이 아니다(validate_mission_contract의 문구, mission_validation.cpp). 사례가 의도한 검사에서
 # 거부되는지 보려고 기대는 것이므로, 문구가 바뀌면 이 표를 같이 고친다.

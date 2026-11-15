@@ -20,10 +20,10 @@ OFFBOARD가 아닌 ARMED 표본의 부류별 판정은 measure_judge.judge_armed
 """
 from tests.support import measure_judge as mj
 
-# 실행 순서(1b decisions.md 쟁점 15). 한 스택에서 이 순서로 돌고 로컬과 CI가 같은 목록이다. F1-F4가 있으므로
+# 실행 순서(tests/sitl/README.md "시나리오와 판정"). 한 스택에서 이 순서로 돌고 로컬과 CI가 같은 목록이다. F1-F4가 있으므로
 # 판정 상수 b와 R_home이 정해져 있어야 한다(test_sitl_flight_missions.py가 단정한다)
 SCENARIOS = ("B", "C", "A", "D", "F1", "F2", "F3", "F4", "T")
-# 비행 시나리오. 하나가 실패하면 뒤의 비행 시나리오는 실행하지 않고 UPSTREAM_FAILED다(쟁점 15)
+# 비행 시나리오. 하나가 실패하면 뒤의 비행 시나리오는 실행하지 않고 UPSTREAM_FAILED다(tests/sitl/README.md "시나리오와 판정")
 FLIGHT_SCENARIOS = ("A", "D", "F1", "F2", "F3", "F4")
 # 정답 pose가 있어야 하는 시나리오(없으면 ORACLE_ABSENT)
 ORACLE_SCENARIOS = ("F1", "F2", "F3", "F4")

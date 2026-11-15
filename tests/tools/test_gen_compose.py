@@ -499,7 +499,7 @@ def test_dump_compose_has_no_anchor_and_quotes_strings():
     assert "restart: 'no'" in text
 
 
-# ------------------------------------------------------------------ ops-N 성질(decisions.md 쟁점 2)
+# ------------------------------------------------------------------ ops-N 성질(docs/architecture.md "Docker Compose 실행 환경 설계")
 OPS_CASES = [
     pytest.param(dict(), id="1대-k0"),
     pytest.param(dict(k=9), id="1대-k9"),
@@ -911,7 +911,7 @@ def test_cli_inputs_sha256_match_real_files(tmp_path):
         assert inputs[name]["sha256"] == real, name
 
 
-# ------------------------------------------------------------------ 월드 SDF 생성(decisions.md 쟁점 2)
+# ------------------------------------------------------------------ 월드 SDF 생성(docs/architecture.md "Docker Compose 실행 환경 설계")
 SDF_OPEN = '<?xml version="1.0" encoding="UTF-8"?>\n<sdf version="1.9">\n'
 
 
@@ -1041,7 +1041,7 @@ def test_stack_json_world_and_v5_keys():
     assert stack["vehicles"][0]["expect_gps"] == {"lat": 37.5665, "lon": 126.978, "alt": 38.24}
 
 
-# ------------------------------------------------------------------ 기대 GPS(decisions.md 쟁점 16)
+# ------------------------------------------------------------------ 기대 GPS(docs/smoke-test.md 원점 판정)
 GZ_ORIGIN = {"lat": 37.5665, "lon": 126.978, "alt": 38}
 # gz-math 7.7.0 SphericalCoordinates(EARTH_WGS84, 위도 37.5665, 경도 126.978, 고도 38, heading 0)의
 # position_transform(LOCAL2 -> SPHERICAL) 값이다. sim-base 이미지(python3-gz-math7 7.7.0)에서 계산해 고정했다.
@@ -1434,7 +1434,7 @@ def test_targets_invariants_catch_tampering():
             gc.assert_invariants(compose, stack)
 
 
-# ------------------------------------------------------------------ sim-oracle(SITL 전용 정답 pose, decisions.md 쟁점 5)
+# ------------------------------------------------------------------ sim-oracle(SITL 전용 정답 pose, idsim_sim README "정답 pose 노드")
 def test_oracle_service_details():
     compose, stack, _ = gen(f=three_vehicles(), k=2)
     o = compose["services"]["sim-oracle"]

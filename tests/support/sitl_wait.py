@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""SITL 통합 테스트의 대기와 벽시계 guard(순수 코드. rclpy 없음). decisions.md 쟁점 10.
+"""SITL 통합 테스트의 대기와 벽시계 guard(순수 코드. rclpy 없음). docs/interface.md "시간 기준".
 
 판정 시간은 모두 ROS 시각(/clock)이다. 이 모듈의 Waiter는 sim 시각 함수와 벽시계 함수를 받아서
 대기마다 다음을 한다.
@@ -30,7 +30,7 @@ TIMEOUT_SIM = "TIMEOUT_SIM"
 CLOCK_STALLED = "CLOCK_STALLED"
 CLOCK_SLOW = "CLOCK_SLOW"
 CLOCK_ABSENT = "CLOCK_ABSENT"
-# 시각이 뒤로 가는 경우(Gazebo 재시작, /clock 발행자가 둘). 멈춤이나 느림과 원인이 달라 따로 분류한다(decisions.md 쟁점 10).
+# 시각이 뒤로 가는 경우(Gazebo 재시작, /clock 발행자가 둘). 멈춤이나 느림과 원인이 달라 따로 분류한다(docs/interface.md "시간 기준").
 CLOCK_BACKWARD = "CLOCK_BACKWARD"
 NO_PUBLISHER = "NO_PUBLISHER"
 SERVER_ABSENT = "SERVER_ABSENT"
@@ -39,7 +39,7 @@ EVENT_MISMATCH = "EVENT_MISMATCH"
 PRECONDITION = "PRECONDITION"
 WRONG_RESULT = "WRONG_RESULT"
 INFRA_UP = "INFRA_UP"
-# 1b(decisions.md 쟁점 5, 15). 앞 비행 시나리오가 실패해 실행하지 않은 비행 시나리오(실패로 센다)
+# 1b(tests/sitl/README.md "시나리오와 판정"). 앞 비행 시나리오가 실패해 실행하지 않은 비행 시나리오(실패로 센다)
 UPSTREAM_FAILED = "UPSTREAM_FAILED"
 # 정답 pose가 있어야 하는 실행에서 정답 pose가 없다 / t_f를 감싸는 정답 표본 간격이 상한을 넘는다
 ORACLE_ABSENT = "ORACLE_ABSENT"

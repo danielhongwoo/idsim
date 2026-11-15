@@ -20,7 +20,7 @@
 표본마다 PX4 timestamp, 받은 시점의 노드 ROS 시각(use_sim_time), 같은 시점에 마지막으로 본 /clock 값을
 함께 남긴다. 판정 로직은 measure_judge.py와 sitl_judge.py(순수 코드)에 있다.
 
-발행자는 이 모듈에서 둘만 만든다(decisions.md 쟁점 8). 통합 테스트는 trajectory_setpoint를 발행하지 않는다.
+발행자는 이 모듈에서 둘만 만든다(docs/interface.md "공개 /fmu/in 목록과 허용 절차"). 통합 테스트는 trajectory_setpoint를 발행하지 않는다.
   - OffboardSignal: offboard_control_mode(시나리오 T). context manager로만 만들고 끝나면 destroy한다.
   - EmergencyCommand: vehicle_command(비상 정리 전용). source가 (254, 25)가 아니면 생성을 거부하고,
     기대 sysid의 vehicle_status를 받아 대조한 뒤에만 발행한다.
@@ -151,7 +151,7 @@ class Px4Raw:
 
     def wait_first_clock(self, grace_s):
         """프로세스 시작 직후 /clock 구독이 맺어질 때까지의 유예(벽시계). 통합 테스트에서 벽시계를 쓰는 유일한 대기다.
-        (decisions.md 쟁점 10, architecture.md 시간 절 (4))"""
+        (docs/interface.md "시간 기준", architecture.md 시간 절 (4))"""
         t0 = time.monotonic()
         while self._clock_us <= 0:
             if time.monotonic() - t0 > grace_s:

@@ -21,7 +21,7 @@ from tests.support import sitl_wait as sw
 US = 1_000_000
 
 # 정답 pose 토픽 이름의 사례 표. idsim_sim/test/test_sim_oracle.py의 ORACLE_TOPIC_CASES, ORACLE_TOPIC_INVALID와
-# 같은 표다(발행 쪽과 import로 공유하지 않는다. 1b decisions.md 쟁점 5). 한쪽을 바꾸면 다른 쪽도 바꾼다.
+# 같은 표다(발행 쪽과 import로 공유하지 않는다. idsim_sim README "정답 pose 노드"). 한쪽을 바꾸면 다른 쪽도 바꾼다.
 ORACLE_TOPIC_CASES = [
     ("px4_1", "/sim/px4_1/pose"),
     ("px4_2", "/sim/px4_2/pose"),

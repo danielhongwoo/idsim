@@ -20,7 +20,7 @@ PX4 hrt는 노드 ROS 시각보다 8-20 ms 크다(docs/interface.md "시간 기�
     vehicle_local_position_setpoint의 vx, vy(PX4 속도 setpoint로 전달되었는가),
     setpoint z와 vehicle_local_position z(R5의 수직).
   - 공중 시작 구간(F3): DO_SET_MODE 전송 수와 시각, 첫 DO_SET_MODE에서 첫 OFFBOARD 표본까지(D), 그 사이 표본의
-    nav_state, 첫 OFFBOARD 표본 뒤 OFFBOARD가 아닌 표본, vehicle_status 표본 간격(쟁점 7의 "공중 시작" 항목).
+    nav_state, 첫 OFFBOARD 표본 뒤 OFFBOARD가 아닌 표본, vehicle_status 표본 간격(docs/interface.md "준비 단계"의 공중 시작 항목).
 """
 import math
 

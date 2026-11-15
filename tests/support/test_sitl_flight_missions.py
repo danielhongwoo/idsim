@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""1b 비행 시나리오(F1-F4)의 시험 미션 YAML과 판정 상수의 대조(1b decisions.md 쟁점 5, 15).
+"""1b 비행 시나리오(F1-F4)의 시험 미션 YAML과 판정 상수의 대조(tests/sitl/README.md "시나리오와 판정").
 
 미션은 로더(idsim_mission/mission_yaml.py)가 만든 MissionSpec(기본값이 채워진 뒤)으로 본다. 로더는 저장소 소스
 경로에서 읽으므로 lint job의 pytest에서 돈다(sitl_missions 모듈 설명).
@@ -50,7 +50,7 @@ def test_loader_types_match_judge_constants():
 
 @pytest.mark.parametrize("sid", FLIGHTS)
 def test_time_rule(sid):
-    """항목 timeout 합 + 마진이 비행당 상한(ROS 시각 3분)을 넘지 않는다(쟁점 15)."""
+    """항목 timeout 합 + 마진이 비행당 상한(ROS 시각 3분)을 넘지 않는다."""
     spec = sm.load_flight(sid)
     assert sm.flight_wait_s(spec) <= sm.FLIGHT_LIMIT_S, (sid, sm.timeout_sum_s(spec))
     assert all(sm.duration_s(it.timeout) > 0 for it in spec.items)
@@ -80,7 +80,7 @@ def test_track_timeout_covers_farthest_point(sid):
 
 
 def test_target_speed_is_one_to_two_mps():
-    """F2와 F4의 표적 속도는 1-2 m/s다(쟁점 15). 판정의 v는 stack.json targets에서 같은 함수로 낸다."""
+    """F2와 F4의 표적 속도는 1-2 m/s다. 판정의 v는 stack.json targets에서 같은 함수로 낸다."""
     targets = _fleet()["targets"]
     used = {it.target_id for sid in FLIGHTS for it in sm.load_flight(sid).items if it.type == sj.TYPE_TRACK_ENTITY}
     assert used and used <= {t["id"] for t in targets}
@@ -93,14 +93,14 @@ def test_target_speed_is_one_to_two_mps():
 
 
 def test_event_counts_match_judge_constants():
-    """m(GOTO와 TRACK_ENTITY 완료 사건 수)과 m_home(RTL 사건 수)은 시나리오에서 파생된 값이다(쟁점 5)."""
+    """m(GOTO와 TRACK_ENTITY 완료 사건 수)과 m_home(RTL 사건 수)은 시나리오에서 파생된 값이다."""
     specs = [sm.load_flight(sid) for sid in FLIGHTS]
     m = sum(1 for s in specs for t in _types(s) if t in (sj.TYPE_GOTO, sj.TYPE_TRACK_ENTITY))
     m_home = sum(1 for s in specs for t in _types(s) if t == sj.TYPE_RTL)
     assert (m, m_home) == (sj.M_EVENTS, sj.M_HOME)
     goto = sum(1 for s in specs for t in _types(s) if t == sj.TYPE_GOTO)
     track = sum(1 for s in specs for t in _types(s) if t == sj.TYPE_TRACK_ENTITY)
-    assert (goto, track) == (7, 2)       # 부팅당 GOTO 7개, s_track 2개(쟁점 5)
+    assert (goto, track) == (7, 2)       # 부팅당 GOTO 7개, s_track 2개
 
 
 @pytest.mark.parametrize("sid", FLIGHTS)
@@ -124,7 +124,7 @@ def test_flight_scenarios_need_constants():
 
 
 def test_l_matches_fresh_age_formula():
-    """L = target_fresh_age + Executor tick + 여유(쟁점 5). 노드의 실제 target_fresh_age는 gate가 대조한다."""
+    """L = target_fresh_age + Executor tick + 여유. 노드의 실제 target_fresh_age는 gate가 대조한다."""
     assert sj.L_S == pytest.approx(sj.TARGET_FRESH_AGE_S + sj.EXECUTOR_TICK_S + sj.L_MARGIN_S)
     assert (sj.TARGET_FRESH_AGE_S, sj.EXECUTOR_TICK_S, sj.L_MARGIN_S) == (0.1, 0.05, 0.05)
 
