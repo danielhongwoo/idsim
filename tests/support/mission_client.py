@@ -130,7 +130,9 @@ class MissionClient:
     # --- goal ---
 
     def build_goal(self, vehicle_id, mission_id, items):
-        """items: [dict(type=..., timeout_s=..., height_m=..., acceptance_m=..., duration_s=..., ...)]"""
+        """items: [dict(type=..., timeout_s=..., height_m=..., acceptance_m=..., duration_s=..., ...)]
+
+        default_sub가 참인 항목은 type의 서브메시지를 채우지 않고 기본값으로 둔다(무효 미션 사례용)."""
         from builtin_interfaces.msg import Duration
         from idsim_interfaces.msg import Mission, MissionItem, YawSetpoint
         goal = self._action_cls.Goal()
@@ -141,7 +143,9 @@ class MissionClient:
             m = MissionItem()
             m.type = it["type"]
             m.timeout = _duration(Duration, it["timeout_s"])
-            if it["type"] == MissionItem.TYPE_TAKEOFF:
+            if it.get("default_sub"):
+                pass
+            elif it["type"] == MissionItem.TYPE_TAKEOFF:
                 m.takeoff.height_m = float(it["height_m"])
                 m.takeoff.acceptance_m = float(it["acceptance_m"])
                 m.takeoff.yaw.mode = YawSetpoint.MODE_KEEP
@@ -151,6 +155,12 @@ class MissionClient:
                 m.go_to.position.x, m.go_to.position.y, m.go_to.position.z = (float(v) for v in it["position"])
                 m.go_to.acceptance_radius_m = float(it["acceptance_m"])
                 m.go_to.yaw.mode = YawSetpoint.MODE_KEEP
+            elif it["type"] == MissionItem.TYPE_TRACK_ENTITY:
+                m.track_entity.target_id = it["target_id"]
+                m.track_entity.offset.x, m.track_entity.offset.y, m.track_entity.offset.z = (
+                    float(v) for v in it["offset"])
+                m.track_entity.acceptance_radius_m = float(it["acceptance_m"])
+                m.track_entity.yaw.mode = YawSetpoint.MODE_KEEP
             goal.mission.items.append(m)
         return goal
 
