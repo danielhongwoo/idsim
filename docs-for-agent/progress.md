@@ -53,8 +53,7 @@ B13 전에 정할 것.
 
 문서 정리(정형, 다음 문서 정리 때).
 
-- `decisions.md` 쟁점 12 근거의 "DISARMED에서 DO_SET_MODE 거부는 TERMINATION뿐이다" 인용을 `UserModeIntention.cpp` 73-74행(결과 값은 `Commander.cpp` 927-932행)으로 고친다. 쟁점 7의 "루프"는 loop로.
-- 유효 ack 뒤 재전송을 멈추는 규칙의 전제 "ACCEPTED면 모드 전환이 일어난다"(`Commander.cpp` 912-927행, [실측] 17회)를 쟁점 12 근거에 적고, `docs/interface.md` 341행을 1a 고정 계약 영향 (t)에 넣을지 정한다(architect).
+- `docs/interface.md` "VehicleCommand" 절의 "ack ACCEPTED는 성공이 아니다" 문장(ACCEPTED 뒤에 모드 전환이 일어나지 않는 경로는 미확인)을 지상 arm 진입의 Offboard 전환이 ack를 진행 조건으로 쓰는 것과 맞춰 고칠지 정한다(architect).
 - `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
 - `docs/architecture.md`의 `tools/sim_stack.sh` 운영 규칙 문단에 restart-ops 뒤 attach 경로를 적을지(architect). `docs/interface.md` SITL 파라미터 표에 `IMU_GYRO_CAL_EN`을 넣을지(architect).
 

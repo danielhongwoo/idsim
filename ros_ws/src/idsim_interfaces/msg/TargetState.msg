@@ -1,5 +1,7 @@
 # 표적 하나의 상태. 시뮬레이터 비의존. 토픽 /targets/<target_id>/state
 # 소실 플래그는 없다. 소실은 발행 중단으로 표현하고 소비자가 stamp의 나이로 판정한다.
+# 소비자는 target_id가 토픽 토큰과 다른 표본, frame_id가 world가 아닌 표본, 값이 비유한인 표본, 증가하지 않는 stamp의 표본을 버린다.
+# Executor는 위치 성분의 절댓값이 1e5 m를 넘는 표본과 stamp가 0인 표본도 버린다.
 string TOPIC_PREFIX = "/targets"
 string TOPIC_SUFFIX = "state"
 string FRAME_ID = "world"

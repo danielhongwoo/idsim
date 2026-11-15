@@ -6,29 +6,29 @@
 
 ## 고정 시점
 
-PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 식별과 네임스페이스", "VehicleCommand", "Offboard setpoint", "SITL 파라미터", "포트" 절)와 공통 규칙("공통 규칙", "시간 기준", "정의 작성 규칙", "변경 절차와 계약 테스트" 절)은 1a 완료에 고정한다. 예외는 "계약 토픽 QoS"의 상태 행이고 그 고정 시점은 그 절에 적는다. `idsim_interfaces`의 정의 파일(msg 10개, action 1개)은 Phase 1a에서 모두 만들었고, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춰 파일 단위로 나눈다.
+PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 식별과 네임스페이스", "VehicleCommand", "Offboard setpoint", "SITL 파라미터", "포트" 절)와 공통 규칙("공통 규칙", "시간 기준", "정의 작성 규칙", "변경 절차와 계약 테스트" 절)은 1a 완료에 고정한다. 예외는 "계약 토픽 QoS"의 상태 행이고 그 고정 시점은 그 절에 적는다. `idsim_interfaces`의 정의 파일(msg 10개, action 1개)은 Phase 1a에서 모두 만들었고, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춰 파일 단위로 나눈다. "SITL 파라미터" 절의 계약 표에서 RTL 항목을 위해 더한 일곱 행(`RTL_TYPE`부터 `EKF2_HGT_REF`까지)은 1b 완료에 고정한다.
 
-| 파일 | 묶음 | 고정 시점 | 1a 완료 때 |
+| 파일 | 묶음 | 고정 시점 | 1b 완료 때 |
 | --- | --- | --- | --- |
-| `action/ExecuteMission.action` | 미션 실행(1a 부분) | 1a 완료 | 고정 |
-| `msg/Mission.msg` | 미션 실행(1a 부분) | 1a 완료 | 고정 |
-| `msg/MissionItem.msg` | 미션 실행(1a 부분). GOTO, TRACK_ENTITY, RTL의 의미와 첫 항목이 아닌 TAKEOFF의 의미는 1b 부분 | 1a 완료(직접 필드와 상수). 1b 부분의 의미는 1b 완료 | 직접 필드와 상수, 첫 항목인 TAKEOFF, LOITER, LAND의 의미 고정 |
-| `msg/YawSetpoint.msg` | 미션 실행(1a 부분). GOTO, TRACK_ENTITY, 첫 항목이 아닌 TAKEOFF의 `MODE_KEEP` 기준 yaw는 1b 부분 | 1a 완료(직접 필드와 상수). 1b 부분의 의미는 1b 완료 | 직접 필드와 상수, `MODE_FIXED`의 의미, 첫 항목인 TAKEOFF의 `MODE_KEEP` 기준 yaw 고정 |
-| `msg/TakeoffItem.msg` | 미션 실행(1a 부분). 첫 항목이 아닌 TAKEOFF의 기준 위치는 1b 부분 | 1a 완료(직접 필드와 상수). 1b 부분의 의미는 1b 완료 | 직접 필드와 상수, 첫 항목인 TAKEOFF의 의미 고정 |
-| `msg/LoiterItem.msg` | 미션 실행(1a 부분) | 1a 완료 | 고정 |
-| `msg/GoToItem.msg` | 미션 실행(1b 부분) | 1b 완료 | 고정 전 |
-| `msg/TrackEntityItem.msg` | 미션 실행(1b 부분) | 1b 완료 | 고정 전 |
-| `msg/TargetState.msg` | 표적 | 1b 완료 | 고정 전 |
+| `action/ExecuteMission.action` | 미션 실행 | 1a 완료. 공중에서 끝나는 미션과 `REASON_TARGET_LOST`의 의미는 1b 완료 | 고정 |
+| `msg/Mission.msg` | 미션 실행 | 1a 완료 | 고정 |
+| `msg/MissionItem.msg` | 미션 실행. GOTO, TRACK_ENTITY, RTL의 의미와 항목 순서 규칙은 1b 부분 | 1a 완료(직접 필드와 상수). 1b 부분의 의미는 1b 완료 | 고정 |
+| `msg/YawSetpoint.msg` | 미션 실행. GOTO, TRACK_ENTITY의 `MODE_KEEP` 기준 yaw는 1b 부분 | 1a 완료(직접 필드와 상수). 1b 부분의 의미는 1b 완료 | 고정 |
+| `msg/TakeoffItem.msg` | 미션 실행. 첫 항목에만 온다는 규칙은 1b 부분 | 1a 완료(직접 필드와 상수). 1b 부분의 의미는 1b 완료 | 고정 |
+| `msg/LoiterItem.msg` | 미션 실행 | 1a 완료 | 고정 |
+| `msg/GoToItem.msg` | 미션 실행(1b 부분) | 1b 완료 | 고정 |
+| `msg/TrackEntityItem.msg` | 미션 실행(1b 부분) | 1b 완료 | 고정 |
+| `msg/TargetState.msg` | 표적 | 1b 완료 | 고정 |
 | `msg/VehicleState.msg` | 기체 요약 | Phase 2 완료(WebSocket JSON 스키마 고정과 함께) | 고정 전 |
 | `msg/MissionEvent.msg` | 미션 기록 | Phase 2 완료(기록물 인덱스가 필드를 검증한 뒤) | 고정 전 |
 
-1a 완료에 함께 고정되는 의미: `ExecuteMission`의 수락 정책, 취소 의미, 첫 항목인 TAKEOFF와 LOITER, LAND 항목의 의미, `reason` 값의 의미(`REASON_TARGET_LOST` 제외). 공중에서 끝나는 미션(마지막 항목이 LAND가 아닌 미션)의 종료 동작은 1a 고정에서 빠지고 1b 완료에 고정한다("공중에서 끝나는 미션" 절). 첫 항목이 아닌 TAKEOFF(예: `[TAKEOFF, LAND, TAKEOFF, LAND]`의 두 번째)의 기준 위치, 기준 heading, `timeout` 기준 시각도 1b 완료에 정하고 고정한다(이 문서의 TAKEOFF 문장은 준비 단계가 있는 첫 항목에 대한 것이다).
+1a 완료에 고정된 의미: `ExecuteMission`의 수락 정책, 취소 의미, 첫 항목이 TAKEOFF인 미션의 준비 단계와 TAKEOFF, LOITER, LAND 항목의 의미, `reason` 값의 의미(`REASON_TARGET_LOST` 제외). 1b 완료에 고정하는 의미: GOTO, TRACK_ENTITY, RTL 항목, 항목 순서 규칙(TAKEOFF는 첫 항목에만 오고 LAND와 RTL은 마지막 항목에만 온다), 공중 Offboard 진입(첫 항목이 GOTO, TRACK_ENTITY, LOITER인 미션), 공중에서 끝나는 미션(마지막 항목이 setpoint 항목인 미션)의 종료 단계, `REASON_TARGET_LOST`, 그리고 이 항목들이 정리, 비행 중 감시, 끝난 뒤 기체 상태에 더하는 경로. 첫 항목이 TAKEOFF이고 마지막이 LAND인 미션과 `[LAND]`의 동작은 이 문서의 1a 문장 그대로이고, 지상 arm 진입의 Offboard 전환이 유효 ack를 기다리는 것("준비 단계" 절)만 더해진다.
 
 "고정"의 정의.
 
 - 고정의 단위는 타입이 아니라 파일이다. 한 파일이 고정되면 그 파일의 직접 필드(이름, 타입, 순서, 기본값)와 상수(이름, 값), 그리고 이 문서에 적힌 그 필드와 상수의 의미가 고정된다. 중첩된 타입의 내용은 그 타입의 파일이 고정될 때 고정된다.
-- 중첩 타입이 바뀌면 그것을 담은 타입의 type hash(RIHS01)와 펼친 정의도 바뀐다. 이 전파는 상위 타입의 변경으로 보지 않으며, 그 중첩 타입이 고정되기 전까지만 허용된다. 예: 1b에서 `GoToItem`을 고치면 `MissionItem`, `Mission`, `ExecuteMission`의 type hash golden과 펼친 정의 golden이 함께 바뀌지만 세 파일의 직접 정의 golden이 그대로이면 고정된 계약의 변경이 아니다. 1b 완료 뒤에는 미션 타입의 어떤 golden 변경도 계약 변경이다.
-- `MissionItem`의 직접 필드에는 `go_to`, `track_entity` 자리와 `TYPE_GOTO`, `TYPE_TRACK_ENTITY`, `TYPE_RTL`의 값이 있고 이것은 1a 완료에 고정된다. 1b에서 이 서브메시지를 다른 타입으로 갈아야 하면 고정된 계약의 변경으로 다룬다.
+- 중첩 타입이 바뀌면 그것을 담은 타입의 type hash(RIHS01)와 펼친 정의도 바뀐다. 이 전파는 상위 타입의 변경으로 보지 않으며, 그 중첩 타입이 고정되기 전까지만 허용된다. 예: 고정되기 전의 `GoToItem`을 고치면 `MissionItem`, `Mission`, `ExecuteMission`의 type hash golden과 펼친 정의 golden이 함께 바뀌지만 세 파일의 직접 정의 golden이 그대로이면 고정된 계약의 변경이 아니다. `GoToItem`과 `TrackEntityItem`까지 고정된 1b 완료 뒤에는 미션 타입의 어떤 golden 변경도 계약 변경이다.
+- `MissionItem`의 직접 필드에는 `go_to`, `track_entity` 자리와 `TYPE_GOTO`, `TYPE_TRACK_ENTITY`, `TYPE_RTL`의 값이 있고 이것은 1a 완료에 고정된다. 이 서브메시지를 다른 타입으로 바꾸는 것은 고정된 계약의 변경이다.
 - 상수(enum 값, 비트, 이름)는 고정 전후 모두 추가만 한다. 상수의 의미는 그 상수를 처음 쓰는 소비자가 생기는 묶음과 함께 고정된다(`VehicleState`의 `WARN_*`는 Phase 2).
 - 고정 전인 파일은 첫 소비자의 구현에서 드러난 문제에 한해 바꿀 수 있고, 고정 뒤에는 새 요구가 있어야 한다. 어느 쪽이든 "변경 절차와 계약 테스트" 절을 따른다.
 - 의미 문장 가운데 실측이나 소스로 확인하지 않은 경계 상황의 기체 동작은 "미확인"으로 표시하고, 그때 노드가 택하는 보수적 동작을 함께 적는다. 미확인 표시는 고정을 막지 않는다. 관찰된 문제가 그 동작을 반증하면 변경 절차로 고친다.
@@ -66,7 +66,7 @@ PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 
 
 ### 이름과 식별자
 
-이름의 고정 부분(토픽, action, 프레임 이름)은 메시지의 string 상수(`ACTION_NAME`, `TOPIC_NAME`, `TOPIC_PREFIX`, `TOPIC_SUFFIX`, `FRAME_ID`)로 둔다. C++ 노드와 Python 판정 코드는 문자열을 다시 쓰지 않고 같은 상수로 전체 이름을 조립한다. 전체 이름의 조립과 id 검증은 C++은 `idsim_common`, Python은 `tests/support`가 한다.
+이름의 고정 부분(토픽, action, 프레임 이름)은 메시지의 string 상수(`ACTION_NAME`, `TOPIC_NAME`, `TOPIC_PREFIX`, `TOPIC_SUFFIX`, `FRAME_ID`)로 둔다. C++ 노드와 Python 판정 코드는 문자열을 다시 쓰지 않고 같은 상수로 전체 이름을 조립한다. 전체 이름의 조립과 id 검증은 C++은 `idsim_common`, Python은 판정 코드의 `tests/support`와 표적 어댑터의 `idsim_sim`이 한다.
 
 | 이름 | 전체 이름 | 상수 |
 | --- | --- | --- |
@@ -84,11 +84,11 @@ PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 
 
 ### 계약 토픽 QoS
 
-QoS 계약은 reliability와 durability 둘이다. 사건 행은 1a 완료에 고정한다(발행자 Executor와 소비자 통합 테스트가 1a에 있다). 상태 행은 공통 규칙의 1a 고정에서 빠지고 토픽마다 그 메시지 파일과 함께 고정한다(`TargetState`는 1b 완료, `VehicleState`는 Phase 2 완료). 상태 행의 값은 아직 발행자와 구독자로 확인하지 않았기 때문이다. history와 depth는 구현 값이고 계약이 아니다. DDS deadline과 liveliness로 신선도를 판정하지 않는다(벽시계 기준이다). PX4 토픽의 QoS는 "PX4 토픽 QoS" 절에 있다.
+QoS 계약은 reliability와 durability 둘이다. 사건 행은 1a 완료에 고정한다(발행자 Executor와 소비자 통합 테스트가 1a에 있다). 상태 행은 공통 규칙의 1a 고정에서 빠지고 토픽마다 그 메시지 파일과 함께 고정한다. `TargetState`의 상태 행은 1b 완료에 고정했고(발행자 표적 어댑터와 구독자 Executor로 확인했다), `VehicleState`의 상태 행은 발행자와 구독자로 확인한 뒤 Phase 2 완료에 고정한다. history와 depth는 구현 값이고 계약이 아니다. DDS deadline과 liveliness로 신선도를 판정하지 않는다(벽시계 기준이다). PX4 토픽의 QoS는 "PX4 토픽 QoS" 절에 있다.
 
 | 토픽 묶음 | 발행 | 구독 | 구현(`idsim_common`) |
 | --- | --- | --- | --- |
-| 상태(`VehicleState`, `TargetState`) | RELIABLE, VOLATILE | BEST_EFFORT, VOLATILE | `state_pub_qos()`, `state_sub_qos()`(`contract_qos.hpp`. KEEP_LAST 5). 아직 발행하거나 구독하는 노드는 없다 |
+| 상태(`VehicleState`, `TargetState`) | RELIABLE, VOLATILE | BEST_EFFORT, VOLATILE | `state_pub_qos()`, `state_sub_qos()`(`contract_qos.hpp`. KEEP_LAST 5). `TargetState`는 표적 어댑터(Python. 같은 값을 다시 적는다)가 발행하고 Executor가 구독한다. `VehicleState`는 아직 발행하거나 구독하는 노드가 없다 |
 | 사건(`MissionEvent`) | RELIABLE, VOLATILE | RELIABLE, VOLATILE | `event_pub_qos()`, `event_sub_qos()`(`contract_qos.hpp`. KEEP_LAST 10) |
 
 - 상태 토픽 구독이 BEST_EFFORT인 것은 라이브 발행자와 rosbag2 재생 발행자 어느 쪽과도 맞게 하려는 것이다. 상태 토픽의 주기는 계약이 아니다.
@@ -108,7 +108,7 @@ PX4 timestamp.
 
 - PX4 메시지의 `timestamp` 필드(us)는 PX4 hrt 시각이다. SITL에서 PX4 hrt는 Gazebo `/world/<월드>/clock`의 `sim` 시간(us)이다(PX4 gz_bridge가 이 토픽의 clock callback마다 PX4 lockstep 시계에 쓴다. `src/modules/simulation/gz_bridge/GZBridge.cpp` 331-347행, `platforms/posix/src/px4/common/drv_hrt.cpp` 106-110행, 484-491행). ROS `/clock`은 ros_gz_bridge가 gz `/clock`을 변환한 것이다(`tools/gen_compose.py`의 `bridge` 서비스). gz `/clock`과 `/world/<월드>/clock`은 gz-sim 서버의 SimulationRunner가 `PublishStats()`에서 같은 clock 메시지 하나를 두 토픽에 연달아 발행하므로 같은 `sim` 시간을 싣는다(sim-base 이미지에 설치된 gz-sim 8.15.0의 `src/SimulationRunner.cc` 553-567행. `docker/versions.env`는 릴리스 이름 `GZ_RELEASE=harmonic`만 고정하고 gz-sim 버전은 고정하지 않는다). 단 `/clock`은 gz-transport에 `/clock`의 다른 발행자가 없을 때만 만들어진다(같은 파일 845-871행. 월드 수는 보지 않으므로 월드를 더해도 `/clock`은 만들어진다). 이 검사는 SimulationRunner 생성 시점에 한 번만 하므로 먼저 만들어진 월드의 시간만 싣는다. idsim은 월드 하나이고 bridge가 `/clock`을 gz->ROS 한 방향(`[`)으로만 연결해 gz 쪽에 발행자를 만들지 않으며 bridge가 gazebo 뒤에 뜨므로 만들어진다. bridge를 양방향이나 ROS->gz로 바꾸거나, bridge를 gazebo보다 먼저 띄우거나, 월드를 더하면 이 문장을 다시 본다. 월드를 더하면 `/clock`은 먼저 만들어진 월드의 시간만 싣고, PX4는 `/world/<PX4_GZ_WORLD>/clock`을 쓰므로 두 토픽이 같은 `sim` 시간이라는 문장이 깨진다. [실측] 명령 전송 뒤 처음 받은 `vehicle_status` 표본의 `timestamp - Px4Timestamp`(표본의 PX4 시각 빼기 그 명령에 실은 노드의 ROS 시각)는 1a 6단계 재실측의 169건 모두 +8에서 +20 ms였고 부호가 섞이지 않았다. 그래서 두 시각 사이에 이보다 큰 상수 오프셋은 없다. `/clock`은 gz-transport, bridge, DDS를 거치는 전달 경로만큼 늦으므로 같은 순간의 두 값은 같지 않다. 이 지연만 따로 측정하지는 않았다(위 차이에는 지연, 명령 처리, 표본 publish 간격이 섞여 있다).
 - 그래서 판정과 신선도 검사의 경과 시간은 PX4 `timestamp`를 ROS 시각과 비교하지 않고 메시지를 받은 시점의 ROS 시각으로 잰다. PX4 `timestamp`는 ULog 정렬, PX4 쪽 묵은 setpoint 판정, 같은 토픽 표본끼리의 순서 비교(Executor의 "N회 연속 확인"에서 같은 표본 건너뛰기)에 쓴다.
-- 예외 하나: 취소의 지상 분기에서 DISARMED 표본을 셀 때 Executor는 표본의 PX4 `timestamp`를 첫 disarm에 실은 timestamp(노드의 ROS 시각)와 비교한다("취소" 절). `/clock`이 늦으므로(지연 크기는 미측정) 이 비교만으로는 disarm 처리 뒤의 표본임이 보장되지 않는다. `ros_ws/src/idsim_mission/src/core/rules.cpp`의 `is_after_disarm_send`는 이 timestamp 조건(표본 `timestamp`가 첫 disarm의 timestamp보다 엄격히 큼)과 수신 tick 조건(표본을 받은 tick이 첫 disarm을 보낸 tick보다 뒤)을 함께 본다. tick 조건은 전송 이전 tick에 받은 표본만 거른다. 처리 전 DISARMED 표본 하나는 지연 창에서 통과할 수 있고, 이를 막는 것은 서로 다른 `timestamp`를 가진 DISARMED 표본 3개의 연속 확인(`kConfirmSamples = 3`)과, arm과 disarm이 같은 `vehicle_command` queue에서 FIFO로 처리된다는 점이다([소스] `Commander.cpp` 1888-1902행. [실측] arm 직후에 disarm을 보낸 10회가 모두 DISARMED로 끝났다). 3개가 되려면 표본 간격 약 0.5 s로 arm이 약 1 s 동안 처리되지 않아야 한다.
+- 예외 하나: 취소의 지상 분기에서 DISARMED 표본을 셀 때 Executor는 표본의 PX4 `timestamp`를 첫 disarm에 실은 timestamp(노드의 ROS 시각)와 비교한다("취소" 절). `/clock`이 늦으므로 이 비교만으로는 disarm 처리 뒤의 표본임이 보장되지 않는다(그 지연은 따로 재지 않았다). `ros_ws/src/idsim_mission/src/core/rules.cpp`의 `is_after_disarm_send`는 이 timestamp 조건(표본 `timestamp`가 첫 disarm의 timestamp보다 엄격히 큼)과 수신 tick 조건(표본을 받은 tick이 첫 disarm을 보낸 tick보다 뒤)을 함께 본다. tick 조건은 전송 이전 tick에 받은 표본만 거른다. 처리 전 DISARMED 표본 하나는 지연 창에서 통과할 수 있고, 이를 막는 것은 서로 다른 `timestamp`를 가진 DISARMED 표본 3개의 연속 확인(`kConfirmSamples = 3`)과, arm과 disarm이 같은 `vehicle_command` queue에서 FIFO로 처리된다는 점이다([소스] `Commander.cpp` 1888-1902행. [실측] arm 직후에 disarm을 보낸 10회가 모두 DISARMED로 끝났다). 처리 전 표본이 확인에 들어갈 수 있는 창은 arm이 처리되기 전이고, 그 폭은 W_arm(arm에 실은 timestamp에서 그 arm의 `vehicle_command_ack.timestamp`까지) 이하다. 잘못된 확인에는 이 창 안에 서로 다른 timestamp의 DISARMED `vehicle_status` publish 3개, 즉 publish 간격 두 개가 들어가야 한다. W_arm이 그보다 좁으므로 이 규칙을 유지한다([실측] `run_sitl.sh` 1회의 ULog에서 arm, Offboard 전환, NAV_LAND의 W는 모두 16 ms 이하이고 W_arm은 8 ms 이하였다. ULog의 `vehicle_command.timestamp`는 실은 값 이하이므로 이 값은 상한이다). 이 판단은 지상 arm 진입이 arm 앞에 이 goal의 명령을 남기지 않는다는 순서("준비 단계" 절)에 기댄다. tick 주기가 W보다 길다는 시간 여유에는 기대지 않는다(그 여유는 SITL 1 스택에서만 근거가 있다). 이 goal 밖의 출처(GCS 등)가 기체를 arm하지 않는다는 것도 전제한다. 이 조건이 깨지는 관측(Phase 2 다중 스택 부하 등)이 나오면 받아들여진 disarm ack의 `timestamp` 이상인 DISARMED 표본만 세도록 바꾼다. 같은 확인 함수를 공중 종료 단계의 지상 대기 disarm에도 쓴다("공중에서 끝나는 미션" 절).
 - 공통 SITL 파라미터 `UXRCE_DDS_SYNCT=0`(`config/px4/sitl_params.env`)으로 uXRCE-DDS 세션의 시간 동기화를 끈다. 그러면 세션 `time_offset`이 0이다.
 - PX4는 /fmu/in 메시지를 받을 때 `timestamp`가 0이면 수신 시각으로 채우고, 아니면 `min(timestamp - time_offset, 수신 시각)`으로 쓴다(`Tools/msg/templates/ucdr/msg.h.em` 167-169행. `config/px4/sitl_params.env`의 근거 주석). 그래서 0이나 벽시계 값을 넣으면 PX4에는 "지금"으로 보이고, 묵은 setpoint를 `COM_OF_LOSS_T`로 판정하는 경로가 조용히 꺼진다. ROS 시각은 PX4 hrt보다 늦으므로 노드가 넣은 값은 이 `min`에서 잘리지 않는다. 근거는 전달 경로 구조와 위의 [실측](전송 뒤 첫 표본의 `timestamp`가 169건 모두 전송에 실은 값보다 8-20 ms 컸다. 노드 값이 PX4 hrt보다 크게 앞섰다면 나오지 않는 값이다)이고, 잘림 여부를 직접 본 것은 아니다. 시나리오 T(묵은 `timestamp`의 Offboard 신호를 PX4가 묵은 것으로 판정한다)는 노드 값이 그대로 쓰인다는 간접 근거다.
 - 규칙: 노드가 /fmu/in에 넣는 `timestamp`는 노드 시계의 ROS 시각(us)이다. 0과 벽시계 값은 보내지 않는다. `idsim_common::Px4Timestamp::now(clock)`가 유일한 생성 경로이고, 시계가 `RCL_ROS_TIME`이면서 ROS 시간 override가 켜져 있고(`/clock` 구독 중) 값이 1 us 이상일 때만 값을 만든다. 그 밖(override가 꺼진 ROS 시계, `RCL_SYSTEM_TIME`, `RCL_STEADY_TIME`, `/clock` 수신 전의 0)에서는 값이 없고, 값이 없으면 /fmu/in에 아무것도 보내지 않는다. Executor는 activate 때 값을 만들 수 없으면 activate를 실패시키고, goal 실행 중에 만들 수 없으면 그 tick의 발행과 명령을 버리고 goal을 ABORTED로 끝낸다(정리 중이 아니면 `REASON_INTERNAL`, 정리 중이면 원래 reason을 유지하고 detail에 적는다. `ros_ws/src/idsim_mission/src/core/mission_runner.cpp`). `VehicleCommandBuilder`와 setpoint 헬퍼는 `Px4Timestamp` 인자로만 timestamp를 받는다(`ros_ws/src/idsim_common/include/idsim_common/px4_timestamp.hpp`, `test/test_px4_timestamp.cpp`).
@@ -151,7 +151,7 @@ PX4 timestamp.
 
 고정 시점: 1a 완료.
 
-PX4 쪽은 지구 NED, 동체 FRD이고 ROS와 Gazebo 쪽은 지구 ENU, 동체 FLU다. 변환은 `idsim_common::frames`(`ros_ws/src/idsim_common/include/idsim_common/frames.hpp`) 한 곳에 두고, setpoint를 보낼 때 이 함수를 쓰고, 표적 속도를 setpoint로 바꿀 때(1b)도 축 치환은 이 함수를 쓴다.
+PX4 쪽은 지구 NED, 동체 FRD이고 ROS와 Gazebo 쪽은 지구 ENU, 동체 FLU다. 변환은 `idsim_common::frames`(`ros_ws/src/idsim_common/include/idsim_common/frames.hpp`) 한 곳에 두고, setpoint를 보낼 때와 표적 속도를 setpoint로 바꿀 때 축 치환은 이 함수를 쓴다.
 
 | 대상 | PX4 <-> ROS | 함수 |
 | --- | --- | --- |
@@ -165,9 +165,10 @@ PX4 쪽은 지구 NED, 동체 FRD이고 ROS와 Gazebo 쪽은 지구 ENU, 동체 
 - PX4 쿼터니언은 Hamilton 규약, 배열 순서 (w, x, y, z), FRD 동체 -> NED 지구 회전이다. q와 -q는 같은 회전으로 본다.
 - 벡터 변환은 축 치환과 부호만 쓰므로 NaN은 그 축에만 남는다(`TrajectorySetpoint`의 NaN은 "제어하지 않음"이다). 비대각 공분산은 다루지 않는다.
 - px4_ros_com `frame_transforms`는 래핑하지 않고 `test/test_frames.cpp`의 차등 비교 기준으로만 쓴다(공분산 변환 오류와 NaN 번짐이 있다).
-- 원점 이동(world ENU <-> 기체 로컬 NED)은 `idsim_common::geo`(`geo.hpp`)에 있다. 사슬은 gz LOCAL2 -> WGS84 -> PX4 MapProjection이고, `world_enu_to_local_ned`와 `local_ned_to_world_enu`가 한 번에 거친다. 입력은 PX4가 실제로 쓰는 원점(`LocalReference`)과 params로 받은 `world.origin`(`WorldOrigin`)이다. 기준이 유효한지 보는 술어는 호출하는 px4 어댑터가 먼저 거친다. 이 변환을 쓰는 운용 노드(표적 위치를 setpoint로 바꾸는 Executor, `FramePort`)는 아직 없다.
+- 원점 이동(world ENU <-> 기체 로컬 NED)은 `idsim_common::geo`(`geo.hpp`)에 있다. 사슬은 gz LOCAL2 -> WGS84 -> PX4 MapProjection이고, `world_enu_to_local_ned`와 `local_ned_to_world_enu`가 한 번에 거친다. 입력은 PX4가 실제로 쓰는 원점(`LocalReference`)과 params로 받은 `world.origin`(`WorldOrigin`)이다. 기준이 유효한지 보는 술어는 호출하는 px4 어댑터가 먼저 거친다. 이 변환을 쓰는 곳은 Executor의 `Px4FramePort`(`ros_ws/src/idsim_mission/include/idsim_mission/px4/frame_port.hpp`)다. GOTO와 TRACK_ENTITY의 world ENU 점과 표적 속도를 그 tick의 기준(`vehicle_local_position`의 `ref_lat`, `ref_lon`, `ref_alt`)과 `world.origin`으로 로컬 NED로 바꾼다. 기준은 `xy_global`과 `z_global`이 true이고 `ref_lat`, `ref_lon`, `ref_alt`가 유한하며 `ref_alt`가 정확히 0.0이 아닐 때만 유효하다(PX4는 고도 원점이 없을 때 `ref_alt`에 NaN이 아니라 0을 낸다). 기준이 무효이거나 결과를 `trajectory_setpoint`에 실을 수 없으면(비유한 또는 float32 범위 밖) 변환은 값 없음이다. 기준은 그 tick의 위치와 같은 `vehicle_local_position` 표본에서 읽는다.
+- world ENU는 `world.origin`에서의 접평면 직교 좌표다(사슬의 첫 단계가 그 뜻을 정한다). z는 접평면 위 높이이고 타원체 고가 아니다. 그래서 원점에서 수평으로 멀어질수록 같은 z의 점이 타원체 위로 높아진다([계산] 원점에서 수평으로 1e4 m 떨어진 곳은 약 7.8 m, 좌표 상한(1e5 m)의 끝은 약 783 m, 상한 상자의 수평 꼭짓점(약 1.41e5 m)은 약 1.57 km 더 높다). 사슬은 이 차이를 고치지 않고 그대로 옮긴다. 미션의 좌표 상한("GoToItem과 TrackEntityItem" 절)은 float32 정밀도와 PX4의 확인된 동작 범위를 묶는 값이고 이 높이 차를 묶지 않는다. 높이 차는 원점에서의 수평 거리의 제곱에 비례하므로 world z를 지면 위 높이로 읽을 수 있는 곳은 원점 근처뿐이다.
 - 기체 로컬 NED의 원점은 월드 원점이 아니라 그 기체의 EKF 원점이다. SITL에서 EKF 원점은 EKF2가 첫 GNSS fix를 받는 순간의 GNSS 위치다(`src/modules/ekf2/EKF/aid_sources/gnss/gps_control.cpp`의 `resetHorizontalPositionToGnss`, 226-239행, 442-445행). 기체가 스폰 지점에 정지한 채 부팅하므로 스폰 지점 근처지만, GNSS 잡음만큼의 오차가 있을 수 있고 그 크기는 측정하지 않았다. 또 이 원점은 월드 `spherical_coordinates`가 첫 fix 전에 적용되어 있어야 의미가 있다. 그래서 변환 입력은 스폰 pose가 아니라 `vehicle_local_position`의 `ref_lat`, `ref_lon`, `ref_alt`로 한다. 비행 중 EKF 원점이 다시 정해지는 조건은 확인하지 않았다.
-- 1a에서 PX4로 가는 setpoint는 기체 로컬 NED 위치(m)와 NED yaw(rad)다(`px4_setpoint.hpp`). ENU 값은 호출자가 `frames`로 바꿔서 넘긴다. 1a 미션의 yaw 입력(`YawSetpoint`)은 ENU yaw이고 `idsim_mission` core가 같은 식으로 NED yaw로 바꾼다(`ros_ws/src/idsim_mission/include/idsim_mission/core/rules.hpp`의 `enu_to_ned_yaw`. core는 ROS 비의존이라 식을 따로 두고 단위 테스트로 덮는다).
+- PX4로 가는 setpoint는 기체 로컬 NED 위치(m)와 NED yaw(rad)이고, TRACK_ENTITY는 여기에 로컬 NED 속도(m/s)를 더한다(`px4_setpoint.hpp`). ENU 값은 호출자가 `frames`로 바꿔서 넘긴다. 미션의 yaw 입력(`YawSetpoint`)은 ENU yaw이고 `idsim_mission` core가 같은 식으로 NED yaw로 바꾼다(`ros_ws/src/idsim_mission/include/idsim_mission/core/rules.hpp`의 `enu_to_ned_yaw`. core는 ROS 비의존이라 식을 따로 두고 단위 테스트로 덮는다).
 
 ## PX4 토픽
 
@@ -354,14 +355,14 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 
 고정 시점: 1a 완료.
 
-- 1a는 position 제어만 쓴다. `offboard_control_mode`는 `position = true`이고 나머지 여섯 flag(velocity, acceleration, attitude, body_rate, thrust_and_torque, direct_actuator)는 false다.
-- `trajectory_setpoint`의 `position`(로컬 NED, m)과 `yaw`(NED, rad)는 유한값이고 float 범위 안이어야 한다. `velocity`, `acceleration`, `jerk`, `yawspeed`는 NaN("제어하지 않음")이다. 둘 다 `px4_setpoint.hpp`의 함수로만 만든다.
+- `offboard_control_mode`는 항상 `position = true`이고 나머지 여섯 flag(velocity, acceleration, attitude, body_rate, thrust_and_torque, direct_actuator)는 false다. 제어는 position setpoint이고, TRACK_ENTITY만 속도를 feedforward로 더한다(아래).
+- `trajectory_setpoint`의 `position`(로컬 NED, m)과 `yaw`(NED, rad)는 유한값이고 float 범위 안이어야 한다. `acceleration`, `jerk`, `yawspeed`는 NaN("제어하지 않음")이고 `velocity`는 예외 하나를 빼고 NaN이다. 예외: TRACK_ENTITY 항목 실행 중에 그 tick의 표적 표본이 신선하고 `velocity_valid`가 true이면 `velocity`에 표적 속도(로컬 NED, m/s)를 싣는다("GoToItem과 TrackEntityItem" 절). 이때 속도도 유한하고 float 범위 안이어야 한다. `offboard_control_mode`와 `trajectory_setpoint`는 `px4_setpoint.hpp`의 함수로만 만든다. GOTO, TAKEOFF, LOITER, 정리와 종료 단계의 setpoint는 속도를 싣지 않는다.
 - yaw는 항상 유한값으로 보낸다. NaN yaw의 Offboard 동작은 미확인이다. 보수적 동작: 보내지 않는다(현재 heading을 유지하려면 현재 yaw를 넣는다).
 - 언제 발행하는가(Offboard 진입 준비와 Offboard 동안만)는 "발행 규칙" 절이 정한다.
 
 ## SITL 파라미터
 
-고정 시점: 1a 완료.
+고정 시점: 1a 완료(`RTL_TYPE`부터 `EKF2_HGT_REF`까지 일곱 행은 1b 완료).
 
 공통 SITL 파라미터는 `config/px4/sitl_params.env`(`config/fleet.yaml`의 `px4.params_file`) 한 파일이다. 형식은 `PX4_PARAM_<이름>=<값>`이고 compose가 px4 서비스에 `env_file`로 넘긴다. PX4 rcS가 airframe 스크립트보다 먼저 `param set`하고(rcS 129-135행), px4 이미지의 airframe 훅(`<airframe>.post`, `docker/Dockerfile.px4`)이 airframe 뒤에 한 번 더 적용해 이 파일의 값이 최종값이 된다(펌웨어 기본값과 같은 값은 airframe의 `set-default`가 덮어쓰기 때문이다). 실제 적용 값은 환경 스모크가 `pxh param show`로 `stack.json`의 `expected_params`, `derived_params`와 대조한다.
 
@@ -376,8 +377,16 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 | `COM_DISARM_PRFLT` | -1 | 이륙 전 자동 disarm 끔 | 시동과 이륙 사이 간격이 부하로 길어져도 PX4가 스스로 disarm하지 않는다. 착지 뒤 자동 disarm(`COM_DISARM_LAND`, 기본 2 s)은 그대로다 |
 | `SDLOG_MODE` | 2 | ULog를 부팅부터 종료까지 | 컨테이너 한 번 실행에 ULog 한 파일. 첫 disarm 뒤 기록도 남는다 |
 | `UXRCE_DDS_SYNCT` | 0 | uXRCE-DDS 시간 동기화 끔 | "시간 기준" 절. SITL 전용이고 실기체에서는 1 |
+| `RTL_TYPE` | 0 | home이나 rally point 가운데 가까운 곳으로 직선 복귀 | 기본값과 같다. idsim은 rally point와 MAVLink 미션을 올리지 않으므로 목적지는 home이다. 2와 4는 MAVLink 미션 경로를 따른다 |
+| `RTL_CONE_ANG` | 0 | 귀환 고도 원뿔 없음 | 귀환 고도가 `max(현재 고도, home 고도 + RTL_RETURN_ALT)` 하나로 정해진다 |
+| `RTL_RETURN_ALT` | 10 m | 귀환 고도(home 위) | 1b 시험 미션의 순항 고도 5 m보다 높은 한 값이다. x500 기본 30 m(펌웨어 기본값은 60 m)는 시험 시간을 늘린다 |
+| `RTL_LAND_DELAY` | 0 | 귀환한 뒤 바로 착륙 | 기본값과 같다. 멀티콥터는 home 위에서 바로 착륙한다. -1이면 착륙하지 않아 RTL 항목의 완료 조건이 오지 않는다. 이 경로에서 `RTL_DESCEND_ALT`는 쓰이지 않는다 |
+| `COM_DISARM_LAND` | 2 s | 착지 뒤 자동 disarm | 기본값과 같지만 LAND와 RTL 항목의 완료와 공중 종료 단계의 지상 판정이 이 값에 기대므로 명시한다 |
+| `COM_LOW_BAT_ACT` | 2 | 저전압 시 Land | 실패의 fallback이 Land라는 원칙과 맞춘다. SITL 배터리는 50%에서 멈춰 닿지 않는다 |
+| `EKF2_HGT_REF` | 1 | 높이 기준 GNSS | 기본값과 같다. 높이 기준이 GNSS여야 EKF 원점의 초기 고도 잡음이 도착점에서 상쇄된다. 0(기압계)이면 초기 GNSS 고도 오차가 bias로 남는다 |
 
 - `NAV_DLL_ACT` 값 0은 `Disabled`다. [소스] PX4 v1.17.0 `src/modules/commander/commander_params.c` 581-598행의 파라미터 정의가 값 0을 `Disabled`로 적는다. `src/modules/commander/failsafe/failsafe.h` 113-120행의 enum `gcs_connection_loss_failsafe_mode`는 `Disabled = 0`이다. `failsafe.cpp` 515행은 파라미터 값이 이 `Disabled`와 다르고 `COM_DLL_EXCEPT` 예외가 없을 때(`!dll_loss_ignored`)만 GCS 연결 손실 failsafe를 건다. 그래서 0이면 515행 failsafe는 걸리지 않는다. 같은 파일 532-538행에는 다른 경로가 있다. `COM_RC_IN_MODE`가 4이거나 AUTO_MISSION에서 RC 손실을 무시하는 예외(`rc_loss_ignored_mission`)가 있고, `NAV_DLL_ACT`가 `Disabled`이면서 사용자 의도 모드가 AUTO_MISSION이고 `mission_finished`이면 GCS 연결 손실에 RTL을 건다. idsim은 `COM_RC_IN_MODE` 4와 `NAV_DLL_ACT` 0을 두어 앞의 두 조건을 채우지만 이 경로는 AUTO_MISSION 전용이고 idsim은 AUTO_MISSION을 요청하지 않으므로 걸리지 않는다. 외부 GCS가 AUTO_MISSION으로 바꾼 경우는 확인하지 않았다(미확인). 보수적 동작: 판정과 CI에 QGC를 쓰지 않는다. AUTO_MISSION을 쓰는 경로를 더하면 이 항목을 다시 본다.
+- `COM_FAIL_ACT_T`는 계약 표에 넣지 않고 PX4 기본값(v1.17.0에서 5 s)을 둔다. Offboard 손실은 이 지연을 거치지 않고 바로 Land다. 지연이 끼는 것은 Auto 조치(저전압 Land 등)이고 그 동안 기체는 failsafe Hold(`failsafe` true, AUTO_LOITER)다. Executor는 그 표본을 비행 중 감시 순위 6으로 끝낸다.
 - 기체별 `px4_params`는 공통 파일 값을 덮을 수 있고 생성기는 경고만 낸다. 위 표의 파라미터를 기체별로 덮으면 그 기체는 이 계약 밖이다.
 - `PX4_SIM_SPEED_FACTOR`는 주지 않는다(주면 rcS 197-210행이 `COM_OF_LOSS_T` 등 손실 타임아웃을 덮어쓴다). 배속은 Phase 3에서 정한다.
 - `COM_RC_IN_MODE=4`의 영향: QGroundControl의 수동 모드 비행과 가상 조이스틱을 쓸 수 없다. QGC는 모니터링과 ARM, TAKEOFF, LAND 같은 명령에만 쓴다. 수동 계열 모드(Position, Altitude, Manual) 진입이 가능한지와 부팅 직후의 기본 모드는 확인하지 않았다(미확인). 보수적 동작: idsim은 수동 계열 모드를 요청하지 않고, Executor는 부팅 모드에 기대지 않고 arm 전에 Offboard를 요청한다.
@@ -418,45 +427,49 @@ QGroundControl.
 
 ## 미션 정의: Mission, MissionItem, YawSetpoint, TakeoffItem, LoiterItem
 
-고정 시점: 1a 완료.
+고정 시점: 1a 완료(GOTO, TRACK_ENTITY, RTL의 의미와 항목 순서 규칙은 1b 완료).
 
 미션은 항목의 목록이고, 항목은 `type`과 그 type의 서브메시지 하나로 이뤄진다.
 
 - `Mission.mission_id`: `mission_id` 규칙의 문자열. 발급 주체는 1b에서는 YAML 로더, Phase 3에서는 Fleet이다. `Mission.items`: 1개 이상이고 순서대로 실행한다.
-- `MissionItem.type`: `TYPE_*`. 0은 무효다. `MissionItem.timeout`: 이 항목의 제한 시간(ROS 시각). 0보다 크다. 넘기면 ITEM_TIMEOUT이다. 기준 시각은 항목이 시작된 시각이다(첫 항목인 TAKEOFF는 준비 단계의 arm 확인 시점. "준비 단계" 절. 첫 항목이 아닌 TAKEOFF는 1b에서 정한다).
+- `MissionItem.type`: `TYPE_*`. 0은 무효다. `MissionItem.timeout`: 이 항목의 제한 시간(ROS 시각). 0보다 크다. 넘기면 ITEM_TIMEOUT이다. 기준 시각은 항목이 시작된 시각이다(첫 항목의 시작 시각은 "준비 단계" 절의 표가 정하고, 그 뒤의 항목은 앞 항목이 완료된 tick에 시작한다).
 - 서브메시지는 type에 맞는 하나만 채우고 나머지는 기본값이어야 한다. RTL과 LAND는 서브메시지가 없다.
 - 항목은 두 부류다. setpoint 항목(TAKEOFF, GOTO, TRACK_ENTITY, LOITER)은 Offboard setpoint로 처리하고, 모드 명령 항목(RTL, LAND)은 PX4 고유 모드로 전환한다. 이 구분은 필드로 두지 않고 type에서 파생한다. 모든 `TYPE_*`가 정확히 한 부류에 속한다는 것을 `idsim_mission` 단위 테스트가 단정한다.
 - 모든 값은 명시적이다. "0이면 기본값" 규칙은 없다. 기본값은 미션을 만드는 쪽(YAML 로더)이 채운다. 표적 신선도 임계, setpoint 주기 같은 안전 값은 메시지가 아니라 노드 파라미터다.
+- 항목 순서 규칙: TAKEOFF는 첫 항목에만 온다. LAND와 RTL은 마지막 항목에만 온다. 그래서 모드 명령 항목으로 시작하는 미션은 `[LAND]`와 `[RTL]` 한 항목뿐이고, 모드 명령 항목 뒤에 setpoint 항목이 오지 않는다(미션 중간의 Offboard 재진입은 없다). 반복 비행은 미션 둘로 보낸다(`[TAKEOFF, ..., LAND]` 다음 `[TAKEOFF, ..., LAND]`). goal 경계가 소비자에게 지상 DISARMED 확인 지점을 준다.
 - 좌표는 world ENU 하나다. 미션은 기체에 묶이지 않으므로 재배분 때 다시 쓰지 않는다.
 
 | 정의 | 필드 | 의미 |
 | --- | --- | --- |
-| `YawSetpoint` | `mode` | `MODE_KEEP`(1): 항목의 기준 yaw를 유지한다(첫 항목인 TAKEOFF는 기준 위치를 읽을 때의 heading. 첫 항목이 아닌 TAKEOFF와 GOTO, TRACK_ENTITY의 기준은 1b에서 정한다). `MODE_FIXED`(2): `yaw_rad`로. 0은 무효 |
+| `YawSetpoint` | `mode` | `MODE_KEEP`(1): 항목의 기준 yaw를 유지한다(기준 yaw는 직전 setpoint의 yaw이고, 직전 setpoint가 없으면 발행을 시작할 때 읽은 heading이다. 첫 항목인 TAKEOFF와 공중 Offboard 진입의 첫 항목이 그 경우다). `MODE_FIXED`(2): `yaw_rad`로. 0은 무효 |
 | `YawSetpoint` | `yaw_rad` | world ENU yaw, `[-pi, pi)`. `MODE_FIXED`일 때만 쓰고 아니면 0이어야 한다 |
-| `TakeoffItem` | `height_m` | 기준 위치에서 올라갈 상대 높이(m). 0보다 크다. 첫 항목인 TAKEOFF의 기준 위치는 준비 단계에서 setpoint 발행을 시작할 때(arm 전, 지상) 읽은 위치다. 첫 항목이 아닌 TAKEOFF의 기준 위치는 1b에서 정한다 |
+| `TakeoffItem` | `height_m` | 기준 위치에서 올라갈 상대 높이(m). 0보다 크다. 첫 항목인 TAKEOFF의 기준 위치는 준비 단계에서 setpoint 발행을 시작할 때(arm 전, 지상) 읽은 위치다. TAKEOFF는 첫 항목에만 온다 |
 | `TakeoffItem` | `acceptance_m` | 수직 허용 오차(m). 0보다 크다 |
 | `TakeoffItem` | `yaw` | 상승 중의 yaw |
 | `LoiterItem` | `duration` | 항목 시작 때의 setpoint를 유지할 시간(ROS 시각). 0보다 크고 그 항목의 `timeout`보다 짧다 |
 
-항목의 의미(1a에 구현된 셋).
+항목의 의미.
 
 | 항목 | 시작 조건 | 동작 | 완료 | feedback phase |
 | --- | --- | --- | --- | --- |
 | TAKEOFF(첫 항목) | 지상(`landed` true)이고 DISARMED. 아니면 PRECONDITION_FAILED | 준비 단계에서 setpoint 발행을 시작할 때(arm 전, 지상) 읽은 위치가 기준 위치다. 목표점은 그 위치 위 `height_m`이고 처음부터 목표점을 보낸다. `MODE_KEEP`의 yaw는 그때의 heading이다. 비행제어의 자동 이륙 모드가 아니라 Offboard position setpoint로 상승한다. 상승 속도는 비행제어 파라미터가 제한한다 | 고도 추정이 유효하고 목표 고도와의 차가 `acceptance_m`보다 작다 | EXECUTING |
-| LOITER | 앞 항목 완료 | 직전 setpoint를 Offboard로 유지한다. 비행제어의 Hold 모드가 아니다 | 항목 시작부터 ROS 시각으로 `duration` 경과 | EXECUTING |
-| LAND | 앞 항목 완료, 또는 `[LAND]` 한 항목 미션이면 준비 단계 끝 | Land 명령(NAV_LAND)을 보내 비행제어의 Land 모드로 전환한다("LAND 항목" 절) | 지상 판정 뒤 DISARMED 확인까지(자동 disarm을 기다린다) | WAITING_MODE |
+| LOITER | 앞 항목 완료. 첫 항목이면 공중 Offboard 진입이 끝난 때 | 직전 setpoint를 Offboard로 유지한다(첫 항목이면 진입 setpoint). 비행제어의 Hold 모드가 아니다 | 항목 시작부터 ROS 시각으로 `duration` 경과 | EXECUTING |
+| GOTO | 앞 항목 완료. 첫 항목이면 공중 Offboard 진입이 끝난 때 | `position`(world ENU)을 로컬 NED로 바꿔 Offboard position setpoint로 보낸다("GoToItem과 TrackEntityItem" 절) | 서로 다른 `vehicle_local_position` 표본 3개 연속에서 위치가 유효하고 3차원 거리가 `acceptance_radius_m`보다 작다 | EXECUTING |
+| TRACK_ENTITY | 앞 항목 완료. 첫 항목이면 공중 Offboard 진입이 끝난 때 | 표적 위치에 `offset`을 더한 점을 매 tick 로컬 NED로 바꿔 보내고, 표적 표본이 신선하고 속도가 유효하면 표적 속도를 feedforward로 싣는다 | GOTO와 같은 거리 조건. 그 tick의 표적 표본이 신선할 때만 센다 | EXECUTING |
+| LAND | 앞 항목 완료, 또는 `[LAND]` 한 항목 미션이면 준비 단계 끝 | Land 명령(NAV_LAND)을 보내 비행제어의 Land 모드로 전환한다("모드 명령 항목" 절) | 지상 판정 뒤 DISARMED 확인까지(자동 disarm을 기다린다) | WAITING_MODE |
+| RTL | 앞 항목 완료, 또는 `[RTL]` 한 항목 미션이면 준비 단계 끝 | RTL 명령(NAV_RETURN_TO_LAUNCH)을 보내 비행제어의 RTL 모드로 전환한다. 귀환과 착륙은 비행제어가 하고 목적지는 home이다("모드 명령 항목" 절) | 지상 판정 뒤 DISARMED 확인까지(자동 disarm을 기다린다) | WAITING_MODE |
 
 - `MissionItem.TYPE_LOITER`(Offboard에서 setpoint 유지)와 `VehicleState.MODE_HOLD`(비행제어의 Hold 모드)는 다른 것이다. 취소가 만드는 상태는 뒤의 것이다.
-- GOTO, TRACK_ENTITY, RTL의 의미는 1b 완료에 고정한다("GoToItem과 TrackEntityItem" 절). 첫 항목이 아닌 TAKEOFF의 의미도 1b 완료에 고정한다.
+- GOTO와 TRACK_ENTITY의 상세는 "GoToItem과 TrackEntityItem" 절에, LAND와 RTL의 상세는 "모드 명령 항목" 절에 있다.
 
 미션 검증(INVALID_MISSION).
 
-- 계약: 항목 1개 이상, `type`이 `TYPE_*` 가운데 하나, `timeout` > 0, 쓰지 않는 서브메시지는 기본값, 서브메시지 값의 범위(`height_m` > 0, `acceptance_m` > 0, `duration` > 0이고 `timeout`보다 짧다, `YawSetpoint.mode`가 유효, `MODE_KEEP`이면 `yaw_rad` 0, `MODE_FIXED`이면 `yaw_rad`가 `[-pi, pi)`, 모든 실수가 유한), `mission_id` 규칙. `builtin_interfaces/Duration`의 `nanosec`은 1e9보다 작아야 한다.
-- 1a 노드의 임시 제한(계약 문장이 아니다. 1b에서 푼다): `type`은 TAKEOFF, LOITER, LAND만 받는다. 마지막 항목은 LAND이고 LAND는 마지막에만 온다. 첫 항목은 TAKEOFF 또는 LAND이고 TAKEOFF는 첫 항목에만 온다. 따라서 LAND로 시작하는 미션은 `[LAND]` 한 항목뿐이다. 이 제한에 걸린 미션도 INVALID_MISSION으로 끝나고 `detail`에 이유가 적힌다.
+- 계약: 항목 1개 이상, `type`이 `TYPE_*` 가운데 하나, `timeout` > 0, 쓰지 않는 서브메시지는 기본값, 서브메시지 값의 범위(`height_m` > 0, `acceptance_m` > 0, GOTO와 TRACK_ENTITY의 `acceptance_radius_m` > 0, TRACK_ENTITY의 `target_id` 형식(`^[a-z][a-z0-9_]{0,31}$`. "이름과 식별자" 표)과 0 벡터가 아닌 `offset`, `duration` > 0이고 `timeout`보다 짧다, `YawSetpoint.mode`가 유효, `MODE_KEEP`이면 `yaw_rad` 0, `MODE_FIXED`이면 `yaw_rad`가 `[-pi, pi)`, 모든 실수가 유한), 좌표 상한(GOTO `position`과 TRACK_ENTITY `offset`의 각 성분 절댓값이 `kMaxContractCoordinateM` 1e5 m 이하. 경계 포함), 항목 순서 규칙, `mission_id` 규칙. `builtin_interfaces/Duration`의 `nanosec`은 1e9보다 작아야 한다.
+- 고도는 검증하지 않는다. Executor는 지형을 모르므로 world z를 지면 높이로 검사하지 않고, 항목의 높이에 상한과 하한이 없다(TAKEOFF `height_m`은 양수, GOTO `position`과 `offset`의 z는 좌표 상한만). TAKEOFF `height_m`이 유한하지만 float32 범위 밖이면 지상 DISARMED에서 setpoint가 나가지 않아 준비 단계의 MODE_SWITCH_FAILED(arm 전)로 끝난다.
 
 ## ExecuteMission
 
-고정 시점: 1a 완료("공중에서 끝나는 미션"은 1b 완료).
+고정 시점: 1b 완료(수락 정책, 취소 의미, 첫 항목이 TAKEOFF인 미션의 의미는 1a 완료에 고정했다).
 
 action `/<vehicle_id>/execute_mission`. 기체마다 Mission Executor 하나가 서버다. 성공, 중단, 취소의 정본은 action의 GoalStatus와 result이고, `MissionEvent`는 그 사본이다.
 
@@ -466,7 +479,7 @@ action `/<vehicle_id>/execute_mission`. 기체마다 Mission Executor 하나가 
 | goal | `mission` | 실행할 미션 |
 | result | `reason` | `REASON_*`("GoalStatus와 reason" 절) |
 | result | `items_completed` | 완료한 항목 수 |
-| result | `last_item_index` | 끝날 때 실행 중이던 항목(0부터). 항목을 시작하기 전에 끝났으면 0 |
+| result | `last_item_index` | 끝날 때 실행 중이던 항목(0부터). 항목을 시작하기 전에 끝났으면 0. 공중 종료 단계에서 끝났으면 마지막 항목 |
 | result | `detail` | 사람이 읽는 설명. 판정에 쓰지 않는다 |
 | feedback | `stamp` | 그 feedback을 만든 tick의 입력 시각(ROS 시각. "feedback" 절) |
 | feedback | `item_index`, `item_count`, `item_type` | 실행 중인 항목의 번호(0부터), 미션의 항목 수, 그 항목의 `MissionItem.TYPE_*` |
@@ -479,10 +492,10 @@ action `/<vehicle_id>/execute_mission`. 기체마다 Mission Executor 하나가 
 
 - 공중과 지상: 이 절의 "공중"은 PX4의 착륙 판정 `vehicle_land_detected.landed`가 false, "지상"은 true인 것이다. 기체의 높이가 아니다. Offboard position setpoint나 Hold 중에는 이륙 ramp가 시작된 뒤 기체가 땅에 닿아 있어도 `landed`가 false로 남는다. 분기는 이 뜻으로 동작한다(땅에 닿은 채 `landed` false인 기체에도 공중 분기의 Hold는 받아들여진다).
 - 발행: Executor가 20 Hz로 `offboard_control_mode`(position만 true)와 `trajectory_setpoint`를 내는 것.
-- 명령: Executor가 `vehicle_command`로 보내는 Offboard 전환, arm, disarm, Hold 전환, Land(NAV_LAND). disarm은 모두 강제가 아닌 disarm이고 강제 disarm은 어디에서도 쓰지 않는다. 강제가 아닌 disarm은 PX4가 착륙 판정(`landed` 또는 `maybe_landed`)일 때만 받아들이므로 떠 있는 기체를 끄지 않는다. 확인을 기다리는 명령은 `command_resend_period`마다 재전송하고, 한 번에 하나만 기다린다. 성공의 판정은 ack가 아니라 `vehicle_status`(`nav_state`, `arming_state`)이고 ack는 거부를 빨리 아는 데만 쓴다.
-- N회 연속 확인: 서로 다른 `vehicle_status` 표본 3개가 연달아 조건을 만족하는 것. 직전 표본보다 timestamp가 크지 않은 표본은 건너뛴다. 확인은 OFFBOARD, ARMED, Hold, Land 모드, DISARMED에 쓴다.
+- 명령: Executor가 `vehicle_command`로 보내는 Offboard 전환, arm, disarm, Hold 전환, Land(NAV_LAND), RTL(NAV_RETURN_TO_LAUNCH). disarm은 모두 강제가 아닌 disarm이고 강제 disarm은 어디에서도 쓰지 않는다. 강제가 아닌 disarm은 PX4가 착륙 판정(`landed` 또는 `maybe_landed`)일 때만 받아들이므로 떠 있는 기체를 끄지 않는다. 확인을 기다리는 명령은 `command_resend_period`마다 재전송하고, 한 번에 하나만 기다린다. 성공의 판정은 ack가 아니라 `vehicle_status`(`nav_state`, `arming_state`)이고 ack는 거부를 빨리 아는 데 쓴다. ack를 진행 조건에 쓰는 곳은 지상 arm 진입의 Offboard 전환 하나다("준비 단계" 절). `/fmu/in`의 명령과 `/fmu/out`의 ack는 best-effort라 하나가 유실될 수 있으므로 명령 하나나 ack 하나의 유실만으로 goal이 실패하지 않는다. 결과가 정해지기 전의 명령은 효과를 관측할 때까지 또는 기한까지 재전송하고, 결과가 이미 정해진 종료 tick의 1회 명령(식별 불일치와 감시 행의 지상 disarm, 정리의 상한에서 보내는 NAV_LAND와 disarm)은 재전송하지 않고 `detail`에 확인하지 못했음을 적는다. 주기 표본(`vehicle_status`)의 유실은 timeout 여유로 견딘다.
+- N회 연속 확인: 서로 다른 `vehicle_status` 표본 3개가 연달아 조건을 만족하는 것. 직전 표본보다 timestamp가 크지 않은 표본은 건너뛴다. 확인은 OFFBOARD, ARMED, Hold, Land 모드(AUTO_LAND), RTL 모드(AUTO_RTL), DISARMED에 쓴다.
 - 만료: 기준 시각부터의 ROS 시각 경과가 그 값 이상(`>=`)인 것.
-- 정리: 취소, setpoint 항목의 ITEM_TIMEOUT, 준비 단계의 실패 뒤에 기체를 정해진 상태로 두려는 절차("취소" 절, "정리" 절).
+- 정리: 취소, setpoint 항목의 ITEM_TIMEOUT과 TARGET_LOST, 준비 단계의 실패, RTL 항목의 실패 뒤에 기체를 정해진 상태로 두려는 절차("취소" 절, "정리" 절). 공중 종료 단계는 같은 장치를 쓰지만 결과 표가 따로다("공중에서 끝나는 미션" 절).
 - 시간 값(timeout, 확인 기한, 상한)은 모두 ROS 시각이다. 이름 붙은 값(`ready_timeout`, `mode_confirm_timeout` 등)은 노드 파라미터이고 기본값은 "참고: 노드 파라미터" 절에 있다. 값은 계약이 아니고, 어느 값으로 어느 분기가 끝나는지가 계약이다.
 
 ### 수락 정책
@@ -497,7 +510,15 @@ action `/<vehicle_id>/execute_mission`. 기체마다 Mission Executor 하나가 
 
 ### 준비 단계
 
-첫 항목이 TAKEOFF인 미션은 아래 순서로 준비한 뒤 TAKEOFF를 시작한다. 이 구간의 feedback phase는 `PHASE_PREPARING`이다. `ready_timeout`은 goal 접수 시각부터 수신, 식별, EKF 준비 대기를 덮는다.
+준비 단계는 미션마다 한 번 돈다. 진입 방식은 첫 항목의 type에서 정해진다. 이 구간의 feedback phase는 `PHASE_PREPARING`이다. `ready_timeout`은 goal 접수 시각부터 수신, 식별, EKF 준비 대기를 덮는다.
+
+| 진입 방식 | 첫 항목 | 시작 조건 | 준비 | 첫 항목의 시작 시각 |
+| --- | --- | --- | --- | --- |
+| 지상 arm 진입 | TAKEOFF | 지상이고 DISARMED | 아래 순서 표 전체 | arm 확인 |
+| 공중 Offboard 진입 | GOTO, TRACK_ENTITY, LOITER | ARMED이고 공중이며 `nav_state`와 `nav_state_user_intention`이 AUTO_LOITER이고 `failsafe`가 false | 수신과 식별, 시작 조건, EKF 준비(위치와 heading이 유한), 발행 시작(진입 setpoint), 신호 확인, Offboard 전환. arm 명령을 보내지 않는다 | OFFBOARD 3회 연속 확인 |
+| 모드 명령 진입 | LAND, RTL | ARMED이고 공중 | 수신과 식별, 시작 조건, EKF 준비. Offboard 전환, arm, 발행을 하지 않는다 | 준비 끝 |
+
+지상 arm 진입의 순서.
 
 | 순서 | 내용 | 실패 |
 | --- | --- | --- |
@@ -506,27 +527,53 @@ action `/<vehicle_id>/execute_mission`. 기체마다 Mission Executor 하나가 
 | EKF 준비 | `failsafe_flags`의 local position, local altitude, global position, home position 무효 flag가 모두 false이고 위치 값이 유한하다(`MODE_KEEP`이면 heading도 유한하다) | `ready_timeout`에 NOT_READY |
 | 발행 시작 | 기준 위치와 heading을 읽고 TAKEOFF 목표점으로 발행을 시작한다 | - |
 | 신호 확인 | 발행 10회 이상이고 PX4가 offboard 신호를 잃지 않았다 | `offboard_signal_timeout`에 MODE_SWITCH_FAILED |
-| Offboard 전환 | Offboard 전환 명령. OFFBOARD 3회 연속 확인 | 거부 ack 또는 `mode_confirm_timeout`에 MODE_SWITCH_FAILED |
+| Offboard 전환 | Offboard 전환 명령(유효 ack가 없는 동안 재전송). OFFBOARD 3회 연속 확인과, 마지막 전송 뒤에 온 ack(거부가 아님) | 거부 ack, `mode_confirm_timeout`(이 단계에 들어간 때부터), 확인한 OFFBOARD에서의 이탈에 MODE_SWITCH_FAILED |
 | arm | arm 명령. ARMED를 처음 관측하면 재전송을 멈춘다. ARMED이고 OFFBOARD인 표본 3회 연속 확인 | ARMED를 처음 관측하기 전: `arm_timeout`(arm을 처음 보낸 시각부터) 또는 TEMPORARILY_REJECTED가 아닌 거부 ack에 ARM_REJECTED. 처음 관측한 뒤: 그 시각부터 `mode_confirm_timeout` 안에 확인되지 않으면 ARM_REJECTED. 그 사이의 이상은 "비행 중 감시"가 끝낸다 |
 
 - Offboard 전환이 먼저이고 arm이 나중이다. PX4는 arm 때 현재 모드에 신호가 없으면 거부하므로, arm이 받아들여졌다는 것이 Offboard가 돌 수 있다는 뜻이다.
+- arm의 순서(불변식): arm은 마지막 Offboard 전환 명령을 보낸 tick보다 뒤의 tick에 받은 그 명령의 ack(거부가 아닌 것. 이하 유효 ack)가 있고 OFFBOARD 3회 연속 확인이 된 tick에만 보낸다. PX4 command queue에서 arm 앞에 이 goal이 보낸 명령이 남지 않게 하려는 것이고, tick 주기가 처리 시간보다 길다는 시간 여유가 아니라 순서로 지킨다("시간 기준" 절). 전환 명령은 유효 ack가 없는 동안 `command_resend_period`마다 재전송하고 유효 ack가 있으면 확인 전이어도 재전송하지 않는다. 재전송하면 마지막 전송 tick이 바뀌므로 그 뒤의 ack를 다시 기다린다. OFFBOARD 3회 확인은 확인한 tick에 고정되어 이후 계수가 0으로 돌아가도 다시 세지 않는다. 확인 뒤 유효 ack를 기다리는 구간(대기 구간)에서 `arm_sent`는 false이고 phase는 `PHASE_PREPARING`이다. [실측] 보통의 실행에서는 ack가 확인보다 먼저 와 있어 대기 구간이 0 tick이다.
+- 대기 구간의 사건은 모두 arm을 보내지 않은 준비 단계의 사건이다. 같은 tick에 겹치면 거부 ack, `mode_confirm_timeout`, 이탈이 arm보다 먼저다.
+
+| 사건 | 결과 |
+| --- | --- |
+| 유효 ack | arm을 보내고 arm 단계로 간다 |
+| 거부 ack | arm 없이 MODE_SWITCH_FAILED(준비 단계). DISARMED이고 arm을 보내지 않았으므로 정리할 것이 없다 |
+| 이탈: 식별이 맞고 timestamp가 확인에 쓴 마지막 OFFBOARD 표본보다 큰 OFFBOARD 아닌 표본 하나 | arm 없이 MODE_SWITCH_FAILED(준비 단계). 재전송도 멈춘다 |
+| `mode_confirm_timeout` | arm 없이 MODE_SWITCH_FAILED(준비 단계) |
+| 취소 | disarm 없이 CANCELED(arm을 보내지 않은 지상 disarm 분기) |
+| 식별 불일치 등 준비 단계의 공통 출구 | ABORTED, REASON_INTERNAL. arm을 보내지 않았으므로 disarm을 보내지 않는다 |
+
+- `detail`의 앞부분이 경로를 가른다: `mode_confirm_timeout: OFFBOARD not confirmed`(확인되지 않은 전환), `mode_confirm_timeout: OFFBOARD confirmed but no DO_SET_MODE(OFFBOARD) ack`(확인 뒤 ack 없음), `DO_SET_MODE(OFFBOARD) rejected: `(확인 전 거부 ack), `DO_SET_MODE(OFFBOARD) rejected after OFFBOARD confirmed: `(확인 뒤 거부 ack), `OFFBOARD left before DO_SET_MODE(OFFBOARD) ack`(대기 중 이탈).
+- 이탈을 arm 없이 실패로 끝내는 이유: [소스] DISARMED에서는 failsafe 동작을 고르지 않으므로(`framework.cpp` 452-455행) 지상 DISARMED의 OFFBOARD는 offboard 신호 손실로 빠지지 않는다. 대기 구간에 OFFBOARD에서 빠지는 길은 다른 출처의 모드 변경뿐이다(DISARMED에서는 모드 변경이 늘 받아들여진다. `UserModeIntention.cpp` 73-74행). 이탈을 본 뒤 재전송을 이어 가면 그 출처와 다투고, 이탈을 보지 않고 확인을 고정하면 OFFBOARD가 아닌 모드에서 arm할 수 있다. 확인 뒤 유효 ack가 끝내 오지 않는 실패는 OFFBOARD로 바뀌었지만 ack를 얻지 못한 거짓 실패일 수 있고, arm 전이고 DISARMED이므로 fail-closed다. 재시도는 소비자가 goal을 다시 보내는 것이다.
+- 유효 ack에서 재전송을 멈추는 이유: [실측] 재전송 하나가 PX4에 닿지 않는 일이 있어(CI `sitl` ULog의 지상 전환 묶음 211개 가운데 1개) 확인 뒤에 재전송하지 않으면 그 ack를 기다리다 `mode_confirm_timeout`으로 끝난다. 확인까지 주기마다 재전송하면 arm이 늘 확인 직전의 재전송과 그 ack에 달린다. 유효 ack에서 멈추면 보통의 실행에서 전환은 하나이고 arm은 첫 전송의 ack에 달린다. 전제: ack ACCEPTED는 모드 전환이 일어난다는 뜻이다([소스] `Commander.cpp` 912-927행, [실측] 17회).
 - 시작 조건에서 지상 arm 기체를 받지 않는다. Executor가 arm하지 않은 기체(외부에서 arm한 기체)를 넘겨받지 않기 위해서다. 그래서 REASON_DISARM_FAILED로 지상에 arm 상태로 남은 기체는 누군가 disarm해야 다음 TAKEOFF 미션을 받는다.
 - 첫 명령(`vehicle_command`)은 준비 단계의 식별 대조가 맞은 뒤에만 보낸다. 발행(setpoint stream)은 이 대조로 막지 않는다.
 - NOT_READY와 PRECONDITION_FAILED로 끝난 goal은 발행을 시작하기 전에 끝났으므로 기체에 setpoint도 명령도 보내지 않았다. 발행을 시작한 뒤의 식별 불일치는 NOT_READY가 아니라 ABORTED, REASON_INTERNAL이고 `detail`에 기대값과 받은 값을 적는다. 이때 arm을 보냈으면 확인 없이 disarm을 한 번 보내고 끝낸다(입력을 믿을 수 없으므로 정리 분기를 고르지 않는다).
-- 이 goal의 arm 뒤 ARMED를 처음 관측한 다음부터는 첫 항목을 시작하기 전이라도 "비행 중 감시"가 적용된다. 그래서 REASON_FAILSAFE, REASON_EXTERNAL_MODE_CHANGE, REASON_EXTERNAL_DISARM, REASON_LINK_LOST가 `PHASE_PREPARING`(`last_item_index` 0)에서 나올 수 있다. ARMED 확인 구간과 TAKEOFF는 같은 물리 상태(arm과 함께 이륙 ramp가 시작된다)이므로 같은 관측에 같은 동작을 낸다.
-- 준비 단계의 실패 가운데 ARM_REJECTED와 MODE_SWITCH_FAILED는 정리("정리" 절)를 거친다. 비행 중 감시로 끝나면 정리를 거치지 않는다.
+- 지상 arm 진입에서 이 goal의 arm 뒤 ARMED를 처음 관측한 다음부터는 첫 항목을 시작하기 전이라도 "비행 중 감시"가 적용된다. 그래서 REASON_FAILSAFE, REASON_EXTERNAL_MODE_CHANGE, REASON_EXTERNAL_DISARM, REASON_LINK_LOST가 `PHASE_PREPARING`(`last_item_index` 0)에서 나올 수 있다. ARMED 확인 구간과 TAKEOFF는 같은 물리 상태(arm과 함께 이륙 ramp가 시작된다)이므로 같은 관측에 같은 동작을 낸다.
+- 준비 단계의 실패 가운데 ARM_REJECTED와 MODE_SWITCH_FAILED는 정리("정리" 절)를 거친다(arm을 보내지 않은 지상 DISARMED이면 정리할 것이 없다). 비행 중 감시로 끝나면 정리를 거치지 않는다.
 
-`[LAND]` 한 항목 미션의 준비: 수신과 식별 -> 시작 조건(ARMED이고 공중. 아니면 PRECONDITION_FAILED) -> EKF 준비 -> LAND 항목. Offboard 전환과 arm을 하지 않고 발행도 하지 않는다. `ready_timeout`으로 NOT_READY가 되면 기체는 있던 모드(보통 Hold)에 그대로 있다. 취소 뒤 Hold로 남은 기체(ARMED, `landed` false)는 이 시작 조건을 통과한다.
+공중 Offboard 진입(첫 항목이 GOTO, TRACK_ENTITY, LOITER)은 arm을 보내지 않고 Hold 중인 기체를 Offboard로 옮긴다.
+
+- 순서는 수신과 식별 -> 시작 조건 -> EKF 준비 -> 발행 시작 -> 신호 확인 -> Offboard 전환이다. 시작 조건이 맞지 않으면 PRECONDITION_FAILED다(아무것도 보내지 않았다). 이미 OFFBOARD인 기체, AUTO_RTL이나 AUTO_LAND 중인 기체, failsafe 중인 기체는 받지 않는다. failsafe 중의 모드 변경은 사용자 넘겨받기라([소스] `framework.cpp` 501-518행) 이런 기체에 Offboard 전환을 보내면 Executor가 다른 주체의 결정을 덮는다. 보내는 쪽이 먼저 기체를 Hold로 둔 뒤(예: 실행 중 goal의 취소) 다시 보낸다.
+- 진입 setpoint는 발행을 시작하는 tick에 읽은 위치와 heading이고 OFFBOARD 확인까지 바꾸지 않는다. Hold 중의 `trajectory_setpoint`는 비행제어 자신의 setpoint와 섞이므로 현재 위치를 보내 끌림을 줄인다. OFFBOARD 3회 확인 tick에 첫 항목을 시작하고 그 항목의 setpoint로 바꾼다. 첫 항목이 LOITER이면 진입 setpoint가 직전 setpoint다. 먼 첫 GOTO도 처음부터 목표점을 보낸다(점진 이동이 없다).
+- Offboard 전환 명령은 신호 확인 뒤에 보내고 첫 OFFBOARD 표본을 볼 때까지 `command_resend_period`마다 재전송한다. 첫 OFFBOARD 표본의 tick에 재전송을 멈추고 대기 중인 명령을 지운다(그 뒤에 온 이 명령의 ack는 거부여도 보지 않는다). 수락 ack는 조건으로 쓰지 않는다. 감시의 행으로 끝난 goal은 발행을 멈추므로, 그 뒤에 이 goal의 전환이 처리되면 기체가 발행 없는 OFFBOARD가 되어 `COM_OF_LOSS_T` 뒤 Offboard 손실 failsafe(이 프로젝트에서 Land)가 걸리기 때문이다. 전제는 전환 전송에서 첫 OFFBOARD 표본 도착까지의 지연이 `command_resend_period`보다 작다는 것이다([추정]. 처리 16 ms 이하, Commander loop 약 10 ms, `vehicle_status` 5 Hz 제한에 따른 최대 200 ms, tick 50 ms로 약 0.28 s 이하로 계산했고 재지 않았다).
+- 첫 OFFBOARD 표본은 발행을 시작한 뒤에 온 표본 가운데 `nav_state`가 OFFBOARD이고 감시 표의 행(순위 1-6)에 걸리지 않은 첫 표본이다. `failsafe` 값과 무관하다. 면제와 재전송은 이 표본을 본 tick에 끝난다("비행 중 감시" 절).
+- 전환을 보내기 전에 첫 OFFBOARD 표본이 오면 다른 주체의 전환이다. 전환을 보내지 않고 MODE_SWITCH_FAILED(준비 단계)로 끝내며 `detail`을 `OFFBOARD before DO_SET_MODE`로 시작해 가른다. 정리를 거친다(기체가 OFFBOARD이고 공중이므로 공중 분기. 발행을 유지한 채 Hold를 보내고 Hold 관측에 발행을 멈춘다. 그 전환은 이 goal의 Offboard 신호 덕에 받아들여졌을 수 있으므로 발행을 멈추면 Offboard 손실 failsafe가 걸릴 수 있다). EXTERNAL_MODE_CHANGE로 끝내지 않는 이유: 그 reason의 끝난 뒤 기체 상태는 "다른 주체가 고른 모드의 ARMED이고 Executor는 발행을 멈추고 아무것도 보내지 않았다"이다.
+- 신호 확인과 Offboard 전환의 실패(MODE_SWITCH_FAILED)와 이 진입 중의 취소는 취소와 같은 분기 고르기를 쓰고 이 진입만의 갈래를 두지 않는다("정리" 절). 같은 tick의 순서: 신호 확인 단계는 감시 표, 먼저 본 OFFBOARD, `offboard_signal_timeout`, 신호 확인이고, Offboard 전환 단계는 감시 표, 거부 ack, 첫 OFFBOARD 표본의 관측, `mode_confirm_timeout`, OFFBOARD 3회 확인, 취소다. 확인과 만료가 같은 tick이면 어느 쪽이든 만료가 이긴다. 발행을 시작하는 tick은 감시 표를 돌리지 않는다(그 tick에 Px4Timestamp를 만들지 못하면 준비 단계의 ABORTED, REASON_INTERNAL이고, 다음 tick부터는 감시 순위 1이다). 식별 불일치는 준비 단계의 별도 분기가 아니라 감시 순위 2로 처리한다.
+- 알려진 창 둘. (1) 실패나 취소의 tick에 본 AUTO_LOITER 표본이 늦은 표본이고 이 goal의 전환이 이미 처리되어 기체가 OFFBOARD일 수 있다. 그 tick에 발행을 멈추므로 같은 tick에 보낸 Hold가 처리될 때까지 기체는 발행 없는 OFFBOARD이다. Hold 하나가 유실되어도 재전송이 Offboard 손실 판정(`COM_OF_LOSS_T` 1.0 s) 안에 닿고([추정]), Hold가 두 번 연속 유실되거나 거부되면 Offboard 손실 Land가 걸릴 수 있다(거부는 정리의 Land 경로가 받는다). (2) 첫 OFFBOARD 표본 전에 감시의 행으로 끝나면 정리를 거치지 않아 Hold를 보내지 않으므로, 이 goal의 전환이 처리 전이거나 처리됐지만 OFFBOARD 표본이 아직 오지 않았으면 종료 뒤에 기체가 발행 없는 OFFBOARD가 되어 Offboard 손실 failsafe로 간다. 다른 주체가 고른 모드나 failsafe 동작에 Hold를 덧씌우지 않는다는 규칙을 우선한다.
+- 첫 OFFBOARD 표본을 본 뒤 운용자가 Hold로 되돌리면 그 표본에서 순위 7의 EXTERNAL_MODE_CHANGE로 끝난다. 정리를 거치지 않고, arm을 보내지 않은 goal이라 명령을 보내지 않는다.
+
+`[LAND]`와 `[RTL]` 한 항목 미션의 준비: 수신과 식별 -> 시작 조건(ARMED이고 공중. 아니면 PRECONDITION_FAILED) -> EKF 준비 -> 항목. Offboard 전환과 arm을 하지 않고 발행도 하지 않는다. `ready_timeout`으로 NOT_READY가 되면 기체는 있던 모드(보통 Hold)에 그대로 있다. 취소나 정리나 공중 종료 단계가 Hold로 남긴 기체(ARMED, `landed` false)는 이 시작 조건과 공중 Offboard 진입의 시작 조건을 통과한다.
 
 ### 발행 규칙
 
-- Executor는 Offboard로 들어가는 중(준비 단계의 발행 시작부터 arm 확인까지)과 `nav_state`가 OFFBOARD인 동안에만 발행한다. OFFBOARD가 아닌 모드(Hold, Land, failsafe 동작)를 관측하면 그 tick에 발행을 멈추고 다시 켜지 않는다. 모드 명령(Hold, NAV_LAND)을 보낸 뒤에는 그 모드를 처음 관측한 tick에 멈춘다.
+- Executor는 Offboard로 들어가는 중(준비 단계의 발행 시작부터 지상 arm 진입은 arm 확인까지, 공중 Offboard 진입은 첫 OFFBOARD 표본까지. 공중 Offboard 진입은 Hold 중에도 진입 setpoint를 발행한다)과 `nav_state`가 OFFBOARD인 동안에만 발행한다. 들어가는 중이 아닌데 OFFBOARD가 아닌 모드(Hold, Land, failsafe 동작)를 관측하면 그 tick에 발행을 멈추고 다시 켜지 않는다. 모드 명령(Hold, NAV_LAND)을 보낸 뒤에는 그 모드를 처음 관측한 tick에 멈춘다.
 - 이유: PX4 안에서 `trajectory_setpoint`는 비행제어 자신의 setpoint와 같은 토픽이라, Offboard가 아닌 모드에서 발행하면 섞인다. Hold 중 발행하면 기체가 끌리고, 착륙 중 발행하면 착륙 판정이 늦어지며, failsafe 뒤 발행을 재개하면 기체가 Offboard로 돌아간다.
 - 정리의 지상 분기는 발행 중이면 setpoint를 "지상 setpoint"(그 tick의 위치에서 0.5 m 아래, 그 tick의 heading. 위치가 유한하지 않으면 준비 단계에서 읽은 기준 위치)로 바꿔 발행한다. 이륙 의도가 꺼져 추력이 오르지 않게 하려는 것이다. 이미 멈춘 발행은 이 분기에서도 다시 켜지 않는다.
 
 ### 비행 중 감시
 
-준비 단계에서 ARMED를 처음 관측한 tick부터 setpoint 항목(TAKEOFF, LOITER)이 끝날 때까지 매 tick 아래 표를 본다. 표의 행으로 끝나는 goal은 정리를 거치지 않고 그 tick에 발행을 멈추고 ABORTED로 끝난다. 한 tick에 여러 행이 맞으면 순위가 앞선 행이 이긴다. 순위는 같은 tick의 동률만 가르고, 먼저 맞은 행이 그 tick에 goal을 끝낸다. 순위 3만 누적 판정(마지막 수신부터 `link_timeout`)이고 나머지는 표본 하나로 판정한다.
+감시 구간의 시작은 진입 방식으로 갈린다. 지상 arm 진입은 준비 단계에서 ARMED를 처음 관측한 tick부터이고, 공중 Offboard 진입은 발행을 시작한 tick부터다(그 tick 자신은 표를 보지 않고 표의 판정은 다음 tick부터다). 구간은 setpoint 항목(TAKEOFF, GOTO, TRACK_ENTITY, LOITER)이 끝날 때까지이고 매 tick 아래 표를 본다. 공중 종료 단계는 이 표 대신 그 절의 표를 쓴다. 표의 행으로 끝나는 goal은 정리를 거치지 않고 그 tick에 발행을 멈추고 ABORTED로 끝난다. 한 tick에 여러 행이 맞으면 순위가 앞선 행이 이긴다. 순위는 같은 tick의 동률만 가르고, 먼저 맞은 행이 그 tick에 goal을 끝낸다. 순위 3만 누적 판정(마지막 수신부터 `link_timeout`)이고 나머지는 표본 하나로 판정한다.
 
 | 순위 | 관측 | reason | 동작 |
 | --- | --- | --- | --- |
@@ -540,27 +587,50 @@ action `/<vehicle_id>/execute_mission`. 기체마다 Mission Executor 하나가 
 | 8 | OFFBOARD가 아니고 failsafe가 아니며 사용자 의도는 OFFBOARD다 | FAILSAFE(방어용. PX4 v1.17.0의 정상 상태에서는 나오지 않는다) | 위와 같다 |
 
 - 순위의 이유. 1-3은 나머지 행의 입력을 믿을 수 없게 하는 조건이다(시각이 없으면 발행이 안 되고, 식별이 어긋난 표본은 남의 기체의 것일 수 있으며, 끊기면 읽을 값이 없다). arming 행(4, 5)이 모드 행(6-8)보다 앞인 것은 disarm된 뒤의 `nav_state`가 확인된 사실이 아니기 때문이다. arming 상태를 먼저 보면 그 `nav_state`가 무엇이든 같은 reason이 나온다.
-- 순위 5의 failsafe 이력 구간: 첫 항목(TAKEOFF)은 첫 ARMED 표본부터 그 항목이 끝날 때까지이고, 그 뒤의 항목은 항목이 시작된 뒤에 받은 표본부터다. 지금의 DISARMED 표본의 `nav_state`는 보지 않는다. PX4의 자동 disarm 주기의 첫 DISARMED 표본은 `failsafe`가 false이므로, failsafe Land로 OFFBOARD를 벗어난 표본을 Executor가 놓친 채 자동 disarm된 경우는 EXTERNAL_DISARM이 된다(원인을 판정하지 않는다는 의미에 맞다).
-- 지상 disarm 1회(순위 3, 6, 7, 8): 세 조건이 모두 참이면 발행을 멈춘 그 tick에 disarm을 한 번 보내고 확인 없이 끝내며, `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground"를 적는다. (1) 이 goal이 arm을 보냈다. (2) 첫 ARMED 표본 뒤에 받은 `landed`가 한 번도 false가 아니었다(이륙 이력이 없다). (3) 그 tick의 최신 `landed`가 true다. 이유: PX4의 착지 자동 disarm(`COM_DISARM_LAND`)은 이륙 이력이 있어야 동작하고, 이 프로젝트는 `COM_DISARM_PRFLT=-1`이라 한 번도 뜨지 않은 지상 arm 기체는 스스로 disarm되지 않는다. 이륙 이력이 생긴 뒤는 PX4가 맡는다. disarm은 모드 변경 요청이 아니라 failsafe 중에 보내도 사용자 넘겨받기를 일으키지 않는다.
+- 순위 5의 failsafe 이력 구간: 첫 항목은 감시 구간의 시작부터(지상 arm 진입은 첫 ARMED 표본, 공중 Offboard 진입은 발행을 시작한 tick) 그 항목이 끝날 때까지이고(첫 항목의 시작 tick에 이력을 지우지 않는다), 그 뒤의 항목은 항목이 시작된 뒤에 받은 표본부터다. 지금의 DISARMED 표본의 `nav_state`는 보지 않는다. PX4의 자동 disarm 주기의 첫 DISARMED 표본은 `failsafe`가 false이므로, failsafe Land로 OFFBOARD를 벗어난 표본을 Executor가 놓친 채 자동 disarm된 경우는 EXTERNAL_DISARM이 된다(원인을 판정하지 않는다는 의미에 맞다).
+- 공중 Offboard 진입의 면제: 첫 OFFBOARD 표본 전에는 순위 7과 8을 `nav_state`가 AUTO_LOITER인 표본에 적용하지 않는다(진입 전의 모드가 AUTO_LOITER이기 때문이다). 순위 1-6은 그대로이고, 순위 6은 AUTO_LOITER여도 적용한다(failsafe 동작이 Hold인 표본은 `failsafe` true, AUTO_LOITER이고 [소스] `Commander.cpp` 2388행, `framework.h` 150행, `framework.cpp` 680행. 면제하면 진입 중 failsafe 동작을 Executor가 덮는다). 면제는 첫 OFFBOARD 표본을 본 tick에 끝나고 그 tick부터 순위 7, 8은 그대로다. 이 구간에서 판정에 쓰는 `vehicle_status`의 하한 timestamp는 발행을 시작한 tick에 쓴 표본의 timestamp이고, 첫 OFFBOARD 표본의 tick에 그 표본의 timestamp로 올린다. 하한보다 작은 표본(순서가 뒤바뀌어 늦게 닿은 AUTO_LOITER 표본)은 판정에 쓰지 않고 직전에 쓴 표본을 다시 본다(식별이 어긋난 표본은 그대로 순위 2다). 운용자가 OFFBOARD 표본 뒤에 되돌린 Hold는 timestamp가 더 크므로 순위 7로 끝난다. [소스] `failsafe`가 false인 채 OFFBOARD에서 AUTO_LOITER로 돌아가는 길은 다른 주체의 모드 변경뿐이다(모드 의도 변경은 원자적이고, 수락 뒤 `nav_state`가 의도와 달라지는 길은 failsafe 동작 선택뿐이다). 이 완전성은 [추정]이다. 틀려서 PX4가 스스로 되돌아가는 길이 있으면 goal이 순위 7이나 8로 거짓 종료하지만, 명령 없이 Hold인 기체를 두고 끝나므로 fail-closed다.
+- 지상 disarm 1회(순위 3, 6, 7, 8): 세 조건이 모두 참이면 발행을 멈춘 그 tick에 disarm을 한 번 보내고 확인 없이 끝내며, `detail`에 "disarm sent once, not confirmed; vehicle may remain armed on ground"를 적는다. (1) 이 goal이 arm을 보냈다. (2) 첫 ARMED 표본 뒤에 받은 `landed`가 한 번도 false가 아니었다(이륙 이력이 없다). (3) 그 tick의 최신 `landed`가 true다. 이유: PX4의 착지 자동 disarm(`COM_DISARM_LAND`)은 이륙 이력이 있어야 동작하고, 이 프로젝트는 `COM_DISARM_PRFLT=-1`이라 한 번도 뜨지 않은 지상 arm 기체는 스스로 disarm되지 않는다. 이륙 이력이 생긴 뒤는 PX4가 맡는다. 공중 Offboard 진입의 goal은 arm을 보내지 않으므로 조건 (1)이 늘 거짓이고 disarm을 보내지 않는다. disarm은 모드 변경 요청이 아니라 failsafe 중에 보내도 사용자 넘겨받기를 일으키지 않는다.
 - 순위 2의 disarm 1회는 `landed`를 보지 않는다. 같은 네임스페이스에 다른 발행자가 있을 수 있는 경우라 `vehicle_land_detected`(식별 필드가 없다)를 믿을 수 없기 때문이다. 이 disarm은 기대 sysid로 주소를 정하므로 우리 기체가 아니면 PX4가 무시하고, 떠 있는 기체에서는 거부된다.
 - OFFBOARD이고 ARMED인 채 failsafe인 표본은 어느 행에도 걸리지 않고 goal을 계속한다. 모드를 바꾸지 않는 failsafe이고, 발행을 멈추면 offboard 신호 손실 failsafe를 스스로 일으키기 때문이다. 다음 표본의 모드 이탈은 순위 6-8이 잡는다.
 
-disarm 분류의 고정 규칙: 관측한 disarm이 지상인지 공중인지는 처음 관측한 DISARMED 표본의 tick에, 그때까지 받은 최신 `landed` 값으로 정하고 고정한다. 뒤에 오는 `landed` 표본으로 바꾸지 않는다. PX4는 공중에서 disarm돼도 약 0.33 s 뒤 `landed`를 true로 바꿔 발행하므로, 고정하지 않으면 공중 disarm이 지상 disarm(완료나 CANCELED)으로 잘못 분류된다. 이 규칙은 감시 표의 순위 4와 5, LAND 항목의 완료 판정, 정리 중에 본 DISARMED에 모두 쓴다.
+disarm 분류의 고정 규칙: 관측한 disarm이 지상인지 공중인지는 처음 관측한 DISARMED 표본의 tick에, 그때까지 받은 최신 `landed` 값으로 정하고 고정한다. 뒤에 오는 `landed` 표본으로 바꾸지 않는다. PX4는 공중에서 disarm돼도 약 0.33 s 뒤 `landed`를 true로 바꿔 발행하므로, 고정하지 않으면 공중 disarm이 지상 disarm(완료나 CANCELED)으로 잘못 분류된다. 이 규칙은 감시 표의 순위 4와 5, 모드 명령 항목의 완료 판정, 정리 중과 공중 종료 단계에서 본 DISARMED에 모두 쓴다.
 
-### LAND 항목
+### 모드 명령 항목(LAND, RTL)
 
-LAND 항목은 NAV_LAND를 재전송하며 Land 모드(AUTO_LAND)를 기다린다. 발행 중이었으면 AUTO_LAND를 처음 관측한 tick에 멈춘다.
+모드 명령 항목은 명령을 재전송하며 확인할 모드를 기다리고, 그 모드가 확인되면 지상 DISARMED를 기다린다. 발행 중이었으면 확인할 모드를 처음 관측한 tick에 멈춘다. 둘의 차이는 아래 표가 전부이고 나머지 규칙은 같다.
 
-- 확인 전(NAV_LAND를 보낸 뒤 AUTO_LAND 3회 연속까지): 모드 이탈 판정을 하지 않는다. 항목 시작 때의 모드가 AUTO_LAND가 아니기 때문이다(보통 OFFBOARD, `[LAND]` 미션이면 보통 Hold). 이 구간에서는 `mode_confirm_timeout`(NAV_LAND를 처음 보낸 시각부터. MODE_SWITCH_FAILED), 상태 끊김(LINK_LOST), 항목 `timeout`(ITEM_TIMEOUT)만 본다. 같은 tick이면 MODE_SWITCH_FAILED가 ITEM_TIMEOUT보다 먼저다. AUTO_LAND를 한 번 본 뒤 다른 모드 표본이 오면 계수를 0으로 되돌릴 뿐 이탈로 보지 않는다. AUTO_LAND 확인은 `failsafe` 값과 무관하게 센다(offboard 손실 Land 중인 기체에 보낸 `[LAND]`도 정상 경로다).
-- 확인 뒤: ARMED인 동안 AUTO_LAND를 벗어나면 EXTERNAL_MODE_CHANGE(failsafe이면 FAILSAFE)다.
+| 항목 | 명령 | 확인할 모드 | 확인 전의 거부 ack | `mode_confirm_timeout` 안에 미확인 | 완료 |
+| --- | --- | --- | --- | --- | --- |
+| LAND | NAV_LAND(21) | AUTO_LAND | 끝내지 않고 재전송을 이어 간다 | 정리 없이 ABORTED, REASON_MODE_SWITCH_FAILED | 지상 DISARMED 3회 연속 |
+| RTL | NAV_RETURN_TO_LAUNCH(20) | AUTO_RTL | 실패 fallback | 실패 fallback | 지상 DISARMED 3회 연속. `nav_state`는 보지 않는다 |
+
+- 확인 전(명령을 보낸 뒤 확인할 모드 3회 연속까지): 모드 이탈 판정을 하지 않는다. 항목 시작 때의 모드가 확인할 모드가 아니기 때문이다(보통 OFFBOARD, 한 항목 미션이면 보통 Hold). 이 구간에서는 `mode_confirm_timeout`(명령을 처음 보낸 시각부터), 상태 끊김(LINK_LOST), 항목 `timeout`(ITEM_TIMEOUT)만 보고, RTL은 거부 ack도 본다. 같은 tick이면 MODE_SWITCH_FAILED(RTL은 실패 fallback)가 ITEM_TIMEOUT보다 먼저다. 확인할 모드를 한 번 본 뒤 다른 모드 표본이 오면 계수를 0으로 되돌릴 뿐 이탈로 보지 않는다. 확인은 `failsafe` 값과 무관하게 센다(offboard 손실 Land 중인 기체에 보낸 `[LAND]`도 정상 경로다).
+- 확인 뒤: ARMED인 동안 확인한 모드를 벗어나면 EXTERNAL_MODE_CHANGE(failsafe이면 FAILSAFE)다.
 - 어느 구간에서든 DISARMED이고 지상이면 `nav_state`가 무엇이든 이탈로 보지 않고 완료 계수(DISARMED 3회 연속)가 우선한다. PX4는 자동 disarm과 함께 `nav_state`를 사용자 의도의 모드로 되돌리기 때문이다. DISARMED이고 공중이면 FAILSAFE다. 지상과 공중은 disarm 분류의 고정 규칙으로 읽는다.
-- 대비책: 지상이고 ARMED인 채 `land_disarm_fallback_delay`가 지나면(AUTO_LAND 확인 뒤에만) disarm을 재전송하며 완료를 기다린다.
-- 식별 불일치 표본은 ABORTED, REASON_INTERNAL로 끝낸다. LAND 항목에는 정리 분기가 없다.
-- LAND 항목의 ITEM_TIMEOUT: NAV_LAND 재전송을 멈추고, 아직 발행 중이면 발행을 멈춘다. Hold는 보내지 않는다. 그 뒤는 PX4가 맡는다(OFFBOARD였으면 offboard 손실 동작 `COM_OBL_RC_ACT=4`의 Land, AUTO_LAND를 확인했으면 그 착륙). `[LAND]` 미션은 발행한 적이 없어 offboard 손실 Land가 걸리지 않으므로, NAV_LAND가 PX4에 닿지 않았다면 기체는 있던 모드(보통 Hold)에 남는다. 어느 쪽인지 `detail`에 적는다.
+- 대비책: 지상이고 ARMED인 채 `land_disarm_fallback_delay`가 지나면(확인할 모드를 확인한 뒤에만) disarm을 재전송하며 완료를 기다린다.
+- 식별 불일치 표본은 ABORTED, REASON_INTERNAL로 끝낸다. LAND 항목에는 정리 분기가 없다. RTL 항목에는 실패 fallback의 정리가 있다.
+- 항목의 ITEM_TIMEOUT(LAND와 RTL 모두): 명령 재전송을 멈추고, 아직 발행 중이면 발행을 멈춘다. Hold도 Land도 보내지 않고 RTL의 실패 fallback을 거치지 않는다(항목 `timeout`이 `mode_confirm_timeout`보다 짧아 확인 전에 먼저 오는 경우도 같다). 그 뒤는 PX4가 맡는다(확인할 모드를 확인했으면 그 착륙이나 귀환과 착륙, OFFBOARD였으면 offboard 손실 동작 `COM_OBL_RC_ACT=4`의 Land, 한 항목 미션이면 있던 모드에 남을 수 있다. NAV_LAND나 RTL 명령이 PX4에 닿지 않았다면 기체는 있던 모드(보통 Hold)에 남는다). 어느 쪽인지 `detail`에 적는다.
+- 같은 tick에 겹치는 순서: 식별 불일치, 상태 끊김, 공중 DISARMED -> 거부 ack(RTL만 끝낸다) -> `mode_confirm_timeout` -> 확인할 모드 3회 확인 -> ITEM_TIMEOUT -> 완료(지상 DISARMED 3회). 만료가 이긴다는 "종료의 충돌 규칙"을 예외 없이 따른다. 그래서 확인할 모드의 3회째 표본이 `mode_confirm_timeout`의 tick에 정확히 닿으면 확인으로 치지 않고 LAND는 정리 없이 ABORTED, MODE_SWITCH_FAILED이며 RTL은 실패 fallback이다. 이 경계 tick의 LAND는 내려오는 중인 기체를 MODE_SWITCH_FAILED로 보고하는 거짓 실패다(fail-closed).
+
+RTL 항목의 실패 fallback.
+
+- 확인 전에 RTL 명령의 거부 ack(ACCEPTED와 IN_PROGRESS가 아닌 결과 모두)를 받거나 항목 시작부터 `mode_confirm_timeout` 안에 AUTO_RTL이 확인되지 않으면 정리(RTL 실패의 정리)로 들어가고 결과는 ABORTED, REASON_MODE_SWITCH_FAILED다. 새 reason은 없다. 모든 실패 fallback은 Land로 모이고 RTL은 명령 항목으로만 쓴다. RTL이 거부되면 갈 곳(Land)이 있으므로 LAND와 달리 거부 ack로 일찍 끝낸다. [소스] RTL 명령의 거부는 ARMED에서 AUTO_RTL의 모드 요구(위치, 고도, home)가 맞지 않을 때다(`UserModeIntention.cpp` 55-59행, `mode_requirements.cpp` 126-141행). TEMPORARILY_REJECTED도 EKF 준비를 지난 뒤 시작한 항목의 것이라 위치, 고도, home 추정이 무효가 된 기체로 보고 풀리기를 기다리지 않는다([추정]. 거부가 `mode_confirm_timeout` 안에 풀리는지는 재지 않았다).
+- RTL 실패의 정리는 "정리"와 "정리의 상한" 절의 규칙을 그대로 쓰고 하나만 다르다. 공중 분기에서 Hold를 보내지 않고 바로 취소의 Hold 실패 뒤와 같은 Land 경로로 간다(NAV_LAND를 재전송하고, AUTO_LAND를 처음 관측하거나 `mode_confirm_timeout`이 지나면 발행을 멈추고 끝낸다). 미션이 요청한 것은 귀환과 착륙이므로 Hold로 끝내면 내려오지 않은 기체가 공중에 남는다. 지상 분기에서 공중으로 돌아갈 때도 Land 경로다. 발행 중이었으면(RTL이 거부되어 OFFBOARD로 남은 기체) AUTO_LAND를 처음 관측할 때까지 발행을 유지한다(발행을 멈추면 Offboard 손실 failsafe가 걸린다).
+
+| 정리 첫 tick의 기체 | 동작 | 끝난 뒤 기체 상태 |
+| --- | --- | --- |
+| 공중 ARMED | NAV_LAND 재전송 | 보통 AUTO_LAND로 내려오는 중이고 PX4가 착지 뒤 자동 disarm한다. AUTO_LAND를 확인하지 못했으면 `detail`에 적는다 |
+| 지상 ARMED, 또는 이 goal이 arm을 보낸 지상 DISARMED | 지상 disarm 분기 | 보통 지상 DISARMED. disarm이 확인되지 않았으면 `detail`에 적고 지상에 arm으로 남았을 수 있다 |
+| 이 goal이 arm을 보내지 않은(`[RTL]`) 지상 DISARMED | 아무것도 보내지 않는다 | 지상 DISARMED |
+| 공중 DISARMED | 아무것도 보내지 않는다 | 공중 disarm(추락했을 수 있다) |
+
+- 어떻게 끝나든(Land 경로의 관측과 미확인, 지상 disarm의 확인과 미확인, 정리할 것 없음, 상한, 정리 중의 상태 끊김과 공중 DISARMED) reason은 REASON_MODE_SWITCH_FAILED이고 정리 결과는 `detail`에만 적는다. feedback의 `phase`는 `PHASE_WAITING_MODE`, `item_type`은 RTL이다. `detail`은 실패 원인(`NAV_RETURN_TO_LAUNCH rejected: <ack 결과>` 또는 `mode_confirm_timeout: AUTO_RTL not confirmed`) 뒤에 `; cleanup: `과 정리 결과를 잇는다.
+- RTL 항목 중의 취소는 LAND 항목 중의 취소와 같다. 공중이면 Hold를 보내 귀환을 멈추고 기체는 그 자리(귀환 경로 위일 수 있다)에 Hold로 남는다. 내리거나 다시 귀환시키는 것은 취소를 요청한 쪽이 `[LAND]`나 `[RTL]` 미션으로 한다. AUTO_RTL 중의 Hold가 받아들여진다는 것은 [추정]이다. 거부돼도 Hold 실패의 Land 경로가 덮으므로 안전 쪽이다. 실패 fallback의 정리가 시작된 뒤에 온 취소는 결과를 바꾸지 않는다.
+- RTL의 목적지는 PX4 home이다. 계약 문장: RTL은 그 기체가 마지막으로 arm하거나 이륙한 지점으로 돌아가 착륙한다. 공중 시작 미션의 RTL 목적지는 그 미션이 아니라 앞선 비행의 지점이다. 귀환 고도는 `max(현재 고도, home 고도 + RTL_RETURN_ALT)`이다("SITL 파라미터" 절). 목적지 필드는 없다.
 
 ### 취소
 
-Executor는 cancel 요청을 항상 받아들인다. 취소는 상황(준비 단계, failsafe 동작 중, LAND 항목 중 포함)을 가리지 않고 같은 분기로 처리하고 결과로 가른다. 분기는 매 tick 그 tick의 상태로 다시 고른다.
+Executor는 cancel 요청을 항상 받아들인다. 취소는 상황(준비 단계, 공중 Offboard 진입 중, failsafe 동작 중, LAND와 RTL 항목 중 포함)을 가리지 않고 같은 분기로 처리하고 결과로 가른다. 분기는 매 tick 그 tick의 상태로 다시 고른다. 이 절의 분기 고르기와 상태 끊김, 공중 DISARMED 규칙은 정리에도 같다.
 
 | 분기 | 조건 | 동작 | 결과 |
 | --- | --- | --- | --- |
@@ -584,57 +654,60 @@ Hold를 고른 이유: setpoint를 그냥 끊으면 `COM_OF_LOSS_T` 뒤 `COM_OBL
 
 ### 정리
 
-setpoint 항목의 ITEM_TIMEOUT과 준비 단계의 실패(ARM_REJECTED, MODE_SWITCH_FAILED)는 취소와 같은 분기로 기체를 정리한다. 다른 점은 결과다.
+setpoint 항목의 ITEM_TIMEOUT과 TARGET_LOST, 준비 단계의 실패(ARM_REJECTED, MODE_SWITCH_FAILED), RTL 항목의 실패(거부 ack, AUTO_RTL 미확인)는 취소와 같은 분기로 기체를 정리한다. 다른 점은 결과다. 이 절의 "정리"는 "GoalStatus와 reason" 표의 "정리"와 같은 절차다.
 
 - 결과는 항상 ABORTED이고 reason은 원래 실패 사유를 유지한다. Hold나 disarm이 확인되지 않았으면 `detail`에 적고, REASON_MODE_SWITCH_FAILED나 REASON_DISARM_FAILED로 바꾸지 않는다. 그래서 REASON_DISARM_FAILED는 취소에서만 나온다.
-- 준비 단계의 실패에서 지상이고 DISARMED이며 arm을 보낸 적이 없으면 발행을 멈추는 것으로 끝낸다(정리할 것이 없다).
-- 정리 중 feedback의 `phase`는 실패한 단계의 phase(EXECUTING 또는 PREPARING)를 유지한다. `PHASE_CANCELING`은 취소일 때만이다.
+- 지상이고 DISARMED이며 arm을 보낸 적이 없으면 발행을 멈추는 것으로 끝낸다(정리할 것이 없다). 준비 단계의 실패, `[RTL]` 미션의 RTL 실패, 그리고 arm을 보내지 않는 공중 Offboard 진입 미션의 준비 단계 실패와 setpoint 항목의 ITEM_TIMEOUT과 TARGET_LOST가 이 끝을 낼 수 있다.
+- 공중 Offboard 진입의 준비 단계 실패(MODE_SWITCH_FAILED)는 분기가 취소와 같다. 공중(ARMED, `landed` false. 보통)이면 공중 분기로 발행 중이면 유지한 채 Hold를 보내고 Hold 관측에 발행을 멈춘다(늦게 처리된 Offboard 전환 뒤에 발행을 멈추면 1 s 뒤 offboard 손실 Land가 걸린다). 지상 ARMED(`landed` true)이면 지상 분기이고 Hold를 강제하지 않는다(지상의 Hold는 IDLE setpoint만 내고 이륙 이력이 있는 기체는 `COM_DISARM_LAND` 뒤 스스로 disarm한다). disarm이 확인되지 않아도 reason은 MODE_SWITCH_FAILED를 유지하고 `detail`에 적는다. 그래서 MODE_SWITCH_FAILED로 끝난 기체가 지상 ARMED로 남을 수 있다.
+- TARGET_LOST를 판정한 tick부터 Hold 확인(또는 Hold 실패 뒤 Land 경로)까지 setpoint 발행을 유지한다(공중 분기 규칙 그대로). 발행만 멈추면 `COM_OF_LOSS_T` 뒤 offboard 손실 Land가 걸리는데 기체는 정상이므로 취소와 같은 Hold가 맞다.
+- 정리 중 feedback의 `phase`는 실패한 단계의 phase(PREPARING, EXECUTING, RTL 실패의 WAITING_MODE)를 유지한다. `PHASE_CANCELING`은 취소일 때만이다.
 - 정리 중에 온 cancel은 결과를 바꾸지 않는다(ABORTED와 원래 reason으로 끝난다. 정리 절차가 취소와 같아 기체 동작도 같다).
 
 ### 정리의 상한
 
-정리(취소, setpoint 항목의 ITEM_TIMEOUT, 준비 단계의 실패)는 분기를 오가도 정리를 시작한 tick부터 `hold_confirm_timeout + 3 x mode_confirm_timeout`(기본 12 s) 안에 끝난다. 이 값은 노드 파라미터가 아닌 파생값이다. 정당한 경로 가운데 가장 긴 것(지상 -> Hold 실패 -> Land 경로 -> 다시 지상)의 합이라 정당한 경로를 자르지 않는다.
+정리(취소, setpoint 항목의 ITEM_TIMEOUT과 TARGET_LOST, 준비 단계의 실패, RTL 항목의 실패)와 공중 종료 단계는 분기를 오가도 시작한 tick부터 `max(hold_confirm_timeout + 3 x mode_confirm_timeout, hold_confirm_timeout + land_disarm_fallback_delay + mode_confirm_timeout)`(기본 12 s) 안에 끝난다. 이 값은 노드 파라미터가 아닌 파생값이다. 정당한 경로 둘 가운데 긴 쪽이라 정당한 경로를 자르지 않는다. 앞 항은 정리의 가장 긴 경로(지상 -> Hold 실패 -> Land 경로 -> 다시 지상)이고, 뒤 항은 공중 종료 단계의 지상 경로(지상에서 `hold_confirm_timeout` -> 지상 대기 -> 대비책 지연 -> disarm 확인)다. 기본값에서는 앞이 길어(12 s 대 11 s) 12 s이고, `land_disarm_fallback_delay`를 `2 x mode_confirm_timeout`보다 크게 준 설정에서만 상한이 는다. 대비책 지연과 다른 기한 사이의 관계 검사는 두지 않는다(검사는 파라미터 조합을 거부할 뿐 그 경로를 살리지 못한다).
 
-- 상한에 닿으면 발행을 멈추고 대기 중인 명령을 지운 뒤, 그 tick의 분기에 따라 명령 하나를 보내고 끝낸다. 지상이면 disarm 1회, 공중이면 NAV_LAND 1회(Hold를 이미 관측해 발행을 멈춘 기체는 이 NAV_LAND가 유실되면 Hold로 남는다. 그 경우를 `detail`에 적는다). 그 tick의 표본이 식별 불일치이면 직전 분기로 정한다.
-- 취소이면 지상은 ABORTED, REASON_DISARM_FAILED, 공중은 ABORTED, REASON_MODE_SWITCH_FAILED다. ITEM_TIMEOUT과 준비 단계 실패의 정리이면 같은 동작에 원래 reason을 유지한다. 어느 경우든 `detail`에 상한으로 끝났다는 것과 마지막 분기를 적는다.
+- 상한에 닿으면 발행을 멈추고 대기 중인 명령을 지운 뒤, 그 tick의 분기에 따라 명령 하나를 보내고 끝낸다. 지상이면 disarm 1회, 공중이면 NAV_LAND 1회(Hold를 이미 관측해 발행을 멈춘 기체는 이 NAV_LAND가 유실되면 Hold로 남는다. 그 경우를 `detail`에 적는다). 그 tick의 표본이 식별 불일치이면 직전 분기로 정한다(공중 종료 단계는 disarm 분류가 지상이면 지상, 아니면 지상 대기는 지상, 그 밖은 공중). 이미 DISARMED인 기체에 보낸 disarm은 ACCEPTED로 끝나고 해가 없다([소스] `Commander.cpp` 640-642행, 976-981행).
+- 취소이면 지상은 ABORTED, REASON_DISARM_FAILED, 공중은 ABORTED, REASON_MODE_SWITCH_FAILED다. ITEM_TIMEOUT, TARGET_LOST, 준비 단계 실패, RTL 실패의 정리이면 같은 동작에 원래 reason을 유지한다. 공중 종료 단계는 지상과 공중 모두 ABORTED, REASON_MODE_SWITCH_FAILED다. 어느 경우든 `detail`에 상한으로 끝났다는 것과 마지막 분기를 적는다.
 - 정리 중 한 tick의 순서: (1) 상태 끊김 (2) 공중 DISARMED (3) 정리할 것 없음(지상 DISARMED이고 arm을 보낸 적이 없고 지상 분기 중이 아님) (4) 상한 (5) 그 분기의 실행. 표본 하나로 정해지는 관측((1)-(3))은 상한보다 앞이고, 상한은 그 tick에 온 확인 표본보다 앞이다.
+- 공중 종료 단계 중 한 tick의 순서: (1) 상태 끊김 (2) 공중 DISARMED (3) 상한 (4) 지상 DISARMED 3회째 (5) 분기의 거부 ack, 분기의 기한, Hold 3회째. 지상 DISARMED로 분류된 동안에는 (5)를 보지 않는다("공중에서 끝나는 미션" 절).
 - 소비자는 취소의 결과를 기다리는 시간을 이 값에 하드코딩하지 않는다. 노드 파라미터가 바뀌면 상한도 바뀌므로, 여유를 두거나 result를 비동기로 받는다.
 
 ### 종료의 충돌 규칙
 
 - 먼저 정해진 종료가 이긴다. 종료가 정해진 tick 뒤의 표본과 cancel은 결과를 바꾸지 않는다. 종료는 goal마다 정확히 한 번이다. "정해진다"는 정리가 끝난 때가 아니라 사유가 생긴 tick이다.
-- 같은 tick에 둘 이상이 정해지면 ABORTED 사유, 완료(SUCCEEDED), 취소 순이다. ABORTED 사유가 둘이면 비행 중 감시 표의 순위를 따르고, 감시 표의 행은 ITEM_TIMEOUT을 이긴다. 예: LAND 항목에서 DISARMED 세 번째 표본과 cancel이 같은 tick이면 SUCCEEDED다. CANCELING 중에 항목 `timeout`이 지나도 취소 경로로 끝난다.
-- 같은 tick에 만료와 기다리던 확인(3회 연속)이 함께 정해지면 만료가 이긴다. 표본 하나로 정해지는 관측(공중 DISARMED, 정리할 것 없음, 첫 ARMED 표본)은 만료보다 앞이다.
+- 같은 tick에 둘 이상이 정해지면 ABORTED 사유, 완료(SUCCEEDED), 취소 순이다. ABORTED 사유가 둘이면 비행 중 감시 표의 순위를 따르고, 한 setpoint 항목 안에서 같은 tick의 순서는 감시 표의 행, TARGET_LOST, ITEM_TIMEOUT, 항목 완료다. 예: LAND 항목에서 DISARMED 세 번째 표본과 cancel이 같은 tick이면 SUCCEEDED다. CANCELING 중에 항목 `timeout`이 지나도 취소 경로로 끝난다.
+- 같은 tick에 만료와 기다리던 확인(3회 연속)이 함께 정해지면 만료가 이긴다. 거부 ack로 끝내는 명령(준비 단계의 Offboard 전환, RTL 항목, 공중 종료 단계의 Hold)이면 같은 tick의 거부 ack가 만료와 확인보다 앞이다. 표본 하나로 정해지는 관측(공중 DISARMED, 정리할 것 없음, 첫 ARMED 표본, 공중 Offboard 진입에서 Offboard 전환을 보내기 전에 먼저 본 OFFBOARD)은 만료보다 앞이다. 공중 Offboard 진입의 첫 OFFBOARD 표본은 여기에 넣지 않는다(종료를 정하지 않으므로 같은 tick의 `mode_confirm_timeout`이 그대로 끝낸다). 공중 종료 단계에서 지상 DISARMED로 분류된 동안 보지 않는 분기의 판정은 그 tick에 정해진 것이 아니므로 위 순서(ABORTED 사유, 완료, 취소)의 대상이 아니다.
 - 종료가 정해져 끝나는 시점에는 발행이 멈춰 있고 명령 재전송이 지워져 있다. 그래서 종료 뒤의 cancel을 무시해도 남는 동작이 없다.
 
 ### GoalStatus와 reason
 
 - SUCCEEDED이면 `reason`은 REASON_NONE, CANCELED이면 REASON_NONE, ABORTED이면 REASON_NONE이 아니다. 이 대응을 Executor 단위 테스트가 묶는다.
 - `reason` 값은 추가만 하고 의미를 바꾸지 않는다. 255는 INTERNAL로 고정이다.
-- 1a 노드가 내지 않는 값: REASON_TARGET_LOST(1b. 의미는 1b 완료에 고정한다).
+- 표의 "정리"는 "정리" 절의 절차이고(취소의 정리 포함) 원인은 취소, ITEM_TIMEOUT, TARGET_LOST, 준비 단계 실패, RTL 실패다.
 
 | reason | 의미 | 나오는 곳 |
 | --- | --- | --- |
 | NONE (0) | 사유 없음 | SUCCEEDED, CANCELED |
-| INVALID_MISSION (1) | 미션이 검증을 통과하지 못했다(1a 임시 제한 포함) | 접수 즉시 |
+| INVALID_MISSION (1) | 미션이 검증을 통과하지 못했다(항목 순서 규칙과 좌표 상한 포함) | 접수 즉시 |
 | VEHICLE_ID_MISMATCH (2) | goal의 `vehicle_id`가 Executor의 값과 다르다 | 접수 즉시 |
 | BUSY (3) | 다른 goal을 실행 중이다 | 접수 즉시 |
 | NOT_READY (4) | 항목을 시작하기 전에 기체가 준비되지 않았다(수신, 식별, EKF 준비). 이 goal은 setpoint와 명령을 보내지 않았다 | 준비 단계(발행 시작 전) |
 | ARM_REJECTED (5) | arm이 거부되었거나 `arm_timeout` 안에 ARMED가 관측되지 않았거나, ARMED를 관측했으나 확인되지 않았다 | 준비 단계(arm) |
-| MODE_SWITCH_FAILED (6) | 요청한 모드 전환이 확인되지 않았다(Offboard 신호 확인과 전환, LAND 항목의 Land 전환, 취소의 Hold) | 준비 단계, LAND 항목, 취소의 정리 |
-| ITEM_TIMEOUT (7) | 항목이 `timeout` 안에 완료되지 않았다 | 항목 |
-| FAILSAFE (8) | 비행제어의 failsafe가 관측되었거나 공중 disarm이 관측되었다 | 비행 중 감시(준비 단계의 ARMED 관측 뒤 포함), LAND 항목, 정리 |
-| EXTERNAL_MODE_CHANGE (9) | Executor가 요청하지 않은 모드 변화가 failsafe 없이 관측되었다 | 비행 중 감시, LAND 항목(Land 확인 뒤) |
-| TARGET_LOST (10) | 1b | - |
-| LINK_LOST (11) | `vehicle_status`가 `link_timeout` 동안 오지 않았다 | 비행 중 감시, LAND 항목, 정리 |
-| PRECONDITION_FAILED (12) | 항목을 시작할 때 그 항목의 시작 조건이 맞지 않았다(TAKEOFF는 지상 DISARMED, `[LAND]`는 공중 ARMED가 조건). 이 goal은 setpoint와 명령을 보내지 않았다 | 준비 단계(발행 시작 전) |
+| MODE_SWITCH_FAILED (6) | 요청한 모드 전환이 확인되지 않았다(Offboard 신호 확인과 전환, 모드 명령 항목의 Land 전환과 RTL 전환, 취소와 종료 단계의 Hold, RTL 실패의 Land 경로). 지상 arm 진입에서는 arm 전까지 그 명령의 ack가 오지 않았거나 확인한 모드가 유지되지 않은 것도 포함한다 | 준비 단계, 모드 명령 항목, 정리, 공중 종료 단계 |
+| ITEM_TIMEOUT (7) | 항목이 `timeout` 안에 완료되지 않았다 | 항목(setpoint 항목은 정리를 거친다) |
+| FAILSAFE (8) | 비행제어의 failsafe가 관측되었거나 공중 disarm이 관측되었다 | 비행 중 감시(준비 단계의 ARMED 관측 뒤와 공중 Offboard 진입의 발행 시작 뒤 포함), 모드 명령 항목, 정리, 공중 종료 단계 |
+| EXTERNAL_MODE_CHANGE (9) | Executor가 요청하지 않은 모드 변화가 failsafe 없이 관측되었다 | 비행 중 감시, 모드 명령 항목(확인한 모드를 확인한 뒤) |
+| TARGET_LOST (10) | TRACK_ENTITY 항목에서 표적 표본이 `target_timeout`을 넘겨 오지 않았다(유효 표본을 받은 적이 없거나 마지막 유효 표본이 묵었다). 표적 쪽의 문제이고 기체는 정상이다 | TRACK_ENTITY 항목(정리를 거친다) |
+| LINK_LOST (11) | `vehicle_status`가 `link_timeout` 동안 오지 않았다 | 비행 중 감시, 모드 명령 항목, 정리, 공중 종료 단계 |
+| PRECONDITION_FAILED (12) | 항목을 시작할 때 그 항목의 시작 조건이 맞지 않았다(TAKEOFF는 지상 DISARMED, `[LAND]`와 `[RTL]`은 공중 ARMED, 공중 Offboard 진입은 공중 ARMED이고 AUTO_LOITER이며 failsafe 없음이 조건). 이 goal은 setpoint와 명령을 보내지 않았다 | 준비 단계(발행 시작 전) |
 | DISARM_FAILED (13) | 취소 처리 중 지상에서 보낸 disarm이 제한 시간 안에 확인되지 않았고 기체가 arm 상태로 남았을 수 있다 | 취소의 정리 |
-| EXTERNAL_DISARM (14) | setpoint 항목 실행 중이거나 그 앞의 arm 확인 중(ARMED를 처음 관측한 뒤)에 Executor가 보내지 않은 disarm이 지상에서 failsafe 없이 관측되었다. 원인은 판정하지 않는다 | 비행 중 감시 |
-| INTERNAL (255) | Executor 쪽 문제로 끝났다: 발행을 시작한 뒤의 식별 불일치, 명령에 실을 PX4 시각을 만들 수 없음, Executor의 종료(lifecycle shutdown, error)와 종료 뒤의 goal. 끝난 뒤 기체 상태를 보장하지 않는다 | 어디서나 |
+| EXTERNAL_DISARM (14) | setpoint 항목 실행 중이거나 그 앞의 준비 중(지상 arm 진입은 ARMED를 처음 관측한 뒤, 공중 Offboard 진입은 발행을 시작한 뒤)에 Executor가 보내지 않은 disarm이 지상에서 failsafe 없이 관측되었다. 원인은 판정하지 않는다 | 비행 중 감시 |
+| INTERNAL (255) | Executor 쪽 문제로 끝났다: 발행을 시작한 뒤의 식별 불일치, 명령에 실을 PX4 시각을 만들 수 없음(공중 종료 단계 포함), Executor의 종료(lifecycle shutdown, error)와 종료 뒤의 goal. 끝난 뒤 기체 상태를 보장하지 않는다 | 어디서나 |
 
 - EXTERNAL_MODE_CHANGE와 EXTERNAL_DISARM의 "external"은 "Executor가 보내지 않은"이라는 뜻이고 외부 주체가 있었다는 판정이 아니다. Executor가 아는 것은 "`failsafe`가 false인데 Executor가 요청하지 않은 변화"뿐이다. EXTERNAL_DISARM에는 외부 명령(GCS, 다른 노드)뿐 아니라 PX4 자체의 disarm과 kill이 들어간다. 예: 기체가 떠오른 뒤 어떤 이유로 지면에 내려앉아 PX4가 착지 자동 disarm(`COM_DISARM_LAND`)을 하면 외부 주체 없이 EXTERNAL_DISARM이 나온다(미확인: Offboard position setpoint를 유지하는 중에 착륙 판정이 서는 경로는 실측하지 않았다). 소비자는 이 reason을 "Executor 밖의 원인으로 지상 disarm됨"으로 읽고, 다음 동작은 아래 "끝난 뒤 기체 상태"로 정한다.
 - FAILSAFE와 EXTERNAL_DISARM은 같은 사건이 관측 시점에 따라 어느 쪽으로도 나올 수 있다(순위 5의 이력 구간). 그래서 소비자는 둘의 다음 동작을 다르게 두지 않고, reason 이름을 운용자 개입의 근거로 표시하지 않는다.
-- MODE_SWITCH_FAILED와 DISARM_FAILED를 나눈 이유: 끝난 뒤 기체 상태가 다르다. Hold 실패는 Executor가 Land를 보내 기체가 내려오는 중이고, 지상 disarm 실패는 기체가 지상에 arm으로 남는다. EXTERNAL_MODE_CHANGE와 EXTERNAL_DISARM도 같은 이유로 나눈다(앞은 보통 공중 ARMED, 뒤는 지상 disarm).
+- MODE_SWITCH_FAILED와 DISARM_FAILED를 나눈 이유: 끝난 뒤 기체 상태가 다르다. Hold 실패는 Executor가 Land를 보내 기체가 내려오는 중이고, 지상 disarm 실패는 기체가 지상에 arm으로 남는다. RTL 실패의 지상 분기에서 disarm이 확인되지 않으면 MODE_SWITCH_FAILED로 끝난 기체가 지상 ARMED로 남는다(`detail`에 적는다. 공중 Offboard 진입의 준비 단계 실패의 지상 분기도 같다). EXTERNAL_MODE_CHANGE와 EXTERNAL_DISARM도 같은 이유로 나눈다(앞은 보통 공중 ARMED, 뒤는 지상 disarm).
 
 ### 끝난 뒤 기체 상태
 
@@ -642,7 +715,9 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 
 | 끝난 방식 | 기체 상태 | 근거 |
 | --- | --- | --- |
-| SUCCEEDED | 지상 DISARMED(마지막 항목 LAND의 완료 조건) | [실측] 시나리오 A, D |
+| SUCCEEDED(마지막 항목 LAND) | 지상 DISARMED(완료 조건) | [실측] 시나리오 A, D |
+| SUCCEEDED(마지막 항목 RTL) | 지상 DISARMED(완료 조건. 귀환한 home 위에서 착륙한 뒤) | 구현 규칙(완료 조건). 시나리오 F3, F4가 본다 |
+| SUCCEEDED(마지막 항목이 setpoint 항목) | 공중 Hold(ARMED, AUTO_LOITER, `landed` false) 또는 지상 DISARMED(마지막 목표가 지면에 닿아 PX4가 disarm했거나 종료 단계가 지상 DISARMED를 확인한 경우. `detail` "ended on ground"). 지상 ARMED는 SUCCEEDED의 끝 상태가 아니다. 공중 Hold로 끝난 기체는 스스로 내려앉지 않는다. 내리려면 `[LAND]`나 `[RTL]` 미션을 보낸다 | [소스] 아래 "공중에서 끝나는 미션". [실측] 시나리오 D가 Hold 상태를 본다. 시나리오 F2가 이 종료를 돈다 |
 | CANCELED(공중 분기) | Hold(AUTO_LOITER, ARMED, `landed` false). 스스로 내려앉거나 disarm되지 않는다. 내리려면 `[LAND]` 미션을 보낸다 | [실측] 시나리오 D(5 m), 이륙 ramp 중과 0.5 m 호버(60 s까지 관찰) |
 | CANCELED(지상 분기) | 지상 DISARMED | [실측] PX4에 직접 보낸 이륙 직후의 지상 setpoint와 disarm(spoolup, rampup 대역 모두 지상 DISARMED). Executor 경유는 단위 테스트 |
 | CANCELED(상태 표본 없이 끝남) | 보장하지 않는다(이 goal은 아무것도 보내지 않았다) | 미확인 |
@@ -650,17 +725,20 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 | INVALID_MISSION, VEHICLE_ID_MISMATCH, BUSY | 이 goal은 기체에 아무것도 보내지 않았다. 기체 상태는 이 goal과 무관하다(BUSY이면 실행 중인 goal이 그대로 돈다) | INVALID_MISSION, VEHICLE_ID_MISMATCH는 [실측] 시나리오 B, C(goal 뒤 5 s 동안 ARMED 없음). BUSY는 [단위 테스트] `idsim_mission`의 `ExecutorNodeTest.SecondGoalIsBusy`(두 번째 goal이 feedback 0건으로 ABORTED, REASON_BUSY이고 첫 goal은 계속된다)와 `ScreenGoal.OrderIsIdThenInvalidThenBusy` |
 | NOT_READY, PRECONDITION_FAILED | 이 goal은 기체에 아무것도 보내지 않았다. 기체는 있던 상태 그대로다 | 구현 규칙(발행 시작 전에만 쓴다) |
 | ARM_REJECTED | 정리를 거친다. arm을 보냈으므로 지상 disarm 분기: 보통 지상 DISARMED. disarm이 확인되지 않았으면 `detail`에 적고 지상에 arm으로 남았을 수 있다. 공중이 되었으면 Hold 또는 Land 진행 중 | 정리 분기의 PX4 쪽 사실은 [실측](이륙 직후 취소의 재실측). 이 reason으로 끝나는 경로는 SITL에서 돌리지 않았다(단위 테스트) |
-| MODE_SWITCH_FAILED(준비 단계) | arm 전이므로 지상 DISARMED. 발행은 멈춰 있다. `nav_state`는 OFFBOARD로 남을 수 있으나 DISARMED라 해가 없고 다음 TAKEOFF를 막지 않는다 | 미확인. 보수적 동작: 발행 중단만 한다 |
+| MODE_SWITCH_FAILED(준비 단계, 지상 arm 진입) | arm 전이므로 지상 DISARMED. 발행은 멈춰 있다. `nav_state`는 OFFBOARD로 남을 수 있으나 DISARMED라 해가 없고 다음 TAKEOFF를 막지 않는다. 대기 구간의 실패도 같다 | 미확인. 보수적 동작: 발행 중단만 한다 |
+| MODE_SWITCH_FAILED(준비 단계, 공중 Offboard 진입) | 정리를 거친다. 보통 공중 Hold(Hold 실패 뒤에는 Land 진행 중일 수 있다). 지상 ARMED이면 disarm 분기를 거쳐 지상 DISARMED이고, disarm이 확인되지 않았으면 `detail`에 적고 지상에 arm으로 남을 수 있다. 지상 DISARMED이면 정리할 것이 없어 그대로다 | 정리 분기는 취소와 같다. 이 진입의 실패 경로는 SITL에서 돌리지 않았다(단위 테스트) |
 | MODE_SWITCH_FAILED(LAND 항목) | 공중. NAV_LAND 재전송과 발행이 멈춰 있다. OFFBOARD였으면 PX4의 offboard 손실 동작(Land)이 내리고, `[LAND]` 미션이면 있던 모드(보통 Hold)에 남을 수 있다 | 미확인. 보수적 동작: 발행 중단, Hold를 보내지 않는다 |
+| MODE_SWITCH_FAILED(RTL 항목) | Land fallback 뒤 끝난다. 공중이면 NAV_LAND를 보냈고 보통 AUTO_LAND로 내려오는 중이며 PX4가 착지 뒤 자동 disarm한다. 지상이면 disarm 분기를 거쳐 보통 지상 DISARMED이고, 확인되지 않은 것(AUTO_LAND, disarm)과 정리의 상한, 상태 끊김은 `detail`에 적는다. 지상 분기에서 disarm이 확인되지 않으면 지상에 arm으로 남을 수 있다 | 정리 분기의 PX4 쪽 사실은 취소와 같다. RTL 거부와 미확인 경로는 SITL에서 돌리지 않았다(단위 테스트) |
 | MODE_SWITCH_FAILED(취소. Hold 실패나 공중의 상한) | 공중. Executor가 NAV_LAND를 보냈고 보통 AUTO_LAND로 내려오는 중이며 PX4가 착지 뒤 자동 disarm한다. AUTO_LAND를 확인하지 못했으면 `detail`에 적고, Hold를 관측한 뒤였으면 NAV_LAND 유실 시 Hold로 남는다 | [소스] NAV_LAND는 force로 요청되어 모드 가용성 검사를 우회한다. 거부(TEMPORARILY_REJECTED) 경로는 소스에 남아 있고(`Commander.cpp` 1106-1109행), force 요청에서 거부되는 조건은 확인하지 않았다(미확인). 그래서 `mode_confirm_timeout` 안에 AUTO_LAND가 보이지 않아도 끝내는 방어를 둔다. 경로는 미확인(위치 무효에서 Hold가 거부되는 경우를 실측하지 않았다) |
-| ITEM_TIMEOUT(setpoint 항목) | 취소와 같은 정리를 거친다: Hold(공중), 지상 DISARMED, 또는 Hold 실패 뒤 Land 진행 중. 확인되지 않은 것은 `detail`에 적는다 | 정리 분기는 취소와 같다. 이 reason으로 끝나는 경로는 SITL에서 돌리지 않았다(단위 테스트) |
-| ITEM_TIMEOUT(LAND 항목) | 공중이거나 착륙 중. 발행과 NAV_LAND 재전송이 멈춰 있고 PX4가 착륙을 이어 가거나(AUTO_LAND 확인 뒤, 또는 OFFBOARD였으면 offboard 손실 Land) `[LAND]` 미션이면 있던 모드에 남을 수 있다. 지상에 ARMED로 남았으면 `detail`에 적는다 | 미확인. 보수적 동작: Hold를 보내지 않는다 |
+| ITEM_TIMEOUT(setpoint 항목), TARGET_LOST | 취소와 같은 정리를 거친다: Hold(공중), 지상 DISARMED, 또는 Hold 실패 뒤 Land 진행 중. 확인되지 않은 것은 `detail`에 적는다. TARGET_LOST는 표적이 사라졌을 뿐 기체는 정상이므로 Hold로 남는다. arm을 보내지 않은 공중 Offboard 진입 미션이 지상 DISARMED이면 정리할 것이 없어 그대로다 | 정리 분기는 취소와 같다. 이 reason으로 끝나는 경로는 SITL에서 돌리지 않았다(단위 테스트) |
+| ITEM_TIMEOUT(모드 명령 항목) | 공중이거나 착륙 중. 발행과 명령 재전송이 멈춰 있고 PX4가 착륙이나 귀환과 착륙을 이어 가거나(확인한 모드를 확인한 뒤, 또는 OFFBOARD였으면 offboard 손실 Land) 한 항목 미션이면 있던 모드에 남을 수 있다. 지상에 ARMED로 남았으면 `detail`에 적는다 | 미확인. 보수적 동작: Hold를 보내지 않는다 |
 | FAILSAFE | PX4의 failsafe 동작 중(이 프로젝트의 SITL 파라미터에서 offboard 손실은 Land)이거나 disarm 상태(공중 disarm이면 추락했을 수 있다). Executor는 발행을 멈췄고, 이륙 이력이 없는 지상 arm이면 disarm을 한 번 보냈다 | [소스] failsafe 중의 발행 재개는 기체를 Offboard로 되돌린다([실측] 1회). 이 reason으로 끝나는 경로는 SITL에서 돌리지 않았다 |
 | EXTERNAL_MODE_CHANGE | 다른 주체가 고른 모드의 ARMED. Executor는 발행을 멈췄고, 이륙 이력이 없는 지상 arm이면 disarm을 한 번 보냈다(넘겨받은 쪽이 비행을 원하면 다시 arm한다) | 미확인 |
 | EXTERNAL_DISARM | 지상 DISARMED | 미확인(지상 disarm 뒤의 `nav_state`는 확인된 사실이 아니다. 판정은 `nav_state`를 보지 않는다) |
-| LINK_LOST | 알 수 없다. Executor는 발행을 멈췄고 이륙 이력이 없는 지상 arm이면 disarm을 한 번 보냈다. OFFBOARD였으면 PX4가 offboard 손실 동작으로 들어간다 | 미확인 |
+| LINK_LOST | 알 수 없다. Executor는 발행을 멈췄고 이륙 이력이 없는 지상 arm이면 disarm을 한 번 보냈다. 공중 종료 단계의 지상 대기에서 대비책 disarm을 이미 보낸 뒤였으면 disarm을 한 번 더 보냈다. OFFBOARD였으면 PX4가 offboard 손실 동작으로 들어간다 | 미확인 |
 | DISARM_FAILED | 지상(`landed` true)에 ARMED로 남았을 수 있다. 이륙 이력이 없으면 PX4가 스스로 disarm하지 않는다. 그 기체는 누군가 disarm할 때까지 TAKEOFF와 `[LAND]` 미션 모두 PRECONDITION_FAILED다 | [소스] `COM_DISARM_PRFLT=-1`. 실측 없음 |
-| INTERNAL | 보장하지 않는다. 식별 불일치와 Executor의 종료에서는 arm을 보낸 goal이면 확인 없이 disarm을 한 번 보낸다. PX4 시각을 만들 수 없으면 명령을 보내지 못한다. 어느 쪽인지 `detail`에 적는다("disarm sent once, not confirmed; vehicle may remain armed on ground", "vehicle state unknown" 등) | 미확인 |
+| INTERNAL | 보장하지 않는다. 식별 불일치와 Executor의 종료에서는 arm을 보낸 goal이면 확인 없이 disarm을 한 번 보낸다. PX4 시각을 만들 수 없으면(공중 종료 단계 포함) 명령을 보내지 못한다. 어느 쪽인지 `detail`에 적는다("disarm sent once, not confirmed; vehicle may remain armed on ground" 등). 시각을 만들지 못한 종료의 `detail` 꼬리는 그 tick의 최신 `landed`로 가른다: true이면 `vehicle state unknown, may remain armed on ground`, false이면 `vehicle state unknown, may remain armed in air`, 표본이 없으면 `vehicle state unknown`. 정리 중 Hold인 기체는 Offboard 손실이 걸리지 않아 Hold로 남는다 | 미확인 |
+| 공중 종료 단계의 MODE_SWITCH_FAILED(Land 경로, 정리의 상한) | 취소의 Hold 실패 행과 같은 상태(공중. Executor가 NAV_LAND를 보냈고 보통 AUTO_LAND로 내려오는 중이다)이거나 지상(상한에서 disarm 1회를 보냈고 확인되지 않았다) | 취소의 Hold 실패 행과 같다. 이 경로는 SITL에서 돌리지 않았다(단위 테스트) |
 | goal 응답 없음, action server 없음 | 알 수 없다("수락 정책" 절). 기체 상태로 확인한 뒤에만 다음 goal을 보낸다 | - |
 
 ### feedback
@@ -671,16 +749,42 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 
 | phase | 언제 |
 | --- | --- |
-| `PHASE_PREPARING` (1) | 준비 단계(수신과 식별, Offboard 진입, arm). 준비 단계 실패의 정리 중 |
-| `PHASE_EXECUTING` (2) | setpoint 항목 실행 중. 그 항목의 ITEM_TIMEOUT 정리 중 |
-| `PHASE_WAITING_MODE` (3) | 모드 명령 항목(1a는 LAND)에서 모드 전이와 완료를 기다리는 중 |
+| `PHASE_PREPARING` (1) | 준비 단계(수신과 식별, Offboard 진입, 지상 arm 진입의 arm). 준비 단계 실패의 정리 중 |
+| `PHASE_EXECUTING` (2) | setpoint 항목 실행 중. 그 항목의 ITEM_TIMEOUT과 TARGET_LOST 정리 중. 공중 종료 단계 중 |
+| `PHASE_WAITING_MODE` (3) | 모드 명령 항목(LAND, RTL)에서 모드 전이와 완료를 기다리는 중. RTL 실패의 정리 중 |
 | `PHASE_CANCELING` (4) | 취소 요청 뒤 정리 중 |
 
 ### 공중에서 끝나는 미션
 
-고정 시점: 고정 전(1b 완료에 고정).
+고정 시점: 1b 완료.
 
-마지막 항목이 LAND가 아닌 미션의 종료 동작은 정하지 않았다. 1a 노드는 그런 미션을 INVALID_MISSION으로 끝낸다. 이것은 임시 제한이고 계약 문장이 아니다. 첫 소비자인 1b의 YAML 미션 설계에서 정하고 1b 완료에 고정한다. 같은 때에 setpoint 항목으로 시작하는 공중 시작 미션(Offboard 재진입)과 1a 임시 제한(마지막이 LAND, 첫 항목 제한)의 해제를 정한다. 지금의 권고안은 취소와 같은 이유로 "Hold 확인 뒤 SUCCEEDED"다.
+마지막 항목이 setpoint 항목(TAKEOFF, GOTO, TRACK_ENTITY, LOITER)인 미션은 그 항목이 완료된 tick에 `items_completed`를 항목 수 N으로 올리고 종료 단계에 들어간다. 종료 단계는 발행을 유지한 채 Hold를 재전송하고, Hold를 처음 관측한 tick에 발행을 멈춘다. 종료 단계 중 feedback의 `phase`는 `PHASE_EXECUTING`이고 `item_index`는 마지막 항목이며 result의 `last_item_index`는 N-1이다. 종료 단계 중의 cancel은 결과를 바꾸지 않는다.
+
+- SUCCEEDED(Hold)는 ARMED이고 AUTO_LOITER이고 그 tick의 최신 `landed`가 false인 표본 3회 연속일 때만이다. 지상에서 Hold가 받아들여져도 세지 않는다. 지상의 Hold는 IDLE setpoint만 내고([소스] `loiter.cpp` 77-95행) 이륙 이력이 있는 기체는 모드와 무관하게 `COM_DISARM_LAND` 뒤 스스로 disarm하므로([소스] `Commander.cpp` 2279-2306행), 지상 Hold 3회를 SUCCEEDED로 세면 Hold라고 보고한 기체가 곧 지상 DISARMED가 되어 소비자의 다음 공중 시작 미션이 PRECONDITION_FAILED가 된다.
+- 종료 단계는 공중 분기, 공중에서의 Hold 실패 뒤 Land 경로, 지상 대기를 쓴다. 취소의 지상 분기는 쓰지 않는다. 지상 대기는 Hold 거부나 `hold_confirm_timeout`이 지상에서 왔을 때 들어간다. NAV_LAND를 보내지 않고, 모드 명령 항목의 착지 뒤 규칙(`land_disarm_fallback_delay`가 지나면 강제가 아닌 disarm을 재전송한다)으로 지상 DISARMED를 기다린다. 지상으로 들어온 기체가 곧 스스로 disarm할 수 있으므로 지상에서 Hold 거부를 실패로 보고하지 않고, 이륙 이력이 없어 자동 disarm되지 않는 기체는 대비책 disarm이 정해진 상태로 보낸다. 이 disarm의 실패는 상한의 MODE_SWITCH_FAILED로 끝나고 DISARM_FAILED를 내지 않는다(그 reason의 고정 의미는 "취소 처리 중"이다).
+
+| 종료 단계의 관측 | 결과 |
+| --- | --- |
+| ARMED, AUTO_LOITER, `landed` false 3회 연속 | SUCCEEDED(Hold) |
+| 지상 DISARMED 3회 연속(disarm 분류의 고정 규칙으로 지상). 분기(Hold, Land 경로, 지상 대기)를 가리지 않는다 | SUCCEEDED, `detail` "ended on ground". 명령을 보내지 않는다 |
+| 공중 DISARMED | ABORTED, FAILSAFE |
+| 상태 끊김 | ABORTED, LINK_LOST. 그 tick의 분기가 지상 대기이고 대비책 disarm을 이미 보냈으면 강제가 아닌 disarm을 한 번 더 보낸다. 대비책 전이면 명령을 보내지 않는다(PX4 자동 disarm을 기다리는 중이다) |
+| Hold 거부 ack 또는 `hold_confirm_timeout`, 그 tick에 공중 | Land 경로: NAV_LAND를 재전송하고 AUTO_LAND를 처음 관측하거나 `mode_confirm_timeout`이 지나면 ABORTED, MODE_SWITCH_FAILED. `items_completed`는 N |
+| Hold 거부 ack 또는 `hold_confirm_timeout`, 그 tick에 지상 | 지상 대기(결과 없음) |
+| 지상 대기 중 `landed` true, ARMED가 `land_disarm_fallback_delay` 이어짐 | 강제가 아닌 disarm을 재전송한다(결과 없음) |
+| 지상 대기 중 `landed`가 false로 바뀜 | Land 경로(이 정리에서 Hold가 한 번 실패했으므로) |
+| 정리의 상한, 공중 | NAV_LAND 1회 뒤 ABORTED, MODE_SWITCH_FAILED |
+| 정리의 상한, 지상(ARMED이고 `landed` true, 또는 분류가 지상인 DISARMED) | disarm 1회 뒤 ABORTED, MODE_SWITCH_FAILED |
+
+- 지상 DISARMED 3회의 계수는 종료 단계 전체에 하나이고 분기가 바뀌어도 이어진다. Land 경로에서 AUTO_LAND를 보기 전에 지상 DISARMED 3회가 되어도 SUCCEEDED다. 결과는 Hold가 실패한 tick이 아니라 단계가 끝나는 tick의 관측으로 정한다(취소의 Land 경로가 지상 분기를 거쳐 CANCELED로 끝날 수 있는 것과 같은 방향이다). 대비책 disarm을 보내기 전에는 일반 계수로, 보낸 뒤에는 "시간 기준" 절의 확인 함수로 세고, 그 뒤 Land 경로로 옮겨도 확인 함수를 유지한다.
+- 지상 DISARMED를 보는 동안의 규칙: disarm 분류가 지상인 동안(첫 지상 DISARMED 표본부터 다음 ARMED 표본 전까지. 식별 불일치 tick은 분류를 바꾸지 않는다)에는 분기의 거부 ack, 분기의 기한(`hold_confirm_timeout`, Land 경로의 `mode_confirm_timeout`), 분기 이동, AUTO_LAND 관측을 보지 않는다. 그 동안 보는 것은 상태 끊김, 정리의 상한, 지상 DISARMED 3회뿐이다. 이유: [소스] DISARMED에서는 TERMINATION 말고는 모드 변경이 받아들여져 Hold 거부 ack가 나오지 않고(`UserModeIntention.cpp` 55, 73-74행, `Commander.cpp` 913-932행) NAV_LAND는 force로 요청되어 DISARMED에서도 받아들여지므로(`Commander.cpp` 1093-1104행), disarm 직후 처리된 재전송이 `nav_state`가 AUTO_LAND인 DISARMED 표본을 만들 수 있다([추정]). 이 표본을 AUTO_LAND 관측으로 세면 결과가 재전송 위상에 따라 갈린다. 첫 지상 DISARMED 표본의 tick에 발행을 멈추고 대기 중인 명령(Hold, NAV_LAND, 대비책 disarm)을 지운다. ARMED 표본이 다시 오면 지상 DISARMED 계수는 0으로 돌아가고 분기의 판정을 원래 기준 시각으로 이어 간다. 지운 명령의 재전송은 되살리지 않는다.
+- 같은 tick의 만료와 확인은 종료 단계에서 두 쌍에 적용한다: `hold_confirm_timeout`과 Hold 3회째(만료가 이겨 Land 경로로 간다), 정리의 상한과 모든 확인(Hold 3회째, 지상 DISARMED 3회째. 상한이 이겨 ABORTED다). 분기의 기한은 그 분기가 기다리던 것(Hold 확인, AUTO_LAND 관측)의 기한이고 지상 DISARMED 3회의 기한이 아니므로 둘은 겹치지 않는다. 그래서 지상에서 `hold_confirm_timeout`이 지나는 tick에 지상 DISARMED 3회째가 오면 지상 대기를 거치지 않고 그 tick에 SUCCEEDED이고, Land 경로의 `mode_confirm_timeout` tick에 3회째가 와도 SUCCEEDED다. Hold 3회째와 같은 tick의 Hold 거부 ack는 거부가 먼저다. Hold를 관측한 뒤 3회 확인 전에 온 거부 ack는 Hold인 기체를 Land 경로로 보낸다(취소와 같다).
+- 정리의 상한은 "정리의 상한" 절의 식 하나이고 종료 단계도 같이 쓴다. 지상과 공중은 그 tick의 신뢰 표본으로 정한다.
+- 종료 단계에서 Px4Timestamp를 만들지 못하면 그 tick의 출력을 버리고 ABORTED, REASON_INTERNAL로 끝난다. `items_completed`는 N이고 기체 상태는 보장하지 않는다(지상이나 공중에 ARMED로 남을 수 있다. `detail` 꼬리는 "끝난 뒤 기체 상태"의 INTERNAL 행).
+- 발행: 지상 대기에서 아직 OFFBOARD이고 발행 중이면 setpoint를 지상 setpoint로 바꾼다. 첫 DISARMED 표본에서 발행을 멈춘다. 종료 단계에 지상 ARMED로 들어가도 같은 규칙이다: Hold를 보내고, 지상의 Hold 관측은 세지 않으며, 기다리는 근거는 PX4 자동 disarm(`COM_DISARM_LAND`)이다. 그래서 공중에서 끝나는 미션의 SUCCEEDED 뒤 기체 상태는 "공중 Hold" 또는 "지상 DISARMED"이고 "지상 ARMED"는 없다.
+- Hold 지점은 마지막 setpoint가 아니라 Hold로 바뀐 순간의 위치에 제동 거리를 더한 점이다([소스] `loiter.cpp` 111-112행). 마지막 항목이 표적 추종이면 표적 쪽으로 앞선다.
+- 마지막 setpoint 항목의 목표가 지면 높이이면 항목 실행 중 착지하고 `COM_DISARM_LAND` 뒤 PX4가 disarm할 수 있다. 항목 완료와 이 disarm 가운데 무엇이 먼저 오는지는 경합이고, disarm이 먼저면 실행 중의 지상 disarm 분류(비행 중 감시 순위 5)로 끝난다. 계약은 지면 높이 목표의 결과를 보장하지 않는다. world ENU z는 지면 높이가 아니고 Executor는 지형을 모르므로 마지막 항목의 높이 하한을 검증하지 않는다.
+- 끝없는 Hold: SITL에서는 배터리와 failsafe가 닿지 않아 Hold로 영원히 머문다. 끝점이 겹치지 않게 하는 것은 소비자(Phase 3 Fleet 계획)의 책임이다.
 
 ### 미확인 목록
 
@@ -700,6 +804,12 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 | Offboard position setpoint 중에 착륙 판정이 서서 PX4가 착지 자동 disarm하는 경우 | 감시 표 순위 5, EXTERNAL_DISARM |
 | arm 상태에서 신호 없는 Offboard 요청 | 준비 단계는 arm 전에 Offboard를 요청하므로 이 경로를 쓰지 않는다 |
 | 지면 근처 Hold에서 스스로 disarm되지 않는다는 관찰의 범위(이륙 ramp 중과 0.5 m 호버 밖) | 위 CANCELED 문장 그대로 |
+| 공중 Offboard 진입에서 첫 OFFBOARD 표본 뒤에 PX4가 스스로 AUTO_LOITER로 되돌아가는 길이 있는지(소스로는 없고 완전성은 추정이다) | 다른 주체의 결정으로 보고 순위 7이나 8로 끝낸다. 거짓 종료여도 명령 없이 Hold인 기체를 두고 끝난다 |
+| 공중 Offboard 진입에서 첫 OFFBOARD 표본 전에 다른 주체가 지정한 Hold | 전환 전의 Hold와 가를 수 없어 면제와 재전송이 이어진다 |
+| RTL 항목 중의 취소가 보낸 Hold가 AUTO_RTL에서 받아들여지는지 | Hold를 보낸다. 거부되면 Hold 실패의 Land 경로가 덮는다 |
+| RTL 명령의 TEMPORARILY_REJECTED가 `mode_confirm_timeout` 안에 풀리는지 | 풀리기를 기다리지 않고 거부 ack에 실패 fallback으로 간다 |
+| TAKEOFF `height_m`이 float32 범위 안이지만 매우 큰 값(예 1e30)일 때 PX4의 수직 제어 | 상한을 두지 않는다. float32 범위 밖이면 지상에서 setpoint가 나가지 않아 준비 단계의 MODE_SWITCH_FAILED로 끝난다 |
+| 좌표 상한(world 성분 1e5 m) 근처의 실제 비행 | 상한 안의 값은 float32 술어와 PX4의 수평 속도 정규화에 닿지 않는 것으로 계산했다. 비행은 재지 않았다 |
 | Executor 컨테이너를 goal 실행 중에 멈췄을 때 종료 사건이 구독자에게 오는지 | Executor는 종료 처리에서 goal을 ABORTED, REASON_INTERNAL로 끝내고 종료 사건을 낸다. 오지 않으면 읽는 쪽은 결과 미상으로 다룬다 |
 
 ### 참고: 노드 파라미터
@@ -710,13 +820,15 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 | --- | --- | --- |
 | `ready_timeout` | 30 s | 준비 단계의 수신, 식별, EKF 준비(goal 접수 시각부터) |
 | `offboard_signal_timeout` | 2 s | 발행 10회와 신호 확인(발행 시작부터) |
-| `mode_confirm_timeout` | 3 s | Offboard 확인, LAND 항목의 Land 확인, Hold 실패 뒤 Land 경로, 지상 disarm 확인, 첫 ARMED 관측 뒤의 arm 확인 |
+| `mode_confirm_timeout` | 3 s | Offboard 확인(지상 arm 진입은 확인 뒤 ack까지), 모드 명령 항목의 Land 확인과 RTL 확인, Hold 실패 뒤 Land 경로, 지상 disarm 확인, 첫 ARMED 관측 뒤의 arm 확인 |
 | `arm_timeout` | 5 s | arm을 처음 보낸 시각부터 ARMED를 처음 관측할 때까지 |
-| `hold_confirm_timeout` | 3 s | 취소의 Hold 확인(Hold를 처음 보낸 시각부터) |
+| `hold_confirm_timeout` | 3 s | 취소와 공중 종료 단계의 Hold 확인(Hold를 처음 보낸 시각부터) |
 | `link_timeout` | 2 s | `vehicle_status` 끊김 판정. `mode_confirm_timeout`보다 짧아야 한다(지상 disarm 분기에서 표본이 아예 없으면 LINK_LOST가 먼저다) |
-| `land_disarm_fallback_delay` | 5 s | LAND 항목의 대비책 disarm까지의 지연 |
+| `land_disarm_fallback_delay` | 5 s | 모드 명령 항목의 대비책 disarm과 공중 종료 단계의 지상 대기에서 대비책 disarm까지의 지연 |
 | `command_resend_period` | 0.5 s | 확인을 기다리는 명령의 재전송 주기 |
-| 정리의 상한 | 12 s | 파라미터가 아니다. `hold_confirm_timeout + 3 x mode_confirm_timeout` |
+| `target_timeout` | 1.0 s | TRACK_ENTITY의 표적 소실 판정(유효 표본이 없으면 항목 시작부터, 있으면 마지막 유효 표본의 `header.stamp`부터). `COM_OF_LOSS_T`와 무관하다 |
+| `target_fresh_age` | 0.1 s | 표적 표본이 신선하다고 보는 나이 상한(표적 발행 간격 0.05 s의 두 배). `target_timeout`보다 작아야 하고 둘 다 양수여야 하며 configure가 어긴 값을 거부한다 |
+| 정리의 상한 | 12 s | 파라미터가 아니다. `max(hold_confirm_timeout + 3 x mode_confirm_timeout, hold_confirm_timeout + land_disarm_fallback_delay + mode_confirm_timeout)` |
 
 ## MissionEvent
 
@@ -752,29 +864,47 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 
 ## GoToItem과 TrackEntityItem
 
-고정 시점: 고정 전(1b 완료에 고정).
-
-1a 노드는 이 둘과 RTL이 든 미션을 INVALID_MISSION으로 끝낸다. 아래는 지금의 정의이고 1b 구현에서 확정한다.
+고정 시점: 1b 완료.
 
 | 정의 | 필드 | 의미 |
 | --- | --- | --- |
-| `GoToItem` | `position` | world ENU 목표점(m) |
+| `GoToItem` | `position` | world ENU 목표점(m). 각 성분의 절댓값은 1e5 m 이하다 |
 | `GoToItem` | `acceptance_radius_m` | 3차원 거리 허용 오차(m). 0보다 크다 |
 | `GoToItem` | `yaw` | 이동 중의 yaw |
 | `TrackEntityItem` | `target_id` | 추종할 표적(`TargetState.target_id`) |
-| `TrackEntityItem` | `offset` | world ENU(m). 표적 위치에 더한 점이 setpoint다. 0 벡터는 검증에서 거부한다(시뮬레이션 표적은 충돌이 없어 테스트에서 드러나지 않는다) |
+| `TrackEntityItem` | `offset` | world ENU(m). 표적 위치에 더한 점이 setpoint다. 0 벡터는 검증에서 거부한다(시뮬레이션 표적은 충돌이 없어 테스트에서 드러나지 않는다). 각 성분의 절댓값은 1e5 m 이하다 |
 | `TrackEntityItem` | `acceptance_radius_m` | setpoint 점까지 이 거리 안에 들면 항목 완료. 0보다 크다 |
 | `TrackEntityItem` | `yaw` | 추종 중의 yaw |
 
-- GOTO와 TRACK_ENTITY는 PX4 위치 추정의 전역 기준(`xy_global`, `z_global`)이 유효해지기 전에는 시작하지 않는다. 기다리는 동안에도 항목 `timeout`이 흐르고, 넘기면 ITEM_TIMEOUT이며 `detail`에 사유를 적는다.
-- 미션에 적힌 `target_id`가 실제로 있는지는 검사하지 않고, 항목 시작 뒤 정해진 시간 안에 유효 표본이 없으면 REASON_TARGET_LOST로 드러난다.
-- RTL은 모드 명령 항목이고 LAND처럼 지상 판정 뒤 DISARMED 확인까지가 한 항목이다.
-- TRACK_ENTITY의 지속 시간 종료 조건은 두지 않았다. 필요해지면 1b 고정 전에 끝에 필드를 더한다.
-- `YawSetpoint.MODE_KEEP`의 기준 yaw는 1b에서 정한다.
+항목별 동작.
+
+| 항목 | GOTO | TRACK_ENTITY |
+| --- | --- | --- |
+| setpoint 위치 | `position`을 매 tick 로컬 NED로 바꾼다 | 최신 유효 표적 위치에 `offset`을 더한 점을 매 tick 로컬 NED로 바꾼다. 유효 표본이 없는 동안 직전 setpoint 위치를 유지한다 |
+| setpoint 속도 | 없음(NaN) | 그 tick의 표적 표본이 신선하고 `velocity_valid`가 true이면 표적 속도를 로컬 NED로 바꿔 feedforward로 싣는다. 아니면 없음 |
+| 시작 대기 | 변환이 값 없음인 동안 직전 setpoint 유지 | 같다. 표적의 첫 유효 표본까지도 기다린다 |
+| 완료 | 서로 다른 `vehicle_local_position` 표본(PX4 `timestamp`로 구분) 3개 연속, `xy_valid`와 `z_valid`, 3차원 거리 < `acceptance_radius_m` | 같은 조건. 그 tick의 표적 표본이 신선할 때만 센다. 신선하지 않은 tick은 완료 계수를 0으로 되돌린다 |
+| 실패 | ITEM_TIMEOUT(정리를 거친다) | ITEM_TIMEOUT과 TARGET_LOST(둘 다 정리를 거치고 reason을 유지한다) |
+
+- TRACK_ENTITY 계약 문장: setpoint는 표적 위치에 `offset`을 더한 점이다. 표적 표본이 신선하고 속도가 유효하면 표적 속도를 같은 setpoint에 feedforward로 싣는다. 그래서 일정 속도 표적에 대한 정상 추종 지연은 표본과 tick 지연 정도다(`target_fresh_age`에 tick 하나를 더한 것). 위치만 보내면 PX4 위치 제어는 순수 P 제어라([소스] `PositionControl.cpp` 124-138행, `MPC_XY_P` 0.95) 일정 속도 v의 목표를 약 1.05 s 뒤처져 따른다([추정] 선형 근사). `offboard_control_mode`는 position만 true인 채 그대로다. 표적 속도의 크기를 Executor가 자르지 않는다(수평과 수직 한계는 PX4 위치 제어가 적용한다).
+- 속도는 그 tick의 끝 상태가 TRACK_ENTITY 항목인 tick에만 나간다. 정리로 들어가는 tick, 종료 단계, 다음 항목으로 넘어가는 tick의 setpoint에는 속도가 없다(고정점을 유지하는 단계에 feedforward가 남지 않게). 속도 변환이 값 없음인 tick은 속도만 싣지 않고 위치는 보낸다.
+- 변환 값 없음: 기준이 무효이거나 결과가 `trajectory_setpoint`에 실을 수 없는 값(비유한 또는 float32 범위 밖)이면 점 변환은 값 없음이다("좌표계" 절). 값 없음인 tick은 직전 setpoint를 유지하고 완료의 연속을 끊는다(완료 계수가 0으로 돌아가고, 값을 다시 얻은 뒤 서로 다른 위치 표본 3개 연속을 처음부터 요구한다). 그래서 점 변환이 계속 값 없음인 항목은 발행을 끊지 않고 ITEM_TIMEOUT과 그 정리로 끝나며, 항목 시작부터 한 번도 값을 얻지 못했으면 `detail`에 그 사실을 적는다. 연속을 끊는 것은 도달을 늦출 뿐 거짓 완료를 만들지 않는다.
+- GOTO와 TRACK_ENTITY는 PX4 위치 추정의 전역 기준(`xy_global`, `z_global`)이 유효해지기 전에는 시작하지 않는다(변환이 값 없음이다). 기다리는 동안에도 항목 `timeout`이 흐르고, 넘기면 ITEM_TIMEOUT이며 `detail`에 사유를 적는다.
+- 같은 tick의 순서는 감시 표, TARGET_LOST, ITEM_TIMEOUT, 완료다("종료의 충돌 규칙"). 그 tick의 점 변환과 완료 계수 갱신은 이 순서보다 앞에서 한 번 하므로 감시 표나 ITEM_TIMEOUT이나 취소로 끝나는 tick에도 변환은 불리고, 값을 얻었으면 그 tick의 setpoint는 변환한 점이다.
+- 유효 표본(Executor가 거른다): `target_id`가 토픽 토큰과 같고, `frame_id`가 `world`이고, 위치(그리고 `velocity_valid`가 true이면 속도)가 유한하고, 위치 성분의 절댓값이 1e5 m 이하이고, `stamp`가 0이 아니고 직전 유효 표본보다 크다. 유효로 표시된 속도가 비유한이면 표본 전체가 무효다(속도만 떼어 위치를 쓰지 않는다). 거른 표본은 소실 판정을 앞당기지 않고, 유효 표본 없이 `target_timeout`이 지나면 TARGET_LOST다. 표본의 나이 `now - header.stamp`는 음수이면 0으로 본다.
+- 신선한 표본: 최신 유효 표본의 나이가 `target_fresh_age`(기본 0.1 s) 이하다. 표적 발행 간격 0.05 s의 두 배라 표본 하나 손실까지 신선하다고 본다. 이보다 작으면 정상 지터에도 feedforward가 깜박인다.
+- TARGET_LOST: 유효 표본이 없으면 `now - 항목 시작 시각 > target_timeout`, 있으면 `now - header.stamp > target_timeout`(둘 다 초과다)이다. 유효 표본은 이 goal에서 받은 것이고 앞 항목 동안 받은 것도 센다. 그래서 앞 항목 동안 표본이 끊겨 이미 `target_timeout`을 넘긴 표적의 TRACK_ENTITY는 시작 다음 tick에 TARGET_LOST다. `detail`은 `item <i> (TRACK_ENTITY) target '<target_id>' lost: `로 시작하고 원인(유효 표본을 받은 적 없음, 마지막 유효 표본이 `target_timeout`보다 묵음)을 구분해 적는다. TARGET_LOST를 판정한 tick부터 Hold 확인(또는 Hold 실패 뒤 Land 경로)까지 발행을 유지한다("정리" 절). 이 유지가 `target_timeout`과 PX4의 Offboard 손실 판정을 떼어 놓는다.
+- 좌표 상한: GOTO `position`과 TRACK_ENTITY `offset`의 성분은 절댓값 1e5 m 이하(`kMaxContractCoordinateM`. 경계 포함)이고 어기면 INVALID_MISSION이다. 표적 위치에도 같은 상한을 둔다(위 유효 표본 규칙). 그래서 setpoint 점(표적 위치 + `offset`)의 world 성분은 절댓값 2e5 m 이하다. 이유: [소스, 실행하지 않음] PX4 위치 제어에는 위치 크기 제한이 없고, 수평 성분이 약 1.8e19 m(float 최댓값의 제곱근)를 넘으면 수평 속도 setpoint가 0이 되어(`ControlMath.cpp` 116-125행) 기체가 오류 없이 멈추고 goal이 ITEM_TIMEOUT으로 끝난다. 1e5 m는 그 한계보다 14자리 작다. [계산] 사슬을 거친 로컬 NED 성분은 상한 상자에서 최대 약 1.12e5 m(setpoint 점은 약 2.17e5 m)라 float32 값 간격이 0.0078125 m(0.015625 m) 이하이고 반올림 오차는 성분마다 약 0.004 m(0.008 m) 이하다. 올리는 쪽이 호환된다. 상한은 소비자의 규칙이고 SITL 표적 생성기의 좌표 상한과 무관하다(생산자는 바뀔 수 있다).
+- `acceptance_radius_m`에는 하한이 없다. 위치 분해능(발행 로컬 위치의 float32 값 간격과 위치 잡음)보다 작은 반경은 완료하지 못하고 ITEM_TIMEOUT과 그 정리로 끝날 수 있다. 거짓 완료는 없다(발행 위치는 float32 격자 위에만 있고 반올림 전 EKF 위치는 setpoint에서 `acceptance_radius_m`에 격자 간격을 더한 거리 안이다). 반경을 분해능보다 크게 잡는 것은 미션을 쓰는 쪽의 책임이다.
+- 미션에 적힌 `target_id`가 실제로 있는지는 검사하지 않는다. 표적 구독은 goal 접수 때 미션에 나오는 모든 `target_id`에 대해 만들고 goal이 끝나면 지운다(QoS는 상태 행). 항목 시작 뒤 `target_timeout` 안에 유효 표본이 없으면 REASON_TARGET_LOST로 드러난다.
+- `MODE_KEEP`의 기준 yaw는 직전 setpoint의 yaw이고, 직전 setpoint가 없으면 발행을 시작할 때 읽은 heading이다.
+- feedback의 `distance_remaining_m`은 로컬 NED 위치와 setpoint 점의 3차원 거리이고 `distance_valid`는 위치(`xy_valid`, `z_valid`)와 변환이 모두 유효할 때만 true다.
+- TRACK_ENTITY의 지속 시간 종료 조건은 없다. `TrackEntityItem`과 `GoToItem`의 필드는 이 정의가 전부이고, 필요해지면 끝에 필드를 더하는 계약 변경으로 다룬다.
+- RTL은 모드 명령 항목이고 LAND처럼 지상 판정 뒤 DISARMED 확인까지가 한 항목이다("모드 명령 항목" 절).
 
 ## TargetState
 
-고정 시점: 고정 전(1b 완료에 고정).
+고정 시점: 1b 완료.
 
 토픽 `/targets/<target_id>/state`. 표적 하나의 상태이고 시뮬레이터에 의존하지 않는다. 소비자에게 정본은 `TargetState`다.
 
@@ -786,8 +916,8 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 | `position` | world ENU(m) |
 | `velocity_valid`, `velocity` | world ENU(m/s). `velocity_valid`는 언제든 false일 수 있고(첫 표본에 한정하지 않는다) false면 `velocity`는 0이다 |
 
-- 소비자는 증가하지 않는 stamp의 표본과 `target_id`가 토픽 토큰과 다른 표본을 버린다.
-- 소실 플래그와 종료 메시지는 없다. 소실은 발행 중단으로 표현하고, 소비자가 `now - header.stamp > T`(T는 노드 파라미터, `now`는 ROS 시각)로 판정한다. 한 번도 오지 않은 경우도 같다.
+- 소비자는 증가하지 않는 stamp의 표본, `target_id`가 토픽 토큰과 다른 표본, `frame_id`가 `world`가 아닌 표본, 위치나(`velocity_valid`가 true이면) 속도가 비유한인 표본을 버린다. Executor는 위치 성분의 절댓값이 1e5 m를 넘는 표본과 `stamp`가 0인 표본도 버린다("GoToItem과 TrackEntityItem" 절의 유효 표본 규칙).
+- 소실 플래그와 종료 메시지는 없다. 소실은 발행 중단으로 표현하고, 소비자가 `now - header.stamp > T`(T는 노드 파라미터, `now`는 ROS 시각. Executor의 T는 `target_timeout`)로 판정한다. 한 번도 오지 않은 경우도 같다.
 - 주기와 위상은 계약이 아니다(참고값 20 Hz).
 - QoS는 "계약 토픽 QoS" 절의 상태 행이다.
 - 넣지 않은 것: 자세(점 표적이다), 공분산과 신뢰도(읽는 소비자가 없다), 위경도와 원점(생산자가 world 원점으로 변환한다).
