@@ -1434,7 +1434,7 @@ def build(fleet_norm, ctx):
 # ---------------------------------------------------------------- 실행 디렉터리 내용
 PARAMS_HEADER = (
     "# 생성 파일. tools/gen_compose.py가 만든다. 손으로 고치지 않는다.\n"
-    "# 식별값과 world.origin만 담는다. 타임아웃, 주기, command_source.*, lifecycle.self_start는 노드 선언 기본값을 쓴다.\n"
+    "# 식별값과 world.origin만 담는다. timeout, 주기, command_source.*, lifecycle.self_start는 노드 선언 기본값을 쓴다.\n"
 )
 
 
