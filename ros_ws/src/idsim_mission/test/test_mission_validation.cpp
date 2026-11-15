@@ -650,7 +650,7 @@ TEST(ScreenGoal, MissionsNewToRunnerStayInvalidMission)
   }
 }
 
-// 같은 단위 테스트 (1)의 S3 몫. 마지막이 setpoint 항목인 미션은 runner가 받고 goal 접수는 1a
+// 같은 단위 테스트 (1): 마지막이 setpoint 항목인 미션은 runner가 받고 goal 접수는 1a
 // 그대로 INVALID_MISSION으로 끝낸다(종료 단계는 노드와 SITL에서 닿지 않는다).
 TEST(ScreenGoal, AirEndingMissionsNewToRunnerStayInvalidMission)
 {
@@ -674,7 +674,7 @@ TEST(ScreenGoal, AirEndingMissionsNewToRunnerStayInvalidMission)
   }
 }
 
-// 같은 단위 테스트 (1)의 S4 몫. 첫 항목이 LOITER인 미션(공중 Offboard 진입)은 runner가 받고 goal
+// 같은 단위 테스트 (1): 첫 항목이 LOITER인 미션(공중 Offboard 진입)은 runner가 받고 goal
 // 접수는 1a 그대로 INVALID_MISSION으로 끝낸다(공중 Offboard 진입은 노드와 SITL에서 닿지 않는다).
 TEST(ScreenGoal, LoiterFirstMissionsNewToRunnerStayInvalidMission)
 {
@@ -704,7 +704,7 @@ TEST(ScreenGoal, LoiterFirstMissionsNewToRunnerStayInvalidMission)
   }
 }
 
-// 같은 단위 테스트 (1)의 S5 몫. GOTO가 든 미션은 runner가 받고 goal 접수는 1a 그대로
+// 같은 단위 테스트 (1): GOTO가 든 미션은 runner가 받고 goal 접수는 1a 그대로
 // INVALID_MISSION으로 끝낸다(GOTO는 노드와 SITL에서 닿지 않는다).
 TEST(ScreenGoal, GotoMissionsNewToRunnerStayInvalidMission)
 {
@@ -730,7 +730,7 @@ TEST(ScreenGoal, GotoMissionsNewToRunnerStayInvalidMission)
   }
 }
 
-// 같은 단위 테스트 (1)의 S6 몫. TRACK_ENTITY가 든 미션은 runner가 받고 goal 접수는 1a 그대로
+// 같은 단위 테스트 (1): TRACK_ENTITY가 든 미션은 runner가 받고 goal 접수는 1a 그대로
 // INVALID_MISSION으로 끝낸다(TRACK_ENTITY는 노드와 SITL에서 닿지 않는다). detail은 1a에서 받지 않는
 // 첫 항목의 type이다.
 TEST(ScreenGoal, TrackEntityMissionsNewToRunnerStayInvalidMission)

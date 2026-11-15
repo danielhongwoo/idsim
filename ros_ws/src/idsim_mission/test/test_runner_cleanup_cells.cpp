@@ -740,8 +740,8 @@ constexpr const char * kArmRej = "ABORTED/ARM_REJECTED";
 constexpr const char * kItemTo = "ABORTED/ITEM_TIMEOUT";
 constexpr const char * kLost = "ABORTED/TARGET_LOST";
 
-// 1a 칸 목록(transition_cells.tsv)에서 B8 때 미덮임이던 정리 칸. 순서는 목록과 같다. 열은 원인,
-// 분기, 사건, to, reason, 그 tick의 기대 명령, (상한 칸만) 상한 tick 표본의 landed다.
+// 정리 칸(transition_cells.tsv의 CLEANUP.* 가운데 이 rig로 덮는 칸). 순서는 목록과 같다. 열은
+// 원인, 분기, 사건, to, reason, 그 tick의 기대 명령, (상한 칸만) 상한 tick 표본의 landed다.
 const CleanupCell kCleanupCells[] = {
   // 취소
   {Cause::kCancel, Reach::kNone, Event::kCleanupNoSample, kDone, "CANCELED/NONE", Sent::kNothing},
@@ -829,7 +829,7 @@ const CleanupCell kCleanupCells[] = {
   {Cause::kPrepModeSwitch, Reach::kGround, Event::kGroundDisarmConfirmed, kDone, kMsf,
    Sent::kNothing},
   {Cause::kPrepModeSwitch, Reach::kGround, Event::kGroundDisarmTimeout, kDone, kMsf, Sent::kDisarm},
-  // RTL 실패(S2). 칸 목록의 CLEANUP.RTL_FAILURE.* covered 19칸이다.
+  // RTL 실패. 칸 목록의 CLEANUP.RTL_FAILURE.* covered 19칸이다.
   {Cause::kRtlFailure, Reach::kNone, Event::kCleanupAirDisarm, kDone, kMsf, Sent::kNothing},
   {Cause::kRtlFailure, Reach::kNone, Event::kCleanupNothingToDo, kDone, kMsf, Sent::kNothing},
   {Cause::kRtlFailure, Reach::kNone, Event::kEnterGround, "CLEANUP.RTL_FAILURE.GROUND", "-",
@@ -853,7 +853,7 @@ const CleanupCell kCleanupCells[] = {
    Sent::kNavLand},
   {Cause::kRtlFailure, Reach::kGround, Event::kGroundDisarmConfirmed, kDone, kMsf, Sent::kNothing},
   {Cause::kRtlFailure, Reach::kGround, Event::kGroundDisarmTimeout, kDone, kMsf, Sent::kDisarm},
-  // TARGET_LOST(S6). 칸 목록의 CLEANUP.TARGET_LOST.* covered 29칸이다. 정리할 것 없음(지상
+  // TARGET_LOST. 칸 목록의 CLEANUP.TARGET_LOST.* covered 29칸이다. 정리할 것 없음(지상
   // DISARMED이고 arm을 보내지 않음)은 공중 Offboard 진입 입구로 닿는다.
   {Cause::kTargetLost, Reach::kNone, Event::kCleanupAirDisarm, kDone, kLost, Sent::kNothing},
   {Cause::kTargetLostAirEntry, Reach::kNone, Event::kCleanupNothingToDo, kDone, kLost,
