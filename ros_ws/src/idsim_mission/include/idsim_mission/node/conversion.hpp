@@ -19,6 +19,9 @@
 //   core::to_result, core::to_terminal_event로 만든다(종료 결과 == 종료 사건).
 // - core::Feedback -> ExecuteMission feedback. stamp는 core::Feedback.stamp_ns(그 tick의 입력
 //   시각)다.
+// - TargetState -> core::TargetSample: 유효 표본 규칙(decisions.md 쟁점 8, core/snapshot.hpp의
+//   TargetSample 주석)으로 거른다. 좌표 상한은 core::within_coordinate_bound(미션 검증과 같은
+//   상수)다.
 // 사건의 stamp는 노드 시계의 ROS 시각이고 호출자가 넘긴다. tick에서 정한 종료의 사건은 그 tick의
 // 입력 시각을 넘긴다.
 
@@ -27,13 +30,16 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "builtin_interfaces/msg/time.hpp"
 #include "idsim_interfaces/action/execute_mission.hpp"
 #include "idsim_interfaces/msg/mission.hpp"
 #include "idsim_interfaces/msg/mission_event.hpp"
+#include "idsim_interfaces/msg/target_state.hpp"
 #include "idsim_mission/core/mission_runner.hpp"
+#include "idsim_mission/core/snapshot.hpp"
 #include "idsim_mission/core/termination.hpp"
 #include "idsim_mission/core/types.hpp"
 
@@ -64,6 +70,26 @@ idsim_interfaces::msg::MissionEvent terminal_event_msg(
 builtin_interfaces::msg::Time to_time_msg(std::int64_t ns);
 
 idsim_interfaces::action::ExecuteMission::Feedback to_feedback_msg(const core::Feedback & feedback);
+
+// 표적 상태 하나를 유효 표본으로 바꾼다. topic_target_id는 구독한 토픽의 <target_id>,
+// last_stamp_ns는 같은 표적의 직전 유효 표본 stamp(없으면 nullopt)다. 유효 표본 규칙
+// - target_id가 topic_target_id와 같고 header.frame_id가 TargetState::FRAME_ID다.
+// - 위치가 core::within_coordinate_bound를 만족한다(유한하고 성분의 절댓값이 1e5 m 이하).
+// - velocity_valid가 true이면 속도의 모든 성분이 유한하다. 아니면 표본 전체가 무효다. false이면
+//   속도 필드를 보지 않고 표본의 속도는 0이다. 속도에는 크기 상한이 없다(쟁점 8 "속도
+//   feedforward").
+// - header.stamp(ns)가 0보다 크고 last_stamp_ns보다 크다.
+// 무효이면 nullopt이고, why가 있으면 이유를 적는다(노드의 WARN 로그용).
+std::optional<core::TargetSample> to_target_sample(
+  const idsim_interfaces::msg::TargetState & msg, const std::string & topic_target_id,
+  std::optional<std::int64_t> last_stamp_ns, std::string * why = nullptr);
+
+// 비행 중 원점 변경 WARN의 판정(1b decisions.md 쟁점 4 "원점 변경"). 지상 판정 표본이 있고
+// landed가 false이며, 직전과 지금의 vehicle_local_position.ref_timestamp(us)가 둘 다 0이 아니고
+// 서로 다르면 true다. 지상에서 원점이 처음 정해지거나 다시 정해지는 것은 WARN하지 않는다.
+bool reference_changed_in_flight(
+  const std::optional<core::LandSample> & land, std::uint64_t previous_ref_timestamp_us,
+  std::uint64_t current_ref_timestamp_us);
 
 }  // namespace idsim_mission
 

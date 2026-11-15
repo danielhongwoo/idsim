@@ -194,8 +194,10 @@ struct AckSample
 };
 
 // 표적 표본. PX4 메시지가 아니다. 노드가 유효 표본만 넣는다(target_id가 토픽 토큰과 같고,
-// frame_id가 world, 위치가 유한하고 성분의 절댓값이 1e5 m 이하, velocity_valid이면 속도가
-// 유한(아니면 표본 전체가 무효), stamp가 0이 아니고 직전 유효 표본보다 크다. decisions.md 쟁점 8).
+// frame_id가 world, 위치가 유한하고 성분의 절댓값이 kMaxContractCoordinateM 이하
+// (mission_validation.hpp의 within_coordinate_bound. 미션 검증과 같은 상수), velocity_valid이면
+// 속도가 유한(아니면 표본 전체가 무효), stamp가 0이 아니고 직전 유효 표본보다 크다. decisions.md
+// 쟁점 8).
 struct TargetSample
 {
   Vec3 position;  // world ENU, m

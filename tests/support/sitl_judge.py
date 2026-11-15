@@ -45,7 +45,10 @@ REASON_VEHICLE_ID_MISMATCH = 2
 PHASE_PREPARING = 1
 PHASE_EXECUTING = 2
 TYPE_TAKEOFF = 1
+TYPE_GOTO = 2
+TYPE_TRACK_ENTITY = 3
 TYPE_LOITER = 4
+TYPE_RTL = 5
 TYPE_LAND = 6
 
 N_CONSECUTIVE = 3                # decisions.md 쟁점 9: N은 3(메시지 수)
@@ -124,6 +127,15 @@ def check_result(result, status, reason, items_completed=None):
     if items_completed is not None and result.items_completed != items_completed:
         f.append((sw.WRONG_RESULT, "items_completed %d, 기대 %d" % (result.items_completed, items_completed)))
     return f
+
+
+def detail_findings(result, fragment):
+    """result.detail에 fragment가 들어 있는가. detail 문구는 계약이 아니다(무효 사례가 의도한 검사에서 걸렸는지 보는 용도)."""
+    if result is None:
+        return [(sw.WRONG_RESULT, "result를 받지 못했다")]
+    if fragment not in result.detail:
+        return [(sw.WRONG_RESULT, "result detail %r에 기대 조각 %r이 없다(다른 검사에서 거부됨)" % (result.detail, fragment))]
+    return []
 
 
 def check_no_feedback(feedbacks, goal_id):

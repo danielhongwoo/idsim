@@ -25,28 +25,17 @@ import pytest
 
 from tests.support import measure_judge as mj
 from tests.support import sitl_judge as sj
+from tests.support import sitl_missions as sm
 from tests.support import sitl_wait as sw
 
-TAKEOFF_M = 5.0
-ACCEPTANCE_M = 0.3
 RESULT_WAIT_S = 90.0         # goal 결과 대기(ROS 시각)
 US = 1_000_000
 
-
-def takeoff_item():
-    return {"type": sj.TYPE_TAKEOFF, "timeout_s": 20.0, "height_m": TAKEOFF_M, "acceptance_m": ACCEPTANCE_M}
-
-
-def loiter_item(duration_s=5.0, timeout_s=10.0):
-    return {"type": sj.TYPE_LOITER, "timeout_s": timeout_s, "duration_s": duration_s}
-
-
-def land_item():
-    return {"type": sj.TYPE_LAND, "timeout_s": 30.0}
-
-
-def goto_item():
-    return {"type": 2, "timeout_s": 10.0, "position": (10.0, 0.0, 5.0), "acceptance_m": 1.0}
+takeoff_item = sm.takeoff_item
+loiter_item = sm.loiter_item
+land_item = sm.land_item
+TAKEOFF_M = sm.TAKEOFF_M
+ACCEPTANCE_M = sm.ACCEPTANCE_M
 
 
 def send(s, vehicle_id, mission_id, items):
@@ -89,20 +78,42 @@ def first_feedback(fbs, item_type):
 
 @pytest.mark.scenario("B")
 def test_b_invalid_mission(session):
-    """GOTO가 든 미션: ABORTED, INVALID_MISSION. 접수와 종료 사건. feedback 0건. 일정 ROS 시간 disarmed 유지."""
+    """1b 무효 사례(sitl_missions.B_INVALID_CASES)를 순서대로 하나씩 보낸다. 사례마다 ABORTED, INVALID_MISSION,
+    접수와 종료 사건, feedback 0건, detail의 기대 조각(의도한 검사에서 거부됐는가).
+    첫 goal 전송부터 끝까지 한 구간에서 ARMED 표본 없음(끝에 일정 ROS 시간 유지).
+    거부가 아닌 결과(feedback, ARMED, 다른 result)가 나오면 그 사례에서 바로 실패하고 goal 취소와 비상 정리를 한다."""
     s = session
     s.require_ground_disarmed("B")
     t0 = s.raw.now_us()
-    run = send(s, s.vehicle_id, "b-invalid-goto", [goto_item()])
-    s.mission.wait_result(s.waiter, run, 30.0, "B result")
-    check_goal(s, run, terminal_status=sj.STATUS_ABORTED, reason=sj.REASON_INVALID_MISSION, feedback_zero=True)
 
     def not_armed(floor=0):
         # 폴링 중에는 구간이 비어 있을 수 있으므로 표본 수 하한을 보지 않고, 끝에서 한 번 하한과 함께 본다
         sw.raise_if(sj.never_armed_findings(s.raw.status, t0, s.raw.now_us(), min_samples=floor))
 
-    s.waiter.hold_for(sj.DISARMED_HOLD_S, "B disarmed 유지", check=not_armed)
-    not_armed(sj.MIN_STATUS_SAMPLES)
+    run = None
+    try:
+        for mission_id, rule, fragment, items in sm.B_INVALID_CASES:
+            run = send(s, s.vehicle_id, mission_id, items)
+            # result를 기다리되 feedback이나 ARMED가 먼저 오면 기다리지 않는다(거부가 아니면 바로 실패)
+            s.waiter.wait_until(lambda r=run: r.result is not None or r.feedbacks
+                                or sj.never_armed_findings(s.raw.status, t0, s.raw.now_us(), min_samples=0),
+                                30.0, "B result %s" % mission_id)
+            s.trace.event("b_case", mission_id=mission_id, rule=rule,
+                          detail=run.result.detail if run.result is not None else None)
+            check_goal(s, run, terminal_status=sj.STATUS_ABORTED, reason=sj.REASON_INVALID_MISSION, feedback_zero=True)
+            sw.raise_if(sj.detail_findings(run.result, fragment))
+            not_armed()
+        s.waiter.hold_for(sj.DISARMED_HOLD_S, "B disarmed 유지", check=not_armed)
+        not_armed(sj.MIN_STATUS_SAMPLES)
+    except BaseException:
+        try:
+            if run is not None and run.handle is not None and run.result is None:
+                s.mission.cancel(s.waiter, run)
+        except Exception as e:                                   # B의 원래 실패를 가리지 않는다
+            s.trace.event("b_cancel_failed", error=repr(e))
+        finally:
+            s.emergency_cleanup()
+        raise
 
 
 @pytest.mark.scenario("C")

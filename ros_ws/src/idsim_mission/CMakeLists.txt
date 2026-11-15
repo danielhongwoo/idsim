@@ -78,6 +78,11 @@ target_link_libraries(mission_executor_component PUBLIC
 rclcpp_components_register_nodes(mission_executor_component "idsim_mission::MissionExecutorNode")
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
+# ---- Python: 미션 YAML 로더(idsim_mission.mission_yaml)와 CLI send_mission(1b decisions.md 쟁점 14) ----
+find_package(ament_cmake_python REQUIRED)
+ament_python_install_package(${PROJECT_NAME})
+install(PROGRAMS scripts/send_mission DESTINATION lib/${PROJECT_NAME})
+
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 install(TARGETS idsim_mission_core idsim_mission_px4 mission_executor_component
   EXPORT export_${PROJECT_NAME}
@@ -188,6 +193,11 @@ if(BUILD_TESTING)
   find_package(rosgraph_msgs REQUIRED)
   ament_add_gtest(test_executor_node test/node/test_executor_node.cpp TIMEOUT 180)
   target_link_libraries(test_executor_node mission_executor_component ${rosgraph_msgs_TARGETS})
+
+  # ---- 미션 YAML 로더 테스트(Python) ----
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_mission_yaml test/python/test_mission_yaml.py)
+  ament_add_pytest_test(test_send_mission_wait test/python/test_send_mission_wait.py)
 endif()
 
 ament_package()

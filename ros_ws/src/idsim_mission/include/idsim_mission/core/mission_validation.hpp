@@ -14,18 +14,15 @@
 
 // 미션의 정적 검증과 goal 접수 직후의 즉시 판정(decisions.md 쟁점 3 M1, 쟁점 4).
 //
-// 검증 함수는 둘이고 goal 접수의 것도 계약 검증을 먼저 부른다(1b decisions.md 쟁점 12 "미션
-// 제한의 두 자리").
 // - validate_mission_contract: 계약(Mission, MissionItem 주석)의 규칙. 필드 검사 뒤에 순서
 //   규칙(TAKEOFF는 첫 항목에만, LAND와 RTL은 마지막 항목에만)을 본다. 필드 검사에는 좌표 상한(GOTO
-//   position과 TRACK_ENTITY offset의 각 성분 절댓값 1e5 m 이하, 유한 검사 뒤. 1b decisions.md 쟁점
-//   8)이 든다. Phase 3에 Fleet이 같이 쓸 수 있게 1a 제한을 넣지 않는다. MissionRunner 생성자도
-//   이것을 부른다(runner는 계약 valid 미션을 모두 실행한다. 첫 항목이 LOITER, GOTO,
-//   TRACK_ENTITY이면 공중 Offboard 진입, 마지막이 setpoint 항목이면 공중 종료 단계). runner의
-//   문구는 사용자에게 닿지 않는다(노드는 screen_goal이 먼저 끝낸다).
-// - validate_mission_1a_goal: 계약 + 1a 임시 제한(계약 문장이 아니다). type은 TAKEOFF, LOITER,
-//   LAND만, 마지막은 LAND, 첫 항목은 TAKEOFF 또는 LAND(계약 순서 규칙과 합쳐 LAND로 시작하면
-//   길이 1). goal 접수(screen_goal)가 쓴다. B9 동안 받는 미션 집합은 1a 그대로다.
+//   position과 TRACK_ENTITY offset의 각 성분 절댓값 kMaxContractCoordinateM 이하, 유한 검사 뒤. 1b
+//   decisions.md 쟁점 8)과 TRACK_ENTITY target_id 형식(is_valid_target_id)이 든다. goal 접수
+//   (screen_goal)와 MissionRunner 생성자가 이것을 부른다(runner는 계약 valid 미션을 모두 실행한다.
+//   첫 항목이 LOITER, GOTO, TRACK_ENTITY이면 공중 Offboard 진입, 마지막이 setpoint 항목이면 공중
+//   종료 단계). runner의 문구는 사용자에게 닿지 않는다(노드는 screen_goal이 먼저 끝낸다).
+// - within_coordinate_bound: 계약 좌표 상한 술어. 미션 검증과 노드의 표적 표본 변환
+//   (node/conversion.cpp)이 함께 쓴다(1b decisions.md 쟁점 8 "좌표 상한").
 
 #ifndef IDSIM_MISSION__CORE__MISSION_VALIDATION_HPP_
 #define IDSIM_MISSION__CORE__MISSION_VALIDATION_HPP_
@@ -39,6 +36,15 @@
 namespace idsim_mission::core
 {
 
+// 계약 좌표 상한(m). GOTO position, TRACK_ENTITY offset, 유효 표적 표본 위치의 각 성분 절댓값이 이
+// 값 이하(경계 포함)여야 한다. 1b decisions.md 쟁점 8 "좌표 상한"의 값이다. 올리는 쪽이 호환된다
+// (받던 미션과 표본을 계속 받는다).
+inline constexpr double kMaxContractCoordinateM = 1e5;
+
+// 모든 성분의 절댓값이 kMaxContractCoordinateM 이하인가. 비교가 NaN과 inf에서 거짓이므로 비유한
+// 성분도 거짓이다.
+bool within_coordinate_bound(const Vec3 & v);
+
 struct MissionCheck
 {
   bool valid{false};
@@ -48,8 +54,12 @@ struct MissionCheck
 // mission_id가 ^[a-z0-9][a-z0-9_-]{0,63}$인가.
 bool is_valid_mission_id(const std::string & mission_id);
 
+// target_id가 ^[a-z][a-z0-9_]{0,31}$인가(TargetState.target_id의 규칙). core는 idsim_common에
+// 의존하지 않으므로 같은 규칙을 여기 둔다. idsim_common::TargetId::parse와 같은 답인지는
+// test/node/test_contract_constants.cpp가 사례 표로 대조한다.
+bool is_valid_target_id(const std::string & target_id);
+
 MissionCheck validate_mission_contract(const MissionSpec & mission);
-MissionCheck validate_mission_1a_goal(const MissionSpec & mission);
 
 // handle_accepted의 즉시 판정. goal과 노드 자신의 상태만 본다. 순서는 VEHICLE_ID_MISMATCH ->
 // INVALID_MISSION -> BUSY다(틀린 기체로 온 goal에 BUSY를 주면 Fleet이 다른 기체로 재시도해

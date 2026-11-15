@@ -21,7 +21,7 @@ component_container_isolated(이름 ops_container)에 Mission Executor 컴포넌
 인자(기본값 없음. 생성기가 넘긴다)
   namespace      기체 네임스페이스. 예: /px4_1
   executor_name  노드 이름. 생성기 상수 하나에서 나온다(stack.json의 executor_node와 같다)
-  params_file    /** 키에 use_sim_time과 vehicle.* 만 있는 params 파일
+  params_file    /** 키에 use_sim_time, vehicle.*, world.origin.* 이 있는 params 파일
 """
 
 from launch import LaunchDescription

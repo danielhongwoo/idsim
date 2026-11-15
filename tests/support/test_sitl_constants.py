@@ -41,7 +41,8 @@ def test_phase_and_item_type_constants():
     fb = actions.ExecuteMission.Feedback
     assert (sj.PHASE_PREPARING, sj.PHASE_EXECUTING) == (fb.PHASE_PREPARING, fb.PHASE_EXECUTING)
     it = msgs.MissionItem
-    assert (sj.TYPE_TAKEOFF, sj.TYPE_LOITER, sj.TYPE_LAND) == (it.TYPE_TAKEOFF, it.TYPE_LOITER, it.TYPE_LAND)
+    assert (sj.TYPE_TAKEOFF, sj.TYPE_GOTO, sj.TYPE_TRACK_ENTITY, sj.TYPE_LOITER, sj.TYPE_RTL, sj.TYPE_LAND) == (
+        it.TYPE_TAKEOFF, it.TYPE_GOTO, it.TYPE_TRACK_ENTITY, it.TYPE_LOITER, it.TYPE_RTL, it.TYPE_LAND)
 
 
 def test_names_come_from_generated_constants():

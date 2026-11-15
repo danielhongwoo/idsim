@@ -14,20 +14,25 @@
 
 #include "idsim_mission/node/mission_executor_node.hpp"
 
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "idsim_common/contract_qos.hpp"
 #include "idsim_common/px4_io.hpp"
 #include "idsim_common/px4_timestamp.hpp"
+#include "idsim_common/target.hpp"
 #include "idsim_mission/core/mission_validation.hpp"
 #include "idsim_mission/px4/inputs.hpp"
 #include "idsim_mission/px4/outputs.hpp"
@@ -59,22 +64,8 @@ double ns_to_seconds(std::int64_t ns) { return static_cast<double>(ns) / 1e9; }
 
 std::size_t ack_index(core::AckCommand command) { return static_cast<std::size_t>(command); }
 
-// 값을 주지 않는 임시 FramePort. 점 변환과 벡터 변환 모두 늘 nullopt다. goal 접수의 1a 미션
-// 제한이 GOTO와 TRACK_ENTITY를 거르므로 이 노드에서는 불리지 않는다.
-// docs-for-agent/plan-1b-mission-target/README.md의 B10에서 px4::Px4FramePort로 바꾸고 지운다.
-class FramePortUntilB10 final : public core::FramePort
-{
-public:
-  std::optional<core::Vec3> world_to_local(const core::Vec3 & /*world_enu*/) const override
-  {
-    return std::nullopt;
-  }
-
-  std::optional<core::Vec3> world_velocity_to_local(const core::Vec3 & /*world_enu*/) const override
-  {
-    return std::nullopt;
-  }
-};
+// 표적 표본을 거를 때의 WARN 간격(노드 시계, ms).
+constexpr int kTargetWarnThrottleMs = 1000;
 
 }  // namespace
 
@@ -132,8 +123,55 @@ void MissionExecutorNode::declare_parameters()
     "s, landed and armed time before fallback disarm");
   t.command_resend_period_ns =
     seconds("command_resend_period", defaults.command_resend_period_ns, "s, command resend");
+  t.target_timeout_ns =
+    seconds("target_timeout", defaults.target_timeout_ns, "s, TRACK_ENTITY target lost limit");
+  t.target_fresh_age_ns = seconds(
+    "target_fresh_age", defaults.target_fresh_age_ns, "s, TRACK_ENTITY target sample fresh age");
   declare_parameter<int>(kParamSourceSystem, 254, read_only("VehicleCommand source_system"));
   declare_parameter<int>(kParamSourceComponent, 191, read_only("VehicleCommand source_component"));
+  declare_world_origin();
+}
+
+void MissionExecutorNode::declare_world_origin()
+{
+  const std::array<const char *, 3> names = {kParamOriginLat, kParamOriginLon, kParamOriginAlt};
+  std::array<double, 3> values{};
+  try {
+    for (std::size_t i = 0; i < names.size(); ++i) {
+      const rclcpp::ParameterValue value = declare_parameter(
+        names[i], rclcpp::ParameterType::PARAMETER_DOUBLE,
+        read_only("world ENU origin (WGS84 deg, ellipsoid height m)"));
+      if (value.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE) {
+        origin_error_ = std::string(names[i]) + " is not set";
+        return;
+      }
+      values.at(i) = value.get<double>();
+    }
+  } catch (const std::runtime_error & e) {
+    // 타입이 다른 params 값(InvalidParameterTypeException) 등.
+    origin_error_ = std::string("cannot declare world.origin: ") + e.what();
+    return;
+  }
+  const double lat = values[0];
+  const double lon = values[1];
+  const double alt = values[2];
+  if (!std::isfinite(lat) || lat < -90.0 || lat > 90.0) {
+    origin_error_ = std::string(kParamOriginLat) + " must be finite and in [-90, 90]";
+    return;
+  }
+  if (!std::isfinite(lon) || lon < -180.0 || lon > 180.0) {
+    origin_error_ = std::string(kParamOriginLon) + " must be finite and in [-180, 180]";
+    return;
+  }
+  if (!std::isfinite(alt)) {
+    origin_error_ = std::string(kParamOriginAlt) + " must be finite";
+    return;
+  }
+  idsim_common::geo::WorldOrigin origin;
+  origin.lat_deg = lat;
+  origin.lon_deg = lon;
+  origin.alt_m = alt;
+  world_origin_ = origin;
 }
 
 void MissionExecutorNode::self_start()
@@ -165,6 +203,23 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::fail(
   return CallbackReturn::FAILURE;
 }
 
+core::Snapshot MissionExecutorNode::snapshot() const
+{
+  const std::lock_guard<std::mutex> lock(mutex_);
+  return snapshot_;
+}
+
+std::vector<std::string> MissionExecutorNode::target_subscriptions() const
+{
+  const std::lock_guard<std::mutex> lock(mutex_);
+  std::vector<std::string> ids;
+  ids.reserve(target_subs_.size());
+  for (const auto & entry : target_subs_) {
+    ids.push_back(entry.first);
+  }
+  return ids;
+}
+
 std::string MissionExecutorNode::last_failure() const
 {
   const std::lock_guard<std::mutex> lock(mutex_);
@@ -188,6 +243,9 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_configure(
   if (!get_parameter("use_sim_time").as_bool()) {
     return fail("configure", "use_sim_time must be true");
   }
+  if (!world_origin_.has_value()) {
+    return fail("configure", "world.origin params: " + origin_error_);
+  }
   const std::string ns = get_namespace();
   if (ns != vehicle_->identity.ns.str()) {
     return fail(
@@ -198,10 +256,15 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_configure(
   for (const std::int64_t v :
        {t.ready_timeout_ns, t.offboard_signal_timeout_ns, t.mode_confirm_timeout_ns,
         t.arm_timeout_ns, t.hold_confirm_timeout_ns, t.link_timeout_ns,
-        t.land_disarm_fallback_delay_ns, t.command_resend_period_ns}) {
+        t.land_disarm_fallback_delay_ns, t.command_resend_period_ns, t.target_timeout_ns,
+        t.target_fresh_age_ns}) {
     if (v <= 0) {
       return fail("configure", "timeouts and periods must be > 0");
     }
+  }
+  if (t.target_fresh_age_ns >= t.target_timeout_ns) {
+    // core 전제(core/config.hpp. 1b decisions.md 쟁점 8 "신선한 표본").
+    return fail("configure", "target_fresh_age must be shorter than target_timeout");
   }
   const std::optional<idsim_common::CommandSource> source = idsim_common::CommandSource::make(
     static_cast<int>(get_parameter(kParamSourceSystem).as_int()),
@@ -261,7 +324,7 @@ void MissionExecutorNode::create_entities(
     *this, ns,
     [this](const px4_msgs::msg::VehicleLocalPosition::ConstSharedPtr & msg) {
       const std::lock_guard<std::mutex> lock(mutex_);
-      snapshot_.position = px4::to_position_sample(*msg, next_tick_);
+      on_local_position(*msg);
     },
     sub_options);
   subs_.flags = idsim_common::px4::create_subscription<topics::FailsafeFlags>(
@@ -353,6 +416,8 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_cleanup(
   clock_port_.reset();
   builder_.reset();
   snapshot_ = core::Snapshot{};
+  reference_.reset();
+  ref_timestamp_us_ = 0;
   acks_ = {};
   return CallbackReturn::SUCCESS;
 }
@@ -387,6 +452,8 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_error(
   clock_port_.reset();
   builder_.reset();
   snapshot_ = core::Snapshot{};
+  reference_.reset();
+  ref_timestamp_us_ = 0;
   acks_ = {};
   return CallbackReturn::SUCCESS;
 }
@@ -443,6 +510,19 @@ void MissionExecutorNode::handle_accepted(const std::shared_ptr<GoalHandle> & go
   }
   if (screened.has_value()) {
     finish(goal_handle, context, *screened, accepted_at);
+    return;
+  }
+  // 앞 goal의 표적 표본을 남기지 않는다(core/snapshot.hpp의 Snapshot.targets 주석). PX4
+  // 표본(status, land 등)은 goal과 무관한 최신 값이라 그대로 둔다.
+  snapshot_.targets.clear();
+  const std::optional<std::string> subscribe_error = subscribe_targets(spec);
+  if (subscribe_error.has_value()) {
+    target_subs_.clear();
+    core::Termination term;
+    term.status = core::Status::kAborted;
+    term.reason = core::Reason::kInternal;
+    term.detail = *subscribe_error;
+    finish(goal_handle, context, term, accepted_at);
     return;
   }
   runner_ =
@@ -510,8 +590,83 @@ void MissionExecutorNode::abort_running_goal(const std::string & why)
   if (goal_->is_active()) {
     finish(goal_, goal_context_, term, stamp_now());
   }
+  end_goal();
+}
+
+void MissionExecutorNode::end_goal()
+{
   runner_.reset();
   goal_.reset();
+  target_subs_.clear();
+}
+
+std::optional<std::string> MissionExecutorNode::subscribe_targets(const core::MissionSpec & spec)
+{
+  rclcpp::SubscriptionOptions options;
+  options.callback_group = group_;
+  for (const core::ItemSpec & item : spec.items) {
+    if (item.type != core::item_type::kTrackEntity) {
+      continue;
+    }
+    const std::string & text = item.track_entity.target_id;
+    if (target_subs_.count(text) != 0) {
+      continue;
+    }
+    // 계약 검증(is_valid_target_id)을 지난 값이라 실패하면 결함이다.
+    std::string error;
+    const std::optional<idsim_common::TargetId> id = idsim_common::TargetId::parse(text, &error);
+    if (!id.has_value()) {
+      std::string why = "target_id '";
+      why += text;
+      why += "' rejected by TargetId::parse: ";
+      why += error;
+      return why;
+    }
+    target_subs_[text] = create_subscription<idsim_interfaces::msg::TargetState>(
+      idsim_common::target_state_topic(*id), idsim_common::state_sub_qos(),
+      [this, text](const idsim_interfaces::msg::TargetState::ConstSharedPtr & msg) {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        on_target_state(text, *msg);
+      },
+      options);
+  }
+  return std::nullopt;
+}
+
+void MissionExecutorNode::on_target_state(
+  const std::string & target_id, const idsim_interfaces::msg::TargetState & msg)
+{
+  if (runner_ == nullptr) {
+    return;  // goal이 끝난 뒤 대기열에 남은 표본
+  }
+  const auto it = snapshot_.targets.find(target_id);
+  const std::optional<std::int64_t> last =
+    it == snapshot_.targets.end() ? std::nullopt : std::optional<std::int64_t>(it->second.stamp_ns);
+  std::string why;
+  const std::optional<core::TargetSample> sample = to_target_sample(msg, target_id, last, &why);
+  if (!sample.has_value()) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), kTargetWarnThrottleMs, "target '%s' sample dropped: %s",
+      target_id.c_str(), why.c_str());
+    return;
+  }
+  snapshot_.targets[target_id] = *sample;
+}
+
+void MissionExecutorNode::on_local_position(const px4_msgs::msg::VehicleLocalPosition & msg)
+{
+  const px4::LocalPositionInput input = px4::to_local_position_input(msg, next_tick_);
+  // 비행 중 원점 변경(1b decisions.md 쟁점 4 "원점 변경"). 변환은 tick마다 최신 기준으로 하므로
+  // 다시 만들 것은 없고 로그만 남긴다. 판정은 reference_changed_in_flight(node/conversion.hpp).
+  if (reference_changed_in_flight(snapshot_.land, ref_timestamp_us_, input.ref_timestamp_us)) {
+    RCLCPP_WARN(
+      get_logger(), "local position reference changed in flight (ref_timestamp %llu -> %llu us)",
+      static_cast<unsigned long long>(ref_timestamp_us_),        // NOLINT(runtime/int)
+      static_cast<unsigned long long>(input.ref_timestamp_us));  // NOLINT(runtime/int)
+  }
+  snapshot_.position = input.position;
+  reference_ = input.reference;
+  ref_timestamp_us_ = input.ref_timestamp_us;
 }
 
 // ---- tick ----
@@ -529,10 +684,12 @@ void MissionExecutorNode::on_tick()
 {
   const std::lock_guard<std::mutex> lock(mutex_);
   const std::uint64_t tick = next_tick_++;
-  if (runner_ == nullptr || goal_ == nullptr || !builder_.has_value()) {
+  if (
+    runner_ == nullptr || goal_ == nullptr || !builder_.has_value() || !world_origin_.has_value()) {
     return;
   }
   const idsim_common::VehicleCommandBuilder & builder = *builder_;
+  const idsim_common::geo::WorldOrigin & origin = *world_origin_;
   select_ack();
   // 이 tick의 시각은 여기서 한 번만 읽는다. core가 경과 시간을 재는 시각이고 feedback과 종료
   // 사건의 stamp도 이 값이다(발행 때 다시 읽으면 /clock 한 양자만큼 어긋날 수 있다).
@@ -541,7 +698,8 @@ void MissionExecutorNode::on_tick()
   input.now_ns = get_clock()->now().nanoseconds();
   input.cancel_requested = goal_->is_canceling();
   clock_port_->begin_tick();
-  const FramePortUntilB10 frame;
+  // 이 tick의 기준은 Snapshot.position과 같은 표본에서 읽은 것이다(on_local_position).
+  const px4::Px4FramePort frame(origin, reference_);
   const core::StepOutput out = runner_->step(input, snapshot_, *clock_port_, frame);
   const px4::Px4Messages msgs = px4::to_px4_messages(out, builder, clock_port_->stamp());
   if (!msgs.error.empty()) {
@@ -568,8 +726,7 @@ void MissionExecutorNode::on_tick()
   }
   if (out.termination.has_value()) {
     finish(goal_, goal_context_, *out.termination, to_time_msg(input.now_ns));
-    runner_.reset();
-    goal_.reset();
+    end_goal();
   }
 }
 

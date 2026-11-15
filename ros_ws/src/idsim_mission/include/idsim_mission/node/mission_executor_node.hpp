@@ -21,9 +21,14 @@
 // - 자기 전이: 생성자의 벽시계 일회 timer(0 ms)가 configure와 activate를 한 번씩 건다
 //   (`lifecycle.self_start`, 기본 true, 읽기 전용). 실패하면 그 상태에 남고 고정 접두어
 //   kStartFailedLogPrefix의 ERROR 로그 한 줄을 남긴다. 프로세스를 끝내지 않는다.
-// - callback group은 MutuallyExclusive 하나에 PX4 구독, 20 Hz tick timer(노드 시계), action
-//   서버를 모두 넣는다. goal 실행용 thread는 없다. context 종료 전 callback(다른 thread)과 겹칠 수
-//   있어 goal 상태는 mutex로 지킨다.
+// - 좌표: params world.origin.{lat,lon,alt}(읽기 전용, 누락이나 범위 밖이면 configure 실패)와
+//   vehicle_local_position의 기준으로 tick마다 px4::Px4FramePort를 만들어 step에 넘긴다. 위치와
+//   기준은 같은 표본에서 to_local_position_input으로 함께 만든다(1b decisions.md 쟁점 4).
+// - 표적: goal 접수 때 미션의 TRACK_ENTITY target_id마다 /targets/<id>/state 구독을 만들고 goal이
+//   끝나면 지운다. goal 접수 때 Snapshot.targets만 비운다(1b decisions.md 쟁점 8).
+// - callback group은 MutuallyExclusive 하나에 PX4 구독, 표적 구독, 20 Hz tick timer(노드 시계),
+//   action 서버를 모두 넣는다. goal 실행용 thread는 없다. context 종료 전 callback(다른
+//   thread)과 겹칠 수 있어 goal 상태는 mutex로 지킨다.
 
 #ifndef IDSIM_MISSION__NODE__MISSION_EXECUTOR_NODE_HPP_
 #define IDSIM_MISSION__NODE__MISSION_EXECUTOR_NODE_HPP_
@@ -31,20 +36,25 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
+#include "idsim_common/geo.hpp"
 #include "idsim_common/vehicle_command.hpp"
 #include "idsim_common/vehicle_params.hpp"
 #include "idsim_interfaces/action/execute_mission.hpp"
 #include "idsim_interfaces/msg/mission_event.hpp"
+#include "idsim_interfaces/msg/target_state.hpp"
 #include "idsim_mission/core/config.hpp"
 #include "idsim_mission/core/mission_runner.hpp"
 #include "idsim_mission/core/snapshot.hpp"
 #include "idsim_mission/node/conversion.hpp"
 #include "idsim_mission/px4/clock_port.hpp"
+#include "idsim_mission/px4/frame_port.hpp"
 #include "px4_msgs/msg/failsafe_flags.hpp"
 #include "px4_msgs/msg/offboard_control_mode.hpp"
 #include "px4_msgs/msg/trajectory_setpoint.hpp"
@@ -68,6 +78,10 @@ inline constexpr const char * kStartFailedLogPrefix = "IDSIM_EXECUTOR_START_FAIL
 inline constexpr const char * kParamSelfStart = "lifecycle.self_start";
 inline constexpr const char * kParamSourceSystem = "command_source.system";
 inline constexpr const char * kParamSourceComponent = "command_source.component";
+// world ENU 원점(WGS84 위도와 경도는 도, 고도는 타원체 고 m). 생성기가 ops-N params에 싣는다.
+inline constexpr const char * kParamOriginLat = "world.origin.lat";
+inline constexpr const char * kParamOriginLon = "world.origin.lon";
+inline constexpr const char * kParamOriginAlt = "world.origin.alt";
 
 // 20 Hz tick(노드 시계).
 inline constexpr std::int64_t kTickPeriodNs = 50000000LL;
@@ -102,6 +116,10 @@ public:
   bool goal_active() const;
   // 마지막 전이 실패의 이유(테스트와 진단용).
   std::string last_failure() const;
+  // 지금의 Snapshot 사본(테스트와 진단용).
+  core::Snapshot snapshot() const;
+  // 지금 있는 표적 구독의 target_id(테스트와 진단용).
+  std::vector<std::string> target_subscriptions() const;
 
 private:
   struct Publishers
@@ -138,6 +156,17 @@ private:
     const core::Termination & term, const builtin_interfaces::msg::Time & stamp);
   // 실행 중인 goal을 ABORTED, REASON_INTERNAL로 끝낸다(종료, 오류). 호출자가 mutex를 잡고 있다.
   void abort_running_goal(const std::string & why);
+  // world.origin params를 선언하고 읽는다. 누락, 타입 불일치, 비유한, 범위 밖이면 world_origin_이
+  // 비고 origin_error_에 이유가 남는다(configure가 거부한다).
+  void declare_world_origin();
+  void on_local_position(const px4_msgs::msg::VehicleLocalPosition & msg);
+  // goal 접수 때 미션의 TRACK_ENTITY target_id마다 구독을 만든다. 실패하면 이유(호출자가 mutex를
+  // 잡고 있다).
+  std::optional<std::string> subscribe_targets(const core::MissionSpec & spec);
+  void on_target_state(
+    const std::string & target_id, const idsim_interfaces::msg::TargetState & msg);
+  // runner와 goal, 표적 구독을 지운다. 호출자가 mutex를 잡고 있다.
+  void end_goal();
   void select_ack();
   builtin_interfaces::msg::Time stamp_now();
 
@@ -157,6 +186,13 @@ private:
   std::unique_ptr<px4::RosPx4ClockPort> clock_port_;
   std::optional<rclcpp::PreShutdownCallbackHandle> pre_shutdown_;
 
+  std::optional<idsim_common::geo::WorldOrigin> world_origin_;
+  std::string origin_error_;
+  // Snapshot.position과 같은 vehicle_local_position 표본에서 읽은 기준과 그 ref_timestamp(us).
+  std::optional<idsim_common::geo::LocalReference> reference_;
+  std::uint64_t ref_timestamp_us_{0};
+  std::map<std::string, rclcpp::Subscription<idsim_interfaces::msg::TargetState>::SharedPtr>
+    target_subs_;
   core::Snapshot snapshot_;
   // AckCommand별 최신 하나. 크기는 AckCommand 값의 수다(kOther가 마지막 값).
   std::array<std::optional<core::AckSample>, static_cast<std::size_t>(core::AckCommand::kOther) + 1>

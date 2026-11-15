@@ -14,11 +14,20 @@
 
 // 노드 껍질의 배선 테스트(PX4 없이, 한 프로세스). decisions.md 쟁점 2, 7.
 // - lifecycle.self_start 대조군 쌍: 같은 spin 횟수에서 true는 active, false는 unconfigured.
-// - 직접 건 configure, activate. params 누락과 use_sim_time false의 configure 실패.
+// - 직접 건 configure, activate. params 누락(vehicle.*, world.origin.*), world.origin 범위 밖,
+//   use_sim_time false, target_fresh_age >= target_timeout의 configure 실패.
 // - goal 실행 중 deactivate 거부, on_shutdown이 실행 중 goal을 ABORTED, REASON_INTERNAL로 끝내고
 //   종료 사건을 낸다.
 // - 배선: 가짜 PX4 발행자로 정상 한 경로(TAKEOFF, LOITER, LAND -> SUCCEEDED)와 무효 한 경로
-//   (GOTO -> INVALID_MISSION). 사건은 ACCEPTED가 앞이고 종료 사건은 1건이며 result와 같은 값.
+//   (1b 무효 사례인 TRACK_ENTITY의 0 offset -> INVALID_MISSION. 1b decisions.md 쟁점 15). 사건은
+//   ACCEPTED가 앞이고 종료 사건은 1건이며 result와 같은 값.
+// - 좌표: world.origin과 같은 기준을 내는 가짜 PX4에서 GOTO의 world ENU 점이 로컬 NED setpoint로
+//   나간다(진짜 Px4FramePort 배선).
+// - target_timeout, target_fresh_age를 주지 않으면 core 기본값(1.0 s, 0.1 s)이다.
+// - TARGET_LOST: 표적 표본을 끊으면 TRACK_ENTITY가 TARGET_LOST로 끝나고, Hold를 보낸 뒤 Hold가
+//   관측될 때까지 setpoint 발행이 이어지며 관측 뒤에는 멈춘다(가짜 PX4가 Hold 반영을 늦춘다).
+// - 표적 구독 수명: goal 접수 때 TRACK_ENTITY target_id마다 /targets/<id>/state 구독이 생기고
+//   goal이 끝나면 없어진다. 다음 goal 접수 때 Snapshot.targets만 비고 status와 land는 남는다.
 // - rclcpp_action에서 cancel을 받아들인 goal을 abort로 끝낼 수 있는지(decisions.md 쟁점 3 "종료의
 //   충돌 규칙"의 rclcpp_action 허용 확인).
 // - PREPARING 중 취소의 CANCELED, 실행 중 두 번째 goal의 BUSY, 종료 때의 disarm 한 번(arm 뒤 1개,
@@ -32,6 +41,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -46,6 +56,7 @@
 #include "idsim_common/qos.hpp"
 #include "idsim_interfaces/action/execute_mission.hpp"
 #include "idsim_interfaces/msg/mission_event.hpp"
+#include "idsim_interfaces/msg/target_state.hpp"
 #include "idsim_mission/node/mission_executor_node.hpp"
 #include "lifecycle_msgs/msg/state.hpp"
 #include "px4_msgs/msg/failsafe_flags.hpp"
@@ -71,6 +82,10 @@ using lifecycle_msgs::msg::State;
 namespace topics = idsim_common::px4::topics;
 
 constexpr std::int64_t kStartSimNs = 1000LL * 1000000000LL;
+// 노드 테스트의 world.origin(config/fleet.yaml의 기본 원점과 같은 값).
+constexpr double kOriginLat = 37.5665;
+constexpr double kOriginLon = 126.9780;
+constexpr double kOriginAlt = 38.0;
 
 // /clock 발행 thread. 벽시계 1 ms마다 sim 시간을 2 ms 올린다(RTF 약 2).
 class ClockThread
@@ -108,9 +123,21 @@ private:
   std::thread thread_;
 };
 
+std::vector<rclcpp::Parameter> origin_params()
+{
+  return {
+    rclcpp::Parameter(kParamOriginLat, kOriginLat),
+    rclcpp::Parameter(kParamOriginLon, kOriginLon),
+    rclcpp::Parameter(kParamOriginAlt, kOriginAlt),
+  };
+}
+
+// origin은 world.origin.* 값들이다(기본은 origin_params()). extra는 그 밖에 더할 파라미터다.
 std::shared_ptr<MissionExecutorNode> make_executor(
   bool self_start, bool with_vehicle = true, bool use_sim_time = true,
-  const std::string & name = "mission_executor")
+  const std::string & name = "mission_executor",
+  const std::vector<rclcpp::Parameter> & origin = origin_params(),
+  const std::vector<rclcpp::Parameter> & extra = {})
 {
   std::vector<rclcpp::Parameter> params = {
     rclcpp::Parameter("use_sim_time", use_sim_time),
@@ -121,6 +148,8 @@ std::shared_ptr<MissionExecutorNode> make_executor(
     params.emplace_back("vehicle.ns", "/px4_1");
     params.emplace_back("vehicle.sysid", 2);
   }
+  params.insert(params.end(), origin.begin(), origin.end());
+  params.insert(params.end(), extra.begin(), extra.end());
   rclcpp::NodeOptions options;
   options.parameter_overrides(params);
   options.arguments({"--ros-args", "-r", "__ns:=/px4_1", "-r", "__node:=" + name});
@@ -161,6 +190,9 @@ public:
       idsim_common::px4::topic_name<topics::TrajectorySetpoint>(ns), qos,
       [this](const px4_msgs::msg::TrajectorySetpoint::ConstSharedPtr msg) {
         got_setpoint_ = true;
+        ++setpoints_;
+        setpoint_x_ = msg->position[0];
+        setpoint_y_ = msg->position[1];
         setpoint_z_ = msg->position[2];
       });
   }
@@ -182,6 +214,10 @@ public:
       z_ = 0.0F;
       landed_ = true;
       armed_ = false;
+    }
+    if (hold_due_ns_ != 0 && now >= hold_due_ns_ && nav_ != VS::NAVIGATION_STATE_AUTO_LOITER) {
+      nav_ = VS::NAVIGATION_STATE_AUTO_LOITER;
+      setpoints_at_hold_seen_ = setpoints_;
     }
     const auto us = static_cast<std::uint64_t>(now / 1000);
     VS status;
@@ -205,6 +241,15 @@ public:
     pos.heading = 0.0F;
     pos.z_valid = true;
     pos.xy_valid = true;
+    if (global_ref) {
+      // world.origin과 같은 기준(로컬 NED 원점 = world ENU 원점).
+      pos.xy_global = true;
+      pos.z_global = true;
+      pos.ref_timestamp = 1000000;
+      pos.ref_lat = kOriginLat;
+      pos.ref_lon = kOriginLon;
+      pos.ref_alt = static_cast<float>(kOriginAlt);
+    }
     position_->publish(pos);
     px4_msgs::msg::FailsafeFlags flags;
     flags.timestamp = us;
@@ -219,6 +264,16 @@ public:
   int holds() const { return holds_; }
   bool landed() const { return landed_; }
   std::uint8_t nav_state() const { return nav_; }
+  float setpoint_x() const { return setpoint_x_; }
+  float setpoint_y() const { return setpoint_y_; }
+  float setpoint_z() const { return setpoint_z_; }
+  // true면 vehicle_local_position에 world.origin과 같은 전역 기준을 싣는다.
+  bool global_ref{false};
+  // 0보다 크면 Hold 명령을 이 시간(sim ns) 뒤에 반영한다.
+  std::int64_t hold_delay_ns{0};
+  int setpoints() const { return setpoints_; }
+  int setpoints_at_hold_sent() const { return setpoints_at_hold_sent_; }
+  int setpoints_at_hold_seen() const { return setpoints_at_hold_seen_; }
   bool react_offboard{
     true};  // false면 Offboard 요청에 반응하지 않고 ack도 내지 않는다(P5에 머문다)
   // true면 Offboard ack 뒤에 core가 모르는 command(DO_REPOSITION)의 ack도 같은 target으로 낸다.
@@ -254,7 +309,13 @@ private:
         }
       }
     } else if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 4.0F) {
-      nav_ = VS::NAVIGATION_STATE_AUTO_LOITER;
+      if (hold_delay_ns <= 0) {
+        nav_ = VS::NAVIGATION_STATE_AUTO_LOITER;
+      } else if (hold_due_ns_ == 0) {
+        // 첫 Hold 명령에서 hold_delay_ns 뒤에 AUTO_LOITER를 내기 시작한다(step).
+        hold_due_ns_ = clock_.now_ns() + hold_delay_ns;
+        setpoints_at_hold_sent_ = setpoints_;
+      }
     } else if (cmd.command == VC::VEHICLE_CMD_COMPONENT_ARM_DISARM && cmd.param1 == 1.0F) {
       armed_ = true;
     } else if (cmd.command == VC::VEHICLE_CMD_COMPONENT_ARM_DISARM && cmd.param1 == 0.0F) {
@@ -280,8 +341,14 @@ private:
   bool armed_{false};
   bool landed_{true};
   float z_{0.0F};
+  float setpoint_x_{0.0F};
+  float setpoint_y_{0.0F};
   float setpoint_z_{0.0F};
   bool got_setpoint_{false};
+  int setpoints_{0};
+  int setpoints_at_hold_sent_{-1};
+  int setpoints_at_hold_seen_{-1};
+  std::int64_t hold_due_ns_{0};
   std::int64_t land_start_ns_{0};
   std::int64_t last_publish_ns_{0};
   int commands_{0};
@@ -376,6 +443,74 @@ TEST_F(ExecutorNodeTest, ConfigureFailsWithoutVehicleParamsOrSimTime)
     EXPECT_EQ(node->configure().id(), State::PRIMARY_STATE_UNCONFIGURED);
     EXPECT_NE(node->last_failure().find("use_sim_time"), std::string::npos);
   }
+}
+
+TEST_F(ExecutorNodeTest, ConfigureFailsWithoutValidWorldOrigin)
+{
+  struct Case
+  {
+    const char * name;
+    std::vector<rclcpp::Parameter> origin;
+    const char * expect;
+  };
+  const std::vector<Case> cases = {
+    {"missing", {}, "world.origin.lat is not set"},
+    {"alt missing",
+     {rclcpp::Parameter(kParamOriginLat, kOriginLat),
+      rclcpp::Parameter(kParamOriginLon, kOriginLon)},
+     "world.origin.alt is not set"},
+    {"lat out of range",
+     {rclcpp::Parameter(kParamOriginLat, 90.5), rclcpp::Parameter(kParamOriginLon, kOriginLon),
+      rclcpp::Parameter(kParamOriginAlt, kOriginAlt)},
+     "world.origin.lat must be finite and in [-90, 90]"},
+    {"lon out of range",
+     {rclcpp::Parameter(kParamOriginLat, kOriginLat), rclcpp::Parameter(kParamOriginLon, -180.5),
+      rclcpp::Parameter(kParamOriginAlt, kOriginAlt)},
+     "world.origin.lon must be finite and in [-180, 180]"},
+    {"alt not finite",
+     {rclcpp::Parameter(kParamOriginLat, kOriginLat),
+      rclcpp::Parameter(kParamOriginLon, kOriginLon),
+      rclcpp::Parameter(kParamOriginAlt, std::nan(""))},
+     "world.origin.alt must be finite"},
+    {"lat not double",
+     {rclcpp::Parameter(kParamOriginLat, 37), rclcpp::Parameter(kParamOriginLon, kOriginLon),
+      rclcpp::Parameter(kParamOriginAlt, kOriginAlt)},
+     "cannot declare world.origin"},
+  };
+  for (const Case & c : cases) {
+    auto node = make_executor(false, true, true, "mission_executor", c.origin);
+    EXPECT_EQ(node->configure().id(), State::PRIMARY_STATE_UNCONFIGURED) << c.name;
+    EXPECT_NE(node->last_failure().find(c.expect), std::string::npos)
+      << c.name << ": " << node->last_failure();
+  }
+  // 경계값은 받는다.
+  auto edge = make_executor(
+    false, true, true, "mission_executor",
+    {rclcpp::Parameter(kParamOriginLat, -90.0), rclcpp::Parameter(kParamOriginLon, 180.0),
+     rclcpp::Parameter(kParamOriginAlt, -10.0)});
+  EXPECT_EQ(edge->configure().id(), State::PRIMARY_STATE_INACTIVE) << edge->last_failure();
+}
+
+TEST_F(ExecutorNodeTest, TargetParametersDefaultToCoreValues)
+{
+  // 파라미터를 주지 않으면 core/config.hpp의 기본값(target_timeout 1.0 s, target_fresh_age 0.1 s).
+  auto node = make_executor(false);
+  const core::Timeouts defaults;
+  EXPECT_EQ(defaults.target_timeout_ns, 1000000000LL);
+  EXPECT_EQ(defaults.target_fresh_age_ns, 100000000LL);
+  EXPECT_EQ(node->get_parameter("target_timeout").as_double(), 1.0);
+  EXPECT_EQ(node->get_parameter("target_fresh_age").as_double(), 0.1);
+  EXPECT_EQ(node->configure().id(), State::PRIMARY_STATE_INACTIVE) << node->last_failure();
+}
+
+TEST_F(ExecutorNodeTest, ConfigureFailsWhenTargetFreshAgeIsNotShorterThanTimeout)
+{
+  auto node = make_executor(
+    false, true, true, "mission_executor", origin_params(),
+    {rclcpp::Parameter("target_fresh_age", 1.0), rclcpp::Parameter("target_timeout", 1.0)});
+  EXPECT_EQ(node->configure().id(), State::PRIMARY_STATE_UNCONFIGURED);
+  EXPECT_NE(node->last_failure().find("target_fresh_age"), std::string::npos)
+    << node->last_failure();
 }
 
 // action client와 사건 구독. 구독을 client보다 먼저, 같은 노드에서 만든다(쟁점 7).
@@ -544,19 +679,242 @@ TEST_F(ExecutorNodeTest, WiringInvalidMissionAbortsWithoutFeedback)
              test_node->count_publishers("/px4_1/mission_event") >= 1;
     },
     std::chrono::seconds(10), nullptr));
+  // 1b 무효 사례: TRACK_ENTITY의 0 offset(1b decisions.md 쟁점 15 시나리오 B).
   ExecuteMission::Goal goal = standard_goal();
-  MissionItem go = item(MissionItem::TYPE_GOTO, 10);
-  go.go_to.acceptance_radius_m = 1.0;
-  go.go_to.yaw.mode = idsim_interfaces::msg::YawSetpoint::MODE_KEEP;
-  goal.mission.items.insert(goal.mission.items.begin() + 1, go);
+  MissionItem track = item(MissionItem::TYPE_TRACK_ENTITY, 10);
+  track.track_entity.target_id = "car_1";
+  track.track_entity.acceptance_radius_m = 1.0;
+  track.track_entity.yaw.mode = idsim_interfaces::msg::YawSetpoint::MODE_KEEP;
+  goal.mission.items.insert(goal.mission.items.begin() + 1, track);
   client.send(goal);
   ASSERT_TRUE(spin_until([&] { return client.has_result_; }, std::chrono::seconds(10), nullptr));
   spin_until([&] { return client.events().size() >= 2; }, std::chrono::seconds(2), nullptr);
   EXPECT_EQ(client.result_.code, rclcpp_action::ResultCode::ABORTED);
   EXPECT_EQ(client.result_.result->reason, ExecuteMission::Result::REASON_INVALID_MISSION);
+  EXPECT_EQ(
+    client.result_.result->detail, "items[1].track_entity.offset must be finite and non-zero");
   EXPECT_EQ(client.feedback_, 0);
   expect_events_match_result(client.events(), client.result_, MissionEvent::STATUS_ABORTED);
   EXPECT_EQ(client.events()[0].item_count, 4U);
+  // 무효 미션에는 표적 구독을 만들지 않는다.
+  EXPECT_TRUE(node->target_subscriptions().empty());
+}
+
+MissionItem goto_item(double east, double north, double up)
+{
+  MissionItem go = item(MissionItem::TYPE_GOTO, 60);
+  go.go_to.position.x = east;
+  go.go_to.position.y = north;
+  go.go_to.position.z = up;
+  go.go_to.acceptance_radius_m = 0.5;
+  go.go_to.yaw.mode = idsim_interfaces::msg::YawSetpoint::MODE_KEEP;
+  return go;
+}
+
+TEST_F(ExecutorNodeTest, GotoSetpointGoesThroughFramePort)
+{
+  // 기준이 world.origin과 같으므로 world ENU (3, 4, 5)는 로컬 NED 약 (4, 3, -5)다(원점에서 5 m 안의
+  // 곡률 차는 1 mm보다 작다). 진짜 Px4FramePort가 아니면 GOTO setpoint가 나가지 않는다.
+  auto node = make_executor(true);
+  auto test_node = std::make_shared<rclcpp::Node>("test_client");
+  Client client(test_node);
+  FakePx4 px4(test_node, *clock_);
+  px4.global_ref = true;
+  executor_->add_node(node->get_node_base_interface());
+  executor_->add_node(test_node);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      return state_of(node) == State::PRIMARY_STATE_ACTIVE &&
+             client.client()->action_server_is_ready() &&
+             test_node->count_publishers("/px4_1/mission_event") >= 1;
+    },
+    std::chrono::seconds(10), &px4));
+  ExecuteMission::Goal goal = standard_goal();
+  goal.mission.items = {
+    goal.mission.items[0], goto_item(3.0, 4.0, 5.0), item(MissionItem::TYPE_LAND, 30)};
+  client.send(goal);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      return std::fabs(px4.setpoint_x() - 4.0F) < 0.01F &&
+             std::fabs(px4.setpoint_y() - 3.0F) < 0.01F;
+    },
+    std::chrono::seconds(40), &px4))
+    << "setpoint " << px4.setpoint_x() << " " << px4.setpoint_y() << " " << px4.setpoint_z()
+    << " item " << client.last_item_;
+  EXPECT_NEAR(px4.setpoint_z(), -5.0F, 0.01F);
+  EXPECT_EQ(client.last_item_, 1U);
+  EXPECT_EQ(node->shutdown().id(), State::PRIMARY_STATE_FINALIZED);
+}
+
+TEST_F(ExecutorNodeTest, TargetLostKeepsPublishingUntilHoldIsObserved)
+{
+  // [TAKEOFF, TRACK_ENTITY car_1]. 표적은 기체에서 먼 곳(world (50, 50, 0))이라 완료되지 않는다.
+  // TRACK_ENTITY 실행에 들어간 뒤 표적 발행을 끊으면 target_timeout(1 s) 뒤 TARGET_LOST이고 공중
+  // 정리로 Hold를 보낸다. 가짜 PX4는 Hold를 1 s(sim) 늦게 반영한다. 그 동안 setpoint 발행이
+  // 이어지고, Hold가 관측된 뒤에는 멈춘다.
+  auto node = make_executor(true);
+  auto test_node = std::make_shared<rclcpp::Node>("test_client");
+  Client client(test_node);
+  FakePx4 px4(test_node, *clock_);
+  px4.global_ref = true;
+  px4.hold_delay_ns = 1000000000LL;
+  auto target_pub = test_node->create_publisher<idsim_interfaces::msg::TargetState>(
+    "/targets/car_1/state", idsim_common::state_pub_qos());
+  executor_->add_node(node->get_node_base_interface());
+  executor_->add_node(test_node);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      return state_of(node) == State::PRIMARY_STATE_ACTIVE &&
+             client.client()->action_server_is_ready() &&
+             test_node->count_publishers("/px4_1/mission_event") >= 1;
+    },
+    std::chrono::seconds(10), &px4));
+  ExecuteMission::Goal goal = standard_goal();
+  MissionItem track = item(MissionItem::TYPE_TRACK_ENTITY, 60);
+  track.track_entity.target_id = "car_1";
+  track.track_entity.offset.z = 5.0;
+  track.track_entity.acceptance_radius_m = 0.5;
+  track.track_entity.yaw.mode = idsim_interfaces::msg::YawSetpoint::MODE_KEEP;
+  goal.mission.items = {goal.mission.items[0], track};
+  client.send(goal);
+  const auto publish_target = [&] {
+    idsim_interfaces::msg::TargetState msg;
+    msg.header.frame_id = idsim_interfaces::msg::TargetState::FRAME_ID;
+    msg.header.stamp = rclcpp::Time(clock_->now_ns());
+    msg.target_id = "car_1";
+    msg.position.x = 50.0;
+    msg.position.y = 50.0;
+    target_pub->publish(msg);
+  };
+  ASSERT_TRUE(spin_until(
+    [&] {
+      publish_target();
+      return client.last_item_ == 1U &&
+             client.last_phase_ == ExecuteMission::Feedback::PHASE_EXECUTING && !px4.landed();
+    },
+    std::chrono::seconds(40), &px4))
+    << "item " << client.last_item_ << " phase " << static_cast<int>(client.last_phase_);
+  ASSERT_EQ(px4.holds(), 0);
+  // 표본이 실제로 도착해 유효 표본으로 들어갔다(소실 원인이 "받은 적 없음"이 아니게).
+  ASSERT_EQ(node->snapshot().targets.count("car_1"), 1U);
+  // 표적 발행을 끊는다. result를 처음 본 때의 setpoint 수를 적는다.
+  int at_result = -1;
+  ASSERT_TRUE(spin_until(
+    [&] {
+      if (client.has_result_ && at_result < 0) {
+        at_result = px4.setpoints();
+      }
+      return client.has_result_;
+    },
+    std::chrono::seconds(20), &px4));
+  EXPECT_EQ(client.result_.code, rclcpp_action::ResultCode::ABORTED);
+  EXPECT_EQ(client.result_.result->reason, ExecuteMission::Result::REASON_TARGET_LOST);
+  // 원인은 "끊긴 표본"이다(core/mission_runner.cpp의 TARGET_LOST detail 앞부분).
+  EXPECT_EQ(
+    client.result_.result->detail.find(
+      "item 1 (TRACK_ENTITY) target 'car_1' lost: last valid sample older than target_timeout"),
+    0U)
+    << client.result_.result->detail;
+  EXPECT_GE(px4.holds(), 1);
+  ASSERT_GE(px4.setpoints_at_hold_sent(), 0);
+  ASSERT_GE(px4.setpoints_at_hold_seen(), 0);
+  // Hold 명령에서 Hold 반영까지 1 s(sim, tick 20개) 동안 발행이 이어졌다.
+  EXPECT_GE(px4.setpoints_at_hold_seen() - px4.setpoints_at_hold_sent(), 10);
+  // 가짜 PX4가 AUTO_LOITER를 내기 시작한 뒤에는 노드가 그 표본을 볼 때까지(표본 간격 20 ms와 tick
+  // 50 ms. 많아야 tick 2-3개)만 발행하고 멈춘다. Hold 확인(3 표본)과 result까지 더 나가지 않는다.
+  EXPECT_GE(at_result - px4.setpoints_at_hold_seen(), 0);
+  EXPECT_LE(at_result - px4.setpoints_at_hold_seen(), 3)
+    << "at_result " << at_result << " at_hold_seen " << px4.setpoints_at_hold_seen();
+  EXPECT_FALSE(node->goal_active());
+  EXPECT_TRUE(node->target_subscriptions().empty());
+  // goal이 끝난 뒤에는 발행이 없다.
+  spin_until([] { return false; }, std::chrono::seconds(1), &px4);
+  const int after_result = px4.setpoints();
+  spin_until([] { return false; }, std::chrono::seconds(1), &px4);
+  EXPECT_EQ(px4.setpoints(), after_result);
+}
+
+TEST_F(ExecutorNodeTest, TargetSubscriptionLivesWithGoalAndOnlyTargetsAreCleared)
+{
+  // 준비 단계에 머물도록 Offboard에 반응하지 않는 가짜 PX4와 긴 timeout을 쓴다.
+  const std::vector<rclcpp::Parameter> slow = {
+    rclcpp::Parameter("ready_timeout", 1000.0),
+    rclcpp::Parameter("offboard_signal_timeout", 1000.0),
+    rclcpp::Parameter("mode_confirm_timeout", 1000.0),
+    rclcpp::Parameter("link_timeout", 500.0),
+  };
+  auto node = make_executor(true, true, true, "mission_executor", origin_params(), slow);
+  auto test_node = std::make_shared<rclcpp::Node>("test_client");
+  Client client(test_node);
+  FakePx4 px4(test_node, *clock_);
+  px4.react_offboard = false;
+  const std::string topic = "/targets/car_1/state";
+  auto target_pub = test_node->create_publisher<idsim_interfaces::msg::TargetState>(
+    topic, idsim_common::state_pub_qos());
+  executor_->add_node(node->get_node_base_interface());
+  executor_->add_node(test_node);
+  ASSERT_TRUE(spin_until(
+    [&] {
+      const core::Snapshot snap = node->snapshot();
+      return client.client()->action_server_is_ready() &&
+             test_node->count_publishers("/px4_1/mission_event") >= 1 && snap.status.has_value() &&
+             snap.land.has_value();
+    },
+    std::chrono::seconds(10), &px4));
+  EXPECT_TRUE(node->target_subscriptions().empty());
+  EXPECT_EQ(test_node->count_subscribers(topic), 0U);
+
+  ExecuteMission::Goal goal = standard_goal();
+  MissionItem track = item(MissionItem::TYPE_TRACK_ENTITY, 30);
+  track.track_entity.target_id = "car_1";
+  track.track_entity.offset.z = 5.0;
+  track.track_entity.acceptance_radius_m = 1.0;
+  track.track_entity.yaw.mode = idsim_interfaces::msg::YawSetpoint::MODE_KEEP;
+  // 같은 표적이 두 번 나와도 구독은 하나다.
+  goal.mission.items = {goal.mission.items[0], track, track, item(MissionItem::TYPE_LAND, 30)};
+  client.send(goal);
+  ASSERT_TRUE(spin_until(
+    [&] { return node->goal_active() && client.handle_ != nullptr; }, std::chrono::seconds(10),
+    &px4));
+  EXPECT_EQ(node->target_subscriptions(), std::vector<std::string>{"car_1"});
+  ASSERT_TRUE(spin_until(
+    [&] { return test_node->count_subscribers(topic) == 1U; }, std::chrono::seconds(10), &px4));
+  std::int32_t sec = 1;
+  ASSERT_TRUE(spin_until(
+    [&] {
+      idsim_interfaces::msg::TargetState msg;
+      msg.header.frame_id = idsim_interfaces::msg::TargetState::FRAME_ID;
+      msg.header.stamp.sec = sec++;
+      msg.target_id = "car_1";
+      msg.position.x = 10.0;
+      target_pub->publish(msg);
+      return node->snapshot().targets.count("car_1") == 1;
+    },
+    std::chrono::seconds(10), &px4));
+
+  client.client()->async_cancel_goal(client.handle_);
+  ASSERT_TRUE(spin_until([&] { return client.has_result_; }, std::chrono::seconds(20), &px4));
+  EXPECT_EQ(client.result_.code, rclcpp_action::ResultCode::CANCELED);
+  EXPECT_TRUE(node->target_subscriptions().empty());
+  EXPECT_TRUE(spin_until(
+    [&] { return test_node->count_subscribers(topic) == 0U; }, std::chrono::seconds(10), &px4));
+
+  // 다음 goal 접수: 표적 표본만 비고 PX4 표본은 남는다. 가짜 PX4는 더 발행하지 않는다(남은
+  // status와 land는 접수 전에 받은 것이다).
+  Client next(test_node);
+  ASSERT_TRUE(spin_until(
+    [&] { return next.client()->action_server_is_ready(); }, std::chrono::seconds(10), nullptr));
+  ASSERT_EQ(node->snapshot().targets.count("car_1"), 1U);
+  next.send(goal);
+  ASSERT_TRUE(spin_until([&] { return node->goal_active(); }, std::chrono::seconds(10), nullptr));
+  const core::Snapshot snap = node->snapshot();
+  EXPECT_TRUE(snap.targets.empty());
+  EXPECT_TRUE(snap.status.has_value());
+  EXPECT_TRUE(snap.land.has_value());
+  EXPECT_TRUE(snap.position.has_value());
+  EXPECT_EQ(node->target_subscriptions(), std::vector<std::string>{"car_1"});
+  EXPECT_EQ(node->shutdown().id(), State::PRIMARY_STATE_FINALIZED);
+  EXPECT_TRUE(node->target_subscriptions().empty());
 }
 
 TEST_F(ExecutorNodeTest, DeactivateRejectedDuringGoalAndShutdownAborts)
