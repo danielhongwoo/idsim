@@ -27,22 +27,23 @@
 //   착지하는 것은 흉내 내지 않는다(착지와 disarm은 테스트가 world를 직접 바꾼다).
 // - auto_px4와 auto_offboard_ack가 둘 다 true이면 가짜 PX4가 Offboard 전환(DO_SET_MODE)마다
 //   ACCEPTED ack를 낸다(명령을 낸 tick의 다음 tick에 받은 것으로 snapshot.ack에 둔다). 지상 arm
-//   진입은 이 ack가 있어야 P6으로 간다(1b decisions.md 쟁점 12). 다른 명령에는 ack를 내지 않는다.
-//   끄면 ack 없음(1a 가짜 PX4와 같음).
+//   진입은 이 ack가 있어야 P6으로 간다(docs/interface.md "준비 단계"). 다른 명령에는 ack를 내지
+//   않는다. 끄면 ack 없음(1a 가짜 PX4와 같음).
 // - 만드는 MissionRunner에 전이 기록기(transition_recorder.hpp)를 넘긴다. 기록기는 test_runner
 //   실행 파일에서만 켜져 있고, 칸 목록 대조는 test_transition_coverage.cpp가 한다. 기록기가 켜져
 //   있으면 Harness는 자기 runner의 기록을 edges()에도 모은다(expect_cell이 한 시나리오의 칸을
 //   단정할 때 쓴다). 꺼져 있으면 runner에 observer를 넘기지 않는다.
 // - FramePort는 HarnessFramePort(frame)다. 기본 모드 kFail은 부르면(점, 벡터 모두) 테스트를
-//   실패시킨다. 그래서 GOTO가 없는 미션의 모든 사례가 "1a type 미션은 FramePort를 부르지 않는다"(1b
-//   decisions.md 쟁점 12)를 함께 단정한다. GOTO 사례는 kAxis(축 치환)나 kNone(점 값 없음)으로
-//   바꾸거나 tick마다 값을 고르는 hook(점)과 vector_hook(벡터)을 둔다.
+//   실패시킨다. 그래서 GOTO가 없는 미션의 모든 사례가 "1a type 미션은 FramePort를 부르지 않는다"를
+//   함께 단정한다. GOTO 사례는 kAxis(축 치환)나 kNone(점 값 없음)으로 바꾸거나 tick마다 값을
+//   고르는 hook(점)과 vector_hook(벡터)을 둔다.
 // - 표적: world.targets에 등록한 표적마다 tick마다 stamp_ns = 그 tick의 now_ns인 새 표본을
 //   Snapshot.targets에 넣는다(위치와 flags와 함께). target_hook이 있으면 표본을 바꾸거나 그 tick에
 //   주지 않는다(nullopt). 표본은 한 번 넣으면 지우지 않는다(노드와 같다). 표적을 등록하지 않은
 //   사례는 Snapshot.targets가 비어 있다.
 // - 모든 step 뒤 속도 불변식을 단정한다: setpoint의 velocity_valid가 true이면 세 성분이 모두
-//   유한하고, 그 tick의 끝 상태가 TRACK_ENTITY 항목이다(1b decisions.md 쟁점 8).
+//   유한하고, 그 tick의 끝 상태가 TRACK_ENTITY 항목이다(docs/interface.md "GoToItem과
+//   TrackEntityItem").
 // - 방어 경로(PX4 v1.17.0에서 나오지 않는 조합과 ack)는 합성 표본과 합성 ack로만 시험한다.
 //   해당 테스트에 그렇게 적는다.
 
@@ -155,7 +156,7 @@ inline MissionSpec land_only_mission(std::int32_t timeout_s = 30)
   return m;
 }
 
-// 공중 Offboard 진입 미션(첫 항목 LOITER. 1b decisions.md 쟁점 7). [LOITER 5 s].
+// 공중 Offboard 진입 미션(첫 항목 LOITER. docs/interface.md "준비 단계"). [LOITER 5 s].
 inline MissionSpec air_loiter_mission()
 {
   MissionSpec m;
@@ -744,8 +745,8 @@ public:
   CommandResponse disarm_response{CommandResponse::kAccept};
 
 private:
-  // 속도 불변식(1b decisions.md 쟁점 8): 속도가 있으면 세 성분이 모두 유한하고 끝 상태가
-  // TRACK_ENTITY 항목이다.
+  // 속도 불변식(docs/interface.md "GoToItem과 TrackEntityItem"): 속도가 있으면 세 성분이 모두
+  // 유한하고 끝 상태가 TRACK_ENTITY 항목이다.
   void expect_velocity_invariant(const StepOutput & out, std::uint64_t tick) const
   {
     if (!out.setpoint.has_value() || !out.setpoint->velocity_valid) {

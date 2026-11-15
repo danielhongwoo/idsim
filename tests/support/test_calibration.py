@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""calibration(b와 R_home 보정 계산) 단위 테스트. 기준값은 decisions.md 쟁점 5의 [계산]과 scipy 1.11.4."""
+"""calibration(b와 R_home 보정 계산) 단위 테스트. 기준값은 scipy 1.11.4로 계산했다."""
 import math
 from statistics import NormalDist
 
@@ -23,7 +23,7 @@ from tests.support import sitl_judge as sj
 
 
 def test_k_for_30_boots_is_4237():
-    """부팅 30회, m = 9(신뢰 95%, 사건당 커버리지 1 - 0.005 / 9)의 비중심 t 허용계수가 4.237이다(쟁점 5)."""
+    """부팅 30회, m = 9(신뢰 95%, 사건당 커버리지 1 - 0.005 / 9)의 비중심 t 허용계수가 4.237이다."""
     assert sj.M_EVENTS == 9
     assert round(cal.tolerance_k(30), 3) == 4.237
 
@@ -36,7 +36,7 @@ def test_k_other_sizes_and_small_n():
 
 
 def test_rayleigh_qf_for_30_boots_is_4080():
-    """m_home = 2, 부팅 30회의 q x f가 4.080이다(쟁점 5)."""
+    """m_home = 2, 부팅 30회의 q x f가 4.080이다."""
     assert sj.M_HOME == 2
     q, f = cal.rayleigh_qf(30)
     assert q == pytest.approx(math.sqrt(-2 * math.log(0.0025)))

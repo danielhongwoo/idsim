@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 노드 껍질의 배선 테스트(PX4 없이, 한 프로세스). decisions.md 쟁점 2, 7.
+// 노드 껍질의 배선 테스트(PX4 없이, 한 프로세스). docs/interface.md "ExecuteMission", "계약 토픽
+// QoS".
 // - lifecycle.self_start 대조군 쌍: 같은 spin 횟수에서 true는 active, false는 unconfigured.
 // - 직접 건 configure, activate. params 누락(vehicle.*, world.origin.*), world.origin 범위 밖,
 //   use_sim_time false, target_fresh_age >= target_timeout의 configure 실패.
 // - goal 실행 중 deactivate 거부, on_shutdown이 실행 중 goal을 ABORTED, REASON_INTERNAL로 끝내고
 //   종료 사건을 낸다.
 // - 배선: 가짜 PX4 발행자로 정상 한 경로(TAKEOFF, LOITER, LAND -> SUCCEEDED)와 무효 한 경로
-//   (1b 무효 사례인 TRACK_ENTITY의 0 offset -> INVALID_MISSION. 1b decisions.md 쟁점 15). 사건은
-//   ACCEPTED가 앞이고 종료 사건은 1건이며 result와 같은 값.
+//   (1b 무효 사례인 TRACK_ENTITY의 0 offset -> INVALID_MISSION. tests/sitl/README.md "시나리오와
+//   판정"). 사건은 ACCEPTED가 앞이고 종료 사건은 1건이며 result와 같은 값.
 // - 좌표: world.origin과 같은 기준을 내는 가짜 PX4에서 GOTO의 world ENU 점이 로컬 NED setpoint로
 //   나간다(진짜 Px4FramePort 배선).
 // - target_timeout, target_fresh_age를 주지 않으면 core 기본값(1.0 s, 0.1 s)이다.
@@ -28,14 +29,14 @@
 //   관측될 때까지 setpoint 발행이 이어지며 관측 뒤에는 멈춘다(가짜 PX4가 Hold 반영을 늦춘다).
 // - 표적 구독 수명: goal 접수 때 TRACK_ENTITY target_id마다 /targets/<id>/state 구독이 생기고
 //   goal이 끝나면 없어진다. 다음 goal 접수 때 Snapshot.targets만 비고 status와 land는 남는다.
-// - rclcpp_action에서 cancel을 받아들인 goal을 abort로 끝낼 수 있는지(decisions.md 쟁점 3 "종료의
+// - rclcpp_action에서 cancel을 받아들인 goal을 abort로 끝낼 수 있는지(docs/interface.md "종료의
 //   충돌 규칙"의 rclcpp_action 허용 확인).
 // - PREPARING 중 취소의 CANCELED, 실행 중 두 번째 goal의 BUSY, 종료 때의 disarm 한 번(arm 뒤 1개,
 //   arm 전 0개).
 // - 전체 취소(goal id 미지정, async_cancel_all_goals): 실행 중 goal은 handle_cancel을 거쳐 취소
 //   분기(공중 -> Hold)로 CANCELED가 되고, 실행 중 goal이 없으면 아무 일도 일어나지 않는다.
 // 시계: 별도 thread가 /clock을 발행한다(on_activate의 2 s 대기는 파라미터가 아니다). 사건 구독은
-// action client보다 먼저, 같은 노드에서 만든다(쟁점 7 순서 규칙).
+// action client보다 먼저, 같은 노드에서 만든다(docs/interface.md "MissionEvent").
 
 #include <gtest/gtest.h>
 
@@ -165,7 +166,7 @@ std::uint8_t state_of(const std::shared_ptr<MissionExecutorNode> & node)
 
 // 가짜 PX4: 명령에 반응하고 /fmu/out 표본을 낸다. 실제 PX4의 판정을 흉내 내지 않는다(배선만 본다).
 // Offboard 전환(DO_SET_MODE, param2 6)에 반응할 때는 ACCEPTED ack도 낸다(target은 명령의 source).
-// 지상 arm 진입은 그 ack가 있어야 arm을 보낸다(1b decisions.md 쟁점 12).
+// 지상 arm 진입은 그 ack가 있어야 arm을 보낸다(docs/interface.md "준비 단계").
 class FakePx4
 {
 public:
@@ -522,7 +523,8 @@ TEST_F(ExecutorNodeTest, ConfigureFailsWhenTargetFreshAgeIsNotShorterThanTimeout
     << node->last_failure();
 }
 
-// action client와 사건 구독. 구독을 client보다 먼저, 같은 노드에서 만든다(쟁점 7).
+// action client와 사건 구독. 구독을 client보다 먼저, 같은 노드에서 만든다(docs/interface.md
+// "MissionEvent").
 class Client
 {
 public:
@@ -690,7 +692,7 @@ TEST_F(ExecutorNodeTest, WiringInvalidMissionAbortsWithoutFeedback)
              test_node->count_publishers("/px4_1/mission_event") >= 1;
     },
     std::chrono::seconds(10), nullptr));
-  // 1b 무효 사례: TRACK_ENTITY의 0 offset(1b decisions.md 쟁점 15 시나리오 B).
+  // 1b 무효 사례: TRACK_ENTITY의 0 offset(tests/sitl/README.md "시나리오와 판정" 시나리오 B).
   ExecuteMission::Goal goal = standard_goal();
   MissionItem track = item(MissionItem::TYPE_TRACK_ENTITY, 10);
   track.track_entity.target_id = "car_1";

@@ -13,7 +13,7 @@
 # limitations under the License.
 """표적 어댑터 params 해석. rclpy를 import하지 않는 순수 함수다.
 
-형식(decisions.md 쟁점 3, 생성기가 params/targets.yaml로 낸다)
+형식(README.md "표적 어댑터", 생성기가 params/targets.yaml로 낸다)
     /**:
       ros__parameters:
         use_sim_time: true

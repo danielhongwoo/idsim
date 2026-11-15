@@ -1,7 +1,7 @@
 # 표적 궤적 평가의 손 계산 golden. test_trajectory_golden.py가 읽는다.
 # 평가 함수(idsim_sim.trajectory.evaluate)로 만든 값이 아니다. 궤적 정의는 같은 파일 아래 "궤적" 줄에 있고
 # 기대값은 손으로 계산했다(구간 직선 보간, 속도는 구간 기울기). 바꿀 때도 손으로 다시 계산한다.
-# 의미: decisions.md 쟁점 1. start_s 전 정지, waypoint 시각 정확히는 다음 구간, loop true는 마지막 시각의
+# 의미: README.md "표적 어댑터". start_s 전 정지, waypoint 시각 정확히는 다음 구간, loop true는 마지막 시각의
 # 나머지, loop false는 끝난 뒤 마지막 점에 정지, 정지 구간과 정지 상태의 속도는 0 벡터.
 #
 # 형식(# 줄과 빈 줄은 무시)

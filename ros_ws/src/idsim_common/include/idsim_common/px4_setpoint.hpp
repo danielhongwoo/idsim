@@ -15,13 +15,13 @@
 // Offboard position setpoint 헬퍼. offboard_control_mode와 trajectory_setpoint는
 // 이 두 함수로만 만든다.
 //
-// 1a는 position 제어만 쓴다(1a 4단계 넘김 (2)는 git 이력, 6단계 쟁점 5). 고정하는 필드:
+// 1a는 position 제어만 쓴다(docs/interface.md "Offboard setpoint"). 고정하는 필드:
 // - offboard_control_mode: position = true, 나머지 여섯 flag(velocity, acceleration, attitude,
 //   body_rate, thrust_and_torque, direct_actuator) = false.
 // - trajectory_setpoint: position(NED, m)과 yaw(NED, rad)는 유한값. acceleration, jerk, yawspeed는
 //   NaN("제어하지 않음"). velocity는 속도 feedforward 인자가 없으면 NaN, 있으면 그 값(NED, m/s).
 //   yaw는 항상 유한값으로 보낸다(NaN yaw의 Offboard 동작은 확인하지 않았다).
-// - 속도 feedforward(1b TRACK_ENTITY, plan-1b-mission-target decisions.md 쟁점 8, 14): PX4 위치
+// - 속도 feedforward(1b TRACK_ENTITY, docs/interface.md "GoToItem과 TrackEntityItem"): PX4 위치
 //   제어는 position과 함께 온 유한한 velocity를 feedforward로 더한다(mc_pos_control/
 //   PositionControl/PositionControl.cpp _positionControl 125-137행). _inputValid(222-247행)는
 //   vx, vy가 둘 다 유한이거나 둘 다 NaN이어야 한다고 요구한다. 세 성분을 한 번에 검사하는

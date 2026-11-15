@@ -13,8 +13,7 @@
 // limitations under the License.
 
 // 기체 식별 타입과 vehicle_status 대조. 순수 함수만 시험한다.
-// 결정: 1a 4단계 idsim_common 설계 결정(git 이력) 쟁점 5. VehicleId는
-// 1a 6단계 설계 결정(git 이력) 쟁점 5.
+// 결정: docs/interface.md "기체 식별과 네임스페이스".
 
 #include <gtest/gtest.h>
 

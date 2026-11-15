@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// PREPARING과 항목 단계의 칸(docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 13, B8b).
+// PREPARING과 항목 단계의 칸(idsim_mission README "테스트", B8b).
 // 테스트 하나가 칸 하나를 덮고, 그 칸의 to와 reason을 이 runner의 전이 기록(expect_cell)과 종료
 // 결과로 단정한다. 정리 단계의 칸은 test_runner_cleanup_cells.cpp의 파라미터화 하네스가 덮는다.
 //

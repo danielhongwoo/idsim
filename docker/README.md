@@ -250,6 +250,7 @@ docker compose -p idsim-0 stop gz-gui   # GUI만 끈다. 서버는 계속 돈다
 - GUI 렌더 엔진은 `IDSIM_GZ_GUI_ENGINE`(기본 ogre2), 깜빡임 시도용 `QSG_RENDER_LOOP`, `vblank_mode`는 호스트 셸에 있으면 그대로 넘어간다(예: `QSG_RENDER_LOOP=basic vblank_mode=1 tools/sim_stack.sh up --viz`).
 - `gui.config`는 WorldControl 플러그인을 뺐으므로 GUI에서 월드를 멈출 수 없다. 화면에서 실수로 일시정지하는 것을 막기 위해서다.
 - GUI 오른쪽 위 메뉴로 plugin을 더하거나 `IDSIM_GUI_CONFIG`로 다른 설정 파일을 주지 않는다(이 변수는 호스트 셸에 둬도 컨테이너에 넘어가지 않고, compose를 고치거나 `docker compose run -e`로만 닿는다). `gui.config`의 plugin 목록은 `idsim_sim` 단위 테스트가 고정하고, 목록 밖의 plugin(특히 `<topic>`으로 구독 대상을 받는 TopicEcho, TopicViewer, Plotting 계열)이 Actor 월드에서 `dynamic_pose/info`를 구독하면 gazebo 서버가 내려가고 lockstep 때문에 PX4가 멈춘다.
+- 수동 확인(서버 120 s 생존, GUI 재접속, ogre2와 ogre 화면)을 다시 하는 조건: Actor 표본 간격이나 궤적 길이 합 상한을 바꿀 때, `gui.config`나 sim-base의 gz-sim, gz-gui 버전이 바뀔 때, 표적을 4개 넘게 쓰는 fleet을 처음 화면으로 볼 때(32개의 GUI 비용은 재지 않았다).
 - Actor 좌표는 GUI Component Inspector에 Pose로 나오지 않고 `pose/info`에도 없다. 표적 좌표는 `TargetState`로 본다.
 - 측정 호스트(VMware VM)에서 GUI가 코어 2개 남짓(173-219%)을 썼다. renderer는 기록하지 못했다. SITL 테스트와 함께 띄우면 CPU를 다툴 수 있다.
 - `ipc: host`가 없으면 GPU 가속이 없는 호스트(소프트웨어 렌더링)에서 창이 검게 나온다. Mesa의 소프트웨어 경로가 X 서버와 MIT-SHM 공유 메모리로 화면을 전달하는데, 컨테이너의 IPC 네임스페이스가 분리되어 있으면 X 서버가 그 메모리에 붙지 못하기 때문이다. GPU 가속(DRI3) 경로에서는 없어도 되지만 항상 붙인다.

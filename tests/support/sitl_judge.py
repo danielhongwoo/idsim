@@ -16,32 +16,31 @@
 
 입력은 기록 객체(EventRec, FeedbackRec, ResultRec)와 measure_judge의 표본(StatusSample, LandedSample), Px4Raw.pos의
 튜플이다. 함수는 (분류, 설명) 목록을 돌려주고 비어 있으면 통과다. 예외를 올리지 않는다(올리는 것은
-sitl_wait.raise_if). 판정 기준을 느슨하게 바꾸려면 근거와 함께 architect에게 올린다(decisions.md 쟁점 9).
+sitl_wait.raise_if). 판정 기준을 느슨하게 바꾸려면 근거와 함께 architect에게 올린다.
 
-기준 상수(허용 오차, N)는 decisions.md 쟁점 9가 정한 값이다. 이 파일에서 새로 정한 것은 아래 표시한 셋이다.
-  HOVER_HOLD_TOL_M(0.5 m), HOVER_HOLD_S(5 s), DISARMED_HOLD_S(5 s). 값의 근거와 다시 보는 조건은 decisions.md
-  쟁점 9에 있다(HOVER_HOLD_S는 Land로 내려가면 약 1.1 s에 0.5 m를 넘고 5 s 안에 3 m 넘게 내려간다는 ULog 실측).
+기준 상수(허용 오차, N)는 아래 값이고, 이 파일에서 새로 정한 것은 아래 표시한 셋이다.
+  HOVER_HOLD_TOL_M(0.5 m), HOVER_HOLD_S(5 s), DISARMED_HOLD_S(5 s). 값의 근거: HOVER_HOLD_S는 Land로 내려가면 약 1.1 s에 0.5 m를 넘고 5 s 안에 3 m 넘게 내려간다는 ULog 실측이다.
   유지 구간의 최대 편차는 통과한 회에도 기록되고 note 임계값(sitl_summary.HOLD_DEV_NOTE_M)을 넘으면 note가 붙는다.
 
-1b 판정(1b decisions.md 쟁점 5, 15)은 두 부분으로 나눈다. 함수 수준에서 섞지 않는다.
+1b 판정(tests/sitl/README.md "시나리오와 판정")은 두 부분으로 나눈다. 함수 수준에서 섞지 않는다.
   계약 판정: 계약 토픽과 PX4 토픽(mission_event, feedback, result, vehicle_status, vehicle_land_detected,
     vehicle_local_position, TargetState)만 쓴다. 이 파일의 "계약 판정" 절.
   정답 판정: SITL 전용 정답 pose(/sim/<vehicle_id>/pose)를 쓴다. 이 파일의 "정답 판정" 절. 정답 pose가 있어야 하는
     실행에서 없으면 ORACLE_ABSENT로 실패하고 조용히 건너뛰지 않는다. 테스트는 원점 변환을 다시 구현하지 않는다.
 
-1b 판정 상수(정한 곳은 1b decisions.md 쟁점 5)
+1b 판정 상수(근거는 tests/sitl/README.md "b와 R_home 보정 확인")
   R_JUDGE_M 1.0 m: waypoint와 TRACK_ENTITY 완료의 판정 반경(U14). t_f(Executor가 항목을 완료로 넘긴 tick의 stamp)에서
     정답 pose와 목표의 3차원 거리가 이 안이어야 한다(아니면 REACH_MISMATCH).
-  B_M 0.5 m: 사용자 결정 U18로 고정한 값이다. 쟁점 5의 정규 허용한계(mean + k x std)는 쓰지 않는다. 확인 조건은
+  B_M 0.5 m: 사용자 결정 U18로 고정한 값이다. 정규 허용한계(mean + k x std)는 쓰지 않는다. 확인 조건은
     "보정 실측의 GOTO s와 TRACK_ENTITY s_track 표본 전부가 B_M 이하"다(tests/support/calibration.py).
     시험 미션의 acceptance_radius_m은 R_JUDGE_M - B_M = 0.5 m이고 ACCEPTANCE_MIN_M(0.5 m) 이상이다. B_M은 상한
     B_MAX_M(0.5 m)과 같다.
     근거(보정 실행): 로컬 부팅 30회(전부 통과), 실행 id 20261115-114952-k7-sitl-r1부터 20261115-141237-k7-sitl-r30,
     commit 1664500(dirty 아님), 이미지 idsim/*:local, 스택 7. GOTO 도달 210건: mean(s) 0.2524, std(s) 0.0588,
     max 0.4198 m. s_track 60건: mean -0.3668, std 0.2583, max 0.1195 m(t_f가 정확하지 않은 사건 0). 두 표본 모두
-    B_M 이하다. 참고(기록): 쟁점 5 절차라면 k 4.237로 허용한계 0.5017(b 0.55)이고 Shapiro-Wilk p는 GOTO 0.0013,
+    B_M 이하다. 참고(기록): 정규 허용한계 절차라면 k 4.237로 허용한계 0.5017(b 0.55)이고 Shapiro-Wilk p는 GOTO 0.0013,
     s_track 0.00001로 정규성이 기각된다. t_f 시점 기체 수평 속도와 d_h의 상관은 0.64다(확인 지연 동안의 진행).
-  R_HOME_M 0.20 m: 쟁점 5의 Rayleigh 허용한계. 같은 보정 실행의 RTL 착륙 60건(F3, F4 x 30): R4 max 0.1313 m,
+  R_HOME_M 0.20 m: Rayleigh 허용한계(식은 README "b와 R_home 보정 확인"). 같은 보정 실행의 RTL 착륙 60건(F3, F4 x 30): R4 max 0.1313 m,
     sigma_hat 0.0371 m, q 3.4616(m_home 2), f 1.1787(n 30), q x f x sigma_hat 0.1514 m -> ceil_0.05 0.20 m.
     표본 최댓값이 허용한계 안이다. 착륙 위치 평균 벡터는 y축에서 0.026 m로 2 표준오차(0.008 m)를 넘는다(기록.
     편향은 RMS에 들어가 보수적이라 기각 사유가 아니다).
@@ -90,8 +89,8 @@ TYPE_LOITER = 4
 TYPE_RTL = 5
 TYPE_LAND = 6
 
-N_CONSECUTIVE = 3                # decisions.md 쟁점 9: N은 3(메시지 수)
-CLOCK_ALIGN_MEDIAN_S = 0.1       # 쟁점 9: /clock 정렬
+N_CONSECUTIVE = 3                # N은 3(메시지 수)
+CLOCK_ALIGN_MEDIAN_S = 0.1       # /clock 정렬
 CLOCK_ALIGN_MAX_S = 0.5
 CLOCK_ALIGN_MIN_SAMPLES = 5
 HOVER_HOLD_TOL_M = 0.5           # 새로 정한 값. D의 "일정 시간 고도 유지"의 허용 하강량
@@ -104,8 +103,8 @@ NAV_STATE_AUTO_RTL = 5
 # 1b 판정 상수(머리말 참고)
 R_JUDGE_M = 1.0
 B_M = 0.5                        # U18(머리말)
-R_HOME_M = 0.20                  # 쟁점 5의 Rayleigh 허용한계(머리말)
-ACCEPTANCE_MIN_M = 0.5           # 시험 미션 acceptance_radius_m의 하한(b의 상한과 짝. 쟁점 5)
+R_HOME_M = 0.20                  # Rayleigh 허용한계(머리말)
+ACCEPTANCE_MIN_M = 0.5           # 시험 미션 acceptance_radius_m의 하한(b의 상한과 짝)
 B_MAX_M = 0.5                    # b의 상한(넘으면 올린다)
 R_HOME_MAX_M = 1.0               # R_HOME_M의 상한(넘으면 올린다)
 TARGET_FRESH_AGE_S = 0.1         # Executor 파라미터 target_fresh_age의 기대값(gate가 실행 중인 노드와 대조)
@@ -118,7 +117,7 @@ M_EVENTS = 9
 M_HOME = 2
 NO_TARGET_MOTION_MIN_M = 0.5     # 새로 정한 값(머리말)
 
-# 종료 유형(1b decisions.md 쟁점 5). 판정은 이 값으로 매개변수화하고 SUCCEEDED => disarm을 가정하지 않는다
+# 종료 유형. 판정은 이 값으로 매개변수화하고 SUCCEEDED => disarm을 가정하지 않는다
 TERMINAL_LANDED_DISARMED = "LANDED_DISARMED"
 TERMINAL_HOLD_AIRBORNE = "HOLD_AIRBORNE"
 
@@ -614,7 +613,7 @@ def status_intervals_s(status, from_us, to_us):
 
 
 # ---------------------------------------------------------------------------
-# 1b 정답 판정(SITL 전용 정답 pose /sim/<vehicle_id>/pose. decisions.md 쟁점 5)
+# 1b 정답 판정(SITL 전용 정답 pose /sim/<vehicle_id>/pose)
 
 
 @dataclass(frozen=True)
@@ -641,7 +640,7 @@ class TargetSample:
     vz: float = 0.0
 
 
-# 정답 pose 토픽 이름. 발행하는 idsim_sim/scripts/sim_oracle.py와 각자 조립하고 공유 상수를 두지 않는다(쟁점 5).
+# 정답 pose 토픽 이름. 발행하는 idsim_sim/scripts/sim_oracle.py와 각자 조립하고 공유 상수를 두지 않는다(idsim_sim README "정답 pose 노드").
 # 같은 사례 표(test_sitl_oracle.py ORACLE_TOPIC_CASES, ORACLE_TOPIC_INVALID)로 양쪽이 따로 단위 테스트한다.
 ORACLE_TOPIC_PREFIX = "/sim"
 ORACLE_TOPIC_SUFFIX = "pose"

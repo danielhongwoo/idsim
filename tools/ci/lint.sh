@@ -225,10 +225,10 @@ check_clang_format() {
 }
 
 check_px4_api() {
-  # /fmu 토픽 이름과 idsim_common 내부 이름은 idsim_common 안에서만 쓴다(1a 4단계 쟁점 2, git 이력).
+  # /fmu 토픽 이름과 idsim_common 내부 이름은 idsim_common 안에서만 쓴다(docs/interface.md "PX4 토픽").
   # 다른 패키지가 문자열을 직접 쓰면 공개 API의 발행 허용 목록을 우회한다. 실수 방지 수준이며 보안 경계가 아니다.
   # 대상은 ros_ws/src 아래 idsim_common 밖의 C++ 파일, .py 파일(launch 포함), yaml 파일(params, remap)과
-  # 생성기 golden의 params 파일, tests/sitl/과 tests/support/ 아래의 .py, yaml 파일이다(decisions 쟁점 8).
+  # 생성기 golden의 params 파일, tests/sitl/과 tests/support/ 아래의 .py, yaml 파일이다.
   # tests/ 쪽 예외는 파일 이름으로만 둔다: tests/support/px4_topic.py,
   # test_px4_topic_names.py 둘(정확한 경로, 패턴이 아니다). 토픽 이름을 다른 모듈에서 얻어 검사에 안 걸린다는 사실에는 기대지 않는다.
   # 예외 파일이 하나라도 사라지면 목록이 낡은 것이므로 실패시킨다.
@@ -259,7 +259,7 @@ check_px4_api() {
 
 check_sim_topic() {
   # 운용 패키지(idsim_common, idsim_mission, 앞으로의 idsim_telemetry, idsim_fleet, gateway/)의 소스, launch, params YAML에
-  # `/sim/`이 없어야 한다(SITL 정답 pose 토픽은 시뮬레이터 전용이다. decisions 쟁점 5). 대상 선별과 판정은 check_sim_topic.py가 한다
+  # `/sim/`이 없어야 한다(SITL 정답 pose 토픽은 시뮬레이터 전용이다. tests/sitl/README.md "시나리오와 판정"). 대상 선별과 판정은 check_sim_topic.py가 한다
   # (test, tests 디렉터리와 문서는 제외, 생성기 golden의 ops-N params는 포함). 여기서는 후보 경로만 넘긴다.
   local files
   mapfile -t files < <(list_files 'ros_ws/src/idsim_common/*' 'ros_ws/src/idsim_mission/*' 'ros_ws/src/idsim_telemetry/*' \

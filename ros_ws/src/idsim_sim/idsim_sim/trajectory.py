@@ -13,9 +13,9 @@
 # limitations under the License.
 """표적 궤적 평가와 stamp 단조 규칙. rclpy를 import하지 않는 순수 함수다.
 
-결정: docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 1(보간), 쟁점 3(stamp).
+규칙: README.md "표적 어댑터"(보간과 stamp).
 
-궤적 의미(쟁점 1)
+궤적 의미
 - t는 노드 시계(ROS 시각, ns 정수). tau = t - start_s.
 - tau < 0: 첫 waypoint에 정지(속도 0 벡터).
 - 구간 직선 보간이고 속도는 구간 기울기다. waypoint 시각 정확히에서는 다음 구간 값이다(구간은 [t_i, t_{i+1})).
@@ -104,7 +104,7 @@ class StampDecision(enum.Enum):
 def stamp_decision(prev_ns, now_ns):
     """직전 발행 stamp(prev_ns, 없으면 None)와 지금 시각(now_ns)에서 발행 여부를 정한다.
 
-    직전 stamp보다 큰 t에서만 발행하고 0 이하는 내지 않는다(쟁점 3).
+    직전 stamp보다 큰 t에서만 발행하고 0 이하는 내지 않는다.
     """
     if prev_ns is None:
         return StampDecision.PUBLISH if now_ns > 0 else StampDecision.SKIP_ZERO

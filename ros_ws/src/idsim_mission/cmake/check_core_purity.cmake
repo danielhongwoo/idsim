@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# core 소스가 벽시계, rclcpp, px4_msgs 같은 ROS 의존을 쓰지 않는지 본다(decisions.md 쟁점 6 C1).
+# core 소스가 벽시계, rclcpp, px4_msgs 같은 ROS 의존을 쓰지 않는지 본다(README "core와 어댑터의 경계").
 # 사용법: cmake -DCORE_INCLUDE_DIR=<dir> -DCORE_SRC_DIR=<dir> -P check_core_purity.cmake
 # 음성 시험: -DEXPECT_VIOLATIONS=<N>이면 위반이 정확히 N건일 때만 통과한다(검사기 자체를 시험한다).
 # 링크는 CMake 대상이 막고(idsim_mission_core는 ROS 패키지를 링크하지 않는다), 이 검사는

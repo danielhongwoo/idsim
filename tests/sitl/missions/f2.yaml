@@ -1,7 +1,7 @@
-# F2(1b decisions.md 쟁점 15): [TAKEOFF, GOTO, TRACK_ENTITY]. 공중에서 끝나는 미션이다.
+# F2(tests/sitl/README.md "시나리오와 판정"): [TAKEOFF, GOTO, TRACK_ENTITY]. 공중에서 끝나는 미션이다.
 # 보는 것: 표적 접근, 공중 종료의 SUCCEEDED와 Hold(HOLD_AIRBORNE). 끝 상태 공중 Hold이고 F3이 이어받는다.
 # 기체는 F1이 내려앉은 (6, 7, 0)에서 이륙한다. GOTO 목표는 표적 car_1 궤적(tests/sitl/fleet.yaml)의 직사각형 중심이다.
-# TRACK_ENTITY timeout 30 s의 근거(쟁점 15, 값은 [추정]): 항목 시작점(직전 GOTO 목표 (29, 15, 5))에서 loop 궤적 위
+# TRACK_ENTITY timeout 30 s의 근거(tests/sitl/README.md "시나리오와 판정", 값은 [추정]): 항목 시작점(직전 GOTO 목표 (29, 15, 5))에서 loop 궤적 위
 # 가장 먼 점(모서리, setpoint 점 기준 9.49 m)까지를 접근 속도 2 m/s로 따라잡는 4.7 s에 완료 마진 10 s를 더한
 # 14.7 s 이상이다. 접근 속도와 마진은 tests/support/sitl_missions.py의 APPROACH_SPEED_MPS, TRACK_COMPLETION_MARGIN_S다.
 # acceptance_radius_m은 1.0 - b = 0.5 m다(b 0.5 m, U18).

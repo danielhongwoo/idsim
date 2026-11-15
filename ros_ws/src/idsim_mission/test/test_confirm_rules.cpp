@@ -14,8 +14,7 @@
 
 // 순수 규칙: N회 연속 계수, "disarm 전송 뒤 받은 표본"의 기준, 착지 뒤 대비책의 기한, 정리 분기
 // 고르기, yaw 변환.
-// 결정: decisions.md 쟁점 3 M5 "arm을 보낸 뒤의 지상 분기"(표본 기준), 쟁점 3 M3-M5, 쟁점 6
-// "단위 테스트의 구성"(교차표).
+// 결정: docs/interface.md "정리"(표본 기준), "취소".
 // 단위 테스트는 합성 timestamp만 검사한다. vehicle_status.timestamp와 Px4Timestamp의 실제 시계
 // 관계는 SITL 시나리오 trace가 확인한다.
 

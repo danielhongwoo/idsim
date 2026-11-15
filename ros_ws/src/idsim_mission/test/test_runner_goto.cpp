@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// step()의 FramePort와 GOTO 항목(docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 8, 12).
+// step()의 FramePort와 GOTO 항목(docs/interface.md "GoToItem과 TrackEntityItem", "준비 단계").
 //
 // - FramePort 호출 규율: 1a type 미션(TAKEOFF, LOITER, LAND, RTL)은 FramePort를 부르지 않는다
-//   (decisions.md 쟁점 12). harness의 기본 port(kFail)가 모든 runner 사례에서 이를 함께 단정하고,
+//   (README "구현 규칙"). harness의 기본 port(kFail)가 모든 runner 사례에서 이를 함께 단정하고,
 //   여기서는 진입 방식과 끝나는 길마다 한 번씩 끝까지 돌려 호출 수 0을 직접 단정한다.
 // - GOTO 항목: 칸은 transition_cells.tsv의 ITEM.GOTO 행과 GOTO로 들어오는 세 행이다. 기호: K는 GOTO
 //   항목을 시작한 tick(지상 진입은 TAKEOFF_REACHED tick), K+n은 그 뒤 n번째 tick, C는 공중 Offboard

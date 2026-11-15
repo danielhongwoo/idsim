@@ -12,17 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 미션의 정적 검증과 goal 접수 직후의 즉시 판정(decisions.md 쟁점 3 M1, 쟁점 4).
+// 미션의 정적 검증과 goal 접수 직후의 즉시 판정(docs/interface.md "수락 정책", "미션 정의").
 //
 // - validate_mission_contract: 계약(Mission, MissionItem 주석)의 규칙. 필드 검사 뒤에 순서
 //   규칙(TAKEOFF는 첫 항목에만, LAND와 RTL은 마지막 항목에만)을 본다. 필드 검사에는 좌표 상한(GOTO
-//   position과 TRACK_ENTITY offset의 각 성분 절댓값 kMaxContractCoordinateM 이하, 유한 검사 뒤. 1b
-//   decisions.md 쟁점 8)과 TRACK_ENTITY target_id 형식(is_valid_target_id)이 든다. goal 접수
-//   (screen_goal)와 MissionRunner 생성자가 이것을 부른다(runner는 계약 valid 미션을 모두 실행한다.
-//   첫 항목이 LOITER, GOTO, TRACK_ENTITY이면 공중 Offboard 진입, 마지막이 setpoint 항목이면 공중
-//   종료 단계). runner의 문구는 사용자에게 닿지 않는다(노드는 screen_goal이 먼저 끝낸다).
+//   position과 TRACK_ENTITY offset의 각 성분 절댓값 kMaxContractCoordinateM 이하, 유한 검사 뒤.
+//   docs/interface.md "GoToItem과 TrackEntityItem")과 TRACK_ENTITY target_id
+//   형식(is_valid_target_id)이 든다. goal 접수 (screen_goal)와 MissionRunner 생성자가 이것을
+//   부른다(runner는 계약 valid 미션을 모두 실행한다. 첫 항목이 LOITER, GOTO, TRACK_ENTITY이면 공중
+//   Offboard 진입, 마지막이 setpoint 항목이면 공중 종료 단계). runner의 문구는 사용자에게 닿지
+//   않는다(노드는 screen_goal이 먼저 끝낸다).
 // - within_coordinate_bound: 계약 좌표 상한 술어. 미션 검증과 노드의 표적 표본 변환
-//   (node/conversion.cpp)이 함께 쓴다(1b decisions.md 쟁점 8 "좌표 상한").
+//   (node/conversion.cpp)이 함께 쓴다(docs/interface.md "GoToItem과 TrackEntityItem").
 
 #ifndef IDSIM_MISSION__CORE__MISSION_VALIDATION_HPP_
 #define IDSIM_MISSION__CORE__MISSION_VALIDATION_HPP_
@@ -37,8 +38,8 @@ namespace idsim_mission::core
 {
 
 // 계약 좌표 상한(m). GOTO position, TRACK_ENTITY offset, 유효 표적 표본 위치의 각 성분 절댓값이 이
-// 값 이하(경계 포함)여야 한다. 1b decisions.md 쟁점 8 "좌표 상한"의 값이다. 올리는 쪽이 호환된다
-// (받던 미션과 표본을 계속 받는다).
+// 값 이하(경계 포함)여야 한다. docs/interface.md "GoToItem과 TrackEntityItem"의 값이다. 올리는
+// 쪽이 호환된다 (받던 미션과 표본을 계속 받는다).
 inline constexpr double kMaxContractCoordinateM = 1e5;
 
 // 모든 성분의 절댓값이 kMaxContractCoordinateM 이하인가. 비교가 NaN과 inf에서 거짓이므로 비유한

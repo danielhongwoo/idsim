@@ -24,7 +24,7 @@ SUPPORTED_SCHEMAS = frozenset({1})
 # 생성기 판 3부터 stack.json에 노드 단계 key(vehicle_id, params_file, executor_node, run.params_dir,
 # startup.node_stages, services.ops)가 있다. 판 3 이상이면 필수로 검사하고, 그보다 낮은 판은 읽기만 한다.
 NODE_KEYS_MIN_GENERATOR_VERSION = 3
-# 생성기 판 5부터 world template, 표적, 정답 pose 서비스, 기체별 기대 GPS key가 있다(Phase 1b 쟁점 2, 3, 5, 16).
+# 생성기 판 5부터 world template, 표적, 정답 pose 서비스, 기체별 기대 GPS key가 있다(docs/architecture.md "Docker Compose 실행 환경 설계").
 # 판 5 이상이면 필수로 검사하고, 그보다 낮은 판은 읽기만 한다(접근자는 StackError).
 WORLD_KEYS_MIN_GENERATOR_VERSION = 5
 

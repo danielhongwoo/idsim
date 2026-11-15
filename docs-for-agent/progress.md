@@ -1,19 +1,19 @@
 # idsim 진행 상황
 
-세션을 시작할 때 지금 어디에 있는지 파악하는 파일이다. 지금 유효한 것만 적는다. 설계는 `docs/architecture.md`, 계획은 `docs/roadmap.md`, 진행 중인 단계의 계약은 `docs-for-agent/plan-*/decisions.md`에 있다. 경위는 git(커밋 메시지, PR 본문)에서 본다. 담당자 구성, 호출 규칙, 모델 선택은 `CLAUDE.md`에 있다.
+세션을 시작할 때 지금 어디에 있는지 파악하는 파일이다. 지금 유효한 것만 적는다. 설계는 `docs/architecture.md`, 계획은 `docs/roadmap.md`, 진행 중인 단계가 있으면 그 계약과 결정은 `docs-for-agent/plan-*/`에 있다. 경위는 git(커밋 메시지, PR 본문)에서 본다. 담당자 구성, 호출 규칙, 모델 선택은 `CLAUDE.md`에 있다.
 
 ## 현재 상태
 
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 계약은 `docs/interface.md`에 고정 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약 정본은 `docs/interface.md`이고 결정의 근거는 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6, B10 전 core 수정, B10(진짜 `Px4FramePort`, 표적 구독, goal 접수는 계약 검증만, 미션 YAML 로더와 `send_mission`), B11(F1-F4, 정답 판정, b 0.5 m와 `R_home` 0.20 m), B12(M4 화면 확인, Actor 표본 간격 250 ms 확정), B13(1b 계약 고정 문서) 반영. 칸 목록 covered 452, impossible 131, uncovered 0 |
+| 1b | 완료. 계약은 `docs/interface.md`에 고정 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
 ## 다음 작업
 
-1. 1b 완료 처리(완료 기준 대조, `decisions.md`의 "1a 고정 계약 영향"과 "문서 반영 목록" 정리, 이 파일의 1b 상태 갱신).
+1. Phase 2 착수 전 설계 토론("Phase 2와 3 전에 정할 것"의 첫 항목).
 
 ## 운영 규칙
 
@@ -29,16 +29,9 @@
 
 - U2: `sitl` job은 PR 머리 커밋마다(draft와 문서만 바뀐 PR 제외)와 main push에서 돈다. `lint`, `unit`도 `pull_request`와 `push: main`.
 - U4: replay job의 trigger는 Phase 2에서 정한다. 그때 `docs/architecture.md` 테스트 층 표의 리플레이 행과 `docs/roadmap.md` Phase 2 완료 기준의 "모든 push"를 고친다.
-- U7: 1b에서 반복 이륙(첫 항목이 아닌 TAKEOFF)은 뺀다.
-- U8: `COM_LOW_BAT_ACT`를 계약 SITL 파라미터 표에 넣어 2(Land)로 고정한다.
-- U9: `RTL_RETURN_ALT`는 미션 고도에 맞춘다(1b는 순항 5 m에 10 m).
-- U10: 표적은 스크립트 궤적을 따르는 점 표적이다. 생산자는 교체 가능하고 Gazebo 기반 생산자는 확장 항목이다.
 - U11, U15: CI `sitl` 목표 15분. 1b 비행 시나리오를 모두 PR CI에 두고, 넘으면 겹치는 비행 구간 -> waypoint 수 -> Hold 시간 순으로 줄인다. F2의 공중 종료와 F3의 공중 시작은 빼지 않는다.
 - U12: Gazebo 정답 pose(`/sim/`)를 SITL MCAP 기록물에 넣는다(Phase 2부터 효과).
-- U13: roadmap 1b 목표를 그대로 덮는 합친 미션 시나리오 F4를 둔다. F1-F3은 경계 상황 검증용.
-- U14: 1b waypoint 판정 반경은 1 m. 시험 미션의 `acceptance_radius_m`은 `1 m - b` 이하.
 - U16: `docs-for-agent/file-ownership.md`의 소유자는 architect.
-- U18: b는 0.5 m 고정. 정규 허용한계를 쓰지 않고 보정 실측의 GOTO `s`와 `s_track` 표본 전부가 b 이하임을 확인한다. CI에서 b를 넘는 사건이 나오면 b를 올리지 않고 시각 정렬을 먼저 본다.
 
 ## 미해결 사항
 
@@ -48,13 +41,13 @@
 
 문서 정리(정형, 다음 문서 정리 때).
 
-- `tools/gen_compose.py` `TARGET_ID_RE` 주석이 사례 표 정본(`idsim_common` `TargetId::parse` 테스트)을 가리키게 한다(devops-engineer).
+- 지운 계획에서만 뜻이 정해진 표지가 주석에 남아 있다: `B8b`, `B9`(`idsim_mission` 테스트), `M4`(`tools/gen_compose.py`), `U8`, `U9`, `U13`, `U14`, `U18`(`tests/sitl/README.md`, `sitl_judge.py`, `calibration.py`, 시험 미션 YAML, `sitl_params.env`). 표지를 뜻을 담은 말로 바꾼다(각 owner).
 - `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
 
 테스트 보강.
 
 - 종료 단계에서 대비책 뒤 지상 DISARMED를 `DisarmConfirm`으로 세는 연결을 가르는 사례가 없다. timestamp가 전송 stamp 이하인 지상 DISARMED 셋으로는 끝나지 않음을 T10 경로와 G8 뒤 AIR_LAND에서 단정한다. 6a의 ack 버림 줄은 주석을 달거나 지운다(ros2-engineer, test-engineer, px4-engineer).
-- 쟁점 7의 D [추정]을 기존 1a 산출물(A의 LAND, D의 Hold)의 모드 표본 간격으로 [실측]으로 바꾼다(px4-engineer).
+- 공중 Offboard 진입의 DO_SET_MODE에서 첫 OFFBOARD 표본까지의 시간 D [추정]을 기존 1a 산출물(A의 LAND, D의 Hold)의 모드 표본 간격으로 [실측]으로 바꾼다(px4-engineer).
 - ACCEPTED 사건 stamp의 건전성을 노드 테스트로 덮을지 판정으로 덮을지(test-engineer, ros2-engineer).
 - 성공 sitl run의 summary.md에 ULog `battery_status`, `cpuload`, `system_power` 마지막 표본 시각을 남겨 숨은 발행 정지를 센다. trace 이정표에 수신 시각을 남긴다(test-engineer, logging-engineer).
 - `test_px4_topic_names.py::test_argument_checks`의 SpinThread `InvalidHandle` 경고, `tools/vehicle_arming_state.py`의 rc 2 사례 테스트(test-engineer).
@@ -62,7 +55,6 @@
 
 빌드와 CI.
 
-- 첫 CI `sitl`(9개 시나리오)의 step 시간으로 U15 15분 목표를 확인한다(추정 보통 10-12분, 최악 14-15분). 넘으면 U15 순서로 줄인다(devops-engineer, test-engineer).
 - GOTO 도달의 판정 반경 여유가 0.08 m다(보정 max d3 0.92 m). EKF 위치가 정답보다 진행 방향으로 약 0.47 m 앞선다. SITL GPS 경로에는 실제 지연이 없는데 `EKF2_GPS_DELAY`는 기본 110 ms다([소스] `GZBridge.cpp` navSatCallback, ULog 값 110). 이것이 앞섬의 약 v x 0.11 s를 만든다는 몫은 [추정]이다. 다음 작업 단위에서 `EKF2_GPS_DELAY` 0으로 로컬 몇 회를 돌려 앞섬이 줄어드는지 먼저 보고, 그 뒤 SITL 계약 파라미터와 재보정을 정한다(architect, px4-engineer, test-engineer).
 - `sitl.yml`은 GHCR에서 이미지 key로 pull하므로 이미지 key가 바뀌는 PR은 PR과 머지 직후 main 양쪽에서 pull이 실패한다. 지금은 로컬 `run_sitl.sh`로 대신하고 publish 뒤 main에서 `sitl`을 다시 돌린다. `workflow_run`으로 묶을지 등은 devops-engineer와 architect가 정한다.
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
@@ -81,6 +73,14 @@ Phase 2와 3 전에 정할 것.
 
 - Phase 2 착수 전 설계 토론(ops-service-engineer, logging-engineer, architect): `VehicleState`의 ROS 시각 역행 처리(replay 일시정지와 배속 포함), 소비자 미수신 timeout 배수, stamp 단조성, WebSocket JSON 표현, gRPC `StreamMissionEvents`와 ROS `MissionEvent`의 관계, 기록기의 구독 확인 순서.
 - ULog가 `compose down`에서 정상 종료되는지(기체당 약 1 GB/h, logging-engineer).
+- 반복 이륙(첫 항목이 아닌 TAKEOFF)은 소비자가 생길 때 허용한다.
+- `docs/interface.md` "시간 기준"의 유지 조건을 부하 아래에서 다시 확인한다(Phase 2).
+- 기체별 `RTL_RETURN_ALT` 예외를 정한다(Phase 3).
+- Fleet 배분 전 검증은 `validate_mission_contract`로 한다. 공중 종료 끝점 계획을 세우고, 공중 시작은 Hold 기체에만 허용한다(Phase 3).
+- `SET_GPS_GLOBAL_ORIGIN` 안(Phase 3 후보).
+- U12의 기록 대상과 기록물 디렉터리 규약을 정한다(Phase 2).
+- Gazebo 기반 표적 생산자(U10 확장).
+- gz-gui 생존 확인 자동화(플래키가 보일 때).
 - Phase 3: Fleet 재시작 복구 경로, 이탈 기체 goal 재배분 한 번, 주기 하한 계약이 필요한 토픽 목록(px4-engineer), lockstep 반대 방향(PX4가 느릴 때 Gazebo가 기다리는지).
 
 ## 새 개발 PC에서 시작할 때
@@ -95,5 +95,5 @@ Phase 2와 3 전에 정할 것.
 ## 갱신 규칙
 
 - 작업 단위가 끝나면 "현재 상태"를 고쳐 쓰고, 끝난 "다음 작업"과 닫힌 "미해결 사항"은 지운다. 완료 표시, 날짜, 경위를 남기지 않는다.
-- 항목은 한두 줄로 쓴다. 근거, 실측값, run id, 검토 경과는 커밋 메시지와 PR 본문에, 계약은 `decisions.md`나 `docs/`에 둔다.
+- 항목은 한두 줄로 쓴다. 근거, 실측값, run id, 검토 경과는 커밋 메시지와 PR 본문에, 계약은 `docs/`(진행 중인 단계는 그 계획 디렉터리)에 둔다.
 - 사용자만 정할 수 있는 사항(범위, 언어 선택, 비용)은 "미해결 사항"의 첫 묶음에 올린다.

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""기체 하나의 운용 컨테이너(ops-N). decisions.md 쟁점 2.
+"""기체 하나의 운용 컨테이너(ops-N). docs/architecture.md "Docker Compose 실행 환경 설계".
 
 component_container_isolated(이름 ops_container)에 Mission Executor 컴포넌트 하나를 load한다.
 전이는 노드가 스스로 건다(lifecycle.self_start). launch의 autostart는 쓰지 않는다(launch_ros

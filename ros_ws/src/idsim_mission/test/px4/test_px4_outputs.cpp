@@ -173,7 +173,7 @@ TEST(Px4Outputs, TargetSetpointMessages)
   EXPECT_TRUE(std::isnan(tr.yawspeed));
 }
 
-// ---- 속도 feedforward(decisions.md 쟁점 8) ----
+// ---- 속도 feedforward(docs/interface.md "GoToItem과 TrackEntityItem") ----
 
 TEST(Px4Outputs, VelocityNotValidGivesNaNEvenIfFieldIsSet)
 {

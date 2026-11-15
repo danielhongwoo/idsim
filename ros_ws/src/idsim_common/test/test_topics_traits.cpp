@@ -14,7 +14,7 @@
 
 // 토픽 기술자의 방향과 발행 허용 trait 전수 검사, 허용 목록 명시 비교, msg_version 규칙,
 // options 인자의 컴파일 확인.
-// 결정: 1a 4단계 idsim_common 설계 결정(git 이력) 쟁점 2.
+// 결정: docs/interface.md "공개 /fmu/in 목록과 허용 절차".
 
 #include <gtest/gtest.h>
 

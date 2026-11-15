@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""mission_yaml 로더: YAML 파일 -> idsim_interfaces/msg/Mission(1b decisions.md 쟁점 14).
+"""mission_yaml 로더: YAML 파일 -> idsim_interfaces/msg/Mission(docs/interface.md "미션 정의").
 
 로더는 구조(중복 key 포함), 단위 변환, 기본값, mission_id만 본다. 계약 위반(빈 항목, 순서, 0 offset, target_id 형식)은
 그대로 Mission이 되는 것도 확인한다(정본은 Executor의 goal 검증).

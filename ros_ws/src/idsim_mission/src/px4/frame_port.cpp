@@ -63,7 +63,7 @@ std::optional<core::Vec3> Px4FramePort::world_to_local(const core::Vec3 & world_
   const Eigen::Vector3d ned = idsim_common::geo::world_enu_to_local_ned(
     origin_, *reference_, Eigen::Vector3d(world_enu.x, world_enu.y, world_enu.z));
   // 비유한이거나 float32 범위 밖인 성분이 있으면 trajectory_setpoint에 실을 수 없다
-  // (position_setpoint의 수용 조건과 같은 술어. decisions.md 쟁점 4).
+  // (position_setpoint의 수용 조건과 같은 술어. docs/interface.md "좌표계").
   if (!idsim_common::px4::fits_float32(ned)) {
     return std::nullopt;
   }
@@ -74,7 +74,7 @@ std::optional<core::Vec3> Px4FramePort::world_velocity_to_local(const core::Vec3
 {
   const Eigen::Vector3d ned =
     idsim_common::frames::enu_to_ned(Eigen::Vector3d(world_enu.x, world_enu.y, world_enu.z));
-  // 점 변환과 같은 술어. 기준과 무관하다(decisions.md 쟁점 4).
+  // 점 변환과 같은 술어. 기준과 무관하다(docs/interface.md "좌표계").
   if (!idsim_common::px4::fits_float32(ned)) {
     return std::nullopt;
   }

@@ -263,7 +263,7 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_configure(
     }
   }
   if (t.target_fresh_age_ns >= t.target_timeout_ns) {
-    // core 전제(core/config.hpp. 1b decisions.md 쟁점 8 "신선한 표본").
+    // core 전제(core/config.hpp. docs/interface.md "GoToItem과 TrackEntityItem").
     return fail("configure", "target_fresh_age must be shorter than target_timeout");
   }
   const std::optional<idsim_common::CommandSource> source = idsim_common::CommandSource::make(
@@ -278,12 +278,13 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_configure(
   }
   if (t.link_timeout_ns >= t.mode_confirm_timeout_ns) {
     // 지상 disarm 분기는 link_timeout이 mode_confirm_timeout보다 짧다는 전제로 정했다
-    // (decisions.md 쟁점 3 M5 "지상 disarm 분기의 상태 끊김과 거부 ack").
+    // (docs/interface.md "정리" "지상 disarm 분기의 상태 끊김과 거부 ack").
     RCLCPP_WARN(
       get_logger(), "link_timeout (%.3f s) is not shorter than mode_confirm_timeout (%.3f s)",
       ns_to_seconds(t.link_timeout_ns), ns_to_seconds(t.mode_confirm_timeout_ns));
   }
-  // 정리의 상한(decisions.md 쟁점 3 M6)은 노드 파라미터가 아니라 파생값이라 계산값을 남긴다.
+  // 정리의 상한(docs/interface.md "정리의 상한")은 노드 파라미터가 아니라 파생값이라 계산값을
+  // 남긴다.
   RCLCPP_INFO(
     get_logger(),
     "cleanup cap %.3f s (max(hold_confirm_timeout + 3 x mode_confirm_timeout, "
@@ -657,7 +658,7 @@ void MissionExecutorNode::on_target_state(
 void MissionExecutorNode::on_local_position(const px4_msgs::msg::VehicleLocalPosition & msg)
 {
   const px4::LocalPositionInput input = px4::to_local_position_input(msg, next_tick_);
-  // 비행 중 원점 변경(1b decisions.md 쟁점 4 "원점 변경"). 변환은 tick마다 최신 기준으로 하므로
+  // 비행 중 원점 변경(docs/interface.md "좌표계"). 변환은 tick마다 최신 기준으로 하므로
   // 다시 만들 것은 없고 로그만 남긴다. 판정은 reference_changed_in_flight(node/conversion.hpp).
   if (reference_changed_in_flight(snapshot_.land, ref_timestamp_us_, input.ref_timestamp_us)) {
     RCLCPP_WARN(
@@ -715,7 +716,8 @@ void MissionExecutorNode::on_tick()
   }
   if (out.feedback.has_value()) {
     // 항목이 완료된 tick에도 바로 낸다. 마지막 setpoint 항목이 완료되어 공중 종료 단계로 들어가는
-    // tick은 항목과 phase가 그대로라(decisions.md 쟁점 10) 이 조건이 없으면 다음 주기까지 늦는다.
+    // tick은 항목과 phase가 그대로라(docs/interface.md "공중에서 끝나는 미션") 이 조건이 없으면
+    // 다음 주기까지 늦는다.
     const std::uint32_t completed = runner_->view().items_completed;
     const auto phase = static_cast<std::uint8_t>(out.feedback->phase);
     const bool changed = phase != last_feedback_phase_ ||

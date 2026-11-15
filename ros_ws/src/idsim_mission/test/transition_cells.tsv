@@ -1,12 +1,12 @@
-# idsim_mission 상태기의 전이 칸 목록. 정의와 대조 방법은 docs-for-agent/plan-1b-mission-target/decisions.md
-# 쟁점 13, 형식은 test/test_transition_coverage.cpp 머리 주석. 바꾸려면 px4-engineer가 필수 승인자다.
+# idsim_mission 상태기의 전이 칸 목록. 정의와 대조 방법은 ros_ws/src/idsim_mission/README.md "테스트",
+# 형식은 test/test_transition_coverage.cpp 머리 주석. 바꾸려면 px4-engineer가 필수 승인자다.
 #
 # 상태 이름: PREPARING.<준비 단계>, ITEM.<항목 type>, CLEANUP.<정리 원인>.<정리 분기>, DONE.
 # class: covered(덮임), impossible(불가능. note에 이유), uncovered(미덮임. 목록에 있으면 덮음 테스트가
 # 실패한다. 상태기를 바꾸는 PR은 새 칸을 같은 PR에서 덮는다).
 # also_true: 겹침 칸(같은 tick에 함께 참이던 사건 하나). 겹침 칸의 열거 범위(감시 표 행 쌍은
 # 상태 key마다 대표, setpoint 순서는 대표 행 넷, 무시된 취소는 정리로 들어가는 사건 모두와 바로
-# 끝내는 사건의 대표)는 decisions.md 쟁점 13에 있다. 대표로 줄인 쌍은 목록에 없고, 관측되면
+# 끝내는 사건의 대표)는 idsim_mission README "테스트"에 있다. 대표로 줄인 쌍은 목록에 없고, 관측되면
 # 목록 밖 칸으로 테스트가 실패하므로 목록에 더하고 승인을 받는다.
 from	event	to	reason	class	also_true	note
 PREPARING.WAIT_READY	INVALID_MISSION	DONE	ABORTED/INTERNAL	covered	-	-
@@ -16,7 +16,7 @@ PREPARING.WAIT_READY	READY_TIMEOUT	DONE	ABORTED/NOT_READY	covered	-	-
 PREPARING.WAIT_READY	READY_TAKEOFF	PREPARING.SIGNAL	-	covered	-	-
 PREPARING.WAIT_READY	READY_MODE_ITEM	ITEM.LAND	-	covered	-	-
 PREPARING.WAIT_READY	READY_MODE_ITEM	ITEM.RTL	-	covered	-	-
-PREPARING.WAIT_READY	READY_AIR_OFFBOARD	PREPARING.AIR_SIGNAL	-	covered	-	첫 항목 LOITER, GOTO, TRACK_ENTITY(공중 Offboard 진입, decisions.md 쟁점 7)
+PREPARING.WAIT_READY	READY_AIR_OFFBOARD	PREPARING.AIR_SIGNAL	-	covered	-	첫 항목 LOITER, GOTO, TRACK_ENTITY(공중 Offboard 진입, docs/interface.md "준비 단계")
 PREPARING.WAIT_READY	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 PREPARING.WAIT_READY	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	P0-P2는 발행도 명령도 없어 finalize가 Px4Timestamp를 묻지 않는다
 PREPARING.WAIT_READY	INVALID_MISSION	DONE	ABORTED/INTERNAL	covered	CANCEL	무효 미션의 첫 step(step_tick의 따로 된 호출 지점). 노드는 screen_goal이 먼저 끝내므로 core에서만 닿는다
@@ -37,7 +37,7 @@ PREPARING.OFFBOARD	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	covered	-	-
 PREPARING.OFFBOARD	OFFBOARD_REJECTED	CLEANUP.PREPARING_FAILURE.NONE	-	covered	CANCEL	-
 PREPARING.OFFBOARD	OFFBOARD_TIMEOUT	CLEANUP.PREPARING_FAILURE.NONE	-	covered	CANCEL	-
 PREPARING.OFFBOARD	PREPARING_IDENTITY_MISMATCH	DONE	ABORTED/INTERNAL	covered	CANCEL	바로 끝내는 사건의 대표
-PREPARING.OFFBOARD_ACK	OFFBOARD_ACK_ACCEPTED	PREPARING.ARM	-	covered	-	마지막 DO_SET_MODE 전송 tick보다 뒤의 tick에 받은 비거부 ack(decisions.md 쟁점 12 불변식)
+PREPARING.OFFBOARD_ACK	OFFBOARD_ACK_ACCEPTED	PREPARING.ARM	-	covered	-	마지막 DO_SET_MODE 전송 tick보다 뒤의 tick에 받은 비거부 ack(docs/interface.md "준비 단계" 불변식)
 PREPARING.OFFBOARD_ACK	OFFBOARD_REJECTED	CLEANUP.PREPARING_FAILURE.NONE	-	covered	-	확인 뒤 거부 ack. arm을 보내지 않았다
 PREPARING.OFFBOARD_ACK	OFFBOARD_LEFT	CLEANUP.PREPARING_FAILURE.NONE	-	covered	-	식별이 맞고 timestamp가 확인 표본보다 큰 OFFBOARD 아닌 표본. 확인 고정을 풀지 않고 arm 없이 실패한다
 PREPARING.OFFBOARD_ACK	OFFBOARD_TIMEOUT	CLEANUP.PREPARING_FAILURE.NONE	-	covered	-	확인 뒤 주기마다 재전송해도 유효 ack 없음. 기한은 P5 진입부터
@@ -71,28 +71,28 @@ PREPARING.ARM	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/EXTERNAL_DISARM	covered	MO
 PREPARING.ARM	MONITOR_MODE_FAILSAFE	DONE	ABORTED/FAILSAFE	covered	CANCEL	바로 끝내는 사건의 대표
 PREPARING.AIR_SIGNAL	SIGNAL_TIMEOUT	CLEANUP.PREPARING_FAILURE.NONE	-	covered	-	공중 진입. 정리는 공중 분기(Hold)
 PREPARING.AIR_SIGNAL	SIGNAL_CONFIRMED	PREPARING.AIR_OFFBOARD	-	covered	-	-
-PREPARING.AIR_SIGNAL	OFFBOARD_BEFORE_SET_MODE	CLEANUP.PREPARING_FAILURE.NONE	-	covered	-	DO_SET_MODE 전에 다른 주체가 OFFBOARD로 바꿈(decisions.md 쟁점 7)
+PREPARING.AIR_SIGNAL	OFFBOARD_BEFORE_SET_MODE	CLEANUP.PREPARING_FAILURE.NONE	-	covered	-	DO_SET_MODE 전에 다른 주체가 OFFBOARD로 바꿈(docs/interface.md "준비 단계")
 PREPARING.AIR_SIGNAL	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 PREPARING.AIR_SIGNAL	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	covered	-	발행을 시작한 P3 tick에만 닿는다. P3 tick은 감시 표를 보지 않고 그 뒤 tick은 감시 표가 판정 맨 앞에서 Px4Timestamp를 묻는다
-PREPARING.AIR_SIGNAL	PREPARING_IDENTITY_MISMATCH	DONE	ABORTED/INTERNAL	impossible	-	공중 Offboard 진입의 식별 불일치는 감시 표 순위 2(MONITOR_IDENTITY_MISMATCH)로 처리한다(decisions.md 쟁점 7). step_preparing의 식별 검사는 지상 arm 진입에만 적용한다
+PREPARING.AIR_SIGNAL	PREPARING_IDENTITY_MISMATCH	DONE	ABORTED/INTERNAL	impossible	-	공중 Offboard 진입의 식별 불일치는 감시 표 순위 2(MONITOR_IDENTITY_MISMATCH)로 처리한다(docs/interface.md "준비 단계"). step_preparing의 식별 검사는 지상 arm 진입에만 적용한다
 PREPARING.AIR_SIGNAL	MONITOR_TIMESTAMP_FAILURE	DONE	ABORTED/INTERNAL	covered	-	-
 PREPARING.AIR_SIGNAL	MONITOR_IDENTITY_MISMATCH	DONE	ABORTED/INTERNAL	covered	-	arm을 보내지 않았으므로 disarm 없음
 PREPARING.AIR_SIGNAL	MONITOR_LINK_LOST	DONE	ABORTED/LINK_LOST	covered	-	-
 PREPARING.AIR_SIGNAL	MONITOR_DISARMED_IN_AIR	DONE	ABORTED/FAILSAFE	covered	-	-
 PREPARING.AIR_SIGNAL	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/EXTERNAL_DISARM	covered	-	-
 PREPARING.AIR_SIGNAL	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/FAILSAFE	covered	-	표본의 failsafe(이력 구간은 P3부터)
-PREPARING.AIR_SIGNAL	MONITOR_MODE_FAILSAFE	DONE	ABORTED/FAILSAFE	covered	-	AUTO_LOITER여도 면제하지 않는다(failsafe 동작 Hold. decisions.md 쟁점 7 K1)
+PREPARING.AIR_SIGNAL	MONITOR_MODE_FAILSAFE	DONE	ABORTED/FAILSAFE	covered	-	AUTO_LOITER여도 면제하지 않는다(failsafe 동작 Hold. docs/interface.md "준비 단계")
 PREPARING.AIR_SIGNAL	MONITOR_MODE_EXTERNAL	DONE	ABORTED/EXTERNAL_MODE_CHANGE	covered	-	첫 OFFBOARD 표본 전에는 nav_state가 AUTO_LOITER가 아닐 때만
 PREPARING.AIR_SIGNAL	MONITOR_MODE_DEFENSIVE	DONE	ABORTED/FAILSAFE	covered	-	PREPARING.AIR_SIGNAL MONITOR_MODE_EXTERNAL과 같다
 PREPARING.AIR_SIGNAL	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/EXTERNAL_DISARM	covered	MONITOR_MODE_EXTERNAL	감시 표 행 쌍의 대표(DISARMED 행 대 모드 행). 모드 행이 맞으려면 nav_state가 AUTO_LOITER가 아니다
 PREPARING.AIR_SIGNAL	SIGNAL_TIMEOUT	CLEANUP.PREPARING_FAILURE.NONE	-	covered	CANCEL	-
 PREPARING.AIR_SIGNAL	OFFBOARD_BEFORE_SET_MODE	CLEANUP.PREPARING_FAILURE.NONE	-	covered	CANCEL	-
 PREPARING.AIR_SIGNAL	MONITOR_MODE_FAILSAFE	DONE	ABORTED/FAILSAFE	covered	CANCEL	바로 끝내는 사건의 대표
-PREPARING.AIR_SIGNAL	OFFBOARD_BEFORE_SET_MODE	CLEANUP.PREPARING_FAILURE.NONE	-	covered	SIGNAL_TIMEOUT	먼저 본 OFFBOARD는 offboard_signal_timeout보다 앞이다(decisions.md 쟁점 7)
-PREPARING.AIR_SIGNAL	OFFBOARD_BEFORE_SET_MODE	CLEANUP.PREPARING_FAILURE.NONE	-	covered	SIGNAL_CONFIRMED	먼저 본 OFFBOARD는 신호 확인보다 앞이다(decisions.md 쟁점 7)
+PREPARING.AIR_SIGNAL	OFFBOARD_BEFORE_SET_MODE	CLEANUP.PREPARING_FAILURE.NONE	-	covered	SIGNAL_TIMEOUT	먼저 본 OFFBOARD는 offboard_signal_timeout보다 앞이다(docs/interface.md "준비 단계")
+PREPARING.AIR_SIGNAL	OFFBOARD_BEFORE_SET_MODE	CLEANUP.PREPARING_FAILURE.NONE	-	covered	SIGNAL_CONFIRMED	먼저 본 OFFBOARD는 신호 확인보다 앞이다(docs/interface.md "준비 단계")
 PREPARING.AIR_OFFBOARD	OFFBOARD_REJECTED	CLEANUP.PREPARING_FAILURE.NONE	-	covered	-	첫 OFFBOARD 표본 전의 거부 ack
 PREPARING.AIR_OFFBOARD	OFFBOARD_TIMEOUT	CLEANUP.PREPARING_FAILURE.NONE	-	covered	-	OFFBOARD 표본을 한 번도 보지 못함
-PREPARING.AIR_OFFBOARD	OFFBOARD_FIRST_SAMPLE	PREPARING.AIR_OFFBOARD_SEEN	-	covered	-	감시를 지난 첫 OFFBOARD 표본. 재전송과 AUTO_LOITER 면제가 이 tick에 끝난다(decisions.md 쟁점 7)
+PREPARING.AIR_OFFBOARD	OFFBOARD_FIRST_SAMPLE	PREPARING.AIR_OFFBOARD_SEEN	-	covered	-	감시를 지난 첫 OFFBOARD 표본. 재전송과 AUTO_LOITER 면제가 이 tick에 끝난다(docs/interface.md "준비 단계")
 PREPARING.AIR_OFFBOARD	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 PREPARING.AIR_OFFBOARD	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	이 상태에 들어온 tick(SIGNAL_CONFIRMED)과 그 뒤 tick 모두 감시 표가 판정 맨 앞에서 Px4Timestamp를 묻고 실패하면 MONITOR_TIMESTAMP_FAILURE로 끝난다
 PREPARING.AIR_OFFBOARD	PREPARING_IDENTITY_MISMATCH	DONE	ABORTED/INTERNAL	impossible	-	PREPARING.AIR_SIGNAL PREPARING_IDENTITY_MISMATCH와 같은 근거
@@ -111,9 +111,9 @@ PREPARING.AIR_OFFBOARD	OFFBOARD_TIMEOUT	CLEANUP.PREPARING_FAILURE.NONE	-	covered
 PREPARING.AIR_OFFBOARD	MONITOR_MODE_FAILSAFE	DONE	ABORTED/FAILSAFE	covered	CANCEL	바로 끝내는 사건의 대표
 PREPARING.AIR_OFFBOARD_SEEN	OFFBOARD_REJECTED	CLEANUP.PREPARING_FAILURE.NONE	-	impossible	-	첫 OFFBOARD 표본의 tick에 대기 명령(DO_SET_MODE)을 지우므로 take_ack가 ack를 받지 않는다
 PREPARING.AIR_OFFBOARD_SEEN	OFFBOARD_TIMEOUT	CLEANUP.PREPARING_FAILURE.NONE	-	covered	-	OFFBOARD를 봤지만 3회 확인 전에 기한. 3회째와 같은 tick이면 만료가 이긴다
-PREPARING.AIR_OFFBOARD_SEEN	OFFBOARD_CONFIRMED	ITEM.LOITER	-	covered	-	OFFBOARD 3회 연속 확인 tick에 첫 항목을 시작한다(decisions.md 쟁점 7)
-PREPARING.AIR_OFFBOARD_SEEN	OFFBOARD_CONFIRMED	ITEM.GOTO	-	covered	-	첫 항목 GOTO(공중 Offboard 진입). 첫 항목을 시작한 tick에 그 항목의 setpoint로 바꾼다(decisions.md 쟁점 7)
-PREPARING.AIR_OFFBOARD_SEEN	OFFBOARD_CONFIRMED	ITEM.TRACK_ENTITY	-	covered	-	첫 항목 TRACK_ENTITY(공중 Offboard 진입). 첫 항목을 시작한 tick에 그 항목의 setpoint로 바꾼다(decisions.md 쟁점 7)
+PREPARING.AIR_OFFBOARD_SEEN	OFFBOARD_CONFIRMED	ITEM.LOITER	-	covered	-	OFFBOARD 3회 연속 확인 tick에 첫 항목을 시작한다(docs/interface.md "준비 단계")
+PREPARING.AIR_OFFBOARD_SEEN	OFFBOARD_CONFIRMED	ITEM.GOTO	-	covered	-	첫 항목 GOTO(공중 Offboard 진입). 첫 항목을 시작한 tick에 그 항목의 setpoint로 바꾼다(docs/interface.md "준비 단계")
+PREPARING.AIR_OFFBOARD_SEEN	OFFBOARD_CONFIRMED	ITEM.TRACK_ENTITY	-	covered	-	첫 항목 TRACK_ENTITY(공중 Offboard 진입). 첫 항목을 시작한 tick에 그 항목의 setpoint로 바꾼다(docs/interface.md "준비 단계")
 PREPARING.AIR_OFFBOARD_SEEN	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 PREPARING.AIR_OFFBOARD_SEEN	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	PREPARING.AIR_OFFBOARD STAMP_UNAVAILABLE과 같은 근거(이 상태에 들어온 tick도 AIR_OFFBOARD의 감시 표가 먼저 Px4Timestamp를 묻는다)
 PREPARING.AIR_OFFBOARD_SEEN	PREPARING_IDENTITY_MISMATCH	DONE	ABORTED/INTERNAL	impossible	-	PREPARING.AIR_SIGNAL PREPARING_IDENTITY_MISMATCH와 같은 근거
@@ -124,7 +124,7 @@ PREPARING.AIR_OFFBOARD_SEEN	MONITOR_DISARMED_IN_AIR	DONE	ABORTED/FAILSAFE	covere
 PREPARING.AIR_OFFBOARD_SEEN	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/EXTERNAL_DISARM	covered	-	-
 PREPARING.AIR_OFFBOARD_SEEN	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/FAILSAFE	covered	-	표본의 failsafe이거나 이력(P3부터 지난 OFFBOARD이고 failsafe인 표본)
 PREPARING.AIR_OFFBOARD_SEEN	MONITOR_MODE_FAILSAFE	DONE	ABORTED/FAILSAFE	covered	-	-
-PREPARING.AIR_OFFBOARD_SEEN	MONITOR_MODE_EXTERNAL	DONE	ABORTED/EXTERNAL_MODE_CHANGE	covered	-	첫 OFFBOARD 표본 뒤 운용자가 Hold로 되돌린 표본(AUTO_LOITER)도 여기다. 면제는 첫 OFFBOARD 표본에서 끝났다(decisions.md 쟁점 7)
+PREPARING.AIR_OFFBOARD_SEEN	MONITOR_MODE_EXTERNAL	DONE	ABORTED/EXTERNAL_MODE_CHANGE	covered	-	첫 OFFBOARD 표본 뒤 운용자가 Hold로 되돌린 표본(AUTO_LOITER)도 여기다. 면제는 첫 OFFBOARD 표본에서 끝났다(docs/interface.md "준비 단계")
 PREPARING.AIR_OFFBOARD_SEEN	MONITOR_MODE_DEFENSIVE	DONE	ABORTED/FAILSAFE	covered	-	-
 PREPARING.AIR_OFFBOARD_SEEN	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/EXTERNAL_DISARM	covered	MONITOR_MODE_EXTERNAL	감시 표 행 쌍의 대표(DISARMED 행 대 모드 행)
 PREPARING.AIR_OFFBOARD_SEEN	OFFBOARD_TIMEOUT	CLEANUP.PREPARING_FAILURE.NONE	-	covered	CANCEL	-
@@ -136,8 +136,8 @@ ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.RTL	-	covered	-	-
 ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.GOTO	-	covered	-	-
 ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.TRACK_ENTITY	-	covered	-	-
 ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.TAKEOFF	-	impossible	-	runner가 부르는 validate_mission_contract의 순서 규칙이 TAKEOFF를 첫 항목에만 둔다
-ITEM.TAKEOFF	TAKEOFF_REACHED	DONE	SUCCEEDED/NONE	impossible	-	마지막 setpoint 항목의 완료는 종료 단계(CLEANUP.MISSION_END.NONE)로 가고 완료 tick에 DONE으로 가지 않는다(decisions.md 쟁점 10)
-ITEM.TAKEOFF	TAKEOFF_REACHED	CLEANUP.MISSION_END.NONE	-	covered	-	미션 [TAKEOFF]. 마지막 setpoint 항목의 완료는 종료 단계로 간다(decisions.md 쟁점 10)
+ITEM.TAKEOFF	TAKEOFF_REACHED	DONE	SUCCEEDED/NONE	impossible	-	마지막 setpoint 항목의 완료는 종료 단계(CLEANUP.MISSION_END.NONE)로 가고 완료 tick에 DONE으로 가지 않는다(docs/interface.md "공중에서 끝나는 미션")
+ITEM.TAKEOFF	TAKEOFF_REACHED	CLEANUP.MISSION_END.NONE	-	covered	-	미션 [TAKEOFF]. 마지막 setpoint 항목의 완료는 종료 단계로 간다(docs/interface.md "공중에서 끝나는 미션")
 ITEM.TAKEOFF	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 ITEM.TAKEOFF	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	setpoint 항목은 감시 표가 판정 맨 앞에서 Px4Timestamp를 묻고 실패하면 MONITOR_TIMESTAMP_FAILURE로 끝난다. finalize는 같은 tick의 값을 다시 쓴다
 ITEM.TAKEOFF	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	TAKEOFF_REACHED	-
@@ -168,7 +168,7 @@ ITEM.LOITER	LOITER_ELAPSED	ITEM.RTL	-	covered	-	-
 ITEM.LOITER	LOITER_ELAPSED	ITEM.LOITER	-	covered	-	LOITER 둘 이상인 미션
 ITEM.LOITER	LOITER_ELAPSED	ITEM.GOTO	-	covered	-	-
 ITEM.LOITER	LOITER_ELAPSED	ITEM.TRACK_ENTITY	-	covered	-	-
-ITEM.LOITER	LOITER_ELAPSED	DONE	SUCCEEDED/NONE	impossible	-	마지막 setpoint 항목의 완료는 종료 단계(CLEANUP.MISSION_END.NONE)로 가고 완료 tick에 DONE으로 가지 않는다(decisions.md 쟁점 10)
+ITEM.LOITER	LOITER_ELAPSED	DONE	SUCCEEDED/NONE	impossible	-	마지막 setpoint 항목의 완료는 종료 단계(CLEANUP.MISSION_END.NONE)로 가고 완료 tick에 DONE으로 가지 않는다(docs/interface.md "공중에서 끝나는 미션")
 ITEM.LOITER	LOITER_ELAPSED	CLEANUP.MISSION_END.NONE	-	covered	-	미션 [TAKEOFF, LOITER]
 ITEM.LOITER	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 ITEM.LOITER	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	setpoint 항목은 감시 표가 판정 맨 앞에서 Px4Timestamp를 묻고 실패하면 MONITOR_TIMESTAMP_FAILURE로 끝난다. finalize는 같은 tick의 값을 다시 쓴다
@@ -195,15 +195,15 @@ ITEM.LOITER	MONITOR_TIMESTAMP_FAILURE	DONE	ABORTED/INTERNAL	covered	LOITER_ELAPS
 ITEM.LOITER	MONITOR_LINK_LOST	DONE	ABORTED/LINK_LOST	covered	LOITER_ELAPSED	setpoint 순서의 대표 행
 ITEM.LOITER	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/EXTERNAL_DISARM	covered	LOITER_ELAPSED	setpoint 순서의 대표 행
 ITEM.LOITER	MONITOR_MODE_EXTERNAL	DONE	ABORTED/EXTERNAL_MODE_CHANGE	covered	LOITER_ELAPSED	setpoint 순서의 대표 행
-ITEM.GOTO	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	-	항목 시작부터 점 변환 값을 한 번도 얻지 못한 경우를 포함한다(detail에 적는다. decisions.md 쟁점 8)
+ITEM.GOTO	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	-	항목 시작부터 점 변환 값을 한 번도 얻지 못한 경우를 포함한다(detail에 적는다. docs/interface.md "GoToItem과 TrackEntityItem")
 ITEM.GOTO	GOTO_REACHED	ITEM.LOITER	-	covered	-	-
 ITEM.GOTO	GOTO_REACHED	ITEM.LAND	-	covered	-	-
 ITEM.GOTO	GOTO_REACHED	ITEM.RTL	-	covered	-	-
 ITEM.GOTO	GOTO_REACHED	ITEM.GOTO	-	covered	-	GOTO 둘 이상인 미션
 ITEM.GOTO	GOTO_REACHED	ITEM.TRACK_ENTITY	-	covered	-	-
 ITEM.GOTO	GOTO_REACHED	ITEM.TAKEOFF	-	impossible	-	runner가 부르는 validate_mission_contract의 순서 규칙이 TAKEOFF를 첫 항목에만 둔다
-ITEM.GOTO	GOTO_REACHED	DONE	SUCCEEDED/NONE	impossible	-	마지막 setpoint 항목의 완료는 종료 단계(CLEANUP.MISSION_END.NONE)로 가고 완료 tick에 DONE으로 가지 않는다(decisions.md 쟁점 10)
-ITEM.GOTO	GOTO_REACHED	CLEANUP.MISSION_END.NONE	-	covered	-	미션 [TAKEOFF, GOTO], [GOTO]. 마지막 setpoint 항목의 완료는 종료 단계로 간다(decisions.md 쟁점 10)
+ITEM.GOTO	GOTO_REACHED	DONE	SUCCEEDED/NONE	impossible	-	마지막 setpoint 항목의 완료는 종료 단계(CLEANUP.MISSION_END.NONE)로 가고 완료 tick에 DONE으로 가지 않는다(docs/interface.md "공중에서 끝나는 미션")
+ITEM.GOTO	GOTO_REACHED	CLEANUP.MISSION_END.NONE	-	covered	-	미션 [TAKEOFF, GOTO], [GOTO]. 마지막 setpoint 항목의 완료는 종료 단계로 간다(docs/interface.md "공중에서 끝나는 미션")
 ITEM.GOTO	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 ITEM.GOTO	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	setpoint 항목은 감시 표가 판정 맨 앞에서 Px4Timestamp를 묻고 실패하면 MONITOR_TIMESTAMP_FAILURE로 끝난다. finalize는 같은 tick의 값을 다시 쓴다
 ITEM.GOTO	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	GOTO_REACHED	서로 다른 위치 표본 3개째와 timeout이 같은 tick이면 만료가 이긴다(종료의 충돌 규칙)
@@ -228,19 +228,19 @@ ITEM.GOTO	MONITOR_TIMESTAMP_FAILURE	DONE	ABORTED/INTERNAL	covered	GOTO_REACHED	s
 ITEM.GOTO	MONITOR_LINK_LOST	DONE	ABORTED/LINK_LOST	covered	GOTO_REACHED	setpoint 순서의 대표 행
 ITEM.GOTO	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/EXTERNAL_DISARM	covered	GOTO_REACHED	setpoint 순서의 대표 행
 ITEM.GOTO	MONITOR_MODE_EXTERNAL	DONE	ABORTED/EXTERNAL_MODE_CHANGE	covered	GOTO_REACHED	setpoint 순서의 대표 행
-ITEM.TRACK_ENTITY	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	-	표적 표본이 있어도 반경 안 3개 연속이 timeout 안에 나지 않은 경우. 항목 시작부터 점 변환 값을 한 번도 얻지 못한 경우는 detail에 적는다(decisions.md 쟁점 8)
-ITEM.TRACK_ENTITY	TARGET_LOST	CLEANUP.TARGET_LOST.NONE	-	covered	-	항목 시작부터 target_timeout 안에 유효 표본이 없거나, 최신 유효 표본의 나이가 target_timeout을 넘었다(decisions.md 쟁점 8)
+ITEM.TRACK_ENTITY	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	-	표적 표본이 있어도 반경 안 3개 연속이 timeout 안에 나지 않은 경우. 항목 시작부터 점 변환 값을 한 번도 얻지 못한 경우는 detail에 적는다(docs/interface.md "GoToItem과 TrackEntityItem")
+ITEM.TRACK_ENTITY	TARGET_LOST	CLEANUP.TARGET_LOST.NONE	-	covered	-	항목 시작부터 target_timeout 안에 유효 표본이 없거나, 최신 유효 표본의 나이가 target_timeout을 넘었다(docs/interface.md "GoToItem과 TrackEntityItem")
 ITEM.TRACK_ENTITY	TRACK_ENTITY_REACHED	ITEM.LOITER	-	covered	-	-
 ITEM.TRACK_ENTITY	TRACK_ENTITY_REACHED	ITEM.LAND	-	covered	-	-
 ITEM.TRACK_ENTITY	TRACK_ENTITY_REACHED	ITEM.RTL	-	covered	-	-
 ITEM.TRACK_ENTITY	TRACK_ENTITY_REACHED	ITEM.GOTO	-	covered	-	-
 ITEM.TRACK_ENTITY	TRACK_ENTITY_REACHED	ITEM.TRACK_ENTITY	-	covered	-	TRACK_ENTITY 둘 이상인 미션
 ITEM.TRACK_ENTITY	TRACK_ENTITY_REACHED	ITEM.TAKEOFF	-	impossible	-	runner가 부르는 validate_mission_contract의 순서 규칙이 TAKEOFF를 첫 항목에만 둔다
-ITEM.TRACK_ENTITY	TRACK_ENTITY_REACHED	DONE	SUCCEEDED/NONE	impossible	-	마지막 setpoint 항목의 완료는 종료 단계(CLEANUP.MISSION_END.NONE)로 가고 완료 tick에 DONE으로 가지 않는다(decisions.md 쟁점 10)
-ITEM.TRACK_ENTITY	TRACK_ENTITY_REACHED	CLEANUP.MISSION_END.NONE	-	covered	-	미션 [TAKEOFF, TRACK_ENTITY], [TRACK_ENTITY]. 마지막 setpoint 항목의 완료는 종료 단계로 간다(decisions.md 쟁점 10)
+ITEM.TRACK_ENTITY	TRACK_ENTITY_REACHED	DONE	SUCCEEDED/NONE	impossible	-	마지막 setpoint 항목의 완료는 종료 단계(CLEANUP.MISSION_END.NONE)로 가고 완료 tick에 DONE으로 가지 않는다(docs/interface.md "공중에서 끝나는 미션")
+ITEM.TRACK_ENTITY	TRACK_ENTITY_REACHED	CLEANUP.MISSION_END.NONE	-	covered	-	미션 [TAKEOFF, TRACK_ENTITY], [TRACK_ENTITY]. 마지막 setpoint 항목의 완료는 종료 단계로 간다(docs/interface.md "공중에서 끝나는 미션")
 ITEM.TRACK_ENTITY	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
 ITEM.TRACK_ENTITY	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	setpoint 항목은 감시 표가 판정 맨 앞에서 Px4Timestamp를 묻고 실패하면 MONITOR_TIMESTAMP_FAILURE로 끝난다. finalize는 같은 tick의 값을 다시 쓴다
-ITEM.TRACK_ENTITY	TARGET_LOST	CLEANUP.TARGET_LOST.NONE	-	covered	ITEM_TIMEOUT	TARGET_LOST가 ITEM_TIMEOUT보다 앞이다(decisions.md 쟁점 8 같은 tick의 순서)
+ITEM.TRACK_ENTITY	TARGET_LOST	CLEANUP.TARGET_LOST.NONE	-	covered	ITEM_TIMEOUT	TARGET_LOST가 ITEM_TIMEOUT보다 앞이다(docs/interface.md "GoToItem과 TrackEntityItem"의 같은 tick의 순서)
 ITEM.TRACK_ENTITY	TARGET_LOST	CLEANUP.TARGET_LOST.NONE	-	impossible	TRACK_ENTITY_REACHED	완료는 그 tick의 표적 표본이 신선할 때만 세고 신선하지 않은 tick은 계수를 0으로 되돌린다. core/config.hpp의 전제 target_fresh_age < target_timeout으로 신선한 표본의 나이는 target_timeout 이하라 소실과 함께 참일 수 없다
 ITEM.TRACK_ENTITY	TARGET_LOST	CLEANUP.TARGET_LOST.NONE	-	covered	CANCEL	-
 ITEM.TRACK_ENTITY	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	covered	TRACK_ENTITY_REACHED	서로 다른 위치 표본 3개째와 timeout이 같은 tick이면 만료가 이긴다(종료의 충돌 규칙)
@@ -460,7 +460,7 @@ CLEANUP.PREPARING_FAILURE.AIR	CLEANUP_LINK_LOST	DONE	ABORTED/MODE_SWITCH_FAILED	
 CLEANUP.PREPARING_FAILURE.AIR	CLEANUP_LINK_LOST	DONE	ABORTED/ARM_REJECTED	covered	-	-
 CLEANUP.PREPARING_FAILURE.AIR	CLEANUP_AIR_DISARM	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	-
 CLEANUP.PREPARING_FAILURE.AIR	CLEANUP_AIR_DISARM	DONE	ABORTED/ARM_REJECTED	covered	-	-
-CLEANUP.PREPARING_FAILURE.AIR	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	공중 Offboard 진입(arm을 보내지 않은 goal)의 P4, P5 실패 뒤 Hold를 기다리는 중 지상 DISARMED(decisions.md 쟁점 7), 또는 지상 arm 진입의 P3-P5 실패 뒤 외부 arm으로 공중 분기에 들어간 뒤 지상 DISARMED
+CLEANUP.PREPARING_FAILURE.AIR	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	공중 Offboard 진입(arm을 보내지 않은 goal)의 P4, P5 실패 뒤 Hold를 기다리는 중 지상 DISARMED(docs/interface.md "준비 단계"), 또는 지상 arm 진입의 P3-P5 실패 뒤 외부 arm으로 공중 분기에 들어간 뒤 지상 DISARMED
 CLEANUP.PREPARING_FAILURE.AIR	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/ARM_REJECTED	impossible	-	ARM_REJECTED는 P6 실패라 arm을 보냈다(arm을 보냈으면 지상 DISARMED도 지상 분기를 거친다)
 CLEANUP.PREPARING_FAILURE.AIR	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	-
 CLEANUP.PREPARING_FAILURE.AIR	CLEANUP_CAP	DONE	ABORTED/ARM_REJECTED	covered	-	-
@@ -474,7 +474,7 @@ CLEANUP.PREPARING_FAILURE.AIR_LAND	CLEANUP_LINK_LOST	DONE	ABORTED/MODE_SWITCH_FA
 CLEANUP.PREPARING_FAILURE.AIR_LAND	CLEANUP_LINK_LOST	DONE	ABORTED/ARM_REJECTED	covered	-	-
 CLEANUP.PREPARING_FAILURE.AIR_LAND	CLEANUP_AIR_DISARM	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	-
 CLEANUP.PREPARING_FAILURE.AIR_LAND	CLEANUP_AIR_DISARM	DONE	ABORTED/ARM_REJECTED	covered	-	-
-CLEANUP.PREPARING_FAILURE.AIR_LAND	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	공중 Offboard 진입(arm을 보내지 않은 goal)의 P4, P5 실패 뒤 Hold 실패와 Land 경로 중 지상 DISARMED(decisions.md 쟁점 7), 또는 지상 arm 진입의 P3-P5 실패 뒤 외부 arm으로 공중 분기에 들어간 뒤 지상 DISARMED
+CLEANUP.PREPARING_FAILURE.AIR_LAND	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	공중 Offboard 진입(arm을 보내지 않은 goal)의 P4, P5 실패 뒤 Hold 실패와 Land 경로 중 지상 DISARMED(docs/interface.md "준비 단계"), 또는 지상 arm 진입의 P3-P5 실패 뒤 외부 arm으로 공중 분기에 들어간 뒤 지상 DISARMED
 CLEANUP.PREPARING_FAILURE.AIR_LAND	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/ARM_REJECTED	impossible	-	ARM_REJECTED는 P6 실패라 arm을 보냈다(arm을 보냈으면 지상 DISARMED도 지상 분기를 거친다)
 CLEANUP.PREPARING_FAILURE.AIR_LAND	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	-
 CLEANUP.PREPARING_FAILURE.AIR_LAND	CLEANUP_CAP	DONE	ABORTED/ARM_REJECTED	covered	-	-
@@ -520,7 +520,7 @@ CLEANUP.RTL_FAILURE.NONE	CLEANUP_AIR_DISARM	DONE	ABORTED/MODE_SWITCH_FAILED	cove
 CLEANUP.RTL_FAILURE.NONE	CLEANUP_NOTHING_TO_DO	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	[RTL](arm을 보내지 않은 goal)에서 지상 DISARMED
 CLEANUP.RTL_FAILURE.NONE	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	impossible	-	정리의 상한은 정리 시작 tick부터 재므로 첫 tick의 경과는 0이고, core/config.hpp의 Timeouts 양수 전제로 상한(cleanup_cap_ns)은 양수다
 CLEANUP.RTL_FAILURE.NONE	ENTER_GROUND	CLEANUP.RTL_FAILURE.GROUND	-	covered	-	지상 ARMED, 또는 arm을 보낸 goal의 지상 DISARMED
-CLEANUP.RTL_FAILURE.NONE	ENTER_AIR	CLEANUP.RTL_FAILURE.AIR_LAND	-	covered	-	RTL 실패는 Hold를 거치지 않고 Land 경로로 간다(쟁점 9)
+CLEANUP.RTL_FAILURE.NONE	ENTER_AIR	CLEANUP.RTL_FAILURE.AIR_LAND	-	covered	-	RTL 실패는 Hold를 거치지 않고 Land 경로로 간다(docs/interface.md "모드 명령 항목(LAND, RTL)")
 CLEANUP.RTL_FAILURE.NONE	ENTER_AIR	CLEANUP.RTL_FAILURE.AIR	-	impossible	-	원인이 RTL 실패이면 공중 진입은 늘 Land 경로다(Hold를 보내지 않는다)
 CLEANUP.RTL_FAILURE.NONE	STAMP_UNAVAILABLE	DONE	ABORTED/MODE_SWITCH_FAILED	impossible	-	정리 첫 tick은 끝나거나 분기에 들어가므로 finalize 때 분기가 NONE이 아니다
 CLEANUP.RTL_FAILURE.AIR_LAND	CLEANUP_NO_SAMPLE	DONE	ABORTED/MODE_SWITCH_FAILED	impossible	-	분기는 status와 land를 본 tick에 정해지고 Snapshot은 비우지 않는다. 분기에서는 명령을 보냈다(acted)
@@ -552,9 +552,9 @@ CLEANUP.MISSION_END.NONE	CLEANUP_LINK_LOST	DONE	ABORTED/LINK_LOST	impossible	-	�
 CLEANUP.MISSION_END.NONE	CLEANUP_AIR_DISARM	DONE	ABORTED/FAILSAFE	impossible	-	같은 tick의 감시 표가 같은 신뢰 표본의 DISARMED를 순위 4, 5로 먼저 끝낸다
 CLEANUP.MISSION_END.NONE	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	impossible	-	정리의 상한은 단계 시작 tick부터 재므로 첫 tick의 경과는 0이고, core/config.hpp의 Timeouts 양수 전제로 상한은 양수다
 CLEANUP.MISSION_END.NONE	GROUND_DISARM_CONFIRMED	DONE	SUCCEEDED/NONE	impossible	-	첫 tick의 신뢰 표본은 감시 표를 지난 ARMED이고 지상 DISARMED 계수는 단계 시작에 0이다
-CLEANUP.MISSION_END.NONE	ENTER_AIR	CLEANUP.MISSION_END.AIR	-	covered	-	종료 단계는 지상 ARMED여도 Hold로 시작한다(decisions.md 쟁점 10)
+CLEANUP.MISSION_END.NONE	ENTER_AIR	CLEANUP.MISSION_END.AIR	-	covered	-	종료 단계는 지상 ARMED여도 Hold로 시작한다(docs/interface.md "공중에서 끝나는 미션")
 CLEANUP.MISSION_END.NONE	ENTER_AIR	CLEANUP.MISSION_END.AIR_LAND	-	impossible	-	Hold 실패 표시는 단계를 시작할 때 지운다
-CLEANUP.MISSION_END.NONE	ENTER_GROUND	CLEANUP.MISSION_END.GROUND	-	impossible	-	종료 단계는 취소의 지상 disarm 분기를 쓰지 않는다. 지상은 Hold 실패 뒤의 지상 대기뿐이다(decisions.md 쟁점 10)
+CLEANUP.MISSION_END.NONE	ENTER_GROUND	CLEANUP.MISSION_END.GROUND	-	impossible	-	종료 단계는 취소의 지상 disarm 분기를 쓰지 않는다. 지상은 Hold 실패 뒤의 지상 대기뿐이다(docs/interface.md "공중에서 끝나는 미션")
 CLEANUP.MISSION_END.NONE	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	impossible	-	정리 첫 tick은 AIR에 들어가므로 finalize 때 분기가 NONE이 아니다
 CLEANUP.MISSION_END.AIR	CLEANUP_NO_SAMPLE	DONE	ABORTED/INTERNAL	impossible	-	분기는 status와 land를 본 tick에 정해지고 Snapshot은 비우지 않는다
 CLEANUP.MISSION_END.AIR	CLEANUP_IDENTITY_MISMATCH	DONE	ABORTED/INTERNAL	impossible	-	분기가 정해진 뒤의 식별 불일치는 그 분기를 표본 없이 이어 간다(상한이나 분기 기한이 끝낸다)
@@ -562,7 +562,7 @@ CLEANUP.MISSION_END.AIR	CLEANUP_LINK_LOST	DONE	ABORTED/LINK_LOST	covered	-	-
 CLEANUP.MISSION_END.AIR	CLEANUP_AIR_DISARM	DONE	ABORTED/FAILSAFE	covered	-	-
 CLEANUP.MISSION_END.AIR	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	두 경로로 닿는다. (1) 한 tick에 경과가 hold_confirm_timeout 미만에서 상한 이상으로 건너뛸 때(tick 간격이 벌어짐). (2) 지상 DISARMED 표본 1-2개로 분류가 지상이 된 뒤 식별 불일치 표본만 이어지면 분류 지상 규칙으로 hold_confirm_timeout을 보지 않고, 식별 불일치 tick은 끊김을 보지 않으며 계수가 그대로라 상한에 disarm 1회로 끝난다
 CLEANUP.MISSION_END.AIR	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	covered	-	-
-CLEANUP.MISSION_END.AIR	ENTER_GROUND	CLEANUP.MISSION_END.GROUND	-	impossible	-	종료 단계는 취소의 지상 disarm 분기를 쓰지 않는다. 지상은 Hold 실패 뒤의 지상 대기뿐이다(decisions.md 쟁점 10)
+CLEANUP.MISSION_END.AIR	ENTER_GROUND	CLEANUP.MISSION_END.GROUND	-	impossible	-	종료 단계는 취소의 지상 disarm 분기를 쓰지 않는다. 지상은 Hold 실패 뒤의 지상 대기뿐이다(docs/interface.md "공중에서 끝나는 미션")
 CLEANUP.MISSION_END.AIR	ENTER_AIR	CLEANUP.MISSION_END.AIR	-	impossible	-	공중 분기(Hold, Land 경로)에서는 enter_air를 부르지 않는다
 CLEANUP.MISSION_END.AIR	HOLD_CONFIRMED	DONE	SUCCEEDED/NONE	covered	-	ARMED, AUTO_LOITER, 그 tick의 최신 landed false 3회 연속
 CLEANUP.MISSION_END.AIR	HOLD_REJECTED	CLEANUP.MISSION_END.AIR_LAND	-	covered	-	그 tick에 공중
@@ -576,19 +576,19 @@ CLEANUP.MISSION_END.AIR_LAND	CLEANUP_LINK_LOST	DONE	ABORTED/LINK_LOST	covered	-	
 CLEANUP.MISSION_END.AIR_LAND	CLEANUP_AIR_DISARM	DONE	ABORTED/FAILSAFE	covered	-	-
 CLEANUP.MISSION_END.AIR_LAND	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	지상 대기에서 늦게 공중으로 돌아온 경우(공중이면 NAV_LAND, 지상이면 disarm). CLEANUP.MISSION_END.AIR CLEANUP_CAP의 (2)와 같은 경로(Land 경로에서 분류 지상 뒤 식별 불일치만)로도 disarm과 함께 닿는다
 CLEANUP.MISSION_END.AIR_LAND	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	covered	-	-
-CLEANUP.MISSION_END.AIR_LAND	ENTER_GROUND	CLEANUP.MISSION_END.GROUND	-	impossible	-	종료 단계는 취소의 지상 disarm 분기를 쓰지 않는다. 지상은 Hold 실패 뒤의 지상 대기뿐이다(decisions.md 쟁점 10)
+CLEANUP.MISSION_END.AIR_LAND	ENTER_GROUND	CLEANUP.MISSION_END.GROUND	-	impossible	-	종료 단계는 취소의 지상 disarm 분기를 쓰지 않는다. 지상은 Hold 실패 뒤의 지상 대기뿐이다(docs/interface.md "공중에서 끝나는 미션")
 CLEANUP.MISSION_END.AIR_LAND	ENTER_AIR	CLEANUP.MISSION_END.AIR_LAND	-	impossible	-	공중 분기(Hold, Land 경로)에서는 enter_air를 부르지 않는다
 CLEANUP.MISSION_END.AIR_LAND	LAND_PATH_MODE_OBSERVED	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	ARMED 표본에서만(분류 지상의 DISARMED 표본의 AUTO_LAND는 보지 않는다, 분류 지상 규칙)
 CLEANUP.MISSION_END.AIR_LAND	LAND_PATH_TIMEOUT	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	ARMED 표본에서만(분류 지상이면 기한을 보지 않는다, 분류 지상 규칙)
-CLEANUP.MISSION_END.AIR_LAND	GROUND_DISARM_CONFIRMED	DONE	SUCCEEDED/NONE	covered	-	AUTO_LAND를 보기 전에 지상 DISARMED 3회(decisions.md 쟁점 10). Land 경로 기한 tick에 3회째여도 이 칸이다(분류 지상 규칙)
+CLEANUP.MISSION_END.AIR_LAND	GROUND_DISARM_CONFIRMED	DONE	SUCCEEDED/NONE	covered	-	AUTO_LAND를 보기 전에 지상 DISARMED 3회(docs/interface.md "공중에서 끝나는 미션"). Land 경로 기한 tick에 3회째여도 이 칸이다(분류 지상 규칙)
 CLEANUP.MISSION_END.GROUND_WAIT	CLEANUP_NO_SAMPLE	DONE	ABORTED/INTERNAL	impossible	-	분기는 status와 land를 본 tick에 정해지고 Snapshot은 비우지 않는다
 CLEANUP.MISSION_END.GROUND_WAIT	CLEANUP_IDENTITY_MISMATCH	DONE	ABORTED/INTERNAL	impossible	-	분기가 정해진 뒤의 식별 불일치는 그 분기를 표본 없이 이어 간다(상한이나 분기 기한이 끝낸다)
 CLEANUP.MISSION_END.GROUND_WAIT	CLEANUP_LINK_LOST	DONE	ABORTED/LINK_LOST	covered	-	-
 CLEANUP.MISSION_END.GROUND_WAIT	CLEANUP_AIR_DISARM	DONE	ABORTED/FAILSAFE	covered	-	첫 DISARMED 표본의 tick에 최신 landed가 false
 CLEANUP.MISSION_END.GROUND_WAIT	CLEANUP_CAP	DONE	ABORTED/MODE_SWITCH_FAILED	covered	-	대비책 disarm이 확인되지 않음. DISARM_FAILED가 아니다
 CLEANUP.MISSION_END.GROUND_WAIT	STAMP_UNAVAILABLE	DONE	ABORTED/INTERNAL	covered	-	-
-CLEANUP.MISSION_END.GROUND_WAIT	ENTER_GROUND	CLEANUP.MISSION_END.GROUND	-	impossible	-	종료 단계는 취소의 지상 disarm 분기를 쓰지 않는다. 지상은 Hold 실패 뒤의 지상 대기뿐이다(decisions.md 쟁점 10)
-CLEANUP.MISSION_END.GROUND_WAIT	ENTER_AIR	CLEANUP.MISSION_END.AIR_LAND	-	covered	-	지상 대기 중 ARMED이고 landed false. Land 경로(decisions.md 쟁점 10)
+CLEANUP.MISSION_END.GROUND_WAIT	ENTER_GROUND	CLEANUP.MISSION_END.GROUND	-	impossible	-	종료 단계는 취소의 지상 disarm 분기를 쓰지 않는다. 지상은 Hold 실패 뒤의 지상 대기뿐이다(docs/interface.md "공중에서 끝나는 미션")
+CLEANUP.MISSION_END.GROUND_WAIT	ENTER_AIR	CLEANUP.MISSION_END.AIR_LAND	-	covered	-	지상 대기 중 ARMED이고 landed false. Land 경로(docs/interface.md "공중에서 끝나는 미션")
 CLEANUP.MISSION_END.GROUND_WAIT	ENTER_AIR	CLEANUP.MISSION_END.AIR	-	impossible	-	지상 대기는 이 단계에서 Hold가 실패한 뒤에만 들어가고 Hold 실패 표시는 단계 끝까지 남으므로 공중 재진입은 늘 Land 경로다
 CLEANUP.MISSION_END.GROUND_WAIT	GROUND_DISARM_CONFIRMED	DONE	SUCCEEDED/NONE	covered	-	PX4 자동 disarm이나 대비책 disarm 뒤 지상 DISARMED 3회
-CLEANUP.MISSION_END.GROUND_WAIT	GROUND_DISARM_TIMEOUT	DONE	ABORTED/DISARM_FAILED	impossible	-	지상 대기에는 분기 기한이 없고 disarm 실패는 상한(MODE_SWITCH_FAILED)으로 끝난다. REASON_DISARM_FAILED는 종료 단계에서 나오지 않는다(decisions.md 쟁점 10)
+CLEANUP.MISSION_END.GROUND_WAIT	GROUND_DISARM_TIMEOUT	DONE	ABORTED/DISARM_FAILED	impossible	-	지상 대기에는 분기 기한이 없고 disarm 실패는 상한(MODE_SWITCH_FAILED)으로 끝난다. REASON_DISARM_FAILED는 종료 단계에서 나오지 않는다(docs/interface.md "공중에서 끝나는 미션")

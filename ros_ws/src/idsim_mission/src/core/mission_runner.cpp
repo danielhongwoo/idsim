@@ -14,20 +14,20 @@
 
 // 상태기 구현. 표의 행과 이 파일의 대응은 README.md "전이 표와 구현의 대응"에 있다.
 //
-// 한 tick 안의 판정 순서(decisions.md 쟁점 3 "종료의 충돌 규칙"을 전이에도 같게 쓴다)
+// 한 tick 안의 판정 순서(docs/interface.md "종료의 충돌 규칙"을 전이에도 같게 쓴다)
 // 1. 그 단계의 실패(감시 표, 상태 끊김, 거부 ack, 타임아웃 만료)
 // 2. 확인과 완료(N회 연속, 도달, 경과)
 // 3. 취소(실패나 완료로 끝나지 않았고 정리 중이 아닐 때만)
 // 4. 출력 마무리(timestamp, setpoint, feedback)
-// 정리 중의 순서는 따로 있다(쟁점 3 M6): 상태 끊김 -> 공중 DISARMED -> 정리할 것 없음 -> 정리의
-// 상한 -> 그 분기의 실행. step_cleanup 머리 주석.
-// 공중 Offboard 진입(첫 항목 LOITER, GOTO, TRACK_ENTITY. 1b decisions.md 쟁점 7)의 순서: P4는
-// 감시 표 -> 먼저 본 OFFBOARD -> offboard_signal_timeout -> 신호 확인, P5는 감시 표 -> 거부 ack
-// -> 첫 OFFBOARD 표본의 관측 -> mode_confirm_timeout -> OFFBOARD 3회 확인이고 취소는 그 뒤다. 첫
-// OFFBOARD 표본의 관측은 종료를 정하지 않으므로 같은 tick의 mode_confirm_timeout이 그대로
-// 끝낸다(확인과 만료가 같은 tick이면 만료가 이긴다). 마지막 setpoint 항목 뒤의 공중 종료 단계(1b
-// decisions.md 쟁점 10)는 같은 정리 단계 안의 원인 kMissionEnd이고 순서는 step_mission_end 머리
-// 주석에 있다.
+// 정리 중의 순서는 따로 있다(docs/interface.md "정리의 상한"): 상태 끊김 -> 공중 DISARMED ->
+// 정리할 것 없음 -> 정리의 상한 -> 그 분기의 실행. step_cleanup 머리 주석.
+// 공중 Offboard 진입(첫 항목 LOITER, GOTO, TRACK_ENTITY. docs/interface.md "준비 단계")의 순서:
+// P4는 감시 표 -> 먼저 본 OFFBOARD -> offboard_signal_timeout -> 신호 확인, P5는 감시 표 -> 거부
+// ack -> 첫 OFFBOARD 표본의 관측 -> mode_confirm_timeout -> OFFBOARD 3회 확인이고 취소는 그 뒤다.
+// 첫 OFFBOARD 표본의 관측은 종료를 정하지 않으므로 같은 tick의 mode_confirm_timeout이 그대로
+// 끝낸다(확인과 만료가 같은 tick이면 만료가 이긴다). 마지막 setpoint 항목 뒤의 공중 종료 단계
+// (docs/interface.md "공중에서 끝나는 미션")는 같은 정리 단계 안의 원인 kMissionEnd이고 순서는
+// step_mission_end 머리 주석에 있다.
 
 #include "idsim_mission/core/mission_runner.hpp"
 
@@ -91,8 +91,8 @@ namespace
 
 // Px4Timestamp를 만들지 못해 끝난 goal(이 goal이 발행이나 명령을 낸 뒤)의 detail 꼬리. 그 tick의
 // 최신 landed로 가른다. Snapshot은 최신 표본을 tick 사이에 들고 있으므로 land가 없으면 표본을 한
-// 번도 받지 못한 것이다. 아무것도 보내지 못한 종료라 PX4가 그 뒤에 할 동작은 적지 않는다(1b
-// decisions.md 쟁점 12).
+// 번도 받지 못한 것이다. 아무것도 보내지 못한 종료라 PX4가 그 뒤에 할 동작은 적지
+// 않는다(docs/interface.md "공중에서 끝나는 미션").
 std::string state_unknown_tail(const LandSample * land)
 {
   if (land == nullptr) {
@@ -232,7 +232,8 @@ void MissionRunner::step_tick(Tick & t)
       break;
   }
   // 취소는 실패와 완료 뒤에 본다. 정리 중(취소, ITEM_TIMEOUT, PREPARING 실패, RTL 실패, 공중 종료
-  // 단계)이면 무시한다(종료 단계 중의 취소는 결과를 바꾸지 않는다. 1b decisions.md 쟁점 10).
+  // 단계)이면 무시한다(종료 단계 중의 취소는 결과를 바꾸지 않는다. docs/interface.md "공중에서
+  // 끝나는 미션").
   if (t.input.cancel_requested && (stage_ == Stage::kPreparing || stage_ == Stage::kItem)) {
     begin_cleanup(Event::kCancel, t, CleanupCause::kCancel, Reason::kNone, "");
   } else if (t.input.cancel_requested && in_flow_at_start) {
@@ -281,13 +282,13 @@ void MissionRunner::step_preparing(Tick & t)
   if (
     prep_ != PrepStep::kWaitReady && !monitor_active_ && t.status != nullptr &&
     t.status->identity == IdentityCheck::kMismatch) {
-    // 지상 arm 진입에서 발행을 시작한 뒤, 첫 ARMED 표본 전의 식별 불일치(decisions.md 쟁점 3 M2).
-    // 입력을 믿을 수 없으므로 정리 분기를 고르지 않는다. arm을 보냈으면 강제가 아닌 disarm을 한 번
-    // 보낸다. vehicle_command는 target_system으로 주소가 정해져 status의 식별과 무관하고, 강제가
-    // 아닌 disarm은 공중에서 거부되므로 공중 기체를 끄지 않는다. 이륙 이력이 없으면 자동 disarm이
-    // 없다. reason은 INTERNAL이다. NOT_READY는 기체에 아무것도 보내지 않은 goal에만 쓴다(P0-P2).
-    // 감시 구간(지상 arm 진입은 첫 ARMED 표본 뒤(prepare_arm), 공중 Offboard 진입은 P3 tick부터.
-    // 1b decisions.md 쟁점 7)은 감시 표 순위 2다.
+    // 지상 arm 진입에서 발행을 시작한 뒤, 첫 ARMED 표본 전의 식별 불일치(docs/interface.md "준비
+    // 단계"). 입력을 믿을 수 없으므로 정리 분기를 고르지 않는다. arm을 보냈으면 강제가 아닌
+    // disarm을 한 번 보낸다. vehicle_command는 target_system으로 주소가 정해져 status의 식별과
+    // 무관하고, 강제가 아닌 disarm은 공중에서 거부되므로 공중 기체를 끄지 않는다. 이륙 이력이
+    // 없으면 자동 disarm이 없다. reason은 INTERNAL이다. NOT_READY는 기체에 아무것도 보내지 않은
+    // goal에만 쓴다(P0-P2). 감시 구간(지상 arm 진입은 첫 ARMED 표본 뒤(prepare_arm), 공중 Offboard
+    // 진입은 P3 tick부터. docs/interface.md "준비 단계")은 감시 표 순위 2다.
     std::string detail =
       "vehicle_status identity mismatch during preparing: " + t.status->identity_detail;
     if (arm_sent_) {
@@ -328,8 +329,9 @@ void MissionRunner::prepare_wait_ready(Tick & t)
 {
   // 진입 방식(첫 항목 type)마다 P1과 P2의 조건이 다르다. 지상 arm 진입(TAKEOFF)은 landed이고
   // DISARMED, 모드 명령 진입(LAND, RTL)은 landed가 아니고 ARMED, 공중 Offboard 진입(LOITER, GOTO)은
-  // landed가 아니고 ARMED이고 nav_state와 의도가 AUTO_LOITER이고 failsafe가 없어야 한다(1b
-  // decisions.md 쟁점 7. 이미 OFFBOARD, AUTO_RTL, AUTO_LAND이거나 failsafe인 기체는 받지 않는다).
+  // landed가 아니고 ARMED이고 nav_state와 의도가 AUTO_LOITER이고 failsafe가 없어야
+  // 한다(docs/interface.md "준비 단계". 이미 OFFBOARD, AUTO_RTL, AUTO_LAND이거나 failsafe인 기체는
+  // 받지 않는다).
   const ItemSpec & first = mission_.items.front();
   const bool takeoff_first = entry_plan_ == EntryPlan::kGroundArm;
   const bool air_offboard = entry_plan_ == EntryPlan::kAirOffboard;
@@ -432,7 +434,7 @@ void MissionRunner::start_signal(Event event, Tick & t)
   const TakeoffSpec & spec = mission_.items.front().takeoff;
   const double yaw =
     spec.yaw.mode == yaw_mode::kFixed ? enu_to_ned_yaw(spec.yaw.yaw_rad) : wrap_pi(p->heading);
-  // TAKEOFF와 지상 setpoint는 속도를 싣지 않는다(decisions.md 쟁점 8).
+  // TAKEOFF와 지상 setpoint는 속도를 싣지 않는다(docs/interface.md "GoToItem과 TrackEntityItem").
   reference_ = SetpointOut{SetpointKind::kGround, p->x, p->y, p->z, yaw, false, Vec3{}};
   setpoint_ =
     SetpointOut{SetpointKind::kTarget, p->x, p->y, p->z - spec.height_m, yaw, false, Vec3{}};
@@ -494,10 +496,10 @@ void MissionRunner::prepare_offboard(Tick & t)
     return;
   }
   if (counter_.count() >= kConfirmSamples && t.status != nullptr) {
-    // 확인을 고정하고 ack 대기로 간다(decisions.md 쟁점 12). 대기 명령(DO_SET_MODE)은 남겨 노드가
-    // 그 묶음의 ack를 계속 넘기게 한다. 이 tick의 거부 ack와 timeout은 위에서 봤고, 확인 표본이
-    // OFFBOARD라 이탈은 없으므로 arm 조건을 이어서 보고, arm하지 않았으면 유효 ack가 없을 때 주기
-    // 재전송을 본다.
+    // 확인을 고정하고 ack 대기로 간다(docs/interface.md "준비 단계"). 대기 명령(DO_SET_MODE)은
+    // 남겨 노드가 그 묶음의 ack를 계속 넘기게 한다. 이 tick의 거부 ack와 timeout은 위에서 봤고,
+    // 확인 표본이 OFFBOARD라 이탈은 없으므로 arm 조건을 이어서 보고, arm하지 않았으면 유효 ack가
+    // 없을 때 주기 재전송을 본다.
     offboard_confirm_timestamp_us_ = t.status->timestamp_us;
     enter_prep(Event::kOffboardConfirmed, t, PrepStep::kOffboardAck);
     if (arm_if_offboard_acked(t)) {
@@ -554,9 +556,9 @@ bool MissionRunner::has_valid_offboard_ack() const
 
 void MissionRunner::resend_offboard_until_acked(Tick & t)
 {
-  // 지상 arm 진입(P5, P5a) 전용. 유효 ack가 없을 때만 주기 재전송한다(decisions.md 쟁점 12 "명령과
-  // ack의 유실"). 유효 ack를 무효로 만드는 것은 그 뒤의 재전송뿐이라 한 번 유효가 된 ack는 arm이나
-  // 실패까지 유효하다.
+  // 지상 arm 진입(P5, P5a) 전용. 유효 ack가 없을 때만 주기 재전송한다(README "구현 규칙"의
+  // 명령과 ack의 유실). 유효 ack를 무효로 만드는 것은 그 뒤의 재전송뿐이라 한 번 유효가 된 ack는
+  // arm이나 실패까지 유효하다.
   if (has_valid_offboard_ack()) {
     return;
   }
@@ -580,7 +582,7 @@ bool MissionRunner::arm_if_offboard_acked(Tick & t)
 
 void MissionRunner::prepare_arm(Tick & t)
 {
-  // P6(decisions.md 쟁점 4 P6 행과 "P6에서 ARMED를 처음 관측한 뒤").
+  // P6(docs/interface.md "준비 단계").
   if (!armed_seen_) {
     // 첫 ARMED 표본: 식별 대조가 맞고 수신 tick이 arm 첫 전송 tick보다 큰 ARMED 표본
     // (nav_state가 OFFBOARD가 아니어도 해당한다). 표본 하나로 정해지는 관측이라 같은 tick의
@@ -649,7 +651,7 @@ void MissionRunner::prepare_arm_before_armed(Tick & t)
   resend_due(t);
 }
 
-// ---- 공중 Offboard 진입(첫 항목 LOITER, GOTO, TRACK_ENTITY. 1b decisions.md 쟁점 7) ----
+// ---- 공중 Offboard 진입(첫 항목 LOITER, GOTO, TRACK_ENTITY. docs/interface.md "준비 단계") ----
 
 namespace
 {
@@ -747,7 +749,7 @@ void MissionRunner::prepare_air_offboard(Tick & t)
   // 고정한다. 첫 OFFBOARD 표본과 같은 tick에 온 거부 ack가 대기 명령에 묶여 거부로 끝나게 하려는
   // 것이다(지상 P6의 첫 ARMED 표본은 반대로 대기 명령을 먼저 지운다. 그 함수를 본뜨지 않는다).
   // 재전송은 수락 ack로 멈추지 않고(지상 arm 진입 전용 resend_offboard_until_acked를 쓰지 않는다)
-  // 첫 OFFBOARD 표본에서 멈춘다(1b decisions.md 쟁점 7, 쟁점 12 "명령과 ack의 유실").
+  // 첫 OFFBOARD 표본에서 멈춘다(README "구현 규칙", docs/interface.md "준비 단계").
   if (monitor_flight(t, kAirEntryLabel, {}, true)) {
     return;
   }
@@ -923,9 +925,10 @@ void MissionRunner::start_item(Event event, Tick & t, std::uint32_t index)
     send(t, spec->command);
   }
   if (current_item().type == item_type::kGoTo) {
-    // yaw는 항목 시작에 한 번 정한다. MODE_KEEP은 시작 직전 setpoint의 yaw다(1b decisions.md 쟁점
-    // 8). 시작 tick에 setpoint를 그 점으로 바꾼다(쟁점 7 "첫 항목을 시작한 tick에 그 항목의
-    // setpoint로 바꾼다"를 중간 GOTO에도 같게 쓴다). 완료는 다음 tick부터 센다.
+    // yaw는 항목 시작에 한 번 정한다. MODE_KEEP은 시작 직전 setpoint의 yaw다
+    // (docs/interface.md "GoToItem과 TrackEntityItem"). 시작 tick에 setpoint를 그 점으로 바꾼다
+    // (docs/interface.md "준비 단계"의 "첫 항목을 시작한 tick에 그 항목의 setpoint로 바꾼다"를
+    // 중간 GOTO에도 같게 쓴다). 완료는 다음 tick부터 센다.
     const YawSpec & yaw = current_item().go_to.yaw;
     goto_yaw_ned_ = yaw.mode == yaw_mode::kFixed ? enu_to_ned_yaw(yaw.yaw_rad) : setpoint_.yaw_ned;
     goto_counter_.reset();
@@ -945,7 +948,8 @@ void MissionRunner::start_item(Event event, Tick & t, std::uint32_t index)
 void MissionRunner::goto_transform(Tick & t)
 {
   // 점 변환 1회. 값이 있으면 setpoint_를 그 점(yaw는 항목 시작에 정한 값, feedforward 없음)으로
-  // 바꾸고, 없으면 setpoint_ 전체(위치와 yaw)를 그대로 둔다(1b decisions.md 쟁점 8 "변환 값 없음").
+  // 바꾸고, 없으면 setpoint_ 전체(위치와 yaw)를 그대로 둔다(docs/interface.md "GoToItem과
+  // TrackEntityItem").
   t.goto_local = t.frame.world_to_local(current_item().go_to.position);
   if (!t.goto_local.has_value()) {
     return;
@@ -959,7 +963,7 @@ void MissionRunner::goto_transform(Tick & t)
 MissionRunner::TrackTarget MissionRunner::track_target(const Tick & t) const
 {
   // 유효 표본은 이 goal에서 받은 것이다(앞 항목 동안 받은 것도 센다). 나이가 음수이면 0으로 본다.
-  // 소실은 두 형태 모두 초과(>)다(1b decisions.md 쟁점 8).
+  // 소실은 두 형태 모두 초과(>)다(docs/interface.md "GoToItem과 TrackEntityItem").
   TrackTarget target;
   const Timeouts & timeouts = config_.timeouts;
   const auto it = t.targets->find(current_item().track_entity.target_id);
@@ -979,7 +983,7 @@ void MissionRunner::track_transform(Tick & t, const TrackTarget & target)
   // 표본이 없거나 점 변환 값이 없는 tick은 위치와 yaw를 그대로 두고 속도를 싣지 않는다(벡터 변환을
   // 부르지 않는다). 점 변환 값이 있으면 setpoint를 그 점으로 바꾸고, 표본이 신선하고 속도가
   // 유효하면 벡터 변환 값(세 성분을 통째로)을 feedforward로 싣는다. 벡터 변환이 값 없음이면 속도만
-  // 싣지 않는다(1b decisions.md 쟁점 8).
+  // 싣지 않는다(docs/interface.md "GoToItem과 TrackEntityItem").
   t.goto_local.reset();
   setpoint_.velocity_valid = false;
   setpoint_.velocity = Vec3{};
@@ -1007,14 +1011,14 @@ void MissionRunner::track_transform(Tick & t, const TrackTarget & target)
 
 void MissionRunner::complete_item(Event event, Tick & t)
 {
-  // 속도는 끝 상태가 TRACK_ENTITY 항목인 tick에만 나간다(1b decisions.md 쟁점 8). 다음 항목이
-  // TRACK_ENTITY이면 그 시작에서 다시 싣는다.
+  // 속도는 끝 상태가 TRACK_ENTITY 항목인 tick에만 나간다(docs/interface.md "GoToItem과
+  // TrackEntityItem"). 다음 항목이 TRACK_ENTITY이면 그 시작에서 다시 싣는다.
   setpoint_.velocity_valid = false;
   setpoint_.velocity = Vec3{};
   ++items_completed_;
   const std::uint32_t next = item_index_ + 1;
   if (next >= mission_.items.size()) {
-    // 마지막 setpoint 항목의 완료는 종료 단계로 간다(1b decisions.md 쟁점 10).
+    // 마지막 setpoint 항목의 완료는 종료 단계로 간다(docs/interface.md "공중에서 끝나는 미션").
     // items_completed는 N이고 결과는 종료 단계가 정한다. 모드 명령 항목(LAND, RTL)은
     // complete_item을 부르지 않는다.
     begin_cleanup(event, t, CleanupCause::kMissionEnd, Reason::kNone, "");
@@ -1137,7 +1141,7 @@ void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
   // 모드 명령 항목(LAND, RTL)의 한 tick. 같은 tick의 순서는 식별 불일치, 상태 끊김,
   // 공중 DISARMED -> 거부 ack(RTL만 끝낸다) -> mode_confirm_timeout -> 3회 확인 -> ITEM_TIMEOUT
   // -> 완료 -> 대비책 disarm -> 재전송이다. RTL은 확인 전 거부 ack와 mode_confirm_timeout에서
-  // Land fallback(RTL 실패의 정리)으로 간다(1b decisions.md 쟁점 9).
+  // Land fallback(RTL 실패의 정리)으로 간다(docs/interface.md "모드 명령 항목(LAND, RTL)").
   apply_publish_rule(t);
   const StatusSample * const s = t.status;
   if (s != nullptr && s->identity == IdentityCheck::kMismatch) {
@@ -1277,7 +1281,7 @@ void MissionRunner::begin_cleanup(
   Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail)
 {
   tag(event, t);
-  // 정리와 종료 단계의 setpoint에는 속도가 없다(1b decisions.md 쟁점 8).
+  // 정리와 종료 단계의 setpoint에는 속도가 없다(docs/interface.md "GoToItem과 TrackEntityItem").
   setpoint_.velocity_valid = false;
   setpoint_.velocity = Vec3{};
   // 분기나 단계가 바뀌는 tick에 이전 명령의 재전송을 지운다(arm 재전송은 이 tick에 멈춘다).
@@ -1304,7 +1308,8 @@ void MissionRunner::begin_cleanup(
 
 void MissionRunner::step_cleanup(Tick & t)
 {
-  // 한 tick의 순서(decisions.md 쟁점 3 M6): (1) 상태 끊김 (2) 공중 DISARMED (3) 정리할 것 없음
+  // 한 tick의 순서(docs/interface.md "정리의 상한"): (1) 상태 끊김 (2) 공중 DISARMED (3) 정리할 것
+  // 없음
   // (4) 정리의 상한 (5) 그 분기의 실행(분기 타임아웃, 확인). (1)-(3)은 표본 하나로 정해지는
   // 관측이라 상한보다 앞이고, (4)가 (5)보다 앞이라 상한 tick의 확인 표본은 세지 않는다.
   // 공중 종료 단계는 순서와 분기 고르기가 따로 있다(step_mission_end).
@@ -1451,10 +1456,10 @@ void MissionRunner::end_at_cleanup_cap(Tick & t, bool on_ground)
 
 void MissionRunner::cleanup_with_untrusted_sample(Tick & t)
 {
-  // 정리 중의 식별 불일치(decisions.md 쟁점 3 M2). 이 표본은 발행 규칙, 분기 고르기, 확인 계수에
-  // 쓰지 않는다. 남의 기체의 DISARMED나 Hold로 정리를 끝내지 않기 위해서다. 이미 정해진 분기는
-  // 유지하고 그 분기의 타임아웃이나 정리의 상한이 끝낸다. 분기가 정해지기 전(정리의 첫 tick)이면
-  // 고를 수 없으므로 끝낸다.
+  // 정리 중의 식별 불일치(docs/interface.md "준비 단계"). 이 표본은 발행 규칙, 분기 고르기, 확인
+  // 계수에 쓰지 않는다. 남의 기체의 DISARMED나 Hold로 정리를 끝내지 않기 위해서다. 이미 정해진
+  // 분기는 유지하고 그 분기의 타임아웃이나 정리의 상한이 끝낸다. 분기가 정해지기 전(정리의 첫
+  // tick)이면 고를 수 없으므로 끝낸다.
   const std::string what = "vehicle_status identity mismatch during cleanup: " +
                            (t.status != nullptr ? t.status->identity_detail : std::string());
   if (branch_ == Branch::kNone) {
@@ -1540,8 +1545,8 @@ void MissionRunner::enter_air(Event event, Tick & t)
   // SITL 시나리오 trace가 다르면 고칠 곳(README.md). 지금 발행 중인 setpoint(지상 분기에서
   // 넘어왔으면 지상 setpoint)를 TAKEOFF 목표점으로 되돌리지 않고 유지한 채 Hold를 보낸다.
   if (cause_ == CleanupCause::kRtlFailure) {
-    // RTL 실패의 정리는 Hold를 거치지 않고 Land 경로다(1b decisions.md 쟁점 9). Hold 실패 표시보다
-    // 먼저 본다. 기준 시각은 들어간 시각이다.
+    // RTL 실패의 정리는 Hold를 거치지 않고 Land 경로다(docs/interface.md "모드 명령 항목(LAND,
+    // RTL)"). Hold 실패 표시보다 먼저 본다. 기준 시각은 들어간 시각이다.
     enter_air_land(
       event, t,
       branch_ == Branch::kGround ? "RTL not confirmed; air re-entered after ground branch"
@@ -1549,7 +1554,7 @@ void MissionRunner::enter_air(Event event, Tick & t)
     return;
   }
   if (hold_failed_) {
-    // 이 정리에서 Hold가 한 번 실패했으면 공중 재진입은 Land 경로다(decisions.md 쟁점 3 M4). 기준
+    // 이 정리에서 Hold가 한 번 실패했으면 공중 재진입은 Land 경로다(docs/interface.md "정리"). 기준
     // 시각은 다시 들어간 시각이다.
     enter_air_land(event, t, hold_failed_why_ + "; air re-entered after Hold failure");
     return;
@@ -1632,7 +1637,7 @@ void MissionRunner::run_air_land(Tick & t)
   resend_due(t);
 }
 
-// ---- 공중 종료 단계(마지막 항목이 setpoint 항목인 미션. 1b decisions.md 쟁점 10, 쟁점 11) ----
+// ---- 공중 종료 단계(마지막 항목이 setpoint 항목인 미션. docs/interface.md) ----
 
 void MissionRunner::step_mission_end(Tick & t)
 {
@@ -1725,9 +1730,10 @@ void MissionRunner::step_mission_end(Tick & t)
     end_at_cleanup_cap(t, on_ground);
     return;
   }
-  // (6a) 분류 지상 규칙(쟁점 10 "지상 DISARMED를 보는 동안의 규칙"): 분류가 지상인 동안은 분기의
-  // 거부 ack, 기한, 이동, AUTO_LAND 관측, 대비책, 재전송을 보지 않는다. 첫 지상 DISARMED 표본의
-  // tick에 대기 명령을 지우고, 그 동안 받은 ack는 버린다(뒤 tick에 다시 보지 않는다).
+  // (6a) 분류 지상 규칙(docs/interface.md "공중에서 끝나는 미션"의 "지상 DISARMED를 보는 동안의
+  // 규칙"): 분류가 지상인 동안은 분기의 거부 ack, 기한, 이동, AUTO_LAND 관측, 대비책, 재전송을
+  // 보지 않는다. 첫 지상 DISARMED 표본의 tick에 대기 명령을 지우고, 그 동안 받은 ack는 버린다(뒤
+  // tick에 다시 보지 않는다).
   if (disarm_class_ == DisarmClass::kGround) {
     if (first_ground_disarm) {
       clear_pending();
@@ -1745,7 +1751,8 @@ void MissionRunner::step_mission_end(Tick & t)
   // (7)-(10)
   switch (branch_) {
     case Branch::kNone: {
-      // 첫 tick은 늘 Hold다(지상 ARMED여도. 쟁점 10). 발행 중인 마지막 항목의 setpoint를 유지한다.
+      // 첫 tick은 늘 Hold다(지상 ARMED여도. docs/interface.md "공중에서 끝나는 미션"). 발행 중인
+      // 마지막 항목의 setpoint를 유지한다.
       tag(Event::kEnterAir, t);
       StateKey next = state_key();
       next.branch = Branch::kAir;
@@ -1810,7 +1817,7 @@ void MissionRunner::step_mission_end(Tick & t)
         ground_wait_fallback_.due(t.input.now_ns, config_.timeouts.land_disarm_fallback_delay_ns)) {
         // 대비책: 지상 대기 안에서 ARMED이고 landed인 상태가 land_disarm_fallback_delay 이어졌다.
         // 강제가 아닌 disarm을 대기 명령으로 보내고, 그 뒤의 지상 DISARMED는 전송 뒤의 표본으로
-        // 센다(쟁점 11. 첫 전송 stamp는 finalize가 둔다).
+        // 센다(docs/interface.md "시간 기준". 첫 전송 stamp는 finalize가 둔다).
         ground_wait_fallback_.mark_sent();
         clear_pending();
         send(t, CommandKind::kDisarm);
@@ -1880,8 +1887,9 @@ int MissionRunner::mission_end_ground_disarm_count() const
 void MissionRunner::finish(Event event, Tick & t, Outcome outcome, const std::string & what)
 {
   if (cause_ == CleanupCause::kMissionEnd) {
-    // 종료 단계에는 유지할 원래 실패 사유가 없다(1b decisions.md 쟁점 10 결과 표). SUCCEEDED의
-    // detail은 what 그대로다(Hold 확인은 빈 문자열, 지상 DISARMED 3회는 "ended on ground").
+    // 종료 단계에는 유지할 원래 실패 사유가 없다(docs/interface.md "공중에서 끝나는 미션" 결과
+    // 표). SUCCEEDED의 detail은 what 그대로다(Hold 확인은 빈 문자열, 지상 DISARMED 3회는 "ended on
+    // ground").
     switch (outcome) {
       case Outcome::kSuccess: {
         Termination term = succeeded();
@@ -1955,8 +1963,8 @@ void MissionRunner::finalize(Tick & t)
       t.out.commands.clear();
       const bool keep_reason = stage_ == Stage::kCleanup && cause_ != CleanupCause::kCancel &&
                                cause_ != CleanupCause::kMissionEnd;
-      // 명령을 만들 수 없으므로 기체 상태를 모른다(decisions.md 쟁점 4 "Px4Timestamp 공급이 실패한
-      // tick").
+      // 명령을 만들 수 없으므로 기체 상태를 모른다(docs/interface.md "GoalStatus와 reason"의
+      // Px4Timestamp 공급 실패).
       const std::string what = std::string("Px4Timestamp unavailable") +
                                (acted_ ? "; " + state_unknown_tail(t.land) : std::string());
       const std::string prefix =

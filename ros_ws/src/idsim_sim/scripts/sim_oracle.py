@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""정답 pose 노드(sim-oracle). SITL 판정 전용이고 계약이 아니다(decisions.md 쟁점 5).
+"""정답 pose 노드(sim-oracle). SITL 판정 전용이고 계약이 아니다(README.md "정답 pose 노드").
 
 sim-base 이미지의 compose 서비스 sim-oracle이 이 파일을 마운트 경로에서 직접 실행한다(설치 대상이 아니다).
   python3 /opt/idsim/sim/scripts/sim_oracle.py [--ros-args ...]

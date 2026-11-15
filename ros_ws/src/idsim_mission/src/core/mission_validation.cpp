@@ -255,7 +255,7 @@ MissionCheck validate_mission_contract(const MissionSpec & mission)
       return invalid(std::move(error));
     }
   }
-  // 순서 규칙(1b decisions.md 쟁점 6). 필드 검사 뒤에 보므로 필드 오류의 detail은 그대로다.
+  // 순서 규칙(docs/interface.md "미션 정의"). 필드 검사 뒤에 보므로 필드 오류의 detail은 그대로다.
   for (std::size_t i = 0; i < count; ++i) {
     const std::uint8_t type = mission.items[i].type;
     if (type == item_type::kTakeoff && i != 0) {

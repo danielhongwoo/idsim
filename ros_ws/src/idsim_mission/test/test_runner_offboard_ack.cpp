@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 지상 arm 진입의 arm 순서 불변식과 ack 대기 구간
-// (docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 12). arm은 마지막
+// (docs/interface.md "준비 단계"). arm은 마지막
 // DO_SET_MODE(Offboard 전환)를 보낸 tick보다 뒤의 tick에 받은 그 명령의 비거부 ack가
 // 있고 OFFBOARD 3회 연속 확인이 된 tick에만 나간다. 확인 tick은 늘 ack 대기 상태
 // PREPARING.OFFBOARD_ACK를 거친다.
@@ -398,7 +398,7 @@ TEST(OffboardAck, AckAndCancelSameTickWhileWaitingGoesToGroundDisarm)
   EXPECT_EQ(h.count_command(CommandKind::kArm), 0);
 }
 
-// ---- 대기 중 같은 tick: 이탈과 timeout이 arm보다 먼저다(decisions.md 쟁점 12 같은 tick 문단) ----
+// ---- 대기 중 같은 tick: 이탈과 timeout이 arm보다 먼저다(docs/interface.md "준비 단계") ----
 
 TEST(OffboardAck, LeavingAndValidAckSameTickIsLeftWithoutArm)
 {
@@ -438,7 +438,7 @@ TEST(OffboardAck, TimeoutAndValidAckSameTickIsTimeoutWithoutArm)
   EXPECT_FALSE(h.view().arm_sent);
 }
 
-// ---- 유효 ack가 없는 동안의 재전송(decisions.md 쟁점 12 "명령과 ack의 유실") ----
+// ---- 유효 ack가 없는 동안의 재전송(README "구현 규칙") ----
 // 단위 테스트에서 재전송의 유실과 그 ack의 유실은 core 입력이 같다(ack가 오지 않음).
 
 TEST(OffboardAck, LostResendBeforeConfirmRecoversByNextResend)
@@ -737,8 +737,8 @@ TEST(OffboardAck, LateAckOfEarlierSendIsReadAsValid)
 {
   // 알려진 열화. S+12의 ack는 S 전송의 것이고 지연이 12 tick(0.6 s, 주기와 두 배 사이)이다. core는
   // 이것을 S+10 재전송의 ack와 가르지 못해 유효로 읽고 arm한다. PX4 queue에서 arm 앞에 S+10의
-  // DO_SET_MODE 하나가 남을 수 있다(decisions.md 쟁점 12가 허용한 열화). 단정하는 것은 현재
-  // 동작이지 바람직한 동작이 아니다. 이 테스트가 깨지면 열화가 해소된 것이므로 기대를
+  // DO_SET_MODE 하나가 남을 수 있다(docs/interface.md "준비 단계"가 허용한 열화). 단정하는 것은
+  // 현재 동작이지 바람직한 동작이 아니다. 이 테스트가 깨지면 열화가 해소된 것이므로 기대를
   // 뒤집는다.
   Harness h(standard_mission());
   const std::uint64_t s = reach_offboard_ack(h);

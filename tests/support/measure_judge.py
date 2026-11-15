@@ -55,7 +55,7 @@ class LandedSample:
 class ConsecutiveConfirm:
     """서로 다른 timestamp의 표본 N개가 연속으로 predicate를 만족하는지 센다.
 
-    decisions.md M5의 계수 규칙: 직전에 센 표본과 timestamp가 같으면 건너뛴다(더하지도 되돌리지도
+    계수 규칙: 직전에 센 표본과 timestamp가 같으면 건너뛴다(더하지도 되돌리지도
     않는다). predicate를 만족하지 않는 표본은 계수를 0으로 되돌린다. timestamp가 줄어든 표본은
     세지 않는다. min_ts_us, min_recv_us가 있으면 timestamp가 min_ts_us보다 엄격히 크고 수신이
     min_recv_us보다 엄격히 뒤인 표본만 센다(전송 뒤에 받은 표본). 기준에 못 미친 표본은 계수에

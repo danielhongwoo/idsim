@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""비행 단위 상태(1b decisions.md 쟁점 5, 15). 순수 코드다(rclpy 없음).
+"""비행 단위 상태(tests/sitl/README.md "시나리오와 판정"). 순수 코드다(rclpy 없음).
 
 세션 하나에 Flights 하나를 두고 비행 시나리오(A, D, F1-F4)가 순서대로 넘겨받는다(tests/sitl/conftest.py의 session
 fixture가 SitlSession.flights로 준다).

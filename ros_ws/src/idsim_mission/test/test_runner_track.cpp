@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // TRACK_ENTITY 항목, TARGET_LOST와 그 정리 입구, 속도 feedforward
-// (docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 8, 13).
+// (docs/interface.md "GoToItem과 TrackEntityItem", idsim_mission README "테스트").
 //
 // - 칸은 transition_cells.tsv의 ITEM.TRACK_ENTITY 행, TRACK_ENTITY로 들어오는 네 행, 그리고
 //   CLEANUP.TARGET_LOST.NONE의 입구다(정리 분기의 칸은 test_runner_cleanup_cells.cpp의 rig). 기호:
@@ -29,7 +29,7 @@
 //   0.25다. 공중 진입은 start_in_air()(위치 (1, 2, -5), heading 0.25)다.
 // - 시간 값은 Config 기본값이다: target_timeout 1.0 s(20 tick), target_fresh_age 0.1 s(2 tick).
 //   표본이 없으면 항목 시작부터 경과가 target_timeout을 넘는 K+21이, 마지막 표본이 tick s이면
-//   s+21이 TARGET_LOST다(초과. 쟁점 8).
+//   s+21이 TARGET_LOST다(초과).
 // - 모든 사례가 port 호출 규율을 함께 단정한다: tick마다 점 변환 2회 이하(완료 tick에 다음 항목이
 //   GOTO나 TRACK_ENTITY일 때만 2), 벡터 변환은 점 변환 이하. 속도 불변식(속도가 있으면 세 성분 모두
 //   유한하고 그 tick의 끝 상태가 ITEM.TRACK_ENTITY)은 harness가 모든 step 뒤에 단정한다.

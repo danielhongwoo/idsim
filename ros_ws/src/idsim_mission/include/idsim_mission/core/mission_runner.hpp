@@ -194,8 +194,8 @@ private:
   void prepare_signal(Tick & t);
   void prepare_offboard(Tick & t);
   void prepare_offboard_ack(Tick & t);
-  // ack 대기에서 arm 조건의 ack가 있으면 arm을 보내고 P6으로 간다(decisions.md 쟁점 12 불변식).
-  // arm을 보냈으면 true.
+  // ack 대기에서 arm 조건의 ack가 있으면 arm을 보내고 P6으로 간다(docs/interface.md "준비 단계"의
+  // 불변식). arm을 보냈으면 true.
   bool arm_if_offboard_acked(Tick & t);
   // 마지막 DO_SET_MODE 전송 tick보다 뒤에 받은 비거부 ack가 있다(arm 조건과 재전송 억제가 같이
   // 쓴다).
@@ -204,8 +204,8 @@ private:
   void resend_offboard_until_acked(Tick & t);
   void prepare_arm(Tick & t);
   void prepare_arm_before_armed(Tick & t);
-  // 공중 Offboard 진입(1b decisions.md 쟁점 7). P3 진입 setpoint와 감시 시작, P4, P5의 첫 OFFBOARD
-  // 표본 전과 뒤.
+  // 공중 Offboard 진입(docs/interface.md "준비 단계"). P3 진입 setpoint와 감시 시작, P4, P5의 첫
+  // OFFBOARD 표본 전과 뒤.
   void start_air_signal(Event event, Tick & t);
   void prepare_air_signal(Tick & t);
   void prepare_air_offboard(Tick & t);
@@ -228,9 +228,11 @@ private:
   void complete_item(Event event, Tick & t);
   void step_item(Tick & t);
   void step_setpoint_item(Tick & t);
-  // GOTO 항목의 점 변환 1회(항목 시작 tick과 그 뒤 매 tick). 1b decisions.md 쟁점 8.
+  // GOTO 항목의 점 변환 1회(항목 시작 tick과 그 뒤 매 tick). docs/interface.md "GoToItem과
+  // TrackEntityItem".
   void goto_transform(Tick & t);
-  // TRACK_ENTITY 항목의 그 tick 표적 판정(표본, 신선, 소실). 1b decisions.md 쟁점 8.
+  // TRACK_ENTITY 항목의 그 tick 표적 판정(표본, 신선, 소실). docs/interface.md "GoToItem과
+  // TrackEntityItem".
   struct TrackTarget
   {
     const TargetSample * sample{nullptr};  // 이 goal에서 받은 최신 유효 표본(없으면 nullptr)
@@ -254,8 +256,8 @@ private:
   void run_air(Tick & t);
   void enter_air_land(Event event, Tick & t, const std::string & why);
   void run_air_land(Tick & t);
-  // 공중 종료 단계(원인 kMissionEnd. 1b decisions.md 쟁점 10). 취소, ITEM_TIMEOUT, PREPARING 실패,
-  // RTL 실패의 정리와 분기 고르기를 따로 둔다.
+  // 공중 종료 단계(원인 kMissionEnd. docs/interface.md "공중에서 끝나는 미션"). 취소,
+  // ITEM_TIMEOUT, PREPARING 실패, RTL 실패의 정리와 분기 고르기를 따로 둔다.
   void step_mission_end(Tick & t);
   // s는 그 tick의 신뢰 표본(식별 불일치 tick이면 nullptr).
   void mission_end_hold_failed(
@@ -328,7 +330,8 @@ private:
   SampleCounter counter_;                       // OFFBOARD, ARMED, AUTO_LOITER 확인
   // GOTO, TRACK_ENTITY 완료(서로 다른 위치 표본 3개 연속. timestamp로 가른다)
   SampleCounter goto_counter_;
-  // 종료 단계의 지상 DISARMED 계수(대비책 disarm 전. 뒤는 disarm_confirm_. 쟁점 10, 쟁점 11)
+  // 종료 단계의 지상 DISARMED 계수(대비책 disarm 전. 뒤는 disarm_confirm_. docs/interface.md
+  // "공중에서 끝나는 미션")
   SampleCounter ground_disarm_counter_;
   LandedArmedFallback ground_wait_fallback_;  // 종료 단계 지상 대기의 대비책 disarm
   std::string cleanup_detail_;

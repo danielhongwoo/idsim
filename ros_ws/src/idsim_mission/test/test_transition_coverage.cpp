@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 전이 칸 목록(test/transition_cells.tsv)과 관측의 대조(decisions.md 쟁점 13).
+// 전이 칸 목록(test/transition_cells.tsv)과 관측의 대조(idsim_mission README "테스트").
 //
 // test_runner 실행 파일의 모든 상태기 테스트가 끝난 뒤 Environment::TearDown에서 단정한다.
 // (1) 관측한 칸 집합 == "covered" 부류 (2) "impossible" 칸은 관측되지 않았다 (3) 목록에 없는 칸은
@@ -190,8 +190,8 @@ TEST(TransitionCells, FileIsWellFormed)
 
 TEST(TransitionCells, NoUncoveredCell)
 {
-  // B8b부터 "uncovered" 부류의 칸이 목록에 있으면 실패한다(decisions.md 1b 쟁점 13). 새 칸은 같은
-  // PR에서 테스트로 덮거나, core 계약 안의 [소스] 이유가 있으면 impossible로 둔다.
+  // B8b부터 "uncovered" 부류의 칸이 목록에 있으면 실패한다(idsim_mission README "테스트"). 새 칸은
+  // 같은 PR에서 테스트로 덮거나, core 계약 안의 [소스] 이유가 있으면 impossible로 둔다.
   const CellList list = load_cells();
   for (const auto & [cell, info] : list.cells) {
     if (info.cls == "uncovered") {
@@ -229,7 +229,7 @@ TEST(TransitionCells, EventNamesMatchList)
 TEST(TransitionCells, EveryMonitorStateHasRepresentativeRowPair)
 {
   // 감시 표 행 쌍의 전부는 test_monitor_table이 보증하고, 칸 목록에는 감시 표를 쓰는 상태 key마다
-  // 대표 쌍(DISARMED 행이 모드 행을 이김)이 하나 이상 있다(decisions.md 1b 쟁점 13).
+  // 대표 쌍(DISARMED 행이 모드 행을 이김)이 하나 이상 있다(idsim_mission README "테스트").
   const std::set<std::string> disarm_rows = {
     "MONITOR_DISARMED_IN_AIR", "MONITOR_DISARMED_ON_GROUND"};
   const std::set<std::string> mode_rows = {

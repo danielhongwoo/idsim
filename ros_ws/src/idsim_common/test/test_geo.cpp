@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 원점 이동 변환(geo.hpp)의 차등 테스트와 왕복 테스트. 노드와 DDS 참가자를 만들지 않는다.
-// 결정: docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 4.
+// 결정: docs/interface.md "좌표계".
 //
 // 기준값의 출처(원문의 판을 고정한다)
 // - gz: gz-math 7.7.0(python3-gz-math7 7.7.0-1~noble, sim-base 이미지)의
@@ -415,8 +415,8 @@ TEST(Geo, ChainWorldEnuToLocalNed)
 
 TEST(Geo, ChainIsNotATranslation)
 {
-  // decisions.md 쟁점 4 근거의 값: 원점 위도 37.57도에서 world 동쪽 100 m는 PX4 로컬 99.763 m,
-  // 북쪽 100 m는 100.186 m다. 평행 이동(frames::enu_to_ned)으로 근사하면 약 20 cm 틀린다.
+  // docs/interface.md "좌표계" 근거의 값: 원점 위도 37.57도에서 world 동쪽 100 m는 PX4 로컬 99.763
+  // m, 북쪽 100 m는 100.186 m다. 평행 이동(frames::enu_to_ned)으로 근사하면 약 20 cm 틀린다.
   const geo::WorldOrigin origin{37.5665, 126.978, 38.0};
   const geo::LocalReference ref{37.5665, 126.978, 38.0};
   const auto east = geo::world_enu_to_local_ned(origin, ref, Eigen::Vector3d(100.0, 0.0, 0.0));

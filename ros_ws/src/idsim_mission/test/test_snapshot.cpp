@@ -13,9 +13,9 @@
 // limitations under the License.
 
 // snapshot 헤더 타입의 기본값과 명령 묶음.
-// 결정: decisions.md 쟁점 12(snapshot 헤더 표), 쟁점 8(SetpointOut 속도, TargetSample), 쟁점 4
-// (FramePort). 기본값은 "모름/무효" 쪽이어야 한다. 어댑터나 노드가 채우지 않은 필드가 유효로
-// 읽히지 않게 한다.
+// 결정: snapshot 헤더 머리 주석의 표, docs/interface.md "GoToItem과 TrackEntityItem"(SetpointOut
+// 속도, TargetSample), "좌표계"(FramePort). 기본값은 "모름/무효" 쪽이어야 한다. 어댑터나 노드가
+// 채우지 않은 필드가 유효로 읽히지 않게 한다.
 
 #include <gtest/gtest.h>
 

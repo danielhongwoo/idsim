@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 종료의 충돌 규칙(decisions.md 쟁점 3 "종료의 충돌 규칙"): 먼저 정해진 것이 이기고, 같은
+// 종료의 충돌 규칙(docs/interface.md "종료의 충돌 규칙"): 먼저 정해진 것이 이기고, 같은
 // tick이면 ABORTED 사유, 완료, 취소 순이다. 종료 뒤의 cancel과 표본은 결과를 바꾸지 않는다.
 // 그리고 Px4Timestamp 공급 실패(감시 표 순위 1 밖의 단계).
 

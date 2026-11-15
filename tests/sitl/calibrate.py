@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""b와 R_home 보정 확인(1b decisions.md 쟁점 5, U18). 계산은 tests/support/calibration.py에 있다.
+"""b와 R_home 보정 확인(tests/sitl/README.md "b와 R_home 보정 확인", U18). 계산은 tests/support/calibration.py에 있다.
 
 사용법: tests/sitl/calibrate.py <회차 디렉터리 또는 실행 디렉터리>... [--b 0.5] [--min-boots 30] [--out 파일]
   회차 디렉터리: run_sitl.sh --repeat이 만드는 artifacts/sitl_repeat/<시각>-k<k>/(repeat_summary.tsv의 run_id로
   artifacts/runs/<run_id>/를 찾는다). 실행 디렉터리: artifacts/runs/<run_id>/(sitl/trace.jsonl, sitl/verdict.json).
-  --b의 기본은 판정 상수 sitl_judge.B_M이다. --min-boots는 부팅 수 하한이다(기본 30, 쟁점 5).
+  --b의 기본은 판정 상수 sitl_judge.B_M이다. --min-boots는 부팅 수 하한이다(기본 30).
 출력: 표준 출력에 요약, --out(없으면 첫 회차 디렉터리의 calibration.json, 실행 디렉터리만 주면 표준 출력만)에 JSON.
 종료 코드: 0 확인 조건 충족, 1 미충족(올린다), 2 입력 오류.
 """

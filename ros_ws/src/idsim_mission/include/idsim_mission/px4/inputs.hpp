@@ -62,7 +62,8 @@ struct Received
 // AUTO_LAND -> kLand, AUTO_RTL -> kRtl, 그 밖(DESCEND, TERMINATION, 정의되지 않은 값 포함)
 // -> kOther.
 // DESCEND를 kLand로 접지 않는다: 위치가 무효일 때 NAV_LAND가 DESCEND로 대체되며, 그것은 AUTO_LAND
-// 확인이 아니다(PX4 Commander.cpp의 NAV_LAND 처리. decisions.md 쟁점 4 `[LAND]` 단서와 같은 동작).
+// 확인이 아니다(PX4 Commander.cpp의 NAV_LAND 처리.
+// docs/interface.md "모드 명령 항목(LAND, RTL)"와 같은 동작).
 core::NavMode nav_mode_from_px4(std::uint8_t nav_state);
 
 // ARMING_STATE_ARMED이면 kArmed, 그 밖의 모든 값은 kDisarmed.
@@ -75,7 +76,7 @@ core::AckCommand ack_command_from_px4(std::uint32_t command);
 // VEHICLE_CMD_RESULT_* 0-6을 이름 그대로, 그 밖 -> kOther.
 core::AckResult ack_result_from_px4(std::uint8_t result);
 
-// EKF 준비 술어(decisions.md 쟁점 4 P2): local_position_invalid, local_altitude_invalid,
+// EKF 준비 술어(docs/interface.md "준비 단계"): local_position_invalid, local_altitude_invalid,
 // global_position_invalid, home_position_invalid가 모두 false. _relaxed 변형은 보지 않는다.
 bool ekf_ready(const px4_msgs::msg::FailsafeFlags & flags);
 

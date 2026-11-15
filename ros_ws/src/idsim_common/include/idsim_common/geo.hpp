@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 원점 이동 변환. world ENU 점 <-> WGS84 <-> 기체 로컬 NED 점.
-// 결정: docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 4.
+// 결정: docs/interface.md "좌표계".
 //
 // 사슬은 Gazebo와 PX4가 실제로 쓰는 식을 그대로 옮긴다. 평행 이동으로 근사하지 않는다.
 // - world ENU <-> WGS84: gz-math 7.7.0
@@ -72,8 +72,8 @@ Geodetic world_enu_to_geodetic(const WorldOrigin & origin, const Eigen::Vector3d
 Eigen::Vector3d geodetic_to_world_enu(const WorldOrigin & origin, const Geodetic & point);
 
 // PX4 MapProjection::project와 같은 식(x 북, y 동). z = -(alt - ref_alt).
-// ref_alt == 0을 무효 신호로 쓰지 않고 그대로 계산한다. 기준 유효 술어(decisions.md 쟁점 4)는
-// 호출하는 px4 어댑터가 먼저 거쳐야 한다.
+// ref_alt == 0을 무효 신호로 쓰지 않고 그대로 계산한다. 기준 유효 술어(docs/interface.md
+// "좌표계")는 호출하는 px4 어댑터가 먼저 거쳐야 한다.
 Eigen::Vector3d geodetic_to_local_ned(const LocalReference & ref, const Geodetic & point);
 
 // PX4 MapProjection::reproject와 같은 식. alt = ref_alt - z.

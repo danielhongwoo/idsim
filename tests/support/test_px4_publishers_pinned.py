@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""PX4 입력 발행자의 허용 목록 고정(decisions.md 쟁점 8). 소스를 정적으로 읽고 일부는 가짜 rclpy로 실행한다.
+"""PX4 입력 발행자의 허용 목록 고정(docs/interface.md "공개 /fmu/in 목록과 허용 절차"). 소스를 정적으로 읽고 일부는 가짜 rclpy로 실행한다.
 
 - px4_raw.py: 발행자는 offboard_control_mode(context manager)와 vehicle_command(비상 정리, source 254/25)
   둘뿐이다. trajectory_setpoint는 발행하지 않는다.
@@ -174,7 +174,7 @@ def test_emergency_command_constants_are_land_and_plain_disarm():
 
 
 def test_raw_first_clock_wait_is_the_only_wall_clock_wait(raw_module):
-    # 통합 테스트의 벽시계 대기는 첫 /clock 유예 하나뿐이다(decisions.md 쟁점 10)
+    # 통합 테스트의 벽시계 대기는 첫 /clock 유예 하나뿐이다(docs/interface.md "시간 기준")
     raw = raw_module.Px4Raw("px4_1", 2)
     with pytest.raises(raw_module.sw.SitlFailure) as e:
         raw.wait_first_clock(0.05)

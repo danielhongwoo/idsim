@@ -18,7 +18,8 @@
 // - item_type, yaw_mode, FeedbackPhase, event_status와 메시지 상수.
 // - core의 enu_to_ned_yaw, wrap_pi와 idsim_common/frames의 같은 함수.
 // - 변환(conversion.hpp): 종료 결과 하나에서 만든 result와 사건이 같은 값. feedback stamp는
-//   core::Feedback.stamp_ns 그대로. 표적 상태의 유효 표본 규칙(1b decisions.md 쟁점 8).
+//   core::Feedback.stamp_ns 그대로. 표적 상태의 유효 표본 규칙(docs/interface.md "GoToItem과
+//   TrackEntityItem").
 // - core::is_valid_target_id와 idsim_common::TargetId::parse가 같은 사례 표에서 같은 답.
 // - 비행 중 원점 변경 WARN의 판정(reference_changed_in_flight).
 

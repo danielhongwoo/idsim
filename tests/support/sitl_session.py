@@ -15,13 +15,13 @@
 """SITL 통합 테스트의 세션(rclpy). ros-ws 컨테이너(runner) 안에서 이미 떠 있는 스택에 붙는다.
 
 스택을 올리고 내리는 것은 호스트의 tests/sitl/run_sitl.sh다. 이 세션은 stack.json(IDSIM_STACK_FILE)을 읽고
-준비 상태를 검증만 한다. 준비 검증(gate)이 실패하면 skip이 아니라 오류다(decisions.md 쟁점 1, 7).
+준비 상태를 검증만 한다. 준비 검증(gate)이 실패하면 skip이 아니라 오류다(tests/sitl/README.md "실행").
 
 노드 둘이 한 프로세스(한 participant)에 있다: Px4Raw의 노드(PX4 토픽, /clock)와 미션 노드(mission_event 구독,
 action client, 1b의 정답 pose와 TargetState 구독). 미션 노드 안에서는 mission_event 구독이 action client보다 먼저
 만들어진다(mission_client).
 
-1b(decisions.md 쟁점 5, 15): gate는 첫 goal 전에 정답 pose와 표적 발행자, 첫 표본을 확인하고, 표적 발행자의 QoS를
+1b(tests/sitl/README.md "시나리오와 판정"): gate는 첫 goal 전에 정답 pose와 표적 발행자, 첫 표본을 확인하고, 표적 발행자의 QoS를
 계약 상태 행과 대조하며(다르면 QOS_MISMATCH로 gate 실패), Executor의 target_fresh_age를 판정 상수와 대조한다.
 정답 pose, 표적, target_fresh_age의 문제는 gate를 실패시키지 않고 기록해 두었다가 그것이 필요한 비행 시나리오가
 시작할 때 실패시킨다(require_truth). 1a 시나리오는 정답 pose를 쓰지 않기 때문이다.
@@ -115,7 +115,7 @@ class SitlSession:
                 self._rclpy.shutdown()
 
     def gate(self):
-        """goal 전 gate(decisions.md 쟁점 7)와 /clock 정렬(쟁점 9). 어긋나면 SitlFailure."""
+        """goal 전 gate(tests/sitl/README.md "시나리오와 판정")와 /clock 정렬. 어긋나면 SitlFailure."""
         w = self.waiter
         w0 = time.monotonic()
         s0 = self.raw.clock_us()
@@ -273,7 +273,7 @@ class SitlSession:
         }
 
     def cleanup_land(self):
-        """비행 시나리오 실패 뒤의 정리(쟁점 15). 끝나지 않은 goal은 취소하고, 기체가 공중이면 정리용 [LAND] 미션을
+        """비행 시나리오 실패 뒤의 정리(tests/sitl/README.md "시나리오와 판정"). 끝나지 않은 goal은 취소하고, 기체가 공중이면 정리용 [LAND] 미션을
         한 번 보낸다. 결과는 판정에 넣지 않는다. 그 뒤 비상 정리(최선 노력. 이미 지상이면 아무것도 하지 않는다)."""
         run = self.last_run
         try:

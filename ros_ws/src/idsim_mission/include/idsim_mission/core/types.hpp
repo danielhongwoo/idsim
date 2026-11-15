@@ -14,8 +14,8 @@
 
 // core의 값 타입: reason, 종료 상태, 항목 type과 분류, feedback phase, 미션 명세.
 //
-// core는 ROS와 PX4에 의존하지 않는다(decisions.md 쟁점 6). 그래서 idsim_interfaces의 메시지를
-// 쓰지 않고 같은 값을 여기에 다시 적는다. 값이 메시지 상수와 같은지는 노드 쪽 gtest(P3d)가
+// core는 ROS와 PX4에 의존하지 않는다(README "core와 어댑터의 경계"). 그래서 idsim_interfaces의
+// 메시지를 쓰지 않고 같은 값을 여기에 다시 적는다. 값이 메시지 상수와 같은지는 노드 쪽 gtest(P3d)가
 // 교차 검사한다(상수가 늘면 깨진다). MissionSpec은 ExecuteMission goal의 Mission을 필드 그대로
 // 옮긴 것이고, 변환은 노드가 한다. 좌표와 yaw는 계약 그대로 world ENU다.
 

@@ -107,7 +107,7 @@ Reason monitor_row_reason(MonitorRow row, const MonitorInput & input)
       return Reason::kFailsafe;
     case MonitorRow::kDisarmedOnGround: {
       // 이 표본의 failsafe이거나 이 항목 실행 중 앞선 표본의 failsafe 이력. 이 표본의 nav_state는
-      // 보지 않는다(decisions.md 쟁점 4 순위 5).
+      // 보지 않는다(docs/interface.md "비행 중 감시" 순위 5).
       const bool sample_failsafe = input.status != nullptr && input.status->failsafe;
       return sample_failsafe || input.failsafe_history ? Reason::kFailsafe
                                                        : Reason::kExternalDisarm;
@@ -257,7 +257,7 @@ CleanupChoice select_cleanup(const CleanupInput & input)
       return CleanupChoice::kAirDisarm;
     }
     // 이 goal에서 arm을 보낸 적이 있으면 arming_state와 무관하게 disarm 분기를 거친다
-    // (arm 전송 뒤의 경쟁. decisions.md 쟁점 3 M5).
+    // (arm 전송 뒤의 경쟁. docs/interface.md "정리").
     return input.arm_sent || input.in_ground_branch ? CleanupChoice::kGround : CleanupChoice::kEnd;
   }
   return input.landed ? CleanupChoice::kGround : CleanupChoice::kAir;

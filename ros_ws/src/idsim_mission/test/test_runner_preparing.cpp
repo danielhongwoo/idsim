@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// PREPARING(decisions.md 쟁점 4 P0-P6, 첫 항목이 LAND인 분기)와 PREPARING 실패의 정리(쟁점 3 M5
-// 마지막 문단). P6에서 ARMED를 처음 관측한 뒤의 감시 표, arm 재전송 중단, 확인 기한, 같은 tick의
-// 순서, failsafe 이력의 구간(쟁점 4 "P6에서 ARMED를 처음 관측한 뒤").
+// PREPARING(docs/interface.md "준비 단계" P0-P6, 첫 항목이 LAND인 분기)와 PREPARING 실패의
+// 정리(docs/interface.md "정리"). P6에서 ARMED를 처음 관측한 뒤의 감시 표, arm 재전송 중단, 확인
+// 기한, 같은 tick의 순서, failsafe 이력의 구간(docs/interface.md "준비 단계").
 
 #include <gtest/gtest.h>
 
@@ -406,7 +406,7 @@ TEST(Preparing, SetpointItemsStartAfterArmSent)
   EXPECT_TRUE(h.view().arm_sent);
 }
 
-// ---- P6에서 ARMED를 처음 관측한 뒤(decisions.md 쟁점 4 "P6에서 ARMED를 처음 관측한 뒤") ----
+// ---- P6에서 ARMED를 처음 관측한 뒤(docs/interface.md "준비 단계") ----
 
 // arm을 처음 보낸 tick까지 간다. 그 tick의 가짜 PX4 반응으로 world는 ARMED다. 그 뒤의 표본은
 // 테스트가 직접 준다.

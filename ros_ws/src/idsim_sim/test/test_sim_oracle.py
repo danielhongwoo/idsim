@@ -13,7 +13,7 @@
 # limitations under the License.
 """정답 pose 노드(scripts/sim_oracle.py)의 순수 함수.
 
-scripts/는 설치 대상이 아니고 sim-base 컨테이너에서 마운트로 돈다(decisions.md 쟁점 3, 5). 그래서 이 테스트는
+scripts/는 설치 대상이 아니고 sim-base 컨테이너에서 마운트로 돈다(README.md "정답 pose 노드"). 그래서 이 테스트는
 소스 트리의 파일을 경로로 읽는다(importlib). ros-ws 이미지에는 gz 바인딩과 sdformat14가 없으므로, 모듈 수준
 import가 rclpy, gz, sdformat14, geometry_msgs 없이 되는지도 따로 본다. 오프셋 합성의 기대값은 손으로 계산했다
 (합성 함수로 기대값을 만들지 않는다).
@@ -57,7 +57,7 @@ def test_module_imports_without_ros_or_gz():
     subprocess.run([sys.executable, "-c", code], check=True)
 
 
-# 구독 토픽: /pose/info로 끝나고 dynamic_pose가 없다(decisions.md 쟁점 2, 5)
+# 구독 토픽: /pose/info로 끝나고 dynamic_pose가 없다(README.md "정답 pose 노드")
 @pytest.mark.parametrize("world, topic", [
     ("default", "/world/default/pose/info"),
     ("idsim_base", "/world/idsim_base/pose/info"),
@@ -89,7 +89,7 @@ def test_pose_info_topic_rejects(world):
         so.pose_info_topic(world)
 
 
-# 정답 pose 토픽 이름 조립 사례 표. tests/support의 조립과 같은 표를 쓴다(decisions.md 쟁점 5)
+# 정답 pose 토픽 이름 조립 사례 표. tests/support의 조립과 같은 표를 쓴다(README.md "정답 pose 노드")
 ORACLE_TOPIC_CASES = [
     ("px4_1", "/sim/px4_1/pose"),
     ("px4_2", "/sim/px4_2/pose"),

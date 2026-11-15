@@ -1,6 +1,6 @@
 # tests/sitl
 
-미션 통합 테스트(시나리오 B, C, A, D, F1, F2, F3, F4, T)다. 계약은 `docs/interface.md`, 1b 판정은 `docs-for-agent/plan-1b-mission-target/decisions.md` 쟁점 5, 15에 있다. 소유는 test-engineer다.
+미션 통합 테스트(시나리오 B, C, A, D, F1, F2, F3, F4, T)다. 계약은 `docs/interface.md`에, 판정과 시나리오 규칙은 이 문서의 "시나리오와 판정", "b와 R_home 보정 확인" 절과 `tests/support/sitl_judge.py` 머리말에 있다. 소유는 test-engineer다.
 
 ## 실행
 
@@ -40,6 +40,9 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 - gate는 첫 goal 전에 정답 pose와 표적의 발행자와 첫 표본을 확인하고, `/targets/<id>/state` 발행자 QoS를 계약 상태 행(RELIABLE, VOLATILE)과 대조하며(다르면 `QOS_MISMATCH`), Executor 파라미터 `target_fresh_age`를 판정 상수 L의 전제(0.1 s)와 대조한다. 정답 pose, 표적, `target_fresh_age`의 문제는 그것이 필요한 F 시나리오에서 실패로 드러난다.
 - 도달의 입력은 goal 직전의 `vehicle_local_position` z(`z_valid`)와 goal의 높이와 허용 오차다.
 - gate(모든 시나리오 앞): `/clock` 수신, `mission_event` 발행자와 PX4 토픽 발행자, action server 준비, 기대 sysid의 `vehicle_status`, `/clock` 정렬(노드 시각 - `vehicle_status.timestamp`의 중앙값 절대값 < 0.1 s, 최대 < 0.5 s). `mission_event` 구독은 action client보다 먼저 같은 node에서 만든다(`tests/support/mission_client.py`).
+- 순서의 이유: 지상 거부 사례(B, C)는 비행 전에 둬서 비행 실패가 사전조건을 깨지 않게 한다. B의 ARMED 없음 단정은 한 구간에 한 번만 걸어 사례 수에 비례해 늘지 않는다. F2의 끝(공중)과 F3의 시작(공중)을 맞물려 이착륙 한 번을 줄이고, F4는 F3이 남긴 지상 DISARMED에서 시작한다. T는 지상 시나리오라 맨 뒤다. F1-F3은 경계 상황(공중 종료, 공중 시작)을 따로 보고 roadmap 목표의 미션 하나(이륙부터 착륙까지)는 F4가 그대로 돈다.
+- 시간 규칙: 시나리오마다 항목 `timeout` 합 + 마진이 비행당 상한(ROS 시각 3분)을 넘지 않음을 `test_sitl_flight_missions.py`가 단정한다. RTF가 1 미만이면 `SITL_PYTEST_TIMEOUT`(벽시계)은 올려도 되고 판정의 ROS 시각 한도는 올리지 않는다. CI `sitl` job의 목표는 15분이다. 넘으면 겹치는 비행 구간(F1과 F4의 순회처럼 같은 판정을 두 비행이 보는 부분) -> 순회 waypoint 수 -> Hold 유지 시간 순으로 줄인다. 경계 상황을 보는 F2의 공중 종료와 F3의 공중 시작은 빼지 않는다. 그래도 넘으면 측정값과 함께 사용자에게 올린다. 판정 기준을 느슨하게 해서 줄이지 않는다.
+- TRACK_ENTITY의 `timeout`은 표적 위상과 무관하게 잡는다. `loop` 표적의 위상은 앞 시나리오의 소요 시간에 따라 달라지므로, 항목 시작점(직전 GOTO 목표)에서 loop 궤적 위 가장 먼 점까지의 거리를 따라잡는 시간에 완료 마진을 더한 값으로 둔다. 같은 테스트가 `timeout`이 `tests/sitl/fleet.yaml`의 궤적에서 계산한 최원점 기준 값 이상임을 단정한다. 접근 속도와 마진의 값은 [추정]이고 근거는 미션 YAML 주석에 있다.
 - verdict 분류: `TIMEOUT_SIM`, `CLOCK_STALLED`, `CLOCK_SLOW`, `CLOCK_ABSENT`, `CLOCK_BACKWARD`, `NO_PUBLISHER`, `SERVER_ABSENT`, `EVENT_MISSING`, `EVENT_MISMATCH`, `PRECONDITION`, `WRONG_RESULT`, `INFRA_UP`, `UPSTREAM_FAILED`, `ORACLE_ABSENT`, `ORACLE_STALE`, `REACH_MISMATCH`, `NO_TARGET_MOTION`, `QOS_MISMATCH`. 대기마다 `wall_cap = ROS 시각 timeout x 3 + 10 s`를 두고, 넘으면 `/clock`이 벽시계 5 s 동안 진행하지 않았는지로 `CLOCK_STALLED`와 `CLOCK_SLOW`를 가른다. 배수를 올려 통과시키지 않는다.
 
 ## 산출물
@@ -51,7 +54,12 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 
 ## b와 R_home 보정 확인
 
-`tests/sitl/calibrate.py <회차 디렉터리 또는 실행 디렉터리>... [--b 0.5] [--min-boots 30] [--out 파일]`이(`--min-boots`는 부팅 수 하한) `--repeat`의 회차마다 `trace.jsonl`(`reach`, `track`, `landing`)과 `verdict.json`을 읽는다(계산은 `tests/support/calibration.py`, 상수와 근거는 `tests/support/sitl_judge.py` 머리말). 통과한 실행만 부팅으로 센다. b는 상수로 받고(사용자 결정 U18) 확인 조건은 GOTO s와 s_track 표본 전부가 b 이하인 것이다. 쟁점 5의 정규 허용한계와 Shapiro-Wilk는 기록으로만 낸다. 도달 사건이 모두 판정 반경 안인지, `R_home`의 Rayleigh 허용한계와 판정 상수 대조, 기록 전용인 t_f 수평 속도와 d_h, s의 관계도 낸다. 회차 디렉터리를 주면 그 안에 `calibration.json`을 쓴다. 종료 코드는 0 충족, 1 미충족, 2 입력 오류다.
+`tests/sitl/calibrate.py <회차 디렉터리 또는 실행 디렉터리>... [--b 0.5] [--min-boots 30] [--out 파일]`이(`--min-boots`는 부팅 수 하한) `--repeat`의 회차마다 `trace.jsonl`(`reach`, `track`, `landing`)과 `verdict.json`을 읽는다(계산은 `tests/support/calibration.py`, 상수와 근거는 `tests/support/sitl_judge.py` 머리말). 통과한 실행만 부팅으로 센다. b는 상수로 받고(사용자 결정 U18) 확인 조건은 GOTO s와 s_track 표본 전부가 b 이하인 것이다. 정규 허용한계(mean + k x std)와 Shapiro-Wilk는 기록으로만 낸다. 도달 사건이 모두 판정 반경 안인지, `R_home`의 Rayleigh 허용한계와 판정 상수 대조, 기록 전용인 t_f 수평 속도와 d_h, s의 관계도 낸다. 회차 디렉터리를 주면 그 안에 `calibration.json`을 쓴다. 종료 코드는 0 충족, 1 미충족, 2 입력 오류다.
+
+- b는 0.5 m로 고정한다. 시험 미션 반경의 하한 0.5 m와 판정 반경 1.0 m 사이의 최대 여유이고 표본에서 추정한 값이 아니다. 도달 사건마다 부호 있는 초과량 `s = d_oracle(t_f) - acceptance_radius_m`을 재고(0으로 자르지 않는다), TRACK_ENTITY 완료는 표적 지연 항 때문에 분포가 달라 `s_track = d_oracle(t_f) - acceptance_radius_m - v x L`로 따로 잰다.
+- 확인 조건: 부팅 30회 이상이고 `s`와 `s_track` 표본 전부가 b 이하여야 b를 적는다. 하나라도 넘거나 부팅이 모자라면 상수를 적지 않고 보정 결과(분포, `d_h`, `d_v`, 도달 속도, R1)를 들고 architect와 사용자에게 올린다. 반경을 줄이거나 판정을 넓혀서 맞추지 않는다. GOTO나 TRACK_ENTITY 항목, 표적 속도, 변 길이를 바꾸면 도달 속도가 달라지므로 보정을 다시 한다.
+- 적은 뒤 통과와 실패를 보고 b를 바꾸지 않는다. CI에서 판정 반경을 넘는 사건이 나오면 b를 올리지 않고 architect에게 올린다. 먼저 시각 정렬을 본다: feedback stamp(`t_f`)와 완료 판정에 쓴 위치 표본의 시각이 어긋나 `s`에 도달 속도에 비례하는 항이 실리는지([추정]). 한 달에 2회를 넘게 나오면 b 0.5 m가 맞지 않는 것으로 보고 사용자에게 올린다. b는 0.5 m보다 클 수 없으므로(그 아래 반경에서는 Executor가 waypoint에서 정체할 위험이 커진다 [추정]) 올리는 길이 없다.
+- `R_home`은 b와 따로 정한다. RTL 착륙점(PX4 home)과 기준점이 같은 물리 위치를 가리켜 사슬 오차가 없기 때문이다. RTL 착륙 수평 위치와 기준점의 거리 R4에 Rayleigh 허용한계를 쓴다: `sigma_hat^2 = mean(R4^2) / 2`, `R_home = ceil_0.05(q x f x sigma_hat)`, `q = sqrt(-2 ln(0.005 / m_home))`, `f = sqrt(2n / chi2_0.05(2n))`(n은 부팅 수, m_home은 RTL 사건 수). 재보정 조건: 시나리오의 RTL 사건 수가 바뀔 때(`test_sitl_flight_missions.py`가 깨져 알린다). 표본 최댓값이 허용한계를 넘으면 모형을 기각하고 상수를 정하지 않고 올린다. `R_home`이 1 m를 넘어도 올린다. 착륙 위치 평균 벡터가 2 표준오차보다 크면 기록한다(편향은 RMS에 들어가 보수적이라 기각 사유가 아니다).
 
 유지 구간(A의 LOITER, D의 취소 뒤 유지)의 기준 고도로부터의 최대 편차는 통과한 회에도 `trace.jsonl`(`hold_deviation`), `verdict.json`(`hold_deviation_m`), `repeat_summary.tsv`(`hold_dev_*_m`)에 남는다. 항목별 임계값(A의 LOITER 0.4 m, D의 유지 0.25 m)을 넘으면 `summary.md`와 `armed_criterion.json`의 `hold_deviation_notes`에 note가 붙는다(판정 상수 0.5 m 재검토의 근거. 임계값은 `tests/support/sitl_summary.py`의 `HOLD_DEV_NOTE_M`).
 

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// setpoint 항목(TAKEOFF, LOITER)과 상태기 안의 비행 중 감시(decisions.md 쟁점 4 "항목", "비행 중
-// 감시"). 순위마다 한 건, 엇갈려 시작하는 경우, 순위 5 이력의 항목 경계, disarm 분류의 고정, 감시
-// 표로 끝낼 때의 disarm 1회(P6, TAKEOFF, LOITER).
-// 감시 표의 행 순위가 SITL 시나리오 trace와 다르면 rules.hpp의 kMonitorRankOrder만 고친다.
+// setpoint 항목(TAKEOFF, LOITER)과 상태기 안의 비행 중 감시(docs/interface.md "비행 중 감시").
+// 순위마다 한 건, 엇갈려 시작하는 경우, 순위 5 이력의 항목 경계, disarm 분류의 고정, 감시 표로
+// 끝낼 때의 disarm 1회(P6, TAKEOFF, LOITER). 감시 표의 행 순위가 SITL 시나리오 trace와 다르면
+// rules.hpp의 kMonitorRankOrder만 고친다.
 
 #include <gtest/gtest.h>
 
@@ -359,7 +359,7 @@ TEST(RunnerMonitor, NavStateOfGroundDisarmedSampleIsNotRead)
   expect_terminated_once(h, Status::kAborted, Reason::kExternalDisarm);
 }
 
-// ---- 감시 표로 끝낼 때의 disarm 1회(decisions.md 쟁점 4 표 아래 "지상 disarm 1회") ----
+// ---- 감시 표로 끝낼 때의 disarm 1회(docs/interface.md "비행 중 감시") ----
 // P6(첫 ARMED 뒤), TAKEOFF, LOITER에서 같은 행과 같은 landed 이력이면 같은 결과다.
 
 enum class MonitorStage : std::uint8_t
