@@ -507,7 +507,7 @@ def _fly(s, sid):
     if prev is not None:
         _air_start_record(s, sid, run, t_goal)
     if run.result is not None and run.result.reason == sj.REASON_TARGET_LOST:
-        # TRACK_ENTITY 시작 때 묵은 표본으로 setpoint가 바뀐 뒤 TARGET_LOST까지의 이동량(progress의 B11 trace 항목)
+        # TRACK_ENTITY 시작 때 묵은 표본으로 setpoint가 바뀐 뒤 TARGET_LOST까지의 이동량. 기록 전용(판정에 쓰지 않음)
         i = run.result.last_item_index
         o0 = sj.oracle_before(s.truth.oracle, starts.get(i, t_goal))
         o1 = sj.oracle_before(s.truth.oracle, run.result.recv_us)
