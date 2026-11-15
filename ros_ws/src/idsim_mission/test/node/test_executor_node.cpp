@@ -43,6 +43,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -262,8 +263,8 @@ public:
   int disarms() const { return disarms_; }
   int offboards() const { return offboards_; }
   int holds() const { return holds_; }
-  // 첫 Hold 명령을 받은 sim 시각(ns). 없으면 0.
-  std::int64_t first_hold_ns() const { return first_hold_ns_; }
+  // 첫 Hold 명령의 timestamp(노드 시계, ns). 없으면 0.
+  std::int64_t first_hold_stamp_ns() const { return first_hold_stamp_ns_; }
   bool landed() const { return landed_; }
   std::uint8_t nav_state() const { return nav_; }
   float setpoint_x() const { return setpoint_x_; }
@@ -293,8 +294,9 @@ private:
     // Hold = AUTO(param2 4) + AUTO_LOITER(param3 3). 다른 AUTO sub mode는 세지 않는다.
     if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 4.0F && cmd.param3 == 3.0F) {
       ++holds_;
-      if (first_hold_ns_ == 0) {
-        first_hold_ns_ = clock_.now_ns();
+      if (first_hold_stamp_ns_ == 0) {
+        // 노드가 명령에 실은 timestamp(us, 노드 시계). 받은 때의 벽시계 스케줄링과 무관하다.
+        first_hold_stamp_ns_ = static_cast<std::int64_t>(cmd.timestamp) * 1000;
       }
     }
     if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 6.0F) {
@@ -360,7 +362,7 @@ private:
   int disarms_{0};
   int offboards_{0};
   int holds_{0};
-  std::int64_t first_hold_ns_{0};
+  std::int64_t first_hold_stamp_ns_{0};
 };
 
 class ExecutorNodeTest : public ::testing::Test
@@ -759,8 +761,8 @@ TEST_F(ExecutorNodeTest, FeedbackIsPublishedOnTheTickTheLastSetpointItemComplete
   // [TAKEOFF, GOTO]. GOTO 목표는 가짜 PX4가 내는 위치(로컬 NED (1, 2, -5) = world ENU (2, 1, 5))라
   // 곧 완료되고 공중 종료 단계로 들어간다. 그 tick은 항목(1)과 phase(EXECUTING)가 그대로지만
   // 항목이 완료됐으므로 feedback이 바로 나간다. 종료 단계는 들어가는 tick에 Hold를 보내므로, 거리가
-  // 없는 첫 항목 1 feedback의 stamp는 가짜 PX4가 첫 Hold를 받은 sim 시각과 tick 하나 안에 있다
-  // (주기 feedback만 있으면 최대 10 tick 늦다).
+  // 없는 첫 항목 1 feedback의 stamp는 첫 Hold 명령의 timestamp와 같은 tick의 값이다(주기 feedback만
+  // 있으면 최대 10 tick 늦다). 둘 다 노드 시계 값이라 벽시계 스케줄링과 무관하다.
   auto node = make_executor(true);
   auto test_node = std::make_shared<rclcpp::Node>("test_client");
   Client client(test_node);
@@ -782,7 +784,7 @@ TEST_F(ExecutorNodeTest, FeedbackIsPublishedOnTheTickTheLastSetpointItemComplete
     << "item " << client.last_item_ << " phase " << static_cast<int>(client.last_phase_);
   EXPECT_EQ(client.result_.code, rclcpp_action::ResultCode::SUCCEEDED);
   EXPECT_EQ(client.result_.result->items_completed, 2U);
-  ASSERT_GT(px4.first_hold_ns(), 0);
+  ASSERT_GT(px4.first_hold_stamp_ns(), 0);
   // 항목 1에서 거리가 있던 feedback 뒤의 첫 거리 없는 feedback(종료 단계의 첫 feedback).
   const ExecuteMission::Feedback * end_stage = nullptr;
   bool seen_valid = false;
@@ -801,10 +803,12 @@ TEST_F(ExecutorNodeTest, FeedbackIsPublishedOnTheTickTheLastSetpointItemComplete
   ASSERT_NE(end_stage, nullptr);
   EXPECT_EQ(end_stage->phase, ExecuteMission::Feedback::PHASE_EXECUTING);
   const std::int64_t stamp_ns = rclcpp::Time(end_stage->stamp).nanoseconds();
-  const std::int64_t lag_ns = px4.first_hold_ns() - stamp_ns;
-  EXPECT_GE(lag_ns, 0) << "feedback after the first Hold";
-  EXPECT_LT(lag_ns, kTickPeriodNs)
-    << "feedback stamp " << stamp_ns << " hold " << px4.first_hold_ns();
+  // Hold 명령의 timestamp와 feedback stamp는 같은 tick에서 노드 시계로 읽은 값이다(feedback은
+  // 그 tick의 입력 시각, 명령은 같은 tick의 Px4Timestamp. /clock 양자 하나만큼 다를 수 있다).
+  // 다음 주기 tick의 feedback이면 차가 한 tick(50 ms) 가까이 되므로 반 tick을 경계로 둔다.
+  const std::int64_t diff_ns = px4.first_hold_stamp_ns() - stamp_ns;
+  EXPECT_LT(std::llabs(diff_ns), kTickPeriodNs / 2)
+    << "feedback stamp " << stamp_ns << " hold timestamp " << px4.first_hold_stamp_ns();
 }
 
 TEST_F(ExecutorNodeTest, TargetLostKeepsPublishingUntilHoldIsObserved)
