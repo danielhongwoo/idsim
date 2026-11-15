@@ -154,7 +154,7 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 | --- | --- | --- |
 | 공통 규칙 | 단위, 좌표계, 시각, NaN 금지, 이름 규칙, QoS 계약, 변경 절차 | 1a 완료 |
 | 미션 실행(1a 부분) | `ExecuteMission.action`, `Mission`, `MissionItem`, `TakeoffItem`, `LoiterItem`, `YawSetpoint`의 직접 필드와 상수. TAKEOFF, LOITER, LAND 항목의 의미, 수락 정책, 취소 의미, `reason` 값의 의미(1b 부분 제외). 공중에서 끝나는 미션의 종료 동작은 뺀다 | 1a 완료 |
-| 미션 실행(1b 부분) | `GoToItem`, `TrackEntityItem`의 직접 필드. GOTO, TRACK_ENTITY, RTL 항목의 의미, 항목 순서 규칙(TAKEOFF는 첫 항목에만, LAND와 RTL은 마지막 항목에만), 공중 Offboard 진입, `REASON_TARGET_LOST`의 의미, 공중에서 끝나는 미션(마지막 항목이 setpoint 항목)의 종료 단계, SITL 파라미터 표의 RTL 항목용 행 | 1b 완료 |
+| 미션 실행(1b 부분) | `GoToItem`, `TrackEntityItem`의 직접 필드. GOTO, TRACK_ENTITY, RTL 항목의 의미, 항목 순서 규칙(TAKEOFF는 첫 항목에만, LAND와 RTL은 마지막 항목에만), 공중 Offboard 진입, `REASON_TARGET_LOST`의 의미, 공중에서 끝나는 미션(마지막 항목이 setpoint 항목)의 종료 단계, SITL 파라미터 표에 1b에서 더한 행 | 1b 완료 |
 | 표적 | `TargetState` | 1b 완료 |
 | 기체 요약 | `VehicleState` | Phase 2 완료(WebSocket JSON 스키마 고정과 함께) |
 | 미션 기록 | `MissionEvent` | Phase 2 완료(기록물 인덱스가 필드를 검증한 뒤) |

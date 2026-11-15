@@ -103,7 +103,7 @@ Phase 1b(미션 시퀀스와 표적 추종)의 설계 결정이다. 구현은 �
 - 토픽: 절대 이름 `/targets/<target_id>/state`. 메시지 상수 `TOPIC_PREFIX`, `TOPIC_SUFFIX`(rosidl Python 클래스 상수)로 조립한다. 노드 네임스페이스는 기체 네임스페이스가 아니다.
 - QoS: 계약 상태 행(발행 RELIABLE, VOLATILE). 구현 값 KEEP_LAST 5. Python은 `contract_qos.hpp`를 쓰지 못하므로 값을 다시 적고, 통합 테스트가 그래프의 발행자 QoS를 계약과 대조한다.
 - stamp: timer 콜백에서 읽은 노드 시계 시각 t이고 위치와 속도는 같은 t에서 계산한다. 0을 내지 않는다. 표적마다 직전 발행 stamp보다 큰 t에서만 발행한다(`/clock` 정지나 역행에서 발행하지 않는다. 역행은 오류 로그를 남긴다). `use_sim_time` false이면 시작을 거부한다. 주기는 params(기본 20 Hz, 계약 아님).
-- 이름 조립과 id 검증: 어댑터 패키지 안에 조립과 `target_id` 정규식 검증 함수를 두고 `tests/support`와 같은 사례 표로 단위 테스트한다. 사례 표의 정본은 `idsim_common`의 `TargetId::parse` 테스트이고 공유 파일은 두지 않는다. 다른 구현(core의 `is_valid_target_id`, 어댑터, `tests/support`, 생성기)은 각자 사례 표를 두고 정본을 주석으로 가리킨다. `docs/interface.md` "이름과 식별자"의 "Python은 `tests/support`가 한다"를 "판정은 `tests/support`, 발행은 표적 어댑터"로 고친다(1a 고정 계약 영향 (j)).
+- 이름 조립과 id 검증: 어댑터 패키지 안에 조립과 `target_id` 정규식 검증 함수를 두고 `tests/support`와 같은 사례 표로 단위 테스트한다. 사례 표의 정본은 `idsim_common`의 `TargetId::parse` 테스트이고 공유 파일은 두지 않는다. 다른 구현(core의 `is_valid_target_id`, 어댑터, 생성기)은 각자 사례 표를 두고 정본을 주석으로 가리킨다(`tools/gen_compose.py`의 `TARGET_ID_RE` 주석은 아직 가리키지 않는다. `tests/support`에는 검증 구현이 없다). `docs/interface.md` "이름과 식별자"의 "Python은 `tests/support`가 한다"를 "판정은 `tests/support`, 발행은 표적 어댑터"로 고친다(1a 고정 계약 영향 (j)).
 - 원점: 어댑터는 원점을 모른다. 출력은 world ENU뿐이다. architecture.md의 "운용 노드와 표적 어댑터는 같은 값을 params로 받는다"에서 표적 어댑터를 뺀다.
 - replay 프로필에서는 `targets`와 `sim-oracle`을 띄우지 않는다(발행자가 둘이 되거나 Gazebo가 없다).
 

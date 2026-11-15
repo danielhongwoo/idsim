@@ -6,7 +6,7 @@
 
 ## 고정 시점
 
-PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 식별과 네임스페이스", "VehicleCommand", "Offboard setpoint", "SITL 파라미터", "포트" 절)와 공통 규칙("공통 규칙", "시간 기준", "정의 작성 규칙", "변경 절차와 계약 테스트" 절)은 1a 완료에 고정한다. 예외는 "계약 토픽 QoS"의 상태 행이고 그 고정 시점은 그 절에 적는다. `idsim_interfaces`의 정의 파일(msg 10개, action 1개)은 Phase 1a에서 모두 만들었고, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춰 파일 단위로 나눈다. "SITL 파라미터" 절의 계약 표에서 RTL 항목을 위해 더한 여덟 행(`RTL_TYPE`부터 `IMU_GYRO_CAL_EN`까지)은 1b 완료에 고정한다.
+PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 식별과 네임스페이스", "VehicleCommand", "Offboard setpoint", "SITL 파라미터", "포트" 절)와 공통 규칙("공통 규칙", "시간 기준", "정의 작성 규칙", "변경 절차와 계약 테스트" 절)은 1a 완료에 고정한다. 예외는 "계약 토픽 QoS"의 상태 행이고 그 고정 시점은 그 절에 적는다. `idsim_interfaces`의 정의 파일(msg 10개, action 1개)은 Phase 1a에서 모두 만들었고, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춰 파일 단위로 나눈다. "SITL 파라미터" 절의 계약 표에서 1b에서 더한 여덟 행(`RTL_TYPE`부터 `IMU_GYRO_CAL_EN`까지)은 1b 완료에 고정한다.
 
 | 파일 | 묶음 | 고정 시점 | 1b 완료 때 |
 | --- | --- | --- | --- |
@@ -339,7 +339,7 @@ sysid 대조 규칙.
 - 송신자는 `source_system` 1-255, `source_component` 1-999다(1000 이상은 PX4가 mode executor로 분류한다. `Commander.cpp` 1561-1562행, `VehicleCommand.msg`의 `COMPONENT_MODE_EXECUTOR_START`). `source_system`이 대상 sysid와 같으면 빌더를 만들 수 없다(송신자가 대상 autopilot 자신으로 보이는 조합을 막는다).
 - 검증 없는 raw 명령은 두지 않는다. 새 명령은 PX4 인터페이스 owner의 승인 뒤 메서드로 더한다.
 - ack 매칭: `is_ack_for(ack, cmd)`는 `command`가 같고 ack의 `target_system`, `target_component`가 cmd의 `source_system`, `source_component`인지 본다(PX4는 ack를 송신자에게 돌려준다).
-- ack ACCEPTED는 성공이 아니다. ack는 명령을 받아들였다는 뜻이고 전환 결과의 확인이 아니다. ACCEPTED 뒤에 모드 전환이 일어나지 않는 경로가 있는지는 확인하지 않았다(미확인). 보수적 동작: 모드 전환 성공은 `vehicle_status.nav_state`로, arm과 disarm은 `arming_state`로 확인하고, ack는 거부를 빨리 아는 데만 쓴다. 예외 하나: 지상 arm 진입의 Offboard 전환은 그 명령의 유효 ack를 `nav_state` 확인에 더해 arm의 조건으로 쓰고, 유효 ack 뒤에는 확인 전이어도 재전송하지 않는다("준비 단계" 절). ACCEPTED 뒤에 전환이 일어나지 않으면 `mode_confirm_timeout`으로 arm 없이 MODE_SWITCH_FAILED로 끝난다.
+- ack ACCEPTED는 성공이 아니다. ack는 명령을 받아들였다는 뜻이고 전환 결과의 확인이 아니다. ACCEPTED 뒤에 모드 전환이 일어나지 않는 경로는 지상 DISARMED 밖에서는 확인하지 않았다(미확인. 지상 DISARMED에서는 `nav_state`가 사용자 의도를 따른다. "준비 단계" 절). 보수적 동작: 모드 전환 성공은 `vehicle_status.nav_state`로, arm과 disarm은 `arming_state`로 확인하고, ack는 거부를 빨리 아는 데만 쓴다. 예외 하나: 지상 arm 진입의 Offboard 전환은 그 명령의 유효 ack를 `nav_state` 확인에 더해 arm의 조건으로 쓰고, 유효 ack 뒤에는 확인 전이어도 재전송하지 않는다("준비 단계" 절). ACCEPTED 뒤에 전환이 일어나지 않으면 `mode_confirm_timeout`으로 arm 없이 MODE_SWITCH_FAILED로 끝난다.
 
 source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 
@@ -356,7 +356,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 고정 시점: 1a 완료.
 
 - `offboard_control_mode`는 항상 `position = true`이고 나머지 여섯 flag(velocity, acceleration, attitude, body_rate, thrust_and_torque, direct_actuator)는 false다. 제어는 position setpoint이고, TRACK_ENTITY만 속도를 feedforward로 더한다(아래).
-- `trajectory_setpoint`의 `position`(로컬 NED, m)과 `yaw`(NED, rad)는 유한값이고 float 범위 안이어야 한다. `acceleration`, `jerk`, `yawspeed`는 NaN("제어하지 않음")이고 `velocity`는 예외 하나를 빼고 NaN이다. 예외: TRACK_ENTITY 항목 실행 중에 그 tick의 표적 표본이 신선하고 `velocity_valid`가 true이면 `velocity`에 표적 속도(로컬 NED, m/s)를 싣는다("GoToItem과 TrackEntityItem" 절). 이때 속도도 유한하고 float 범위 안이어야 하며, 세 성분 모두 유한이거나 모두 NaN이다(vx, vy 중 한쪽만 유한이면 PX4가 입력을 무효로 본다. [소스] `PositionControl.cpp` 235행). position만 true인 `offboard_control_mode`에서 FlightTaskOffboard가 `trajectory_setpoint.velocity`를 feedforward로 넘기는지는 [소스 미확인]이다. [실측] B11 ULog에서 `vehicle_local_position_setpoint`의 vx, vy가 1189/1189 유한했고 `trajectory_setpoint.velocity`의 최대는 2.0 m/s였다. `offboard_control_mode`와 `trajectory_setpoint`는 `px4_setpoint.hpp`의 함수로만 만든다. GOTO, TAKEOFF, LOITER, 정리와 종료 단계의 setpoint는 속도를 싣지 않는다.
+- `trajectory_setpoint`의 `position`(로컬 NED, m)과 `yaw`(NED, rad)는 유한값이고 float 범위 안이어야 한다. `acceleration`, `jerk`, `yawspeed`는 NaN("제어하지 않음")이고 `velocity`는 예외 하나를 빼고 NaN이다. 예외: TRACK_ENTITY 항목 실행 중에 그 tick의 표적 표본이 신선하고 `velocity_valid`가 true이면 `velocity`에 표적 속도(로컬 NED, m/s)를 싣는다("GoToItem과 TrackEntityItem" 절). 이때 속도도 유한하고 float 범위 안이어야 하며, 세 성분 모두 유한이거나 모두 NaN이다(vx, vy 중 한쪽만 유한이면 PX4가 입력을 무효로 본다. [소스] `PositionControl.cpp` 235행). position만 true인 `offboard_control_mode`에서 FlightTaskOffboard가 `trajectory_setpoint.velocity`를 feedforward로 넘기는지는 [소스 미확인]이다. [실측] 시나리오 F2, F4의 ULog에서 `vehicle_local_position_setpoint`의 vx, vy가 1189/1189 유한했고 `trajectory_setpoint.velocity`의 최대는 2.0 m/s였다. `offboard_control_mode`와 `trajectory_setpoint`는 `px4_setpoint.hpp`의 함수로만 만든다. GOTO, TAKEOFF, LOITER, 정리와 종료 단계의 setpoint는 속도를 싣지 않는다.
 - yaw는 항상 유한값으로 보낸다. NaN yaw의 Offboard 동작은 미확인이다. 보수적 동작: 보내지 않는다(현재 heading을 유지하려면 현재 yaw를 넣는다).
 - 언제 발행하는가(Offboard 진입 준비와 Offboard 동안만)는 "발행 규칙" 절이 정한다.
 
@@ -625,7 +625,7 @@ RTL 항목의 실패 fallback.
 | 이 goal이 arm을 보내지 않은(`[RTL]`) 지상 DISARMED | 아무것도 보내지 않는다 | 지상 DISARMED |
 | 공중 DISARMED | 아무것도 보내지 않는다 | 공중 disarm(추락했을 수 있다) |
 
-- 어떻게 끝나든(Land 경로의 관측과 미확인, 지상 disarm의 확인과 미확인, 정리할 것 없음, 상한, 정리 중의 상태 끊김과 공중 DISARMED) reason은 REASON_MODE_SWITCH_FAILED이고 정리 결과는 `detail`에만 적는다. feedback의 `phase`는 `PHASE_WAITING_MODE`, `item_type`은 RTL이다. `detail`은 실패 원인(`NAV_RETURN_TO_LAUNCH rejected: <ack 결과>` 또는 `mode_confirm_timeout: AUTO_RTL not confirmed`) 뒤에 `; cleanup: `과 정리 결과를 잇는다.
+- 어떻게 끝나든(Land 경로의 관측과 미확인, 지상 disarm의 확인과 미확인, 정리할 것 없음, 상한, 정리 중의 상태 끊김과 공중 DISARMED) reason은 REASON_MODE_SWITCH_FAILED이고 정리 결과는 `detail`에만 적는다. feedback의 `phase`는 `PHASE_WAITING_MODE`, `item_type`은 RTL이다. `detail`은 `item <i> (RTL): `로 시작하고 실패 원인(`NAV_RETURN_TO_LAUNCH rejected: <ack 결과>` 또는 `mode_confirm_timeout: AUTO_RTL not confirmed`) 뒤에 `; cleanup: `과 정리 결과를 잇는다.
 - RTL 항목 중의 취소는 LAND 항목 중의 취소와 같다. 공중이면 Hold를 보내 귀환을 멈추고 기체는 그 자리(귀환 경로 위일 수 있다)에 Hold로 남는다. 내리거나 다시 귀환시키는 것은 취소를 요청한 쪽이 `[LAND]`나 `[RTL]` 미션으로 한다. AUTO_RTL 중의 Hold가 받아들여진다는 것은 [추정]이다. 거부돼도 Hold 실패의 Land 경로가 덮으므로 안전 쪽이다. 실패 fallback의 정리가 시작된 뒤에 온 취소는 결과를 바꾸지 않는다.
 - RTL의 목적지는 PX4 home이다. 계약 문장: RTL은 그 기체가 마지막으로 arm하거나 이륙한 지점으로 돌아가 착륙한다. 공중 시작 미션의 RTL 목적지는 그 미션이 아니라 앞선 비행의 지점이다. 귀환 고도는 `max(현재 고도, home 고도 + RTL_RETURN_ALT)`이다("SITL 파라미터" 절). 목적지 필드는 없다.
 

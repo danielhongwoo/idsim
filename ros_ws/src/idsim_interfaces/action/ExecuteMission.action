@@ -32,11 +32,13 @@ uint8 REASON_BUSY = 3
 uint8 REASON_NOT_READY = 4            # 항목을 시작하기 전에 기체가 준비되지 않음. 이 goal은 setpoint와 명령을 보내지 않았다
 uint8 REASON_ARM_REJECTED = 5
 # 요청한 모드 전환이 확인되지 않았다(Offboard 전환, 모드 명령 항목의 Land와 RTL 전환, 취소와 종료 단계의 Hold).
+# 지상 arm 진입에서는 arm 전까지 그 명령의 ack가 오지 않았거나 확인한 모드가 유지되지 않은 것도 포함한다.
 # RTL 항목의 실패는 정리를 거쳐 Land로 모이고 이 reason으로 끝난다.
 uint8 REASON_MODE_SWITCH_FAILED = 6
 uint8 REASON_ITEM_TIMEOUT = 7
 # 아래 FAILSAFE, EXTERNAL_MODE_CHANGE, LINK_LOST, EXTERNAL_DISARM은 첫 항목을 시작하기 전이라도 이 goal의 arm 뒤
-# ARMED를 처음 관측한 다음에는 나올 수 있다(그때 phase는 PHASE_PREPARING, last_item_index는 0이다).
+# ARMED를 처음 관측한 다음(공중 Offboard 진입은 발행을 시작한 뒤)에는 나올 수 있다(그때 phase는 PHASE_PREPARING,
+# last_item_index는 0이다).
 uint8 REASON_FAILSAFE = 8
 uint8 REASON_EXTERNAL_MODE_CHANGE = 9
 # TRACK_ENTITY 항목에서 표적 표본이 정해진 시간(target_timeout)을 넘겨 오지 않았다. 표적 쪽의 문제이고 기체는 정상이다.

@@ -7,7 +7,7 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 계약은 `docs/interface.md`에 고정 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6, B10 전 core 수정, B10(진짜 `Px4FramePort`, 표적 구독, goal 접수는 계약 검증만, 미션 YAML 로더와 `send_mission`), B11(F1-F4, 정답 판정, b 0.5 m와 `R_home` 0.20 m), B12(M4 화면 확인, Actor 표본 간격 250 ms 확정), B13(1b 계약 고정 문서) 반영. 칸 목록 covered 452, impossible 131, uncovered 0 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약 정본은 `docs/interface.md`이고 결정의 근거는 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6, B10 전 core 수정, B10(진짜 `Px4FramePort`, 표적 구독, goal 접수는 계약 검증만, 미션 YAML 로더와 `send_mission`), B11(F1-F4, 정답 판정, b 0.5 m와 `R_home` 0.20 m), B12(M4 화면 확인, Actor 표본 간격 250 ms 확정), B13(1b 계약 고정 문서) 반영. 칸 목록 covered 452, impossible 131, uncovered 0 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
@@ -48,6 +48,7 @@
 
 문서 정리(정형, 다음 문서 정리 때).
 
+- `tools/gen_compose.py` `TARGET_ID_RE` 주석이 사례 표 정본(`idsim_common` `TargetId::parse` 테스트)을 가리키게 한다(devops-engineer).
 - `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
 
 테스트 보강.
