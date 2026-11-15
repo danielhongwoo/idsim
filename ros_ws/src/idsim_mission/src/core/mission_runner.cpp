@@ -753,8 +753,10 @@ void MissionRunner::prepare_air_offboard(Tick & t)
   if (s != nullptr && s->nav == NavMode::kOffboard) {
     // 첫 OFFBOARD 표본: 대기 명령을 지워 재전송을 멈추고(그 뒤 ack는 받지 않는다) AUTO_LOITER
     // 면제를 끈다(다음 상태는 면제 없이 감시 표를 본다). 표본 하나로 정해지는 관측이라 종료를
-    // 정하지 않고, 같은 tick에 기한과 3회 확인을 이어서 본다.
+    // 정하지 않고, 같은 tick에 기한과 3회 확인을 이어서 본다. 감시 하한 timestamp를 이 표본으로
+    // 올려, 순서가 뒤바뀌어 늦게 닿은 그 전의 표본(AUTO_LOITER 등)을 판정에 쓰지 않는다.
     clear_pending();
+    first_armed_timestamp_us_ = s->timestamp_us;
     enter_prep(Event::kOffboardFirstSample, t, PrepStep::kAirOffboardSeen);
     air_offboard_seen_checks(t);
     return;
@@ -805,7 +807,8 @@ void MissionRunner::air_offboard_seen_checks(Tick & t)
 const StatusSample * MissionRunner::monitored_status(const Tick & t)
 {
   // 감시 구간에서 판정에 쓰는 vehicle_status. 식별이 어긋난 표본은 그대로 넘긴다(순위 2).
-  // timestamp가 첫 ARMED 표본보다 작은 표본은 판정에 쓰지 않고 직전에 쓴 표본을 다시 본다(그래서
+  // timestamp가 하한(지상 arm 진입은 첫 ARMED 표본, 공중 Offboard 진입은 P3 표본이고 첫 OFFBOARD
+  // 표본에서 그 표본으로 올린다)보다 작은 표본은 판정에 쓰지 않고 직전에 쓴 표본을 다시 본다(그래서
   // 순위 3의 link_timeout은 그 표본의 수신 시각부터 흐른다).
   const StatusSample * const s = t.status;
   if (s != nullptr && s->identity == IdentityCheck::kMismatch) {

@@ -1139,6 +1139,32 @@ TEST(AirEntry, A16b_RejectionAckAfterFirstOffboardSampleIsIgnored)
   EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 0);
 }
 
+// 첫 OFFBOARD 표본의 tick에 감시 하한을 그 표본의 timestamp로 올린다. 그 뒤 순서가 뒤바뀌어 늦게
+// 닿은, P3 표본보다 뒤이고 첫 OFFBOARD 표본보다 앞선 AUTO_LOITER 표본은 감시 표에 쓰지 않는다(합성
+// 표본). 대조: 첫 OFFBOARD 표본보다 뒤의 AUTO_LOITER 표본은 A18처럼 EXTERNAL_MODE_CHANGE다.
+TEST(AirEntry, A21c_LateHoldSampleAfterFirstOffboardSampleIsNotMonitored)
+{
+  Harness h(air_loiter_mission());
+  const std::uint64_t s = h.drive_to_air_seen();  // S+1: 첫 OFFBOARD 표본
+  ASSERT_TRUE(h.snapshot.status.has_value());
+  const std::uint64_t first_offboard = h.snapshot.status->timestamp_us;
+  Sample late = armed(NavMode::kHold);
+  late.intention = NavMode::kHold;
+  late.timestamp_us = first_offboard - 1U;
+  std::size_t before = h.edges().size();
+  const std::vector<StepOutput> outs = h.feed({late});
+  EXPECT_FALSE(h.runner().done()) << termination_or_empty(h).detail;
+  EXPECT_EQ(h.edges().size(), before);
+  EXPECT_EQ(h.view().prep, PrepStep::kAirOffboardSeen);
+  EXPECT_TRUE(outs[0].setpoint.has_value());
+  before = h.edges().size();
+  h.feed({armed(NavMode::kOffboard), armed(NavMode::kOffboard)});  // 새 표본 둘로 3회 확인
+  expect_cell(
+    h, "PREPARING.AIR_OFFBOARD_SEEN", Event::kOffboardConfirmed, "ITEM.LOITER", "-", {}, before);
+  EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 0);
+  EXPECT_EQ(h.tick_no - 1, s + 4);  // S+1 첫 OFFBOARD, S+2 늦은 표본, S+3, S+4
+}
+
 // ---- A22 P3 tick의 Px4Timestamp ----
 
 TEST(AirEntry, A22a_StampFailureOnPublishStartTick)
