@@ -41,7 +41,7 @@
 
 문서 정리(정형, 다음 문서 정리 때).
 
-- `tools/gen_compose.py` `TARGET_ID_RE` 주석이 사례 표 정본(`idsim_common` `TargetId::parse` 테스트)을 가리키게 한다(devops-engineer).
+- 지운 계획에서만 뜻이 정해진 표지가 주석에 남아 있다: `B8b`, `B9`(`idsim_mission` 테스트), `M4`(`tools/gen_compose.py`), `U8`, `U9`, `U13`, `U14`, `U18`(`tests/sitl/README.md`, `sitl_judge.py`, `calibration.py`, 시험 미션 YAML, `sitl_params.env`). 표지를 뜻을 담은 말로 바꾼다(각 owner).
 - `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
 
 테스트 보강.
