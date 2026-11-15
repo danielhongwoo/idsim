@@ -13,7 +13,7 @@
 # limitations under the License.
 """mission_yaml 로더: YAML 파일 -> idsim_interfaces/msg/Mission(1b decisions.md 쟁점 14).
 
-로더는 구조, 단위 변환, 기본값, mission_id만 본다. 계약 위반(빈 항목, 순서, 0 offset, target_id 형식)은
+로더는 구조(중복 key 포함), 단위 변환, 기본값, mission_id만 본다. 계약 위반(빈 항목, 순서, 0 offset, target_id 형식)은
 그대로 Mission이 되는 것도 확인한다(정본은 Executor의 goal 검증).
 """
 
@@ -31,6 +31,7 @@ items:
   - type: TAKEOFF
     timeout_s: 20
     height_m: 5
+    acceptance_m: 0.25
   - type: GOTO
     timeout_s: 30.5
     position: [10.0, -2, 5.0]
@@ -69,7 +70,7 @@ def test_full_mission_becomes_message(tmp_path):
     takeoff, go, track, loiter, rtl = msg.items
     assert takeoff.timeout == Duration(sec=20, nanosec=0)
     assert takeoff.takeoff.height_m == 5.0
-    assert takeoff.takeoff.acceptance_m == my.DEFAULT_TAKEOFF_ACCEPTANCE_M  # 기본값
+    assert takeoff.takeoff.acceptance_m == 0.25
     assert takeoff.takeoff.yaw.mode == YawSetpoint.MODE_KEEP  # 기본값
     assert takeoff.takeoff.yaw.yaw_rad == 0.0
     assert go.timeout == Duration(sec=30, nanosec=500000000)
@@ -140,12 +141,18 @@ def test_contract_violations_are_not_loader_errors():
     ({"mission_id": "m", "items": [{"type": "LAND"}]}, r"missing key\(s\) timeout_s"),
     ({"mission_id": "m", "items": [{"type": "LAND", "timeout_s": 1, "height_m": 5}]},
      r"items\[0\]: unknown key\(s\) height_m"),
-    ({"mission_id": "m", "items": [{"type": "TAKEOFF", "timeout_s": 1}]}, r"missing key\(s\) height_m"),
-    ({"mission_id": "m", "items": [{"type": "TAKEOFF", "timeout_s": 1, "height_m": "5"}]},
+    ({"mission_id": "m", "items": [{"type": "TAKEOFF", "timeout_s": 1}]},
+     r"missing key\(s\) acceptance_m, height_m"),
+    ({"mission_id": "m", "items": [{"type": "TAKEOFF", "timeout_s": 1, "height_m": 5}]},
+     r"items\[0\]: missing key\(s\) acceptance_m"),
+    ({"mission_id": "m", "items": [{"type": "TAKEOFF", "timeout_s": 1, "height_m": "5",
+                                    "acceptance_m": 0.3}]},
      r"items\[0\]\.height_m: must be a number"),
-    ({"mission_id": "m", "items": [{"type": "TAKEOFF", "timeout_s": 1, "height_m": True}]},
+    ({"mission_id": "m", "items": [{"type": "TAKEOFF", "timeout_s": 1, "height_m": True,
+                                    "acceptance_m": 0.3}]},
      r"items\[0\]\.height_m: must be a number"),
-    ({"mission_id": "m", "items": [{"type": "TAKEOFF", "timeout_s": 1, "height_m": 5, "yaw": 1}]},
+    ({"mission_id": "m", "items": [{"type": "TAKEOFF", "timeout_s": 1, "height_m": 5,
+                                    "acceptance_m": 0.3, "yaw": 1}]},
      r"unknown key\(s\) yaw"),
     ({"mission_id": "m", "items": [{"type": "GOTO", "timeout_s": 1, "position": [1, 2],
                                     "acceptance_radius_m": 1}]}, r"position: must be a list of 3"),
@@ -185,3 +192,19 @@ def test_yaml_special_floats_reach_timeout_check(tmp_path):
     path = write(tmp_path, "mission_id: m\nitems:\n  - {type: LAND, timeout_s: .nan}\n")
     with pytest.raises(my.MissionYamlError, match="must be finite"):
         my.load_mission(path)
+
+
+@pytest.mark.parametrize("text, line", [
+    ("mission_id: a\nmission_id: b\nitems: []\n", 2),
+    ("mission_id: m\nitems:\n  - type: LAND\n    timeout_s: 30\n    timeout_s: 60\n", 5),
+    ("mission_id: m\nitems:\n  - {type: GOTO, timeout_s: 10, position: [1, 2, 3],\n"
+     "     acceptance_radius_m: 1, acceptance_radius_m: 2}\n", 4),
+])
+def test_duplicate_keys_are_rejected(tmp_path, text, line):
+    with pytest.raises(my.MissionYamlError, match=f"duplicate key .* at line {line}"):
+        my.load_mission(write(tmp_path, text))
+
+
+def test_same_key_in_different_items_is_not_duplicate(tmp_path):
+    text = "mission_id: m\nitems:\n  - {type: LAND, timeout_s: 30}\n  - {type: LAND, timeout_s: 30}\n"
+    assert len(my.load_mission(write(tmp_path, text)).items) == 2

@@ -13,7 +13,7 @@
 # limitations under the License.
 """미션 YAML 로더(1b decisions.md 쟁점 14).
 
-로더가 하는 일은 넷뿐이다. 구조 검사(모르는 key 거부, 필수 key, 타입), 단위 변환(timeout_s, duration_s
+로더가 하는 일은 넷뿐이다. 구조 검사(모르는 key 거부, 같은 mapping 안의 중복 key 거부, 필수 key, 타입), 단위 변환(timeout_s, duration_s
 -> builtin_interfaces/Duration, ns 반올림, 음수와 비유한 거부), 기본값 채움, mission_id(YAML 값 또는 파일
 이름, 정규식 검사). 계약 검증(값의 범위, 항목 순서, 좌표 상한, target_id 형식 등)의 정본은 Executor의
 goal 검증이고 여기서 다시 하지 않는다. 그래서 계약에 어긋나는 미션도 구조만 맞으면 Mission이 되고,
@@ -26,7 +26,7 @@ Executor가 INVALID_MISSION으로 끝낸다.
       - type: TAKEOFF            # TAKEOFF, GOTO, TRACK_ENTITY, LOITER, RTL, LAND
         timeout_s: 20
         height_m: 5.0
-        acceptance_m: 0.3        # 선택. 기본 0.3
+        acceptance_m: 0.3
         yaw_rad: 0.0             # 선택. 있으면 MODE_FIXED, 없으면 MODE_KEEP
       - type: GOTO
         timeout_s: 30
@@ -45,8 +45,8 @@ Executor가 INVALID_MISSION으로 끝낸다.
       - type: LAND
         timeout_s: 30
 
-type마다 받는 key는 아래 ITEM_KEYS다. 기본값이 있는 key는 acceptance_m(TAKEOFF)와 yaw_rad(TAKEOFF, GOTO,
-TRACK_ENTITY. 없으면 MODE_KEEP)뿐이다. 수는 int나 float(bool은 아니다)를 받는다.
+type마다 받는 key는 아래 ITEM_KEYS다. 기본값이 있는 key는 yaw_rad(TAKEOFF, GOTO, TRACK_ENTITY. 없으면
+MODE_KEEP) 하나뿐이다. 허용 오차(acceptance_m, acceptance_radius_m)는 근거 있는 기본값이 없어 필수다. 수는 int나 float(bool은 아니다)를 받는다.
 
 parse_mission과 load_mission은 순수 Python이다(rclpy와 메시지 패키지 없음). to_mission_msg만
 idsim_interfaces를 import한다.
@@ -64,7 +64,6 @@ MISSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 NS_PER_S = 1_000_000_000
 # builtin_interfaces/Duration.sec는 int32다.
 MAX_DURATION_SEC = 2**31 - 1
-DEFAULT_TAKEOFF_ACCEPTANCE_M = 0.3
 
 # MissionItem.TYPE_* 값(idsim_interfaces/msg/MissionItem.msg). test_mission_yaml.py가 메시지 상수와
 # 대조한다.
@@ -79,7 +78,7 @@ ITEM_TYPES = {
 
 # type마다 (필수 key, 선택 key). type과 timeout_s는 모든 항목의 필수 key다.
 ITEM_KEYS = {
-    "TAKEOFF": ({"height_m"}, {"acceptance_m", "yaw_rad"}),
+    "TAKEOFF": ({"height_m", "acceptance_m"}, {"yaw_rad"}),
     "GOTO": ({"position", "acceptance_radius_m"}, {"yaw_rad"}),
     "TRACK_ENTITY": ({"target_id", "offset", "acceptance_radius_m"}, {"yaw_rad"}),
     "LOITER": ({"duration_s"}, set()),
@@ -91,6 +90,29 @@ MISSION_KEYS = {"mission_id", "items"}
 
 class MissionYamlError(ValueError):
     """구조, 타입, 단위 변환, mission_id 오류. 메시지에 위치(items[i].key)를 담는다."""
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """SafeLoader와 같고, 한 mapping 안에 같은 key가 두 번 나오면 거부한다(safe_load는 뒤의 값으로 덮는다)."""
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            try:
+                duplicate = key in seen
+            except TypeError:
+                continue  # hash할 수 없는 key는 SafeLoader가 오류로 낸다
+            if duplicate:
+                raise MissionYamlError(
+                    f"duplicate key {key!r} at line {key_node.start_mark.line + 1}")
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
+def load_yaml(stream):
+    """YAML 문서 하나를 읽는다(safe_load와 같고 중복 key를 거부한다)."""
+    return yaml.load(stream, Loader=_UniqueKeyLoader)
 
 
 @dataclass(frozen=True)
@@ -190,8 +212,7 @@ def parse_item(data, index):
                     timeout=seconds_to_duration(data["timeout_s"], f"{where}.timeout_s"))
     if name == "TAKEOFF":
         item.height_m = float(_number(data["height_m"], f"{where}.height_m"))
-        item.acceptance_m = float(_number(
-            data.get("acceptance_m", DEFAULT_TAKEOFF_ACCEPTANCE_M), f"{where}.acceptance_m"))
+        item.acceptance_m = float(_number(data["acceptance_m"], f"{where}.acceptance_m"))
         item.yaw = _parse_yaw(data, where)
     elif name == "GOTO":
         item.position = _vec3(data["position"], f"{where}.position")
@@ -233,7 +254,7 @@ def parse_mission(data, default_mission_id: Optional[str] = None) -> MissionSpec
 def load_mission(path) -> MissionSpec:
     """YAML 파일 -> MissionSpec. mission_id의 기본값은 파일 이름에서 확장자를 뺀 것이다."""
     with open(path, encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+        data = load_yaml(f)
     stem = os.path.splitext(os.path.basename(os.fspath(path)))[0]
     return parse_mission(data, stem)
 
