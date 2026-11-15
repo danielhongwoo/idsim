@@ -16,8 +16,10 @@
 action 이름은 /<vehicle_id>/execute_mission(Mission.ACTION_NAME)이다. 로더(mission_yaml)는 구조만 보고, 계약
 검증은 Executor가 한다. feedback과 result를 한 줄씩 출력하고, 종료 코드는 SUCCEEDED이면 0, 로더 오류이면 2,
 그 밖(서버 없음, ABORTED, CANCELED, 결과 없음)은 1, 두 번째 Ctrl-C로 끊으면 130이다.
-Ctrl-C 한 번은 goal을 취소하고 결과를 기다린다. 그러려고 rclpy의 signal handler를 쓰지 않는다
-(SignalHandlerOptions.NO. 기본 handler는 SIGINT에 context를 내려 취소와 결과를 받을 수 없다).
+Ctrl-C 한 번은 goal을 취소하고 결과를 기다린다(goal 응답 전이면 응답을 받은 뒤 취소한다). 그러려고
+rclpy의 signal handler를 쓰지 않는다(SignalHandlerOptions.NO. 기본 handler는 SIGINT에 context를 내려
+취소와 결과를 받을 수 없다). 대신 모든 대기를 POLL_S(0.2 s) 간격으로 끊어 Ctrl-C가 그 안에 처리되게
+한다. 서버가 응답하지 않아 대기가 끝나지 않으면 두 번째 Ctrl-C로 끊는다.
 use_sim_time은 쓰지 않는다(시계는 대기 상한에만 쓰고 판정에 쓰지 않는다).
 """
 
@@ -30,6 +32,9 @@ EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_BAD_FILE = 2
 EXIT_INTERRUPTED = 130
+# Ctrl-C 응답용 벽시계 poll 간격(s)이고 판정이 아니다. SignalHandlerOptions.NO에서는 SIGINT가 executor의
+# wait set을 깨우지 않으므로, 대기를 이 간격으로 끊어 Python에 돌아와야 KeyboardInterrupt를 받는다.
+POLL_S = 0.2
 
 
 def _parse_args(argv):
@@ -39,6 +44,13 @@ def _parse_args(argv):
     parser.add_argument("--server-timeout", type=float, default=10.0,
                         help="seconds to wait for the action server (default 10)")
     return parser.parse_args(argv)
+
+
+def _wait(rclpy, node, future):
+    """future가 끝날 때까지 POLL_S 간격으로 spin한다(상한 없음. Ctrl-C는 POLL_S 안에 올라온다)."""
+    while not future.done():
+        rclpy.spin_until_future_complete(node, future, timeout_sec=POLL_S)
+    return future.result()
 
 
 def main(argv=None):
@@ -86,11 +98,13 @@ def main(argv=None):
         send = client.send_goal_async(goal, feedback_callback=on_feedback)
         interrupted = False
         try:
-            rclpy.spin_until_future_complete(node, send)
+            _wait(rclpy, node, send)
         except KeyboardInterrupt:
             # goal 응답을 받아야 취소할 수 있다.
             interrupted = True
-            rclpy.spin_until_future_complete(node, send)
+            print("send_mission: waiting for the goal response to cancel (Ctrl-C again to stop)",
+                  file=sys.stderr, flush=True)
+            _wait(rclpy, node, send)
         handle = send.result()
         if handle is None or not handle.accepted:
             print("send_mission: goal not accepted", file=sys.stderr)
@@ -98,14 +112,14 @@ def main(argv=None):
         result_future = handle.get_result_async()
         if not interrupted:
             try:
-                rclpy.spin_until_future_complete(node, result_future)
+                _wait(rclpy, node, result_future)
             except KeyboardInterrupt:
                 interrupted = True
         if interrupted:
             print("send_mission: canceling (Ctrl-C again to stop waiting)", file=sys.stderr,
                   flush=True)
-            rclpy.spin_until_future_complete(node, handle.cancel_goal_async())
-            rclpy.spin_until_future_complete(node, result_future)
+            _wait(rclpy, node, handle.cancel_goal_async())
+            _wait(rclpy, node, result_future)
         wrapped = result_future.result()
         if wrapped is None:
             print("send_mission: no result received", file=sys.stderr)
