@@ -38,6 +38,7 @@
 - U13: roadmap 1b 목표를 그대로 덮는 합친 미션 시나리오 F4를 둔다. F1-F3은 경계 상황 검증용.
 - U14: 1b waypoint 판정 반경은 1 m. 시험 미션의 `acceptance_radius_m`은 `1 m - b` 이하.
 - U16: `docs-for-agent/file-ownership.md`의 소유자는 architect.
+- U18: b는 0.5 m 고정. 정규 허용한계를 쓰지 않고 보정 실측의 GOTO `s`와 `s_track` 표본 전부가 b 이하임을 확인한다. CI에서 b를 넘는 사건이 나오면 b를 올리지 않고 시각 정렬을 먼저 본다.
 
 ## 미해결 사항
 
