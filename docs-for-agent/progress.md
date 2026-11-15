@@ -7,14 +7,13 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 계약은 `docs/interface.md`에 고정 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6과 B10 전 core 수정(모드 명령 항목의 같은 tick 순서, 정리 상한 식, 공중 진입 감시 하한, Px4Timestamp 실패 꼬리) 반영. 칸 목록 covered 452, impossible 131, uncovered 0. runner는 계약 검증을 그대로 쓰고, goal 접수는 1a 미션만 받는다 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6, B10 전 core 수정, B10(진짜 `Px4FramePort`, 표적 구독, goal 접수는 계약 검증만, 미션 YAML 로더와 `send_mission`) 반영. 칸 목록 covered 452, impossible 131, uncovered 0 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
 ## 다음 작업
 
-1. B10: 진짜 `Px4FramePort`(`to_local_position_input`, 비행 중 `ref_timestamp_us` 변경 WARN, `world.origin` 전달), 표적 구독(goal 접수 때 `Snapshot.targets`만 비우고 `land`와 `status`는 두며 노드 테스트에 사례), goal 접수 제한 제거, 표적 표본 좌표 상한 1e5 m(WARN throttle)와 상한 술어의 core 헤더 공개(`snapshot.hpp` `TargetSample` 주석이 상수 이름을 가리키게). FramePort는 비유한, float32 밖이면 값 없음이라는 계약을 지킨다(core는 속도 유한을 이 계약에 기댄다). 같은 PR에서 시나리오 B와 노드 테스트의 무효 미션 사례를 1b 무효 사례로 바꾼다(B의 사례 범위는 test-engineer). 쟁점 12 승인 조건 (2)는 B10 검토 때 본다.
-2. B11, B12, B13은 README 순서대로. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다.
+1. B11, B12, B13은 README 순서대로. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다.
 
 ## 운영 규칙
 
@@ -73,6 +72,7 @@ B13 전에 정할 것.
 
 B11 판정에서 챙길 것(test-engineer).
 
+- 시험 미션 YAML은 `idsim_mission.mission_yaml` 형식으로 쓰고 `tests/support/sitl_missions.py`의 항목 key를 그에 맞춘다. lint pytest에는 `idsim_mission`이 import 경로에 없으니 시간 합산 테스트의 실행 위치를 정한다.
 - `tests/support`에 `/sim/<vehicle_id>/pose` 조립 순수 함수와 `sim_oracle.py`의 `ORACLE_TOPIC_CASES`, `ORACLE_TOPIC_INVALID`와 같은 사례 표(import로 공유하지 않음). `target_id` 사례 표의 단일 출처는 이때 정한다(architect).
 - 정답 pose 구독은 첫 `mission_event` 전에 discovery와 `sim-oracle` 준비를 확인하고 depth를 크게 둔다(발행은 RELIABLE, VOLATILE, KEEP_LAST 10). QoS 짝을 `tests/support` 머리말에 적는다. `ORACLE_STALE`은 `/clock`이 `t_f + 0.1 s`를 지날 때까지 기다린 뒤 판정한다.
 - start 뒤 health가 healthy가 되기를 기다린다(interval 10 s). uid 1001로 스택 전체가 도는지는 CI sitl에서 본다.
