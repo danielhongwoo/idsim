@@ -12,14 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""이륙-호버-착륙 통합 테스트: 시나리오 B, C, A, D, T(decisions.md 쟁점 9). 한 스택에서 이 순서로 돈다.
+"""미션 통합 테스트: 시나리오 B, C, A, D, F1, F2, F3, F4, T(1a decisions.md 쟁점 9, 1b decisions.md 쟁점 15).
+한 스택에서 이 순서로 돈다. 실행 목록(conftest의 IDSIM_SITL_SCENARIOS)에 없는 시나리오는 수집에서 빠진다.
 
-판정 시간은 모두 ROS 시각이다. 판정 입력은 토픽에서만 읽는다(goal의 목표값과 vehicle_local_position,
-vehicle_status, vehicle_land_detected, failsafe_flags, mission_event, action의 feedback과 result).
-노드가 낸 setpoint는 입력으로 쓰지 않는다. 판정 함수는 tests/support/sitl_judge.py(순수 코드)에 있다.
-각 시나리오 시작 전에 사전조건(지상, DISARMED N회 연속)을 단정하고 어긋나면 그 자리에서 실패한다.
+판정 시간은 모두 ROS 시각이다. 계약 판정의 입력은 토픽에서만 읽는다(goal의 목표값과 vehicle_local_position,
+vehicle_status, vehicle_land_detected, failsafe_flags, mission_event, action의 feedback과 result, TargetState).
+노드가 낸 setpoint는 입력으로 쓰지 않는다. 1b 비행 시나리오(F1-F4)는 여기에 정답 판정(SITL 전용 정답 pose)을
+더한다. 판정 함수는 tests/support/sitl_judge.py(순수 코드)에 있다.
+각 시나리오 시작 전에 사전조건(지상, DISARMED N회 연속. F3은 공중 Hold)을 단정하고 어긋나면 그 자리에서 실패한다.
+비행 시나리오(A, D, F1-F4)가 실패하면 정리용 [LAND]를 한 번 시도하고(판정에 넣지 않는다) 뒤의 비행 시나리오는
+UPSTREAM_FAILED로 실패한다(flight()).
 """
 import json
+from contextlib import contextmanager
 
 import pytest
 
@@ -38,18 +43,27 @@ TAKEOFF_M = sm.TAKEOFF_M
 ACCEPTANCE_M = sm.ACCEPTANCE_M
 
 
-def send(s, vehicle_id, mission_id, items):
-    """goal을 보내 수락 응답까지 받는다. 수락하지 않으면 WRONG_RESULT(받는 쪽은 판단할 수 있는 goal을 모두 수락한다)."""
-    run = s.mission.send_goal(s.waiter, vehicle_id, mission_id, items)
-    s.trace.event("goal_sent", mission_id=mission_id, vehicle_id=vehicle_id, accepted=run.accepted,
-                  goal_id=run.goal_id, items=len(items))
+def _accepted(s, run, mission_id, n_items):
+    s.last_run = run
+    s.trace.event("goal_sent", mission_id=mission_id, vehicle_id=run.vehicle_id_sent, accepted=run.accepted,
+                  goal_id=run.goal_id, items=n_items)
     if not run.accepted:
         raise sw.SitlFailure(sw.WRONG_RESULT, "goal %s이 수락되지 않았다(즉시 ABORTED가 아니라 거절)" % mission_id)
     return run
 
 
-def check_goal(s, run, *, terminal_status, reason, items_completed=None, vehicle_id=None, feedback_zero=False):
-    """result, 사건 짝, (선택) feedback 0건을 한 번에 판정한다."""
+def send(s, vehicle_id, mission_id, items):
+    """goal을 보내 수락 응답까지 받는다. 수락하지 않으면 WRONG_RESULT(받는 쪽은 판단할 수 있는 goal을 모두 수락한다)."""
+    return _accepted(s, s.mission.send_goal(s.waiter, vehicle_id, mission_id, items), mission_id, len(items))
+
+
+def send_spec(s, spec):
+    """미션 YAML을 로더로 읽은 MissionSpec을 보낸다(F1-F4)."""
+    return _accepted(s, s.mission.send_spec(s.waiter, s.vehicle_id, spec), spec.mission_id, len(spec.items))
+
+
+def goal_findings(s, run, *, terminal_status, reason, items_completed=None, vehicle_id=None, feedback_zero=False):
+    """result, 사건 짝, (선택) feedback 0건의 판정 결과(목록)."""
     s.settle_events(run)
     own = vehicle_id or s.vehicle_id
     findings = sj.check_result(run.result, terminal_status, reason, items_completed)
@@ -59,7 +73,31 @@ def check_goal(s, run, *, terminal_status, reason, items_completed=None, vehicle
     if feedback_zero:
         findings += sj.check_no_feedback(s.mission.feedbacks, run.goal_id)
     s.trace.event("goal_checked", mission_id=run.mission_id, findings=[list(f) for f in findings])
-    sw.raise_if(findings)
+    return findings
+
+
+def check_goal(s, run, **kw):
+    """goal_findings를 판정해 실패면 바로 올린다."""
+    sw.raise_if(goal_findings(s, run, **kw))
+
+
+def _category(exc):
+    return exc.category if isinstance(exc, sw.SitlFailure) else "ERROR"
+
+
+@contextmanager
+def flight(s, sid):
+    """비행 시나리오 한 번(1b decisions.md 쟁점 15). 앞 비행 시나리오가 실패했으면 실행하지 않고 UPSTREAM_FAILED다.
+    실패하면 정리용 [LAND]를 한 번 시도하고(판정에 넣지 않는다) 뒤의 비행 시나리오를 막는다."""
+    s.flights.check_upstream(sid)
+    try:
+        yield
+    except BaseException as e:
+        s.flights.fail(sid, _category(e))
+        s.trace.event("flight_failed", scenario=sid, category=_category(e))
+        s.cleanup_land()
+        raise
+    s.flights.passed(sid)
 
 
 def mission_a(loiter_s=5.0):
@@ -165,7 +203,11 @@ def _record_armed_a(s, t_goal, run):
 def test_a_normal_flight(session):
     """[TAKEOFF 5 m, LOITER 5 s, LAND] 콜드 상태. 이정표의 순서와 ROS 시각 단조 증가, 사건 짝과 result 일치,
     TAKEOFF와 LOITER 동안 failsafe 없음과 OFFBOARD."""
-    s = session
+    with flight(session, "A"):
+        _scenario_a(session)
+
+
+def _scenario_a(s):
     raw = s.raw
     s.require_ground_disarmed("A")
     z0 = s.z_ref()
@@ -233,17 +275,16 @@ def test_d_cancel_in_air_then_land_only_mission(session):
     이어서 [LAND] 한 항목 미션: SUCCEEDED와 DISARMED."""
     s = session
     raw = s.raw
-    t_start = raw.now_us()
-    try:
-        _scenario_d(s, raw)
-    except BaseException:
+    with flight(s, "D"):
+        t_start = raw.now_us()
         try:
-            s.dump_raw_status("raw_status_D.jsonl", t_start)     # 실패 원인 분석용(ULog 대조)
-        except Exception as e:                                   # D의 원래 실패를 가리지 않는다
-            s.trace.event("dump_raw_status_failed", error=repr(e))
-        finally:
-            s.emergency_cleanup()
-        raise
+            _scenario_d(s, raw)
+        except BaseException:
+            try:
+                s.dump_raw_status("raw_status_D.jsonl", t_start)     # 실패 원인 분석용(ULog 대조)
+            except Exception as e:                                   # D의 원래 실패를 가리지 않는다
+                s.trace.event("dump_raw_status_failed", error=repr(e))
+            raise
 
 
 def _wait_d_reached(s, raw, run, z0, t_goal):
@@ -300,6 +341,222 @@ def _scenario_d(s, raw):
     s.trace.event("d_land_sequence", findings=[list(f) for f in seq], **seq_ts)
     sw.raise_if(seq)
     s.waiter.wait_until(lambda: raw.last_landed().landed, 5.0, "D [LAND] 뒤 landed true")
+
+
+# ---------------------------------------------------------------------------
+# 1b 비행 시나리오 F1-F4(1b decisions.md 쟁점 5, 15). 미션은 tests/sitl/missions/의 YAML(로더 형식)이다.
+
+FLIGHT_SAMPLE_WAIT_S = 1.0        # result 뒤 늦게 도착하는 표본(vehicle_status, 정답 pose)을 기다리는 ROS 시각
+HOLD_CONFIRM_WAIT_S = 10.0        # 공중 종료 뒤 AUTO_LOITER 3회 연속을 기다리는 상한(D의 취소 뒤와 같다)
+TYPE_NAMES = {sj.TYPE_TAKEOFF: "TAKEOFF", sj.TYPE_GOTO: "GOTO", sj.TYPE_TRACK_ENTITY: "TRACK_ENTITY",
+              sj.TYPE_LOITER: "LOITER", sj.TYPE_RTL: "RTL", sj.TYPE_LAND: "LAND"}
+
+
+def _ekf_near(raw, t_us):
+    """t에 가장 가까이 받은 vehicle_local_position(NED 로컬). S1-b 기록용(정답과 EKF를 나중에 대조한다)."""
+    if not raw.pos:
+        return None
+    p = min(raw.pos, key=lambda p: abs(p[0] - t_us))
+    return {"recv_us": p[0], "x": p[1], "y": p[2], "z": p[3], "xy_valid": p[5], "z_valid": p[6]}
+
+
+def _target_age_at(samples, t_us):
+    """t까지 받은 표적 표본 가운데 최신 stamp의 나이(s). TRACK_ENTITY 시작 때의 묵은 표본 기록용."""
+    xs = [x for x in samples if x.recv_us <= t_us]
+    return None if not xs else round((t_us - max(x.stamp_us for x in xs)) / sj.US, 4)
+
+
+def _oracle_events(s, sid, spec, fbs, tf):
+    """GOTO와 TRACK_ENTITY 완료마다 정답 판정을 하고 R2 기록을 trace에 남긴다. 반환 findings."""
+    truth, raw = s.truth, s.raw
+    out = []
+    for i, it in enumerate(spec.items):
+        if it.type not in (sj.TYPE_GOTO, sj.TYPE_TRACK_ENTITY):
+            continue
+        if i not in tf:
+            out.append((sw.WRONG_RESULT, "항목 %d의 완료 시각 t_f를 feedback에서 읽지 못했다" % i))
+            continue
+        t_f, exact, lo = tf[i]
+        if it.type == sj.TYPE_GOTO:
+            f, rec = sj.reach_judge(truth.oracle, t_f, it.position, it.acceptance_radius_m)
+        else:
+            fb0 = sj.first_item_feedback(fbs, i)
+            start = fb0.stamp_us if fb0 is not None else t_f
+            targets = truth.targets.get(it.target_id, [])
+            v = sj.target_speed_max([t for t in s.stack.targets if t["id"] == it.target_id])
+            f, rec = sj.track_judge(truth.oracle, targets, start, t_f, it.offset, it.acceptance_radius_m, v)
+            rec.update(tracking=sj.tracking_errors(truth.oracle, targets, it.offset, start, t_f),
+                       stale_ticks=sj.stale_ticks(targets, start, t_f),
+                       target_age_at_start_s=_target_age_at(targets, start), target_id=it.target_id)
+        rec.update(scenario=sid, index=i, type=TYPE_NAMES[it.type], t_f_exact=exact, t_f_lo_us=lo,
+                   ekf=_ekf_near(raw, t_f), findings=[list(x) for x in f])
+        s.r2.append(rec)
+        s.trace.event("reach" if it.type == sj.TYPE_GOTO else "track", **rec)
+        out += f
+    return out
+
+
+def _landed_disarmed(s, sid, spec, run, t_goal, rtl):
+    """LANDED_DISARMED 종료의 계약 판정(ARMED -> AUTO_LAND 또는 AUTO_RTL -> DISARMED 3회, landed)과 착륙 정답 판정."""
+    raw = s.raw
+    mode = sj.NAV_STATE_AUTO_RTL if rtl else mj.NAV_STATE_AUTO_LAND
+    contract, seq_ts = sj.sequence_findings(raw.status, t_goal, mode_nav=mode)
+    # 이륙 전의 landed 표본으로 vacuous하게 통과하지 않게 착륙 모드 표본 뒤에 받은 것만 센다
+    if not sj.landed_confirmed(raw.landed, seq_ts.get("land_recv_us", raw.now_us())):
+        contract.append((sw.WRONG_RESULT, "착륙 뒤 landed %d회 연속을 보지 못했다" % sj.N_CONSECUTIVE))
+    s.trace.event("%s_land_sequence" % sid, findings=[list(f) for f in contract], **seq_ts)
+    oracle = []
+    if "land_ts" in seq_ts and "disarmed_ts" in seq_ts:
+        first = next(x for x in raw.status if x.ts_us > seq_ts["land_ts"] and mj.is_disarmed(x))
+        s.waiter.wait_until(lambda: raw.clock_us() >= first.ts_us + int(sj.ORACLE_MAX_GAP_S * sj.US) + 20_000,
+                            5.0, "%s 정답 표본(DISARMED 뒤)" % sid)
+        oracle, rec = sj.landing_judge(s.truth.oracle, first.ts_us, s.flights.ref, rtl)
+        rec.update(scenario=sid, ref_sid=s.flights.ref_sid, findings=[list(x) for x in oracle])
+        if rtl:
+            fb_rtl = sj.first_item_feedback(s.mission.feedbacks_of(run), len(spec.items) - 1)
+            landed_ts = next((x.ts_us for x in raw.landed if x.ts_us > seq_ts["land_ts"] and x.landed), None)
+            start = fb_rtl.stamp_us if fb_rtl else None
+            rec["rtl_timing_s"] = {k: (None if v is None or start is None else round((v - start) / sj.US, 3))
+                                   for k, v in (("auto_rtl", seq_ts["land_ts"]), ("touchdown", landed_ts),
+                                                ("disarmed", first.ts_us), ("disarm_confirmed", seq_ts["disarmed_ts"]))}
+        s.r4.append(rec)
+        s.trace.event("landing", **rec)
+    return contract, oracle
+
+
+def _hold_airborne(s, sid, tf_last_lo, t_goal):
+    """HOLD_AIRBORNE 종료의 계약 판정: 마지막 항목 완료 뒤 AUTO_LOITER 3회 연속, 그 뒤 일정 ROS 시간 ARMED,
+    landed false, 고도 유지. Hold 확인까지의 소요와 상태 구간을 trace에 남긴다(F2 trace)."""
+    raw = s.raw
+    after = tf_last_lo if tf_last_lo is not None else t_goal
+    s.waiter.wait_or_timeout(lambda: not sj.cancel_hover_findings(raw.status, after)[0], HOLD_CONFIRM_WAIT_S,
+                             "%s 공중 종료 뒤 AUTO_LOITER %d회 연속" % (sid, sj.N_CONSECUTIVE))
+    findings, hit = sj.cancel_hover_findings(raw.status, after)
+    if findings:
+        return findings
+    ref_z = raw.last_pos()[3]
+    t0 = raw.now_us()
+    s.waiter.hold_for(sj.HOVER_HOLD_S, "%s Hold 유지" % sid)
+    t1 = raw.now_us()
+    findings = sj.altitude_hold_findings(raw.pos, t0, t1, ref_z)
+    findings += sj.hover_state_findings(raw.status, raw.landed, t0, t1)
+    s.trace.event("hold_end", scenario=sid, hold_confirm_s=round((hit.recv_ros_us - after) / sj.US, 3),
+                  max_dev_m=sj.altitude_max_deviation(raw.pos, t0, t1, ref_z),
+                  nav_runs=sj.nav_runs(raw.status, after, raw.now_us()),
+                  findings=[list(f) for f in findings])
+    return findings
+
+
+def _air_start_record(s, sid, run, t_goal):
+    """공중 시작 구간(goal 전송부터 첫 항목 실행 시작까지)의 기록(F3 trace). DO_SET_MODE 전송 수와 D는 ULog에서
+    trace_1b.py가 낸다."""
+    raw, fbs = s.raw, s.mission.feedbacks_of(run)
+    exe = next((f for f in sorted(fbs, key=lambda f: f.stamp_us) if f.phase == sj.PHASE_EXECUTING), None)
+    prep = next((f for f in sorted(fbs, key=lambda f: f.stamp_us) if f.phase == sj.PHASE_PREPARING), None)
+    end = exe.stamp_us if exe else raw.now_us()
+    o0, o1 = sj.oracle_before(s.truth.oracle, t_goal), sj.oracle_before(s.truth.oracle, end)
+    first_off = next((x for x in raw.status if x.ts_us >= t_goal and x.nav_state == mj.NAV_STATE_OFFBOARD), None)
+    non_off_after = [x.ts_us for x in raw.status if first_off and first_off.ts_us < x.ts_us <= end
+                     and x.nav_state != mj.NAV_STATE_OFFBOARD]
+    s.trace.event("air_start", scenario=sid, goal_sent_us=t_goal, preparing_us=prep.stamp_us if prep else None,
+                  executing_us=exe.stamp_us if exe else None,
+                  preparing_s=None if not (prep and exe) else round((exe.stamp_us - prep.stamp_us) / sj.US, 3),
+                  displacement_m=None if not (o0 and o1) else round(sj.distance_parts(
+                      (o1.x, o1.y, o1.z), (o0.x, o0.y, o0.z))[0], 4),
+                  first_offboard_ts=first_off.ts_us if first_off else None, non_offboard_after_first=non_off_after,
+                  nav_runs=sj.nav_runs(raw.status, t_goal, end), status_interval_s=sj.status_intervals_s(
+                      raw.status, t_goal, end))
+
+
+def _fly(s, sid):
+    spec = sm.load_flight(sid)
+    terminal = sm.FLIGHT_TERMINAL[sid]
+    types = [it.type for it in spec.items]
+    rtl = types[-1] == sj.TYPE_RTL
+    raw = s.raw
+    s.require_truth(sid, sorted({it.target_id for it in spec.items if it.type == sj.TYPE_TRACK_ENTITY}))
+    prev = sm.AIR_START.get(sid)
+    if prev is None:
+        s.require_ground_disarmed(sid)
+        ref = sj.oracle_before(s.truth.oracle, raw.now_us())
+        if ref is None:
+            raise sw.SitlFailure(sw.ORACLE_ABSENT, "%s 이륙 직전 정답 표본이 없다" % sid)
+        s.flights.set_ref(sid, (ref.x, ref.y, ref.z))
+    else:
+        s.flights.inherited_ref(sid, prev)
+        s.require_air_hold(sid)
+    s.trace.event("flight_ref", scenario=sid, ref=list(s.flights.ref), ref_sid=s.flights.ref_sid)
+    s.record_r1()
+    t_goal = raw.now_us()
+    s.mark(sid, "goal_sent", t_goal)
+    run = send_spec(s, spec)
+    s.mission.wait_result(s.waiter, run, sm.flight_wait_s(spec), "%s result" % sid)
+    s.waiter.hold_for(FLIGHT_SAMPLE_WAIT_S, "%s 표본 수신 여유" % sid)
+
+    fbs = s.mission.feedbacks_of(run)
+    tf = sj.item_completion_times(fbs, len(types))
+    starts = {i: f.stamp_us for i in range(len(types)) for f in [sj.first_item_feedback(fbs, i)] if f is not None}
+    s.trace.event("flight_window", scenario=sid, mission_id=spec.mission_id, goal_sent_us=t_goal,
+                  types=[TYPE_NAMES[t] for t in types], item_start_us=starts,
+                  t_f={i: list(v) for i, v in tf.items()}, result_recv_us=run.result.recv_us if run.result else None)
+    if prev is not None:
+        _air_start_record(s, sid, run, t_goal)
+    if run.result is not None and run.result.reason == sj.REASON_TARGET_LOST:
+        # TRACK_ENTITY 시작 때 묵은 표본으로 setpoint가 바뀐 뒤 TARGET_LOST까지의 이동량(progress의 B11 trace 항목)
+        i = run.result.last_item_index
+        o0 = sj.oracle_before(s.truth.oracle, starts.get(i, t_goal))
+        o1 = sj.oracle_before(s.truth.oracle, run.result.recv_us)
+        s.trace.event("target_lost_motion", scenario=sid, index=i, displacement_m=None if not (o0 and o1) else round(
+            sj.distance_parts((o1.x, o1.y, o1.z), (o0.x, o0.y, o0.z))[0], 4))
+
+    # 계약 판정
+    contract = goal_findings(s, run, terminal_status=sj.STATUS_SUCCEEDED, reason=sj.REASON_NONE,
+                             items_completed=len(types))
+    contract += sj.item_order_findings(fbs, types, run.result.items_completed if run.result else 0)
+    oracle = []
+    if terminal == sj.TERMINAL_LANDED_DISARMED:
+        c, oracle = _landed_disarmed(s, sid, spec, run, t_goal, rtl)
+        contract += c
+    else:
+        last = tf.get(len(types) - 1)
+        contract += _hold_airborne(s, sid, last[2] if last else None, t_goal)
+    # 정답 판정. /clock이 마지막 t_f + 0.1 s를 지난 뒤 판정한다(뒤 표본이 아직 오지 않은 것을 STALE로 세지 않게)
+    if tf:
+        t_last = max(v[0] for v in tf.values())
+        s.waiter.wait_until(lambda: raw.clock_us() >= t_last + int(sj.ORACLE_MAX_GAP_S * sj.US) + 20_000, 5.0,
+                            "%s 정답 표본(t_f 뒤)" % sid)
+    oracle = _oracle_events(s, sid, spec, fbs, tf) + oracle
+    s.trace.event("flight_findings", scenario=sid, contract=[list(f) for f in contract],
+                  oracle=[list(f) for f in oracle])
+    sw.raise_if(contract + oracle)
+
+
+@pytest.mark.scenario("F1")
+def test_f1_waypoints_land(session):
+    """[TAKEOFF 5 m, GOTO x 3, LAND]: waypoint 도달(정답 판정), 항목 순서, 착륙 후 disarm. b의 표본(R2)."""
+    with flight(session, "F1"):
+        _fly(session, "F1")
+
+
+@pytest.mark.scenario("F2")
+def test_f2_track_hold_airborne(session):
+    """[TAKEOFF, GOTO, TRACK_ENTITY]: 표적 접근, 공중 종료의 SUCCEEDED와 Hold(HOLD_AIRBORNE). 기체를 공중 Hold로 남긴다."""
+    with flight(session, "F2"):
+        _fly(session, "F2")
+
+
+@pytest.mark.scenario("F3")
+def test_f3_air_start_rtl(session):
+    """[GOTO, RTL]: F2가 남긴 Hold에서 공중 시작, RTL 완료(착륙 위치, disarm). R_home의 표본(R4)."""
+    with flight(session, "F3"):
+        _fly(session, "F3")
+
+
+@pytest.mark.scenario("F4")
+def test_f4_combined(session):
+    """합친 미션 [TAKEOFF 5 m, GOTO x 2, TRACK_ENTITY, RTL]: 도달, 표적 접근, RTL 착륙 위치(R4), 착륙 후 disarm."""
+    with flight(session, "F4"):
+        _fly(session, "F4")
 
 
 @pytest.mark.scenario("T")

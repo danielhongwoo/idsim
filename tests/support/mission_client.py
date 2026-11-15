@@ -21,6 +21,7 @@
 mock으로 고정한다. goal 응답이 accepted인데 ACCEPTED 사건이 없으면 EVENT_MISSING이며 재시도하지 않는다.
 """
 from tests.support import sitl_judge as sj
+from tests.support import sitl_missions as sm
 from tests.support import sitl_wait as sw
 
 EVENT_DEPTH = 200
@@ -48,7 +49,7 @@ def feedback_rec(msg, recv_us):
     return sj.FeedbackRec(
         recv_us=recv_us, goal_id=goal_hex(msg.goal_id.uuid), stamp_us=stamp_us(fb.stamp),
         item_index=int(fb.item_index), item_count=int(fb.item_count), item_type=int(fb.item_type),
-        phase=int(fb.phase))
+        phase=int(fb.phase), distance_valid=bool(fb.distance_valid), distance_m=float(fb.distance_remaining_m))
 
 
 def result_rec(wrapped, recv_us):
@@ -130,44 +131,39 @@ class MissionClient:
     # --- goal ---
 
     def build_goal(self, vehicle_id, mission_id, items):
-        """items: [dict(type=..., timeout_s=..., height_m=..., acceptance_m=..., duration_s=..., ...)]
+        """items: 미션 YAML 로더 형식의 항목 dict 목록(sitl_missions). 로더의 parse_mission과 to_mission_msg로 만든다.
 
-        default_sub가 참인 항목은 type의 서브메시지를 채우지 않고 기본값으로 둔다(무효 미션 사례용)."""
-        from builtin_interfaces.msg import Duration
-        from idsim_interfaces.msg import Mission, MissionItem, YawSetpoint
+        default_sub가 참인 항목은 로더가 받는 자리값으로 읽은 뒤 서브메시지를 기본값(yaw.mode 0 포함)으로 되돌린다
+        (무효 미션 사례용)."""
+        defaults = [i for i, it in enumerate(items) if it.get("default_sub")]
+        plain = [_placeholder(it) if it.get("default_sub") else it for it in items]
+        spec = sm.mission_yaml().parse_mission({"mission_id": mission_id, "items": plain})
+        return self.build_goal_from_spec(vehicle_id, spec, default_sub=defaults)
+
+    def build_goal_from_spec(self, vehicle_id, spec, default_sub=()):
+        """로더의 MissionSpec -> goal. default_sub의 index 항목은 type의 서브메시지를 기본값으로 둔다."""
         goal = self._action_cls.Goal()
         goal.vehicle_id = vehicle_id
-        goal.mission = Mission()
-        goal.mission.mission_id = mission_id
-        for it in items:
-            m = MissionItem()
-            m.type = it["type"]
-            m.timeout = _duration(Duration, it["timeout_s"])
-            if it.get("default_sub"):
-                pass
-            elif it["type"] == MissionItem.TYPE_TAKEOFF:
-                m.takeoff.height_m = float(it["height_m"])
-                m.takeoff.acceptance_m = float(it["acceptance_m"])
-                m.takeoff.yaw.mode = YawSetpoint.MODE_KEEP
-            elif it["type"] == MissionItem.TYPE_LOITER:
-                m.loiter.duration = _duration(Duration, it["duration_s"])
-            elif it["type"] == MissionItem.TYPE_GOTO:
-                m.go_to.position.x, m.go_to.position.y, m.go_to.position.z = (float(v) for v in it["position"])
-                m.go_to.acceptance_radius_m = float(it["acceptance_m"])
-                m.go_to.yaw.mode = YawSetpoint.MODE_KEEP
-            elif it["type"] == MissionItem.TYPE_TRACK_ENTITY:
-                m.track_entity.target_id = it["target_id"]
-                m.track_entity.offset.x, m.track_entity.offset.y, m.track_entity.offset.z = (
-                    float(v) for v in it["offset"])
-                m.track_entity.acceptance_radius_m = float(it["acceptance_m"])
-                m.track_entity.yaw.mode = YawSetpoint.MODE_KEEP
-            goal.mission.items.append(m)
+        goal.mission = sm.mission_yaml().to_mission_msg(spec)
+        for i in default_sub:
+            m = goal.mission.items[i]
+            field = _SUB_FIELD.get(sm.type_name(m.type))
+            if field is not None:
+                setattr(m, field, type(getattr(m, field))())
         return goal
 
     def send_goal(self, waiter, vehicle_id, mission_id, items, response_timeout_s=10.0):
         """goal을 보내 accepted 응답까지 기다린다. 이 goal의 GoalRun을 돌려준다(feedback과 result는 채워진다)."""
         goal = self.build_goal(vehicle_id, mission_id, items)
-        run = GoalRun(mission_id, vehicle_id, len(items), self._now_us())
+        return self._send(waiter, goal, mission_id, vehicle_id, len(items), response_timeout_s)
+
+    def send_spec(self, waiter, vehicle_id, spec, response_timeout_s=10.0):
+        """로더가 읽은 미션(MissionSpec)을 보낸다. 미션 YAML 파일을 쓰는 비행 시나리오(F1-F4)용."""
+        goal = self.build_goal_from_spec(vehicle_id, spec)
+        return self._send(waiter, goal, spec.mission_id, vehicle_id, len(spec.items), response_timeout_s)
+
+    def _send(self, waiter, goal, mission_id, vehicle_id, item_count, response_timeout_s):
+        run = GoalRun(mission_id, vehicle_id, item_count, self._now_us())
         self.runs.append(run)
 
         def on_feedback(msg):
@@ -205,11 +201,17 @@ class MissionClient:
         return [f for f in self.feedbacks if f.goal_id == run.goal_id]
 
 
-def _duration(cls, seconds):
-    d = cls()
-    d.sec = int(seconds)
-    d.nanosec = int(round((seconds - int(seconds)) * 1e9))
-    return d
+# 로더 type 이름 -> MissionItem의 서브메시지 필드(default_sub 처리용)
+_SUB_FIELD = {"TAKEOFF": "takeoff", "GOTO": "go_to", "TRACK_ENTITY": "track_entity", "LOITER": "loiter"}
+
+
+def _placeholder(it):
+    """default_sub 항목을 로더가 받는 모양으로 채운다(필수 key는 0, 빈 문자열, 0 벡터). 서브메시지는 뒤에서 되돌린다."""
+    required, _ = sm.mission_yaml().ITEM_KEYS[it["type"]]
+    out = {"type": it["type"], "timeout_s": it["timeout_s"]}
+    for k in required:
+        out[k] = "" if k == "target_id" else ([0.0, 0.0, 0.0] if k in ("position", "offset") else 0.0)
+    return out
 
 
 def require_server(waiter, client, timeout_s):

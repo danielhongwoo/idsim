@@ -14,7 +14,9 @@
 
 """tests/sitl의 pytest 설정. 스택은 호스트의 run_sitl.sh가 올렸고, 여기서는 붙어서 검증만 한다.
 
-환경: IDSIM_STACK_FILE(stack.json 경로), IDSIM_SITL_OUT(실행 디렉터리 아래 출력 디렉터리 이름, 기본 sitl).
+환경: IDSIM_STACK_FILE(stack.json 경로), IDSIM_SITL_OUT(실행 디렉터리 아래 출력 디렉터리 이름, 기본 sitl),
+IDSIM_SITL_SCENARIOS(실행 목록 이름 all 또는 ci, 기본 all. sitl_summary.SCENARIO_SETS. 목록 밖의 시나리오는 수집에서
+뺀다. run_sitl.sh가 GitHub Actions에서는 ci를 넘긴다).
 산출물(<실행 디렉터리>/<출력 디렉터리>/): junit.xml(run_sitl.sh가 --junitxml로 지정), trace.jsonl, verdict.json,
 raw_status_A.jsonl, armed_a.json. verdict.json의 구조는 tests/support/sitl_summary.py가 읽는다.
 이 디렉터리의 테스트는 tests/support의 단위 테스트(lint job의 pytest)가 수집하지 않는다.
@@ -31,6 +33,24 @@ from tests.support import sitl_wait as sw
 from tests.support import stack as stk
 
 _STATE = {"session": None, "gate_error": None, "results": {}, "t0": {}, "out": None, "rtf": None}
+SCENARIO_SET_ENV = "IDSIM_SITL_SCENARIOS"
+
+
+def _scenario_set():
+    name = os.environ.get(SCENARIO_SET_ENV, "all")
+    return name, ss.expected_scenarios(name)
+
+
+def pytest_collection_modifyitems(config, items):
+    """실행 목록(IDSIM_SITL_SCENARIOS) 밖의 시나리오 테스트를 뺀다. scenario 표시가 없는 테스트는 그대로 둔다."""
+    _, keep = _scenario_set()
+    selected, deselected = [], []
+    for it in items:
+        m = it.get_closest_marker("scenario")
+        (deselected if m is not None and m.args[0] not in keep else selected).append(it)
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = selected
 
 
 def _out_dir(stack):
@@ -110,8 +130,16 @@ def pytest_sessionfinish(session, exitstatus):
     stack = stk.load_from_env()
     gate = _STATE["gate_error"] or {"ok": s is not None and bool(s.gate_info), "category": None, "message": None,
                                     **(s.gate_info if s else {})}
+    set_name, expected = _scenario_set()
+    recorded = None
+    if s is not None:
+        try:
+            recorded = s.recorded_only()
+        except Exception as e:  # noqa: BLE001 기록 실패가 verdict.json을 막지 않게 한다
+            recorded = {"error": repr(e)}
     verdict = {
         "schema": ss.SCHEMA, "run_id": stack.run_id, "stack_index": stack.stack_index,
+        "scenario_set": set_name, "expected_scenarios": list(expected), "recorded_only": recorded,
         "git_commit": stack.git_commit, "git_dirty": stack.git_dirty,
         "images": {k: v for k, v in stack.images.items() if v}, "gate": gate,
         "scenarios": [_STATE["results"][i] for i in ss.SCENARIOS if i in _STATE["results"]],
@@ -125,4 +153,4 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "scenario(id): 시나리오 이름(B, C, A, D, T). verdict.json의 행 이름")
+    config.addinivalue_line("markers", "scenario(id): 시나리오 이름(sitl_summary.SCENARIOS). verdict.json의 행 이름")

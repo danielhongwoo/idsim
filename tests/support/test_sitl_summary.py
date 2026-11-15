@@ -43,6 +43,34 @@ def test_run_passed_needs_gate_and_all_five():
     assert not ss.run_passed(v)
 
 
+def test_run_passed_uses_expected_scenarios():
+    v = verdict()
+    v["expected_scenarios"] = list(ss.SCENARIOS)
+    assert ss.run_passed(v)
+    v["scenarios"] = [r for r in v["scenarios"] if r["id"] != "F3"]     # 기대 목록의 F3이 빠지면 실패
+    assert not ss.run_passed(v)
+    v = verdict()
+    v["scenarios"] = [r for r in v["scenarios"] if r["id"] in ss.CI_SCENARIOS]
+    v["expected_scenarios"] = list(ss.CI_SCENARIOS)
+    assert ss.run_passed(v)
+    v["expected_scenarios"] = ["B", "C"]                                 # CI 목록보다 줄인 기대 목록은 통과가 아니다
+    assert not ss.run_passed(v)
+
+
+def test_scenario_sets():
+    assert ss.expected_scenarios("all") == ss.SCENARIOS
+    assert ss.expected_scenarios("ci") == ss.CI_SCENARIOS
+    # CI 목록은 전체 순서의 부분열이다
+    assert [x for x in ss.SCENARIOS if x in ss.CI_SCENARIOS] == list(ss.CI_SCENARIOS)
+    assert set(ss.FLIGHT_SCENARIOS) <= set(ss.SCENARIOS) and set(ss.ORACLE_SCENARIOS) <= set(ss.FLIGHT_SCENARIOS)
+    try:
+        ss.expected_scenarios("nightly")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("모르는 목록 이름을 받았다")
+
+
 def test_verdict_cell():
     v = verdict(passed=False)
     assert ss.verdict_cell(v, "B") == "PASS"

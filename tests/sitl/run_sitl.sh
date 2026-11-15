@@ -14,14 +14,17 @@
 # limitations under the License.
 
 
-# 이륙-호버-착륙 통합 테스트(시나리오 B, C, A, D, T)의 호스트 wrapper. 로컬과 CI(.github/workflows/sitl.yml)가 같은 명령을 쓴다.
+# 미션 통합 테스트(시나리오 B, C, A, D, F1, F2, F3, F4, T)의 호스트 wrapper. 로컬과 CI(.github/workflows/sitl.yml)가 같은 명령을 쓴다.
 #
-# 사용법: tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>] [-- pytest 인자...]
+# 사용법: tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--scenarios all|ci] [--attach <실행 디렉터리>] [-- pytest 인자...]
 #   --stack k      스택 번호 0-9. 없으면 IDSIM_STACK_INDEX, 없으면 0
 #   --repeat N     회마다 down 뒤 콜드 up으로 N번 돈다(회마다 실행 id가 다르다). 첫 실패에서 멈춘다(자동 재시도 없음)
+#   --scenarios S  실행 목록(tests/support/sitl_summary.py SCENARIO_SETS). 없으면 GitHub Actions(GITHUB_ACTIONS=true)에서는
+#                  ci, 그 밖에서는 all. b와 R_home이 빈 보정 상태에서는 ci 목록에 F1-F4가 없다
 #   --attach DIR   올리지도 내리지도 않고 이미 떠 있는 스택(DIR/compose.yaml)에 붙어 pytest와 수집만 한다
 #                  (QGC와 Gazebo GUI 육안 확인, 디버깅). 산출물은 DIR/sitl-attach-<시각>/ 에 쓴다
 #   --             이 뒤는 pytest에 그대로 넘긴다(예: -- -k test_b)
+# 기체와 표적은 sitl 전용 fleet 파일 tests/sitl/fleet.yaml이다(sim_stack.sh up --fleet).
 # 환경변수: SITL_PYTEST_TIMEOUT (pytest 전체의 벽시계 상한 초, 기본 900. CI timeout-minutes보다 짧게 둔다),
 #           STACK_UP_TIMEOUT (sim_stack.sh up의 단계별 제한 초, 기본 240)
 #
@@ -30,14 +33,15 @@
 #   stdout     마지막 줄이 (마지막 회의) 실행 디렉터리 절대 경로 artifacts/runs/<실행 id>. 나머지는 모두 stderr
 #   요약       GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
 #   산출물     <실행 디렉터리>/sitl/: junit.xml, trace.jsonl, verdict.json, summary.md, steps.tsv, raw_status_A.jsonl,
-#              raw_status_D.jsonl(D 실패 때만), armed_a.json, crosscheck_a.json, ps_before_stop.jsonl, logs/<서비스>.log,
+#              raw_status_D.jsonl(D 실패 때만), armed_a.json, crosscheck_a.json, trace_1b.json, ps_before_stop.jsonl, logs/<서비스>.log,
 #              health_<서비스>.txt(실패한 회나 unhealthy 서비스만). steps.tsv 끝에 서비스 종료 상태(stop_exit_*),
 #              ULog 끝 경계(ulog), 회차별 종료 코드(rc_*)가 줄로 붙는다. 실행 디렉터리 안에는 compose.yaml, stack.json, params/, px4-N/log/*.ulg, ros_log/
 #              --repeat이면 artifacts/sitl_repeat/<시각>-k<k>/ 에 repeat_summary.tsv, armed_criterion.json
 #   소유       artifacts/runs/ 아래 파일은 모두 호스트 사용자 소유다(컨테이너를 호스트 uid:gid로 돌린다)
 #
 # 순서(회마다): sim_stack.sh up -> pytest(바깥 timeout) -> (Phase 2에 recorder 정지가 들어올 자리) -> stop 전 ps 기록,
-#   compose stop -t 15 -> 종료 코드와 서비스 로그 수집 -> down. 중단돼도 trap으로 down이 돈다(--attach 제외).
+#   compose stop -t 15 -> 종료 코드와 서비스 로그 수집 -> down -> ULog 교차 확인(A), 1b ULog 기록(trace_1b.py. 기록 전용이라
+#   종료 코드에 넣지 않는다). 중단돼도 trap으로 down이 돈다(--attach 제외).
 # 스택은 tools/sim_stack.sh로만 올리고 내린다. 수집에만 docker compose ps/logs/stop과 inspect를 직접 쓴다.
 # pytest를 다시 돌리는 재시도는 없다. 실패한 회의 증거는 그대로 남긴다.
 
@@ -52,6 +56,8 @@ usage() { sed -n '17,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; exit
 k="${IDSIM_STACK_INDEX:-0}"
 repeat=1
 attach=""
+scenarios=""
+fleet_file="tests/sitl/fleet.yaml"
 pytest_args=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -61,6 +67,8 @@ while [ $# -gt 0 ]; do
     --repeat=*) repeat="${1#*=}"; shift ;;
     --attach) attach="${2:?--attach 값}"; shift 2 ;;
     --attach=*) attach="${1#*=}"; shift ;;
+    --scenarios) scenarios="${2:?--scenarios 값}"; shift 2 ;;
+    --scenarios=*) scenarios="${1#*=}"; shift ;;
     -h|--help) usage ;;
     --) shift; pytest_args=("$@"); break ;;
     *) say "모르는 인자: $1"; usage ;;
@@ -69,6 +77,11 @@ done
 case "$k" in [0-9]) ;; *) say "스택 번호는 0-9: '${k}'"; exit 2 ;; esac
 case "$repeat" in ''|*[!0-9]*|0) say "--repeat은 1 이상의 정수: '${repeat}'"; exit 2 ;; esac
 if [ -n "$attach" ] && [ "$repeat" -ne 1 ]; then say "--attach는 --repeat과 함께 쓰지 않는다"; exit 2; fi
+if [ -z "$scenarios" ]; then
+  if [ "${GITHUB_ACTIONS:-}" = "true" ]; then scenarios=ci; else scenarios=all; fi
+fi
+case "$scenarios" in all|ci) ;; *) say "--scenarios는 all 또는 ci: '${scenarios}'"; exit 2 ;; esac
+say "실행 목록: ${scenarios}"
 
 pytest_timeout="${SITL_PYTEST_TIMEOUT:-900}"
 case "$pytest_timeout" in ''|*[!0-9]*) say "SITL_PYTEST_TIMEOUT은 정수 초: '${pytest_timeout}'"; exit 2 ;; esac
@@ -127,7 +140,7 @@ one_run() { # 회 번호
     say "== 회 ${i}/${repeat}: 스택 ${k} 올리기 (${run_id})"
     t0="$(now)"
     # 마지막 stdout 줄이 실행 디렉터리다. 안내는 stderr로 흐른다
-    if ! STACK_UP_TIMEOUT="${STACK_UP_TIMEOUT:-240}" tools/sim_stack.sh up --stack "$k" --run-dir "$run_dir" >/dev/null; then
+    if ! STACK_UP_TIMEOUT="${STACK_UP_TIMEOUT:-240}" tools/sim_stack.sh up --stack "$k" --fleet "$fleet_file" --run-dir "$run_dir" >/dev/null; then
       up_done=1    # 일부 서비스가 떠 있을 수 있어 trap이 내리게 한다
       t1="$(now)"
       steps="up=$((t1 - t0))"
@@ -151,7 +164,7 @@ one_run() { # 회 번호
   t0="$(now)"
   # shellcheck disable=SC2016  # $1과 $@는 컨테이너 안의 bash가 푼다
   timeout --foreground -s INT -k 30 "$pytest_timeout" docker compose -f "$compose" run --rm --no-deps -T \
-    -e IDSIM_SITL_OUT="$out_name" runner bash -c \
+    -e IDSIM_SITL_OUT="$out_name" -e IDSIM_SITL_SCENARIOS="$scenarios" runner bash -c \
     'cd /opt/idsim && exec python3 -m pytest tests/sitl tests/support/test_sitl_constants.py tests/support/test_px4_topic_names.py -p no:cacheprovider -ra --junitxml="$1" "${@:2}"' _ \
     "/opt/idsim/${rel}/${out_name}/junit.xml" ${pytest_args[@]+"${pytest_args[@]}"} >&2
   rc=$?
@@ -219,6 +232,8 @@ PY
   # 2(입력 없음과 판정 불가)는 INFRA로 따로 센다
   python3 tests/sitl/crosscheck_a.py "$run_dir" --sitl-dir "$out_name" >&2
   local cross_rc=$?
+  # 1b ULog 기록(속도 feedforward, F3 공중 시작의 DO_SET_MODE와 D, TRACK_ENTITY 구간의 z). 기록 전용이다
+  python3 tests/sitl/trace_1b.py "$run_dir" --sitl-dir "$out_name" >&2 || say "trace_1b.py가 실패했다(기록 전용, 판정과 무관)"
   # steps.tsv: 단계별 초, 서비스 종료 상태(stop_exit_*), ULog 끝 경계(ulog), 그리고 아래의 rc_ 줄
   { printf '%s\n' "$steps" | tr ',' '\n' | tr '=' '\t'; printf '%s' "${stop_lines:-}"; [ -z "$ulog_lines" ] || printf '%s\n' "$ulog_lines"; } \
     >"${run_dir}/${out_name}/steps.tsv"

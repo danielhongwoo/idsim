@@ -13,11 +13,11 @@
 # limitations under the License.
 
 """시나리오 B 사례 표의 모양을 고정한다. 계약 검증을 다시 구현하지 않고, 사례가 어기는 규칙 하나 밖의 항목이
-필드 값으로 거부되지 않을 모양인지만 본다(사례가 의도한 규칙에서 INVALID_MISSION을 받게 하려는 것)."""
+필드 값으로 거부되지 않을 모양인지만 본다(사례가 의도한 규칙에서 INVALID_MISSION을 받게 하려는 것).
+항목은 미션 YAML 로더 형식이고, default_sub 항목 밖의 항목은 로더의 구조 검사를 통과한다."""
 import math
 import re
 
-from tests.support import sitl_judge as sj
 from tests.support import sitl_missions as sm
 
 MISSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")     # docs/interface.md mission_id
@@ -29,16 +29,16 @@ def _fields_ok(it):
     if it.get("default_sub") or not it["timeout_s"] > 0:
         return False
     t = it["type"]
-    if t == sj.TYPE_TAKEOFF:
+    if t == "TAKEOFF":
         return it["height_m"] > 0 and it["acceptance_m"] > 0
-    if t == sj.TYPE_LOITER:
+    if t == "LOITER":
         return 0 < it["duration_s"] < it["timeout_s"]
-    if t == sj.TYPE_GOTO:
-        return all(math.isfinite(v) and abs(v) <= 1e5 for v in it["position"]) and it["acceptance_m"] > 0
-    if t == sj.TYPE_TRACK_ENTITY:
-        return (TARGET_ID_RE.match(it["target_id"]) is not None and it["acceptance_m"] > 0
+    if t == "GOTO":
+        return all(math.isfinite(v) and abs(v) <= 1e5 for v in it["position"]) and it["acceptance_radius_m"] > 0
+    if t == "TRACK_ENTITY":
+        return (TARGET_ID_RE.match(it["target_id"]) is not None and it["acceptance_radius_m"] > 0
                 and any(v != 0.0 for v in it["offset"]))
-    return t in (sj.TYPE_RTL, sj.TYPE_LAND)
+    return t in ("RTL", "LAND")
 
 
 def _case(mission_id):
@@ -67,26 +67,26 @@ def test_order_cases_have_only_well_formed_items():
 
 def test_order_cases_break_their_rule():
     types = {mid: [it["type"] for it in items] for mid, _, _, items in sm.B_INVALID_CASES}
-    assert sj.TYPE_TAKEOFF in types["b-takeoff-not-first"][1:]
-    assert types["b-land-goto"][0] == sj.TYPE_LAND and len(types["b-land-goto"]) > 1
+    assert "TAKEOFF" in types["b-takeoff-not-first"][1:]
+    assert types["b-land-goto"][0] == "LAND" and len(types["b-land-goto"]) > 1
     rtl_mid = types["b-rtl-not-last"]
-    assert sj.TYPE_RTL in rtl_mid[1:-1]
-    assert types["b-rtl-first"][0] == sj.TYPE_RTL and len(types["b-rtl-first"]) > 1
+    assert "RTL" in rtl_mid[1:-1]
+    assert types["b-rtl-first"][0] == "RTL" and len(types["b-rtl-first"]) > 1
 
 
 def test_field_cases_break_only_the_track_item():
     for mid in ("b-track-zero-offset", "b-track-bad-target-id", "b-track-default"):
         items = _case(mid)
-        assert items[0]["type"] == sj.TYPE_TAKEOFF and _fields_ok(items[0])
-        assert [it["type"] for it in items[1:]] == [sj.TYPE_TRACK_ENTITY]
+        assert items[0]["type"] == "TAKEOFF" and _fields_ok(items[0])
+        assert [it["type"] for it in items[1:]] == ["TRACK_ENTITY"]
         assert not _fields_ok(items[1])
     zero = _case("b-track-zero-offset")[1]
-    assert zero["offset"] == (0.0, 0.0, 0.0)
-    assert TARGET_ID_RE.match(zero["target_id"]) and zero["acceptance_m"] > 0
+    assert zero["offset"] == [0.0, 0.0, 0.0]
+    assert TARGET_ID_RE.match(zero["target_id"]) and zero["acceptance_radius_m"] > 0
     assert _case("b-track-default")[1].get("default_sub") is True
     bad = _case("b-track-bad-target-id")[1]
     assert TARGET_ID_RE.match(bad["target_id"]) is None
-    assert any(v != 0.0 for v in bad["offset"]) and bad["acceptance_m"] > 0
+    assert any(v != 0.0 for v in bad["offset"]) and bad["acceptance_radius_m"] > 0
 
 
 def test_empty_case_has_no_items():
@@ -95,3 +95,19 @@ def test_empty_case_has_no_items():
 
 def test_track_target_id_has_valid_format():
     assert TARGET_ID_RE.match(sm.TRACK_TARGET_ID)
+
+
+def test_items_pass_loader_structure_checks():
+    """default_sub 밖의 모든 항목은 로더의 구조 검사(모르는 key, 필수 key, 타입)를 통과한다."""
+    my = sm.mission_yaml()
+    for mid, _, _, items in sm.B_INVALID_CASES:
+        plain = [it for it in items if not it.get("default_sub")]
+        spec = my.parse_mission({"mission_id": mid, "items": plain})
+        assert len(spec.items) == len(plain)
+    for it in (sm.takeoff_item(), sm.loiter_item(), sm.land_item(), sm.rtl_item(), sm.goto_item(), sm.track_item()):
+        my.parse_item(it, 0)
+
+
+def test_default_sub_item_is_not_loader_format():
+    it = sm.default_sub_item("TRACK_ENTITY")
+    assert set(it) == {"type", "timeout_s", "default_sub"}

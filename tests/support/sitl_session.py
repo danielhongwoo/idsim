@@ -18,15 +18,23 @@
 준비 상태를 검증만 한다. 준비 검증(gate)이 실패하면 skip이 아니라 오류다(decisions.md 쟁점 1, 7).
 
 노드 둘이 한 프로세스(한 participant)에 있다: Px4Raw의 노드(PX4 토픽, /clock)와 미션 노드(mission_event 구독,
-action client). 미션 노드 안에서는 mission_event 구독이 action client보다 먼저 만들어진다(mission_client).
+action client, 1b의 정답 pose와 TargetState 구독). 미션 노드 안에서는 mission_event 구독이 action client보다 먼저
+만들어진다(mission_client).
+
+1b(decisions.md 쟁점 5, 15): gate는 첫 goal 전에 정답 pose와 표적 발행자, 첫 표본을 확인하고, 표적 발행자의 QoS를
+계약 상태 행과 대조하며(다르면 QOS_MISMATCH로 gate 실패), Executor의 target_fresh_age를 판정 상수와 대조한다.
+정답 pose, 표적, target_fresh_age의 문제는 gate를 실패시키지 않고 기록해 두었다가 그것이 필요한 비행 시나리오가
+시작할 때 실패시킨다(require_truth). 1a 시나리오는 정답 pose를 쓰지 않기 때문이다.
 """
 import json
 import time
 
 from tests.support import mission_client as mcl
 from tests.support import sitl_judge as sj
+from tests.support import sitl_missions as sm
 from tests.support import sitl_wait as sw
 from tests.support.px4_raw import EmergencyCommand, Px4Raw
+from tests.support.sitl_flight import Flights
 from tests.support.sitl_trace import Trace
 
 US = 1_000_000
@@ -36,6 +44,11 @@ GATE_STATUS_S = 20.0
 GROUND_WAIT_S = 20.0
 EMERGENCY_WAIT_S = 90.0
 EMERGENCY_LAND_S = 15.0       # Land 재전송을 이어 가는 상한(AUTO_LAND 또는 DISARMED가 보일 때까지)
+GATE_TRUTH_S = 20.0           # 정답 pose와 표적의 발행자, 첫 표본을 기다리는 ROS 시각 상한(gate)
+PARAM_WAIT_S = 10.0           # Executor 파라미터 조회
+CLEANUP_CANCEL_S = 30.0
+CLEANUP_LAND_S = 60.0         # 정리용 [LAND] 결과 대기(LAND 항목 timeout 30 s + disarm 확인)
+PARAMETER_DOUBLE = 3          # rcl_interfaces/ParameterType
 
 
 class SitlSession:
@@ -56,6 +69,14 @@ class SitlSession:
         self.trace = Trace(out_dir / "trace.jsonl", sim_us=self.raw.clock_us)
         self.node = Node("sitl_mission_client", parameter_overrides=[Parameter("use_sim_time", value=True)])
         self.mission = mcl.MissionClient(self.node, self.vehicle_id, self.raw.now_us)
+        from tests.support.sim_truth import SimTruth
+        self.truth = SimTruth(self.node, self.vehicle_id, [t["id"] for t in stack.targets], self.raw.now_us)
+        self.truth_problems = {}  # 이름 -> 설명. 정답 pose, 표적, target_fresh_age(require_truth가 본다)
+        self.flights = Flights()
+        self.last_run = None      # 마지막으로 보낸 goal(실패 뒤 정리가 끝나지 않은 goal을 취소한다)
+        self.r1 = None            # R1 기록(첫 1b 비행에서 한 번)
+        self.r2 = []              # GOTO, TRACK_ENTITY 완료 사건의 정답 판정 기록
+        self.r4 = []              # 착륙 판정 기록
         self._spin = SpinThread(self.node)
         self._started = False
         self.rtf_start = None
@@ -120,10 +141,155 @@ class SitlSession:
         sw.raise_if(sj.clock_alignment_findings(self.raw.status[-12:]))
         self._need(lambda: self.raw.last_pos() is not None and self.raw.last_landed() is not None, GATE_STATUS_S,
                    "vehicle_local_position, vehicle_land_detected 표본", sw.PRECONDITION)
+        truth = self._gate_truth()
         sim_s, wall_s = (self.raw.clock_us() - s0) / US, time.monotonic() - w0
-        self.gate_info = {"sim_s": sim_s, "wall_s": wall_s}
+        self.gate_info = {"sim_s": sim_s, "wall_s": wall_s, "truth": truth}
         self.rtf_start = (self.raw.clock_us(), time.monotonic())
         self.trace.event("gate_ok", sim_s=sim_s, wall_s=round(wall_s, 3))
+
+    def _gate_truth(self):
+        """정답 pose, 표적, target_fresh_age를 첫 goal 전에 확인한다. 표적 발행자 QoS가 계약과 다르면 QOS_MISMATCH."""
+        from tests.support.sim_truth import qos_contract_findings
+
+        w, t = self.waiter, self.truth
+        info = {"oracle_topic": t.oracle_topic, "targets": {}}
+        if self.stack.sim_oracle_service is None:
+            self.truth_problems["oracle"] = "stack.json에 sim-oracle 서비스가 없다(정답 pose 공급자 없음)"
+        elif not w.wait_or_timeout(lambda: t.oracle_publishers() >= 1 and len(t.oracle) > 0, GATE_TRUTH_S,
+                                   "정답 pose 발행자와 첫 표본"):
+            self.truth_problems["oracle"] = "%s: ROS 시각 %.0f s 안에 발행자 %d, 표본 %d" % (
+                t.oracle_topic, GATE_TRUTH_S, t.oracle_publishers(), len(t.oracle))
+        info["oracle_samples"] = len(t.oracle)
+        for tid, topic in sorted(t.target_topics.items()):
+            ok = w.wait_or_timeout(lambda tid=tid: t.target_publishers(tid) >= 1 and len(t.targets[tid]) > 0,
+                                   GATE_TRUTH_S, "표적 %s 발행자와 첫 표본" % tid)
+            qos = t.target_publisher_qos(tid)
+            info["targets"][tid] = {"topic": topic, "samples": len(t.targets[tid]), "publisher_qos": qos}
+            if not ok:
+                self.truth_problems["target:" + tid] = "%s: ROS 시각 %.0f s 안에 발행자 %d, 표본 %d" % (
+                    topic, GATE_TRUTH_S, t.target_publishers(tid), len(t.targets[tid]))
+            bad = qos_contract_findings(qos)
+            if bad:
+                raise sw.SitlFailure(sw.QOS_MISMATCH, "%s 발행자 QoS가 계약 상태 행(RELIABLE, VOLATILE)과 다르다: %s"
+                                     % (topic, "; ".join(bad)))
+        fresh, why = self._executor_double("target_fresh_age")
+        info["target_fresh_age_s"] = fresh
+        if fresh is None:
+            self.truth_problems["fresh_age"] = "Executor 파라미터 target_fresh_age를 읽지 못했다(%s)" % why
+        elif abs(fresh - sj.TARGET_FRESH_AGE_S) > 1e-9:
+            self.truth_problems["fresh_age"] = ("Executor target_fresh_age %.3f s가 판정 상수의 전제 %.3f s와 다르다"
+                                                "(L = target_fresh_age + tick + 여유. sitl_judge 머리말)"
+                                                % (fresh, sj.TARGET_FRESH_AGE_S))
+        info["problems"] = dict(self.truth_problems)
+        self.trace.event("gate_truth", **info)
+        return info
+
+    def _executor_double(self, name):
+        """Executor 노드의 double 파라미터 하나를 rcl_interfaces/GetParameters로 읽는다. 반환 (값 또는 None, 사유)."""
+        from rcl_interfaces.srv import GetParameters
+
+        node_name = self.vehicle.executor_node
+        if not node_name:
+            return None, "stack.json에 executor_node가 없다"
+        cli = self.node.create_client(GetParameters, node_name + "/get_parameters")
+        try:
+            if not self.waiter.wait_or_timeout(cli.service_is_ready, PARAM_WAIT_S, "%s/get_parameters" % node_name):
+                return None, "서비스가 준비되지 않았다"
+            fut = cli.call_async(GetParameters.Request(names=[name]))
+            if not self.waiter.wait_or_timeout(fut.done, PARAM_WAIT_S, "파라미터 %s 응답" % name):
+                return None, "응답이 없다"
+            vals = fut.result().values
+            if len(vals) != 1 or vals[0].type != PARAMETER_DOUBLE:
+                return None, "double 값이 아니다(%r)" % ([v.type for v in vals],)
+            return float(vals[0].double_value), None
+        finally:
+            self.node.destroy_client(cli)
+
+    def require_truth(self, scenario, target_ids=()):
+        """1b 비행 시나리오의 사전조건: 정답 pose(없으면 ORACLE_ABSENT), 쓰는 표적, target_fresh_age 대조."""
+        p = self.truth_problems
+        if "oracle" in p:
+            raise sw.SitlFailure(sw.ORACLE_ABSENT, "시나리오 %s: %s" % (scenario, p["oracle"]))
+        for tid in target_ids:
+            if tid not in self.truth.targets:
+                raise sw.SitlFailure(sw.PRECONDITION, "시나리오 %s의 표적 %s가 stack.json targets에 없다" % (scenario, tid))
+            if "target:" + tid in p:
+                raise sw.SitlFailure(sw.NO_PUBLISHER, "시나리오 %s: %s" % (scenario, p["target:" + tid]))
+        if target_ids and "fresh_age" in p:
+            raise sw.SitlFailure(sw.PRECONDITION, "시나리오 %s: %s" % (scenario, p["fresh_age"]))
+
+    def require_air_hold(self, scenario):
+        """공중 시작의 사전조건: ARMED, landed false, AUTO_LOITER(Hold). 어긋나면 PRECONDITION."""
+        st, ld = self.raw.last_status(), self.raw.last_landed()
+        ok = (st is not None and st.arming_state == 2 and st.nav_state == 4 and ld is not None and not ld.landed)
+        if not ok:
+            raise sw.SitlFailure(sw.PRECONDITION, "시나리오 %s 사전조건(공중 Hold) 위반: status %s, landed %s" % (
+                scenario, None if st is None else (st.arming_state, st.nav_state),
+                None if ld is None else ld.landed))
+        self.trace.event("precondition_ok", scenario=scenario, air=True)
+
+    def record_r1(self):
+        """R1(EKF 원점과 기대 스폰 GPS의 차)을 부팅마다 한 번 남긴다. 기록 전용(recorded_only)."""
+        if self.r1 is not None:
+            return
+        ref, exp = self.raw.pos_ref, self.vehicle.expect_gps
+        if ref is None or exp is None or not (ref[4] and ref[5]):
+            self.trace.event("r1_unavailable", pos_ref=ref, expect_gps=exp)
+            return
+        self.r1 = dict(sj.r1_record(ref[1], ref[2], ref[3], exp), ref_timestamp=ref[6], status="recorded_only")
+        self.trace.event("r1", **self.r1)
+
+    def recorded_only(self):
+        """verdict.json의 recorded_only 묶음(R1, R3, R2와 R4 요약). 판정에 쓰지 않는다."""
+        t = self.truth
+        ref = self.raw.pos_ref
+        r1 = dict(self.r1) if self.r1 else None
+        if r1 is not None and ref is not None and ref[6] != r1["ref_timestamp"]:
+            r1["ref_timestamp_at_end"] = ref[6]          # EKF 원점이 실행 중 바뀌었다
+        lag = [(s.recv_ros_us - s.ts_us) / US for s in self.raw.status]
+        return {
+            "R1": r1,
+            "R3": {
+                "target_age_s": {tid: sj.summary([(x.recv_us - x.stamp_us) / US for x in xs])
+                                 for tid, xs in t.targets.items()},
+                "target_interval_s": {tid: sj.summary([(b.stamp_us - a.stamp_us) / US for a, b in zip(xs, xs[1:])])
+                                      for tid, xs in t.targets.items()},
+                "clock_sim_step_s": sj.summary([d / US for d in t.clock_sim_steps_us]),
+                "clock_wall_gap_s": sj.summary(t.clock_wall_gaps_s),
+                "now_minus_status_timestamp_s": sj.summary(lag),
+                "stale_ticks": [{"scenario": r["scenario"], "index": r["index"], **r["stale_ticks"]}
+                                for r in self.r2 if "stale_ticks" in r],
+                "tracking": [{"scenario": r["scenario"], "index": r["index"], **r.get("tracking", {})}
+                             for r in self.r2 if r["type"] == "TRACK_ENTITY"],
+                "status": "recorded_only"},
+            "R2": [{k: r.get(k) for k in ("scenario", "index", "type", "d3", "d_h", "d_v", "s", "s_track", "gap_s",
+                                          "t_f_exact")} for r in self.r2],
+            "R4": [{k: r.get(k) for k in ("scenario", "r4_m", "dz", "r_home_status")} for r in self.r4],
+            "oracle": {"samples": len(t.oracle), "bad_frame": t.oracle_bad_frame,
+                       "interval_s": sj.summary([(b.stamp_us - a.stamp_us) / US
+                                                 for a, b in zip(t.oracle, t.oracle[1:])])},
+            "target_bad_samples": dict(t.target_bad),
+        }
+
+    def cleanup_land(self):
+        """비행 시나리오 실패 뒤의 정리(쟁점 15). 끝나지 않은 goal은 취소하고, 기체가 공중이면 정리용 [LAND] 미션을
+        한 번 보낸다. 결과는 판정에 넣지 않는다. 그 뒤 비상 정리(최선 노력. 이미 지상이면 아무것도 하지 않는다)."""
+        run = self.last_run
+        try:
+            if run is not None and run.accepted and run.handle is not None and run.result is None:
+                self.mission.cancel(self.waiter, run)
+                self.waiter.wait_or_timeout(lambda: run.result is not None, CLEANUP_CANCEL_S, "정리 전 취소 결과")
+            st, ld = self.raw.last_status(), self.raw.last_landed()
+            if st is not None and st.arming_state == 2 and not (ld is not None and ld.landed):
+                r = self.mission.send_goal(self.waiter, self.vehicle_id, "cleanup-land", [sm.land_item()])
+                if r.accepted:
+                    self.waiter.wait_or_timeout(lambda: r.result is not None, CLEANUP_LAND_S, "정리 [LAND] 결과")
+                self.trace.event("cleanup_land", accepted=r.accepted,
+                                 result=None if r.result is None else [r.result.status, r.result.reason])
+        except Exception as e:  # noqa: BLE001 정리는 최선 노력이고 원래 실패를 가리지 않는다
+            self.trace.event("cleanup_land_failed", error=repr(e))
+        finally:
+            self.emergency_cleanup()
 
     def _need(self, pred, timeout_s, what, category):
         try:

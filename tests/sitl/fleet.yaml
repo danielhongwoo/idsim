@@ -1,0 +1,40 @@
+# sitl 통합 테스트 전용 기체 레지스트리(1b decisions.md 쟁점 15). 소유 test-engineer.
+#
+# run_sitl.sh가 tools/sim_stack.sh up --fleet tests/sitl/fleet.yaml로 쓴다. 개발용 config/fleet.yaml을 고쳐도 시나리오
+# 기하가 바뀌지 않게 따로 둔다. 형식과 key의 뜻은 config/fleet.yaml 주석과 같고 생성기(tools/gen_compose.py)가 검사한다.
+# 시험 미션(tests/sitl/missions/)의 좌표와 TRACK_ENTITY timeout이 이 파일의 스폰과 표적 궤적에 기댄다.
+# 표적을 바꾸면 tests/support/test_sitl_flight_missions.py가 timeout 하한과 표적 속도 범위를 다시 본다.
+schema: 2
+
+world:
+  name: default
+  template: ros_ws/src/idsim_sim/worlds/idsim_base.sdf
+  origin:
+    lat: 37.5665
+    lon: 126.9780
+    alt: 38
+  speed_factor: null
+
+vehicles:
+  # 기체 1은 원점에서 떨어진 (6, -3, 0)에 둔다. 스모크 S2가 NavSat 위경도 변환의 수평 반전을 가려낸다(config/fleet.yaml과 같다).
+  - id: 1
+    airframe: 4001_gz_x500
+    pose: {x: 6.0, y: -3.0, z: 0.0, yaw: 0.0}
+    px4_params: {}
+
+# F2와 F4가 따라가는 표적 하나(쟁점 15: 표적 속도 1-2 m/s, loop true). 지면(z 0)의 직사각형 18 m x 6 m를
+# 긴 변은 2 m/s, 짧은 변은 1 m/s로 돈다(한 바퀴 30 s). 시작 위상은 앞 비행의 시간에 따라 달라진다.
+targets:
+  - id: car_1
+    start_s: 0
+    loop: true
+    waypoints:
+      - {t: 0.0, x: 20.0, y: 12.0, z: 0.0}
+      - {t: 9.0, x: 38.0, y: 12.0, z: 0.0}
+      - {t: 15.0, x: 38.0, y: 18.0, z: 0.0}
+      - {t: 24.0, x: 20.0, y: 18.0, z: 0.0}
+      - {t: 30.0, x: 20.0, y: 12.0, z: 0.0}
+
+px4:
+  params_file: config/px4/sitl_params.env
+  start: parallel
