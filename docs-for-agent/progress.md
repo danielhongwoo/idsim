@@ -7,13 +7,13 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 계약은 `docs/interface.md`에 고정 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6, B10 전 core 수정, B10(진짜 `Px4FramePort`, 표적 구독, goal 접수는 계약 검증만, 미션 YAML 로더와 `send_mission`), B11(F1-F4, 정답 판정, b 0.5 m와 `R_home` 0.20 m), B12(M4 화면 확인, Actor 표본 간격 250 ms 확정) 반영. 칸 목록 covered 452, impossible 131, uncovered 0 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6, B10 전 core 수정, B10(진짜 `Px4FramePort`, 표적 구독, goal 접수는 계약 검증만, 미션 YAML 로더와 `send_mission`), B11(F1-F4, 정답 판정, b 0.5 m와 `R_home` 0.20 m), B12(M4 화면 확인, Actor 표본 간격 250 ms 확정), B13(1b 계약 고정 문서) 반영. 칸 목록 covered 452, impossible 131, uncovered 0 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
 ## 다음 작업
 
-1. B13(계약 고정 문서). 초안은 branch `feat/1b-b13`에 있고 B11 머지 뒤 rebase해 (v) 행과 함께 낸다.
+1. 1b 완료 처리(완료 기준 대조, `decisions.md`의 "1a 고정 계약 영향"과 "문서 반영 목록" 정리, 이 파일의 1b 상태 갱신).
 
 ## 운영 규칙
 
@@ -46,16 +46,9 @@
 
 - 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
 
-B13 전에 정할 것.
-
--  `decisions.md` "1a 고정 계약 영향" 표에 월드 ENU 좌표계 문장을 넣을지(architect).
-- `target_id` 사례 표의 단일 출처(architect).
-
 문서 정리(정형, 다음 문서 정리 때).
 
-- `docs/interface.md` "VehicleCommand" 절의 "ack ACCEPTED는 성공이 아니다" 문장(ACCEPTED 뒤에 모드 전환이 일어나지 않는 경로는 미확인)을 지상 arm 진입의 Offboard 전환이 ack를 진행 조건으로 쓰는 것과 맞춰 고칠지 정한다(architect).
 - `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
-- `docs/architecture.md`의 `tools/sim_stack.sh` 운영 규칙 문단에 restart-ops 뒤 attach 경로를 적을지(architect). `docs/interface.md` SITL 파라미터 표에 `IMU_GYRO_CAL_EN`을 넣을지(architect).
 
 테스트 보강.
 

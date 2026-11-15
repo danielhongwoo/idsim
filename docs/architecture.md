@@ -494,7 +494,8 @@ idsim/
     gen_compose.sh   # gen_compose.py의 호스트 진입점 (ros-ws 컨테이너, 호스트 uid:gid, --network none)
     ros_ws.sh        # ros-ws 컨테이너에서 ROS 패키지 build, test, tidy, ci, clean, shell (저장소를 /opt/idsim에 마운트)
     sim_stack.sh         # 생성 + compose up/down/logs 묶음. down 뒤 up, 모델 잔존 사전 검사, Agent bind 오류 보고,
-                         # 인프라 단계 뒤 노드 단계(ops-N). --infra-only는 노드 단계를 건너뛴다
+                         # 인프라 단계 뒤 노드 단계(ops-N). --infra-only는 노드 단계를 건너뛴다.
+                         # restart-ops는 떠 있는 스택에서 ops-N만 다시 만든다
     to_interface.py  # 스모크 산출물 -> docs/interface.md 표
     qgc.sh           # QGroundControl AppImage 내려받기(버전, sha256 고정), 캐시, 호스트 실행. --stack k로 GCS 포트 선택
   ros_ws/src/

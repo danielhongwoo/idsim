@@ -6,7 +6,7 @@
 
 ## 고정 시점
 
-PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 식별과 네임스페이스", "VehicleCommand", "Offboard setpoint", "SITL 파라미터", "포트" 절)와 공통 규칙("공통 규칙", "시간 기준", "정의 작성 규칙", "변경 절차와 계약 테스트" 절)은 1a 완료에 고정한다. 예외는 "계약 토픽 QoS"의 상태 행이고 그 고정 시점은 그 절에 적는다. `idsim_interfaces`의 정의 파일(msg 10개, action 1개)은 Phase 1a에서 모두 만들었고, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춰 파일 단위로 나눈다. "SITL 파라미터" 절의 계약 표에서 RTL 항목을 위해 더한 일곱 행(`RTL_TYPE`부터 `EKF2_HGT_REF`까지)은 1b 완료에 고정한다.
+PX4 인터페이스("PX4 쪽 기준 버전", "좌표계", "PX4 토픽", "기체 식별과 네임스페이스", "VehicleCommand", "Offboard setpoint", "SITL 파라미터", "포트" 절)와 공통 규칙("공통 규칙", "시간 기준", "정의 작성 규칙", "변경 절차와 계약 테스트" 절)은 1a 완료에 고정한다. 예외는 "계약 토픽 QoS"의 상태 행이고 그 고정 시점은 그 절에 적는다. `idsim_interfaces`의 정의 파일(msg 10개, action 1개)은 Phase 1a에서 모두 만들었고, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춰 파일 단위로 나눈다. "SITL 파라미터" 절의 계약 표에서 RTL 항목을 위해 더한 여덟 행(`RTL_TYPE`부터 `IMU_GYRO_CAL_EN`까지)은 1b 완료에 고정한다.
 
 | 파일 | 묶음 | 고정 시점 | 1b 완료 때 |
 | --- | --- | --- | --- |
@@ -339,7 +339,7 @@ sysid 대조 규칙.
 - 송신자는 `source_system` 1-255, `source_component` 1-999다(1000 이상은 PX4가 mode executor로 분류한다. `Commander.cpp` 1561-1562행, `VehicleCommand.msg`의 `COMPONENT_MODE_EXECUTOR_START`). `source_system`이 대상 sysid와 같으면 빌더를 만들 수 없다(송신자가 대상 autopilot 자신으로 보이는 조합을 막는다).
 - 검증 없는 raw 명령은 두지 않는다. 새 명령은 PX4 인터페이스 owner의 승인 뒤 메서드로 더한다.
 - ack 매칭: `is_ack_for(ack, cmd)`는 `command`가 같고 ack의 `target_system`, `target_component`가 cmd의 `source_system`, `source_component`인지 본다(PX4는 ack를 송신자에게 돌려준다).
-- ack ACCEPTED는 성공이 아니다. ack는 명령을 받아들였다는 뜻이고 전환 결과의 확인이 아니다. ACCEPTED 뒤에 모드 전환이 일어나지 않는 경로가 있는지는 확인하지 않았다(미확인). 보수적 동작: 모드 전환 성공은 `vehicle_status.nav_state`로, arm과 disarm은 `arming_state`로 확인하고, ack는 거부를 빨리 아는 데만 쓴다.
+- ack ACCEPTED는 성공이 아니다. ack는 명령을 받아들였다는 뜻이고 전환 결과의 확인이 아니다. ACCEPTED 뒤에 모드 전환이 일어나지 않는 경로가 있는지는 확인하지 않았다(미확인). 보수적 동작: 모드 전환 성공은 `vehicle_status.nav_state`로, arm과 disarm은 `arming_state`로 확인하고, ack는 거부를 빨리 아는 데만 쓴다. 예외 하나: 지상 arm 진입의 Offboard 전환은 그 명령의 유효 ack를 `nav_state` 확인에 더해 arm의 조건으로 쓰고, 유효 ack 뒤에는 확인 전이어도 재전송하지 않는다("준비 단계" 절). ACCEPTED 뒤에 전환이 일어나지 않으면 `mode_confirm_timeout`으로 arm 없이 MODE_SWITCH_FAILED로 끝난다.
 
 source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 
@@ -362,7 +362,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 
 ## SITL 파라미터
 
-고정 시점: 1a 완료(`RTL_TYPE`부터 `EKF2_HGT_REF`까지 일곱 행은 1b 완료).
+고정 시점: 1a 완료(`RTL_TYPE`부터 `IMU_GYRO_CAL_EN`까지 여덟 행은 1b 완료).
 
 공통 SITL 파라미터는 `config/px4/sitl_params.env`(`config/fleet.yaml`의 `px4.params_file`) 한 파일이다. 형식은 `PX4_PARAM_<이름>=<값>`이고 compose가 px4 서비스에 `env_file`로 넘긴다. PX4 rcS가 airframe 스크립트보다 먼저 `param set`하고(rcS 129-135행), px4 이미지의 airframe 훅(`<airframe>.post`, `docker/Dockerfile.px4`)이 airframe 뒤에 한 번 더 적용해 이 파일의 값이 최종값이 된다(펌웨어 기본값과 같은 값은 airframe의 `set-default`가 덮어쓰기 때문이다). 실제 적용 값은 환경 스모크가 `pxh param show`로 `stack.json`의 `expected_params`, `derived_params`와 대조한다.
 
@@ -384,6 +384,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 | `COM_DISARM_LAND` | 2 s | 착지 뒤 자동 disarm | 기본값과 같지만 LAND와 RTL 항목의 완료와 공중 종료 단계의 지상 판정이 이 값에 기대므로 명시한다 |
 | `COM_LOW_BAT_ACT` | 2 | 저전압 시 Land | 실패의 fallback이 Land라는 원칙과 맞춘다. SITL 배터리는 50%에서 멈춰 닿지 않는다 |
 | `EKF2_HGT_REF` | 1 | 높이 기준 GNSS | 기본값과 같다. 높이 기준이 GNSS여야 EKF 원점의 초기 고도 잡음이 도착점에서 상쇄된다. 0(기압계)이면 초기 GNSS 고도 오차가 bias로 남는다 |
+| `IMU_GYRO_CAL_EN` | 0 | 정지 상태 gyro bias 온라인 보정 모듈을 시작하지 않음 | SITL에서 이 모듈이 있으면 arm과 disarm을 반복할 때 `battery_status` 등의 발행이 멈춰 이후 arm이 거부된 일이 있다(실측. 원인은 추정). SITL 센서는 Gazebo에서 오므로 보정이 없어도 EKF가 bias를 추정한다. SITL 전용이고 실기체에서는 1 |
 
 - `NAV_DLL_ACT` 값 0은 `Disabled`다. [소스] PX4 v1.17.0 `src/modules/commander/commander_params.c` 581-598행의 파라미터 정의가 값 0을 `Disabled`로 적는다. `src/modules/commander/failsafe/failsafe.h` 113-120행의 enum `gcs_connection_loss_failsafe_mode`는 `Disabled = 0`이다. `failsafe.cpp` 515행은 파라미터 값이 이 `Disabled`와 다르고 `COM_DLL_EXCEPT` 예외가 없을 때(`!dll_loss_ignored`)만 GCS 연결 손실 failsafe를 건다. 그래서 0이면 515행 failsafe는 걸리지 않는다. 같은 파일 532-538행에는 다른 경로가 있다. `COM_RC_IN_MODE`가 4이거나 AUTO_MISSION에서 RC 손실을 무시하는 예외(`rc_loss_ignored_mission`)가 있고, `NAV_DLL_ACT`가 `Disabled`이면서 사용자 의도 모드가 AUTO_MISSION이고 `mission_finished`이면 GCS 연결 손실에 RTL을 건다. idsim은 `COM_RC_IN_MODE` 4와 `NAV_DLL_ACT` 0을 두어 앞의 두 조건을 채우지만 이 경로는 AUTO_MISSION 전용이고 idsim은 AUTO_MISSION을 요청하지 않으므로 걸리지 않는다. 외부 GCS가 AUTO_MISSION으로 바꾼 경우는 확인하지 않았다(미확인). 보수적 동작: 판정과 CI에 QGC를 쓰지 않는다. AUTO_MISSION을 쓰는 경로를 더하면 이 항목을 다시 본다.
 - `COM_FAIL_ACT_T`는 계약 표에 넣지 않고 PX4 기본값(v1.17.0에서 5 s)을 둔다. Offboard 손실은 이 지연을 거치지 않고 바로 Land다. 지연이 끼는 것은 Auto 조치(저전압 Land 등)이고 그 동안 기체는 failsafe Hold(`failsafe` true, AUTO_LOITER)다. Executor는 그 표본을 비행 중 감시 순위 6으로 끝낸다.
@@ -484,7 +485,7 @@ action `/<vehicle_id>/execute_mission`. 기체마다 Mission Executor 하나가 
 | feedback | `stamp` | 그 feedback을 만든 tick의 입력 시각(ROS 시각. "feedback" 절) |
 | feedback | `item_index`, `item_count`, `item_type` | 실행 중인 항목의 번호(0부터), 미션의 항목 수, 그 항목의 `MissionItem.TYPE_*` |
 | feedback | `phase` | `PHASE_*`("feedback" 절) |
-| feedback | `distance_valid`, `distance_remaining_m` | TAKEOFF는 목표 고도까지 남은 높이(m). GOTO와 TRACK_ENTITY는 setpoint 점까지의 거리(1b). 그 밖에는 `distance_valid` false |
+| feedback | `distance_valid`, `distance_remaining_m` | TAKEOFF는 목표 고도까지 남은 높이(m). GOTO와 TRACK_ENTITY는 setpoint 점까지의 거리. 그 밖에는(공중 종료 단계 포함) `distance_valid` false |
 
 `last_item_index`와 `items_completed`가 둘 다 0이면 "첫 항목 실행 중에 끝남"과 "항목을 시작하기 전에 끝남"을 가르지 않는다. 가르는 필드는 두지 않는다. 소비자의 다음 동작은 `reason`으로 갈리고, 항목 시작 전의 종료는 `reason`(NOT_READY, PRECONDITION_FAILED, ARM_REJECTED 등)과 마지막 feedback의 `PHASE_PREPARING`으로 읽힌다.
 
@@ -743,7 +744,7 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 
 ### feedback
 
-- Executor는 실행 중인 goal에 phase나 항목이 바뀐 tick에 바로, 그 밖에는 약 2 Hz로 feedback을 낸다. 주기는 계약이 아니다. 즉시 끝나는 goal(VEHICLE_ID_MISMATCH, INVALID_MISSION, BUSY, 종료 뒤의 INTERNAL)은 feedback이 없다.
+- Executor는 실행 중인 goal에 phase나 항목이 바뀐 tick과 항목이 완료된 tick에 바로, 그 밖에는 약 2 Hz로 feedback을 낸다. 주기는 계약이 아니다. 즉시 끝나는 goal(VEHICLE_ID_MISMATCH, INVALID_MISSION, BUSY, 종료 뒤의 INTERNAL)은 feedback이 없다.
 - `stamp`는 그 feedback을 만든 tick의 입력 시각이다. Executor가 그 tick에서 경과 시간(timeout, `duration`)을 잰 ROS 시각과 같은 값이다. 명령에 싣는 PX4 timestamp와는 따로 읽은 값이라 다를 수 있다.
 - 준비 단계의 feedback은 `item_index` 0, `item_type`은 첫 항목의 type, `phase`는 `PHASE_PREPARING`이다.
 
