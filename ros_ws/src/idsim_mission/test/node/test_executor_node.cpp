@@ -795,15 +795,36 @@ TEST_F(ExecutorNodeTest, TargetLostKeepsPublishingUntilHoldIsObserved)
     std::chrono::seconds(40), &px4))
     << "item " << client.last_item_ << " phase " << static_cast<int>(client.last_phase_);
   ASSERT_EQ(px4.holds(), 0);
-  // 표적 발행을 끊는다.
-  ASSERT_TRUE(spin_until([&] { return client.has_result_; }, std::chrono::seconds(20), &px4));
+  // 표본이 실제로 도착해 유효 표본으로 들어갔다(소실 원인이 "받은 적 없음"이 아니게).
+  ASSERT_EQ(node->snapshot().targets.count("car_1"), 1U);
+  // 표적 발행을 끊는다. result를 처음 본 때의 setpoint 수를 적는다.
+  int at_result = -1;
+  ASSERT_TRUE(spin_until(
+    [&] {
+      if (client.has_result_ && at_result < 0) {
+        at_result = px4.setpoints();
+      }
+      return client.has_result_;
+    },
+    std::chrono::seconds(20), &px4));
   EXPECT_EQ(client.result_.code, rclcpp_action::ResultCode::ABORTED);
   EXPECT_EQ(client.result_.result->reason, ExecuteMission::Result::REASON_TARGET_LOST);
+  // 원인은 "끊긴 표본"이다(core/mission_runner.cpp의 TARGET_LOST detail 앞부분).
+  EXPECT_EQ(
+    client.result_.result->detail.find(
+      "item 1 (TRACK_ENTITY) target 'car_1' lost: last valid sample older than target_timeout"),
+    0U)
+    << client.result_.result->detail;
   EXPECT_GE(px4.holds(), 1);
   ASSERT_GE(px4.setpoints_at_hold_sent(), 0);
   ASSERT_GE(px4.setpoints_at_hold_seen(), 0);
   // Hold 명령에서 Hold 반영까지 1 s(sim, tick 20개) 동안 발행이 이어졌다.
   EXPECT_GE(px4.setpoints_at_hold_seen() - px4.setpoints_at_hold_sent(), 10);
+  // 가짜 PX4가 AUTO_LOITER를 내기 시작한 뒤에는 노드가 그 표본을 볼 때까지(표본 간격 20 ms와 tick
+  // 50 ms. 많아야 tick 2-3개)만 발행하고 멈춘다. Hold 확인(3 표본)과 result까지 더 나가지 않는다.
+  EXPECT_GE(at_result - px4.setpoints_at_hold_seen(), 0);
+  EXPECT_LE(at_result - px4.setpoints_at_hold_seen(), 3)
+    << "at_result " << at_result << " at_hold_seen " << px4.setpoints_at_hold_seen();
   EXPECT_FALSE(node->goal_active());
   EXPECT_TRUE(node->target_subscriptions().empty());
   // goal이 끝난 뒤에는 발행이 없다.
