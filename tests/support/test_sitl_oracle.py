@@ -152,7 +152,7 @@ def test_tracking_errors_and_target_speed():
 
 # --- 착륙 ---
 
-def test_landing_judge_rtl_recorded_only_in_calibration_state():
+def test_landing_judge_rtl_recorded_only_without_r_home():
     ref = (6.0, 7.0, 0.227)
     oracle = [OS(50.0, 6.4, 7.3, 0.23), OS(50.02, 6.4, 7.3, 0.23)]
     f, rec = sj.landing_judge(oracle, int(50.01 * US), ref, rtl=True, r_home=None)
@@ -163,16 +163,40 @@ def test_landing_judge_rtl_recorded_only_in_calibration_state():
     assert f == [] and "r4_m" not in rec
 
 
-def test_landing_judge_z():
+def test_landing_judge_z_both_sides():
+    """DISARMED 시점 정답 z와 이륙 직전 정답 z의 차의 절댓값이 0.3 m 안이다(위와 아래 모두)."""
     ref = (0.0, 0.0, 0.227)
     high = [OS(50.0, 0.0, 0.0, 0.6), OS(50.02, 0.0, 0.0, 0.6)]
     f, rec = sj.landing_judge(high, int(50.01 * US), ref, rtl=False)
     assert cats(f) == [sw.WRONG_RESULT] and rec["dz"] == pytest.approx(0.373)
+    low = [OS(50.0, 0.0, 0.0, -0.1), OS(50.02, 0.0, 0.0, -0.1)]
+    f, rec = sj.landing_judge(low, int(50.01 * US), ref, rtl=False)
+    assert cats(f) == [sw.WRONG_RESULT] and rec["dz"] == pytest.approx(-0.327)
+    edge = [OS(50.0, 0.0, 0.0, 0.227 - 0.29), OS(50.02, 0.0, 0.0, 0.227 - 0.29)]
+    assert sj.landing_judge(edge, int(50.01 * US), ref, rtl=False)[0] == []
 
 
-def test_calibration_state_constants_are_empty():
-    """보정 상태는 b와 R_home이 빈 상태 그 자체다(스위치를 두지 않는다)."""
-    assert sj.landing_judge.__defaults__[0] is sj.R_HOME_M
+def test_landing_judge_uses_r_home_constant_by_default():
+    assert sj.R_HOME_M == 0.20
+    ref = (0.0, 0.0, 0.227)
+    far = [OS(50.0, 0.25, 0.0, 0.227), OS(50.02, 0.25, 0.0, 0.227)]
+    f, rec = sj.landing_judge(far, int(50.01 * US), ref, rtl=True)
+    assert cats(f) == [sw.WRONG_RESULT] and rec["r_home_status"] == "checked"
+
+
+def test_last_item_feedback_gaps():
+    fbs = [FB(9.05, 0, sj.TYPE_TRACK_ENTITY, count=1), FB(9.55, 0, sj.TYPE_TRACK_ENTITY, count=1),
+           FB(9.80, 0, sj.TYPE_TRACK_ENTITY, valid=False, count=1),
+           FB(10.30, 0, sj.TYPE_TRACK_ENTITY, valid=False, count=1)]
+    assert sj.last_item_feedback_gaps(fbs, 1) == {"prev_valid_s": 0.25, "next_invalid_s": 0.5}
+    assert sj.last_item_feedback_gaps(fbs[:2], 1) is None
+
+
+def test_clock_alignment_stats():
+    from tests.support import measure_judge as mj
+    st = [mj.StatusSample(1000, 1000 + d, 0, 1, 4, False, 0) for d in (0, 4000, 8000)]
+    assert sj.clock_alignment_stats(st) == {"median_s": 0.004, "max_s": 0.008, "n": 3}
+    assert sj.clock_alignment_stats([]) is None
 
 
 # --- t_f, 항목 순서 ---

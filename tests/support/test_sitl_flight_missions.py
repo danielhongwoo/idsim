@@ -105,22 +105,18 @@ def test_event_counts_match_judge_constants():
 
 @pytest.mark.parametrize("sid", FLIGHTS)
 def test_acceptance_radius_matches_judge_constants(sid):
-    """보정 상태(b가 빈 상태)에서는 0.5 m, b가 정해지면 0.5 m 이상이고 R_JUDGE - b 이하다."""
+    """시험 미션의 acceptance_radius_m은 0.5 m 이상이고 R_JUDGE - b 이하다(반경의 숫자는 미션 YAML에만 적는다)."""
+    assert sj.B_M is not None
     for it in sm.load_flight(sid).items:
         if it.type not in (sj.TYPE_GOTO, sj.TYPE_TRACK_ENTITY):
             continue
-        r = it.acceptance_radius_m
-        if sj.B_M is None:
-            assert r == sj.CALIBRATION_ACCEPTANCE_M
-        else:
-            assert sj.CALIBRATION_ACCEPTANCE_M - 1e-9 <= r <= sj.R_JUDGE_M - sj.B_M + 1e-9
+        assert sj.ACCEPTANCE_MIN_M - 1e-9 <= it.acceptance_radius_m <= sj.R_JUDGE_M - sj.B_M + 1e-9
 
 
-def test_ci_list_with_flights_needs_constants():
-    """CI 시나리오 목록에 F1-F4가 있으면 b와 R_home이 정해져 있다(보정 상태는 머지되지 않는다)."""
-    if set(ss.CI_SCENARIOS) & set(ss.ORACLE_SCENARIOS):
+def test_flight_scenarios_need_constants():
+    """시나리오 목록(로컬과 CI가 같다)에 F1-F4가 있으면 b와 R_home이 정해져 있다(보정 상태는 머지되지 않는다)."""
+    if set(ss.SCENARIOS) & set(ss.ORACLE_SCENARIOS):
         assert sj.B_M is not None and sj.R_HOME_M is not None
-        assert set(ss.ORACLE_SCENARIOS) <= set(ss.CI_SCENARIOS)
     if sj.B_M is not None:
         assert 0 < sj.B_M <= sj.B_MAX_M and round(sj.B_M / 0.05, 9) == round(sj.B_M / 0.05)
     if sj.R_HOME_M is not None:
@@ -153,3 +149,13 @@ def test_mission_ids_unique_and_valid():
     ids = [sm.load_flight(sid).mission_id for sid in FLIGHTS]
     assert len(set(ids)) == len(ids)
     assert all(re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", i) for i in ids)
+
+
+def test_executor_tick_matches_node_source():
+    """EXECUTOR_TICK_S가 노드의 tick 주기(mission_executor_node.hpp의 kTickPeriodNs 원문)와 같다(L의 식에 들어간다)."""
+    import re
+    hpp = (sm.REPO / "ros_ws" / "src" / "idsim_mission" / "include" / "idsim_mission" / "node"
+           / "mission_executor_node.hpp").read_text(encoding="utf-8")
+    m = re.findall(r"kTickPeriodNs\s*=\s*(\d+)LL", hpp)
+    assert len(m) == 1, "kTickPeriodNs 정의를 하나 찾아야 한다"
+    assert int(m[0]) == round(sj.EXECUTOR_TICK_S * 1e9)

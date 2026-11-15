@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """미션 통합 테스트: 시나리오 B, C, A, D, F1, F2, F3, F4, T(1a decisions.md 쟁점 9, 1b decisions.md 쟁점 15).
-한 스택에서 이 순서로 돈다. 실행 목록(conftest의 IDSIM_SITL_SCENARIOS)에 없는 시나리오는 수집에서 빠진다.
+한 스택에서 이 순서로 돈다(로컬과 CI가 같다).
 
 판정 시간은 모두 ROS 시각이다. 계약 판정의 입력은 토픽에서만 읽는다(goal의 목표값과 vehicle_local_position,
 vehicle_status, vehicle_land_detected, failsafe_flags, mission_event, action의 feedback과 result, TargetState).
@@ -502,7 +502,8 @@ def _fly(s, sid):
     starts = {i: f.stamp_us for i in range(len(types)) for f in [sj.first_item_feedback(fbs, i)] if f is not None}
     s.trace.event("flight_window", scenario=sid, mission_id=spec.mission_id, goal_sent_us=t_goal,
                   types=[TYPE_NAMES[t] for t in types], item_start_us=starts,
-                  t_f={i: list(v) for i, v in tf.items()}, result_recv_us=run.result.recv_us if run.result else None)
+                  t_f={i: list(v) for i, v in tf.items()}, result_recv_us=run.result.recv_us if run.result else None,
+                  last_item_feedback_gaps=sj.last_item_feedback_gaps(fbs, len(types)))
     if prev is not None:
         _air_start_record(s, sid, run, t_goal)
     if run.result is not None and run.result.reason == sj.REASON_TARGET_LOST:

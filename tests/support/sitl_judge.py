@@ -32,17 +32,25 @@ sitl_wait.raise_if). 판정 기준을 느슨하게 바꾸려면 근거와 함께
 1b 판정 상수(정한 곳은 1b decisions.md 쟁점 5)
   R_JUDGE_M 1.0 m: waypoint와 TRACK_ENTITY 완료의 판정 반경(U14). t_f(Executor가 항목을 완료로 넘긴 tick의 stamp)에서
     정답 pose와 목표의 3차원 거리가 이 안이어야 한다(아니면 REACH_MISMATCH).
-  B_M, R_HOME_M: 비어 있다(None). 두 상수가 빈 상태가 보정 상태이고 따로 스위치나 환경 변수를 두지 않는다.
-    보정 상태에서 바뀌는 것은 R_HOME_M에 기대는 RTL 착륙 수평 위치 단정 하나이고 R4 값과 함께 recorded_only로
-    남긴다. 나머지 판정은 그대로 실패로 센다. 시험 미션의 acceptance_radius_m은 보정 값 CALIBRATION_ACCEPTANCE_M
-    (0.5 m)이다. 값은 로컬 부팅 30회 이상의 R2, R4에서 정하고 근거(부팅 수, 사건 수, mean(s), std(s), 최댓값,
-    s_track 통계, k, Shapiro-Wilk p, 실행 id)와 함께 이 머리말에 적는다(README의 두 커밋 절차의 (나)).
+  B_M 0.5 m: 사용자 결정 U18로 고정한 값이다. 쟁점 5의 정규 허용한계(mean + k x std)는 쓰지 않는다. 확인 조건은
+    "보정 실측의 GOTO s와 TRACK_ENTITY s_track 표본 전부가 B_M 이하"다(tests/support/calibration.py).
+    시험 미션의 acceptance_radius_m은 R_JUDGE_M - B_M = 0.5 m이고 ACCEPTANCE_MIN_M(0.5 m) 이상이다. B_M은 상한
+    B_MAX_M(0.5 m)과 같고 경고선 B_WARN_M(0.35 m)을 넘는다.
+    근거(보정 실행): 로컬 부팅 30회(전부 통과), 실행 id 20261115-114952-k7-sitl-r1부터 20261115-141237-k7-sitl-r30,
+    commit 1664500(dirty 아님), 이미지 idsim/*:local, 스택 7. GOTO 도달 210건: mean(s) 0.2524, std(s) 0.0588,
+    max 0.4198 m. s_track 60건: mean -0.3668, std 0.2583, max 0.1195 m(t_f가 정확하지 않은 사건 0). 두 표본 모두
+    B_M 이하다. 참고(기록): 쟁점 5 절차라면 k 4.237로 허용한계 0.5017(b 0.55)이고 Shapiro-Wilk p는 GOTO 0.0013,
+    s_track 0.00001로 정규성이 기각된다. t_f 시점 기체 수평 속도와 d_h의 상관은 0.64다(확인 지연 동안의 진행).
+  R_HOME_M 0.20 m: 쟁점 5의 Rayleigh 허용한계. 같은 보정 실행의 RTL 착륙 60건(F3, F4 x 30): R4 max 0.1313 m,
+    sigma_hat 0.0371 m, q 3.4616(m_home 2), f 1.1787(n 30), q x f x sigma_hat 0.1514 m -> ceil_0.05 0.20 m.
+    표본 최댓값이 허용한계 안이다. 착륙 위치 평균 벡터는 y축에서 0.026 m로 2 표준오차(0.008 m)를 넘는다(기록.
+    편향은 RMS에 들어가 보수적이라 기각 사유가 아니다).
   L_S 0.2 s = target_fresh_age 0.1 s + Executor tick 0.05 s + 여유 0.05 s. 표적 접근의 임계값은 R_JUDGE_M + v x L_S이고
     v는 시나리오 표적 속도의 최댓값(stack.json targets의 구간 속도 최댓값)이다. L_S는 TRACK_ENTITY의 속도 feedforward를
     전제로 하고, PX4가 setpoint를 반영하는 지연을 약 한 tick으로 본 것은 [추정]이다(F2, F4 trace의 R3로 확인한다).
     노드의 target_fresh_age는 gate가 Executor 파라미터를 읽어 TARGET_FRESH_AGE_S와 대조한다.
   ORACLE_MAX_GAP_S 0.1 s: t_f를 감싸는 정답 표본 둘의 간격 상한. 넘으면 ORACLE_STALE.
-  LAND_Z_TOL_M 0.3 m: 착륙 뒤 DISARMED 시점의 정답 z가 그 비행의 이륙 직전 정답 z + 이 값 안.
+  LAND_Z_TOL_M 0.3 m: 착륙 뒤 DISARMED 시점의 정답 z와 그 비행의 이륙 직전 정답 z의 차의 절댓값이 이 값 안.
   M_EVENTS 9, M_HOME 2: b와 R_HOME_M을 쓰는 사건 수(GOTO와 TRACK_ENTITY 완료, RTL). 시나리오에서 파생된 값이고
     test_sitl_flight_missions.py가 시나리오 미션과 대조한다. 시나리오를 바꾸면 k와 q x f를 다시 계산한다.
   NO_TARGET_MOTION_MIN_M 0.5 m: 새로 정한 값. TRACK_ENTITY 접근 구간(항목 시작부터 t_f)의 표적 이동 거리 하한.
@@ -94,9 +102,9 @@ NAV_STATE_AUTO_RTL = 5
 
 # 1b 판정 상수(머리말 참고)
 R_JUDGE_M = 1.0
-B_M = None                       # 보정 상태(비어 있음)
-R_HOME_M = None                  # 보정 상태(비어 있음)
-CALIBRATION_ACCEPTANCE_M = 0.5   # 보정 실행의 시험 미션 acceptance_radius_m
+B_M = 0.5                        # U18(머리말)
+R_HOME_M = 0.20                  # 쟁점 5의 Rayleigh 허용한계(머리말)
+ACCEPTANCE_MIN_M = 0.5           # 시험 미션 acceptance_radius_m의 하한(b의 상한과 짝. 쟁점 5)
 B_MAX_M = 0.5                    # b의 상한(넘으면 올린다)
 B_WARN_M = 0.35                  # [추정] 경고선(넘으면 PR 본문에 적는다)
 R_HOME_MAX_M = 1.0               # R_HOME_M의 상한(넘으면 올린다)
@@ -262,6 +270,15 @@ def clock_alignment_findings(status_samples):
     if not d[-1] < CLOCK_ALIGN_MAX_S:
         f.append((sw.PRECONDITION, "/clock 정렬: 최대 %.3f s(기준 < %.1f s)" % (d[-1], CLOCK_ALIGN_MAX_S)))
     return f
+
+
+def clock_alignment_stats(status_samples):
+    """gate의 /clock 정렬 값(|노드 시각 - vehicle_status.timestamp|의 중앙값과 최대, s). 기록용. 표본이 없으면 None."""
+    d = sorted(abs(s.recv_ros_us - s.ts_us) / US for s in status_samples)
+    if not d:
+        return None
+    med = d[len(d) // 2] if len(d) % 2 else (d[len(d) // 2 - 1] + d[len(d) // 2]) / 2
+    return {"median_s": round(med, 4), "max_s": round(d[-1], 4), "n": len(d)}
 
 
 def disarmed_confirmed(status_samples, after_recv_us=0, n=N_CONSECUTIVE):
@@ -525,6 +542,20 @@ def item_completion_times(feedbacks, item_count):
     return out
 
 
+def last_item_feedback_gaps(feedbacks, item_count):
+    """마지막 항목의 t_f(item_completion_times) 앞뒤 feedback 간격(s). trace 기록용(architect 요청).
+    반환 {prev_valid_s: 직전 distance_valid 참 feedback에서 t_f까지, next_invalid_s: t_f에서 다음 distance_valid
+    거짓 feedback까지(없으면 None)}. t_f가 없으면 None."""
+    tf = item_completion_times(feedbacks, item_count).get(item_count - 1)
+    if tf is None:
+        return None
+    mine = sorted((f for f in feedbacks if f.item_index == item_count - 1), key=lambda f: f.stamp_us)
+    prev = [f.stamp_us for f in mine if f.distance_valid and f.stamp_us < tf[0]]
+    nxt = [f.stamp_us for f in mine if not f.distance_valid and f.stamp_us > tf[0]]
+    return {"prev_valid_s": round((tf[0] - prev[-1]) / US, 4) if prev else None,
+            "next_invalid_s": round((nxt[0] - tf[0]) / US, 4) if nxt else None}
+
+
 def item_order_findings(feedbacks, item_types, completed):
     """항목 순서(계약 판정). feedback의 item_index가 stamp 순으로 줄어들지 않고, item_type이 미션의 그 항목 type과
     같으며, item_count가 미션 길이이고, 완료한 항목(0..completed-1)과 끝 항목이 모두 한 번 이상 보였는가.
@@ -778,9 +809,9 @@ def target_speed_max(targets):
 def landing_judge(oracle, t_disarmed_us, ref, rtl, r_home=R_HOME_M, z_tol=LAND_Z_TOL_M):
     """착륙 후 disarm의 정답 판정. ref는 그 비행의 이륙 직전 정답 위치(x, y, z).
 
-    DISARMED 시점의 정답 z가 ref z + z_tol 안인가(아니면 WRONG_RESULT). RTL이면 착륙 수평 위치와 ref의 거리 R4를
-    재고, r_home이 정해져 있으면 그 안인가(아니면 WRONG_RESULT). r_home이 빈 보정 상태에서는 R4를 recorded_only로
-    남기고 실패로 세지 않는다. 반환 (findings, 기록).
+    DISARMED 시점의 정답 z와 ref z의 차의 절댓값이 z_tol 안인가(아니면 WRONG_RESULT). RTL이면 착륙 수평 위치와
+    ref의 거리 R4가 r_home 안인가(아니면 WRONG_RESULT). r_home이 None이면 R4를 recorded_only로 남기고 실패로
+    세지 않는다(단위 테스트용 경로. 판정 상수는 정해져 있다). 반환 (findings, 기록).
     """
     f, p, gap = oracle_at(oracle, t_disarmed_us)
     rec = {"t_disarmed_us": t_disarmed_us, "ref": [round(v, 4) for v in ref], "gap_s": gap, "rtl": bool(rtl)}
@@ -788,8 +819,8 @@ def landing_judge(oracle, t_disarmed_us, ref, rtl, r_home=R_HOME_M, z_tol=LAND_Z
         return f, rec
     dz = p[2] - ref[2]
     rec.update(landing=[round(v, 4) for v in p], dz=round(dz, 4))
-    if dz > z_tol:
-        f.append((sw.WRONG_RESULT, "DISARMED 시점의 정답 z가 이륙 직전보다 %.3f m 높다(허용 %.2f m)" % (dz, z_tol)))
+    if abs(dz) > z_tol:
+        f.append((sw.WRONG_RESULT, "DISARMED 시점의 정답 z가 이륙 직전과 %+.3f m 다르다(허용 절댓값 %.2f m)" % (dz, z_tol)))
     if rtl:
         r4 = math.hypot(p[0] - ref[0], p[1] - ref[1])
         rec["r4_m"] = round(r4, 4)

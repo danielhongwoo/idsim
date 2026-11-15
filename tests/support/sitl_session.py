@@ -139,13 +139,14 @@ class SitlSession:
         self._need(lambda: len(self.raw.status) >= sj.CLOCK_ALIGN_MIN_SAMPLES + 3, GATE_STATUS_S,
                    "정렬 판정용 vehicle_status 표본", sw.PRECONDITION)
         sw.raise_if(sj.clock_alignment_findings(self.raw.status[-12:]))
+        clock_align = sj.clock_alignment_stats(self.raw.status[-12:])
         self._need(lambda: self.raw.last_pos() is not None and self.raw.last_landed() is not None, GATE_STATUS_S,
                    "vehicle_local_position, vehicle_land_detected 표본", sw.PRECONDITION)
         truth = self._gate_truth()
         sim_s, wall_s = (self.raw.clock_us() - s0) / US, time.monotonic() - w0
-        self.gate_info = {"sim_s": sim_s, "wall_s": wall_s, "truth": truth}
+        self.gate_info = {"sim_s": sim_s, "wall_s": wall_s, "truth": truth, "clock_alignment": clock_align}
         self.rtf_start = (self.raw.clock_us(), time.monotonic())
-        self.trace.event("gate_ok", sim_s=sim_s, wall_s=round(wall_s, 3))
+        self.trace.event("gate_ok", sim_s=sim_s, wall_s=round(wall_s, 3), clock_alignment=clock_align)
 
     def _gate_truth(self):
         """정답 pose, 표적, target_fresh_age를 첫 goal 전에 확인한다. 표적 발행자 QoS가 계약과 다르면 QOS_MISMATCH."""

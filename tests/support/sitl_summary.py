@@ -20,13 +20,9 @@ OFFBOARD가 아닌 ARMED 표본의 부류별 판정은 measure_judge.judge_armed
 """
 from tests.support import measure_judge as mj
 
-# 실행 순서(1b decisions.md 쟁점 15). 한 스택에서 이 순서로 돈다
+# 실행 순서(1b decisions.md 쟁점 15). 한 스택에서 이 순서로 돌고 로컬과 CI가 같은 목록이다. F1-F4가 있으므로
+# 판정 상수 b와 R_home이 정해져 있어야 한다(test_sitl_flight_missions.py가 단정한다)
 SCENARIOS = ("B", "C", "A", "D", "F1", "F2", "F3", "F4", "T")
-# CI sitl job이 도는 목록. b와 R_home이 빈 보정 상태(sitl_judge.B_M, R_HOME_M이 None)에서는 F1-F4를 넣지 않는다
-# (README의 두 커밋 절차. 상수가 빈 채 F1-F4를 넣으면 test_sitl_flight_missions.py가 실패한다)
-CI_SCENARIOS = ("B", "C", "A", "D", "T")
-# 실행 목록 이름 -> 시나리오. run_sitl.sh가 IDSIM_SITL_SCENARIOS로 넘긴다(GitHub Actions에서는 ci, 로컬 기본은 all)
-SCENARIO_SETS = {"all": SCENARIOS, "ci": CI_SCENARIOS}
 # 비행 시나리오. 하나가 실패하면 뒤의 비행 시나리오는 실행하지 않고 UPSTREAM_FAILED다(쟁점 15)
 FLIGHT_SCENARIOS = ("A", "D", "F1", "F2", "F3", "F4")
 # 정답 pose가 있어야 하는 시나리오(없으면 ORACLE_ABSENT)
@@ -47,23 +43,12 @@ def scenario_result(sid, outcome, category=None, message=None, sim_s=None, wall_
             "wall_s": wall_s, "milestones": milestones or {}}
 
 
-def expected_scenarios(name):
-    """실행 목록 이름(all, ci) -> 시나리오 튜플. 모르는 이름은 ValueError."""
-    if name not in SCENARIO_SETS:
-        raise ValueError("모르는 시나리오 목록 %r(아는 것: %s)" % (name, ", ".join(sorted(SCENARIO_SETS))))
-    return SCENARIO_SETS[name]
-
-
 def run_passed(verdict):
-    """게이트가 통과하고 그 실행의 기대 시나리오(verdict의 expected_scenarios, 없으면 CI_SCENARIOS)가 모두 passed인가.
-    하나라도 빠지면 실패다. 기대 목록이 CI_SCENARIOS를 다 담지 않으면 실패다(목록을 줄여 통과시키지 않는다)."""
+    """게이트가 통과하고 SCENARIOS가 모두 passed인가. 하나라도 빠지면 실패다."""
     if not verdict.get("gate", {}).get("ok"):
         return False
-    expected = tuple(verdict.get("expected_scenarios") or CI_SCENARIOS)
-    if not set(CI_SCENARIOS) <= set(expected):
-        return False
     by_id = {s["id"]: s for s in verdict.get("scenarios", [])}
-    return all(by_id.get(i, {}).get("outcome") == "passed" for i in expected)
+    return all(by_id.get(i, {}).get("outcome") == "passed" for i in SCENARIOS)
 
 
 def verdict_cell(verdict, sid):

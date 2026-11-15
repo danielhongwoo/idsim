@@ -16,11 +16,9 @@
 
 # 미션 통합 테스트(시나리오 B, C, A, D, F1, F2, F3, F4, T)의 호스트 wrapper. 로컬과 CI(.github/workflows/sitl.yml)가 같은 명령을 쓴다.
 #
-# 사용법: tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--scenarios all|ci] [--attach <실행 디렉터리>] [-- pytest 인자...]
+# 사용법: tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>] [-- pytest 인자...]
 #   --stack k      스택 번호 0-9. 없으면 IDSIM_STACK_INDEX, 없으면 0
 #   --repeat N     회마다 down 뒤 콜드 up으로 N번 돈다(회마다 실행 id가 다르다). 첫 실패에서 멈춘다(자동 재시도 없음)
-#   --scenarios S  실행 목록(tests/support/sitl_summary.py SCENARIO_SETS). 없으면 GitHub Actions(GITHUB_ACTIONS=true)에서는
-#                  ci, 그 밖에서는 all. b와 R_home이 빈 보정 상태에서는 ci 목록에 F1-F4가 없다
 #   --attach DIR   올리지도 내리지도 않고 이미 떠 있는 스택(DIR/compose.yaml)에 붙어 pytest와 수집만 한다
 #                  (QGC와 Gazebo GUI 육안 확인, 디버깅). 산출물은 DIR/sitl-attach-<시각>/ 에 쓴다
 #   --             이 뒤는 pytest에 그대로 넘긴다(예: -- -k test_b)
@@ -56,7 +54,6 @@ usage() { sed -n '17,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; exit
 k="${IDSIM_STACK_INDEX:-0}"
 repeat=1
 attach=""
-scenarios=""
 fleet_file="tests/sitl/fleet.yaml"
 pytest_args=()
 while [ $# -gt 0 ]; do
@@ -67,8 +64,6 @@ while [ $# -gt 0 ]; do
     --repeat=*) repeat="${1#*=}"; shift ;;
     --attach) attach="${2:?--attach 값}"; shift 2 ;;
     --attach=*) attach="${1#*=}"; shift ;;
-    --scenarios) scenarios="${2:?--scenarios 값}"; shift 2 ;;
-    --scenarios=*) scenarios="${1#*=}"; shift ;;
     -h|--help) usage ;;
     --) shift; pytest_args=("$@"); break ;;
     *) say "모르는 인자: $1"; usage ;;
@@ -77,11 +72,6 @@ done
 case "$k" in [0-9]) ;; *) say "스택 번호는 0-9: '${k}'"; exit 2 ;; esac
 case "$repeat" in ''|*[!0-9]*|0) say "--repeat은 1 이상의 정수: '${repeat}'"; exit 2 ;; esac
 if [ -n "$attach" ] && [ "$repeat" -ne 1 ]; then say "--attach는 --repeat과 함께 쓰지 않는다"; exit 2; fi
-if [ -z "$scenarios" ]; then
-  if [ "${GITHUB_ACTIONS:-}" = "true" ]; then scenarios=ci; else scenarios=all; fi
-fi
-case "$scenarios" in all|ci) ;; *) say "--scenarios는 all 또는 ci: '${scenarios}'"; exit 2 ;; esac
-say "실행 목록: ${scenarios}"
 
 pytest_timeout="${SITL_PYTEST_TIMEOUT:-900}"
 case "$pytest_timeout" in ''|*[!0-9]*) say "SITL_PYTEST_TIMEOUT은 정수 초: '${pytest_timeout}'"; exit 2 ;; esac
@@ -164,7 +154,7 @@ one_run() { # 회 번호
   t0="$(now)"
   # shellcheck disable=SC2016  # $1과 $@는 컨테이너 안의 bash가 푼다
   timeout --foreground -s INT -k 30 "$pytest_timeout" docker compose -f "$compose" run --rm --no-deps -T \
-    -e IDSIM_SITL_OUT="$out_name" -e IDSIM_SITL_SCENARIOS="$scenarios" runner bash -c \
+    -e IDSIM_SITL_OUT="$out_name" runner bash -c \
     'cd /opt/idsim && exec python3 -m pytest tests/sitl tests/support/test_sitl_constants.py tests/support/test_px4_topic_names.py -p no:cacheprovider -ra --junitxml="$1" "${@:2}"' _ \
     "/opt/idsim/${rel}/${out_name}/junit.xml" ${pytest_args[@]+"${pytest_args[@]}"} >&2
   rc=$?
