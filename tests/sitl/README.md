@@ -23,7 +23,7 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 
 | 시나리오 | 내용 | 판정 필드 |
 | --- | --- | --- |
-| B | 1b 무효 사례 8개(`tests/support/sitl_missions.py`의 `B_INVALID_CASES`: `[]`, 첫 항목이 아닌 TAKEOFF, `[LAND, GOTO]`, 가운데 RTL, `[RTL, GOTO]`, TRACK_ENTITY의 0 `offset`, 형식이 틀린 `target_id`, 기본값 TRACK_ENTITY 서브메시지)를 순서대로 | 사례마다 result ABORTED와 `REASON_INVALID_MISSION`, 접수와 종료 사건 한 쌍(종료 사건 == result), feedback 0건. 첫 goal부터 끝(마지막 사례 뒤 5 s)까지 한 구간에서 ARMED 표본 없음. 거부가 아닌 결과는 그 사례에서 바로 실패하고 goal 취소와 비상 정리를 한다 |
+| B | 1b 무효 사례 8개(`tests/support/sitl_missions.py`의 `B_INVALID_CASES`: `[]`, 첫 항목이 아닌 TAKEOFF, `[LAND, GOTO]`, 가운데 RTL, `[RTL, GOTO]`, TRACK_ENTITY의 0 `offset`, 형식이 틀린 `target_id`, 기본값 TRACK_ENTITY 서브메시지)를 순서대로 | 사례마다 result ABORTED와 `REASON_INVALID_MISSION`, `detail`에 사례의 기대 조각(의도한 검사에서 거부됐는가. 문구는 계약이 아니다), 접수와 종료 사건 한 쌍(종료 사건 == result), feedback 0건. 첫 goal부터 끝(마지막 사례 뒤 5 s)까지 한 구간에서 ARMED 표본 없음. 거부가 아닌 결과는 그 사례에서 바로 실패하고 goal 취소와 비상 정리를 한다 |
 | C | goal의 `vehicle_id`가 다른 값 | result ABORTED와 `REASON_VEHICLE_ID_MISMATCH`. 사건의 `vehicle_id`는 Executor 자신의 값. feedback 0건. 5 s 동안 ARMED 표본 없음 |
 | A | `[TAKEOFF 5 m, LOITER 5 s, LAND]` | SUCCEEDED, `REASON_NONE`, `items_completed` 3. 사건 짝과 result 일치. 이정표 순서(goal 전송, 접수, ARMED, TAKEOFF 시작, 도달, LAND 시작, AUTO_LAND, DISARMED, result)가 테스트 노드 수신 시각으로 줄어들지 않음. LOITER 유지 5 s 이상과 고도 허용 0.5 m. TAKEOFF와 LOITER 동안 `failsafe`가 false이고 `nav_state`가 OFFBOARD. ARMED를 본 뒤의 AUTO_LAND, 그 뒤 DISARMED 3회 연속. OFFBOARD가 아닌 ARMED 표본 0개 |
 | D | 도달 뒤 cancel, 이어서 `[LAND]` | cancel 응답 `ERROR_NONE`, CANCELED와 `REASON_NONE`. AUTO_LOITER 3회 연속, 그 뒤 5 s 동안 고도 변화 0.5 m 이하이고 ARMED, `landed` false. `[LAND]` 미션 SUCCEEDED, ARMED 뒤 AUTO_LAND, DISARMED 3회 연속, `landed` true |

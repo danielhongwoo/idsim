@@ -129,6 +129,15 @@ def check_result(result, status, reason, items_completed=None):
     return f
 
 
+def detail_findings(result, fragment):
+    """result.detail에 fragment가 들어 있는가. detail 문구는 계약이 아니다(무효 사례가 의도한 검사에서 걸렸는지 보는 용도)."""
+    if result is None:
+        return [(sw.WRONG_RESULT, "result를 받지 못했다")]
+    if fragment not in result.detail:
+        return [(sw.WRONG_RESULT, "result detail %r에 기대 조각 %r이 없다(다른 검사에서 거부됨)" % (result.detail, fragment))]
+    return []
+
+
 def check_no_feedback(feedbacks, goal_id):
     mine = [x for x in feedbacks if x.goal_id == goal_id]
     if mine:

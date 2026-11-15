@@ -42,13 +42,22 @@ def _fields_ok(it):
 
 
 def _case(mission_id):
-    return next(items for mid, _, items in sm.B_INVALID_CASES if mid == mission_id)
+    return next(items for mid, _, _, items in sm.B_INVALID_CASES if mid == mission_id)
 
 
 def test_mission_ids_are_valid_and_unique():
-    ids = [mid for mid, _, _ in sm.B_INVALID_CASES]
+    ids = [mid for mid, _, _, _ in sm.B_INVALID_CASES]
     assert len(ids) == len(set(ids))
     assert all(MISSION_ID_RE.match(mid) for mid in ids)
+
+
+def test_every_case_has_a_detail_fragment():
+    assert all(isinstance(d, str) and d for _, _, d, _ in sm.B_INVALID_CASES)
+
+
+def test_bad_target_id_fragment_names_the_id():
+    assert ("'%s'" % sm.BAD_TARGET_ID) in next(d for mid, _, d, _ in sm.B_INVALID_CASES
+                                               if mid == "b-track-bad-target-id")
 
 
 def test_order_cases_have_only_well_formed_items():
@@ -57,7 +66,7 @@ def test_order_cases_have_only_well_formed_items():
 
 
 def test_order_cases_break_their_rule():
-    types = {mid: [it["type"] for it in items] for mid, _, items in sm.B_INVALID_CASES}
+    types = {mid: [it["type"] for it in items] for mid, _, _, items in sm.B_INVALID_CASES}
     assert sj.TYPE_TAKEOFF in types["b-takeoff-not-first"][1:]
     assert types["b-land-goto"][0] == sj.TYPE_LAND and len(types["b-land-goto"]) > 1
     rtl_mid = types["b-rtl-not-last"]

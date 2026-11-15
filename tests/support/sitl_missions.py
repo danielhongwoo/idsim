@@ -55,16 +55,25 @@ def default_sub_item(item_type, timeout_s=30.0):
     return {"type": item_type, "timeout_s": timeout_s, "default_sub": True}
 
 
-# 시나리오 B의 1b 무효 사례(decisions.md 쟁점 15). 이 순서로 보낸다. (mission_id, 어기는 규칙, 항목)
+# 시나리오 B의 1b 무효 사례(decisions.md 쟁점 15). 이 순서로 보낸다. (mission_id, 걸리는 검사, 기대 detail 조각, 항목)
 # 형식이 맞지만 없는 target_id는 계약상 유효하므로(TARGET_LOST로 드러난다) 넣지 않는다.
+# detail 조각은 계약이 아니다(validate_mission_contract의 문구, mission_validation.cpp). 사례가 의도한 검사에서
+# 거부되는지 보려고 기대는 것이므로, 문구가 바뀌면 이 표를 같이 고친다.
 B_INVALID_CASES = (
-    ("b-empty", "항목 1개 이상", []),
-    ("b-takeoff-not-first", "TAKEOFF는 첫 항목에만", [goto_item(), takeoff_item()]),
-    ("b-land-goto", "LAND는 마지막 항목에만", [land_item(), goto_item()]),
-    ("b-rtl-not-last", "RTL은 마지막 항목에만(가운데)", [takeoff_item(), rtl_item(), land_item()]),
-    ("b-rtl-first", "RTL은 마지막 항목에만(첫 항목)", [rtl_item(), goto_item()]),
-    ("b-track-zero-offset", "TRACK_ENTITY offset은 0 벡터가 아니다", [takeoff_item(), track_item(offset=(0.0, 0.0, 0.0))]),
-    ("b-track-bad-target-id", "TRACK_ENTITY target_id 형식", [takeoff_item(), track_item(target_id=BAD_TARGET_ID)]),
-    ("b-track-default", "TRACK_ENTITY 서브메시지가 기본값이 아니다",
-     [takeoff_item(), default_sub_item(sj.TYPE_TRACK_ENTITY)]),
+    ("b-empty", "항목 1개 이상", "mission has no items", []),
+    ("b-takeoff-not-first", "TAKEOFF는 첫 항목에만", "items[1].type TAKEOFF is allowed only as the first item",
+     [goto_item(), takeoff_item()]),
+    ("b-land-goto", "LAND는 마지막 항목에만", "items[0].type LAND is allowed only as the last item",
+     [land_item(), goto_item()]),
+    ("b-rtl-not-last", "RTL은 마지막 항목에만(가운데)", "items[1].type RTL is allowed only as the last item",
+     [takeoff_item(), rtl_item(), land_item()]),
+    ("b-rtl-first", "RTL은 마지막 항목에만(첫 항목)", "items[0].type RTL is allowed only as the last item",
+     [rtl_item(), goto_item()]),
+    ("b-track-zero-offset", "TRACK_ENTITY offset은 0 벡터가 아니다",
+     "items[1].track_entity.offset must be finite and non-zero", [takeoff_item(), track_item(offset=(0.0, 0.0, 0.0))]),
+    ("b-track-bad-target-id", "TRACK_ENTITY target_id 형식", "items[1].track_entity.target_id 'Car-1' does not match",
+     [takeoff_item(), track_item(target_id=BAD_TARGET_ID)]),
+    # 서브메시지가 모두 기본값이면 검사 순서상 첫 필드 검사(target_id 형식, 빈 문자열)에서 거부된다
+    ("b-track-default", "기본값 TRACK_ENTITY 서브메시지(빈 target_id)",
+     "items[1].track_entity.target_id '' does not match", [takeoff_item(), default_sub_item(sj.TYPE_TRACK_ENTITY)]),
 )

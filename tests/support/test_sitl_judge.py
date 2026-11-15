@@ -286,3 +286,10 @@ def test_altitude_max_deviation():
     p = [pos(1, -5.0), pos(2, -5.2), pos(3, -4.9, valid=False), pos(9, -3.0)]
     assert abs(sj.altitude_max_deviation(p, 0, 5, -5.0) - 0.2) < 1e-9
     assert sj.altitude_max_deviation(p, 20, 30, -5.0) is None
+
+
+def test_detail_findings():
+    r = sj.ResultRec(0, sj.STATUS_ABORTED, sj.REASON_INVALID_MISSION, 0, 0, "items[1].type TAKEOFF is allowed only")
+    assert sj.detail_findings(r, "TAKEOFF is allowed") == []
+    assert sj.detail_findings(r, "offset")[0][0] == sw.WRONG_RESULT
+    assert sj.detail_findings(None, "x")[0][0] == sw.WRONG_RESULT
