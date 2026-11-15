@@ -15,7 +15,8 @@
 // PX4 어댑터의 좌표 기준 쪽: vehicle_local_position의 기준(ref_*) -> core::FramePort.
 // 소유 px4-engineer.
 //
-// 대응의 정본은 core/snapshot.hpp 머리 주석의 FramePort 행이고, 결정은 docs/interface.md "좌표계"다.
+// 대응의 정본은 core/snapshot.hpp 머리 주석의 FramePort 행이고,
+// 결정은 docs/interface.md "좌표계"다.
 // - 기준 유효 술어는 local_reference_from_px4 하나에 둔다: xy_global과 z_global이 true,
 //   ref_lat, ref_lon, ref_alt가 유한, ref_alt가 정확히 0.0이 아니다. PX4는 고도 원점이 없을 때
 //   ref_alt에 NaN이 아니라 0을 내고 z_global은 위경도 원점만 본다(EKF2.cpp,
@@ -30,8 +31,8 @@
 //     // tick
 //     const Px4FramePort frame(world_origin_, position_input_->reference);
 //
-//   비행 중 기준이 바뀌면(ref_timestamp_us가 달라지면) 노드가 WARN 한 줄을 남긴다(docs/interface.md "좌표계"의
-//   "원점 변경").
+//   비행 중 기준이 바뀌면(ref_timestamp_us가 달라지면) 노드가 WARN 한 줄을 남긴다
+//   (docs/interface.md "좌표계"의 "원점 변경").
 // - 식은 idsim_common::geo::world_enu_to_local_ned(점)와 idsim_common::frames::enu_to_ned(벡터)다.
 //   이 파일은 술어와 형 변환만 하고 식을 다시 쓰지 않는다.
 //
@@ -51,7 +52,8 @@
 namespace idsim_mission::px4
 {
 
-// 기준 유효 술어(docs/interface.md "좌표계"). 참이면 ref_lat, ref_lon(도), ref_alt(m, float32 -> double)를
+// 기준 유효 술어(docs/interface.md "좌표계").
+// 참이면 ref_lat, ref_lon(도), ref_alt(m, float32 -> double)를
 // 돌려주고, 하나라도 어긋나면 nullopt.
 std::optional<idsim_common::geo::LocalReference> local_reference_from_px4(
   const px4_msgs::msg::VehicleLocalPosition & msg);

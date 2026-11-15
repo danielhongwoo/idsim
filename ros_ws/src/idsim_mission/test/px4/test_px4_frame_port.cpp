@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// PX4 어댑터 좌표 기준 쪽: vehicle_local_position의 기준 -> core::FramePort(docs/interface.md "좌표계").
+// PX4 어댑터 좌표 기준 쪽: vehicle_local_position의 기준 -> core::FramePort
+// (docs/interface.md "좌표계").
 // 기준 유효 술어의 칸마다 한 사례, 같은 표본에서 위치와 기준을 함께 만드는지, 식은
 // idsim_common::geo와 frames에 위임하는지 본다. 노드와 DDS 참가자를 만들지 않는다.
 
@@ -274,7 +275,8 @@ TEST(Px4FramePort, PointOutsideFloat32GivesNoValue)
 
 TEST(Px4FramePort, ReturnedPointIsNeverDroppedBySetpointOutput)
 {
-  // Px4FramePort가 값을 돌려준 점은 to_setpoint_messages가 버리지 않는다(docs/interface.md "좌표계"의 대조
+  // Px4FramePort가 값을 돌려준 점은 to_setpoint_messages가 버리지 않는다
+  // (docs/interface.md "좌표계"의 대조
   // 테스트. 벡터 쪽은 ReturnedVelocityIsNeverDroppedBySetpointOutput).
   const Px4FramePort frame(origin(), local_reference_from_px4(valid_msg()));
   const idsim_common::Px4Timestamp ts = stamp_at(1'000'000);
@@ -338,7 +340,8 @@ std::vector<Vec3> velocity_inputs()
 
 TEST(Px4FramePort, VelocityOutsideFloat32GivesNoValue)
 {
-  // 벡터 변환은 기준과 무관하게 결과가 float32에 실을 수 없으면 nullopt다(docs/interface.md "좌표계").
+  // 벡터 변환은 기준과 무관하게 결과가 float32에 실을 수 없으면 nullopt다
+  // (docs/interface.md "좌표계").
   const double flt_max = static_cast<double>(std::numeric_limits<float>::max());
   for (const std::optional<LocalReference> & ref :
        {local_reference_from_px4(valid_msg()), std::optional<LocalReference>{}}) {
@@ -357,7 +360,8 @@ TEST(Px4FramePort, VelocityOutsideFloat32GivesNoValue)
 TEST(Px4FramePort, ReturnedVelocityIsNeverDroppedBySetpointOutput)
 {
   // Px4FramePort가 값을 돌려준 벡터는 velocity_valid setpoint로 실어도 to_setpoint_messages가
-  // 버리지 않는다(docs/interface.md "좌표계"의 대조 테스트 벡터 쪽).
+  // 버리지 않는다
+  // (docs/interface.md "좌표계"의 대조 테스트 벡터 쪽).
   const Px4FramePort frame(origin(), local_reference_from_px4(valid_msg()));
   const idsim_common::Px4Timestamp ts = stamp_at(1'000'000);
   int with_value = 0;
