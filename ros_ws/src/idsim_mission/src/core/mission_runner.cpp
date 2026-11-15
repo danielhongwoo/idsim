@@ -143,11 +143,11 @@ MissionRunner::MissionRunner(
   MissionSpec mission, Config config, std::int64_t accept_ns, TransitionObserver * observer)
 : accept_ns_(accept_ns), observer_(observer), mission_(std::move(mission)), config_(config)
 {
-  MissionCheck check = validate_mission_runnable(mission_);
+  MissionCheck check = validate_mission_contract(mission_);
   mission_valid_ = check.valid;
   invalid_detail_ = std::move(check.detail);
   if (mission_valid_) {
-    // validate_mission_runnable이 첫 항목을 진입 방식이 있는 type으로 둔다.
+    // 계약 valid 미션의 첫 항목 type은 모두 진입 방식이 있다. 아래 갈래는 방어다.
     const std::optional<EntryPlan> plan = entry_plan(mission_.items.front().type);
     mission_valid_ = plan.has_value();
     entry_plan_ = plan.value_or(EntryPlan::kGroundArm);
@@ -198,7 +198,7 @@ void MissionRunner::step_tick(Tick & t)
     terminate(
       Event::kInvalidMission, t,
       aborted(
-        Reason::kInternal, "mission did not pass validate_mission_runnable: " + invalid_detail_));
+        Reason::kInternal, "mission did not pass validate_mission_contract: " + invalid_detail_));
     if (t.input.cancel_requested) {
       note_ignored_cancel(t);
     }
@@ -1030,7 +1030,7 @@ void MissionRunner::step_setpoint_item(Tick & t)
   bool track_has_sample = false;
   Event completion = Event::kLoiterElapsed;
   if (item.type == item_type::kTakeoff) {
-    // validate_mission_runnable이 부르는 계약 순서 규칙이 TAKEOFF를 첫 항목에만 두므로
+    // runner가 부르는 validate_mission_contract의 순서 규칙이 TAKEOFF를 첫 항목에만 두므로
     // takeoff_target_z_는 이 항목의 목표다.
     const PositionSample * const p = t.position;
     completed = p != nullptr && p->z_valid && std::isfinite(p->z) &&

@@ -211,12 +211,6 @@ bool supported_in_1a(std::uint8_t type)
   return type == item_type::kTakeoff || type == item_type::kLoiter || type == item_type::kLand;
 }
 
-bool supported_by_runner(std::uint8_t type)
-{
-  return supported_in_1a(type) || type == item_type::kRtl || type == item_type::kGoTo ||
-         type == item_type::kTrackEntity;
-}
-
 // 계약 + 1a 임시 제한. validate_mission_1a_goal이 쓴다.
 MissionCheck check_1a_limits(const MissionSpec & mission)
 {
@@ -297,26 +291,6 @@ MissionCheck validate_mission_contract(const MissionSpec & mission)
 MissionCheck validate_mission_1a_goal(const MissionSpec & mission)
 {
   return check_1a_limits(mission);
-}
-
-MissionCheck validate_mission_runnable(const MissionSpec & mission)
-{
-  // 계약 + runner가 아직 실행하지 못하는 미션의 제한. 1b decisions.md 쟁점 12의 PR마다 푼다.
-  MissionCheck check = validate_mission_contract(mission);
-  if (!check.valid) {
-    return check;
-  }
-  const std::size_t count = mission.items.size();
-  for (std::size_t i = 0; i < count; ++i) {
-    const std::uint8_t type = mission.items[i].type;
-    if (!supported_by_runner(type)) {
-      return invalid(
-        field(i, "type") + " " + item_type_name(type) +
-        " is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, RTL only)");
-    }
-  }
-  // 첫 항목 type은 모두 진입 방식이 있다(type 여섯. rules.hpp entry_plan).
-  return check;
 }
 
 std::optional<Termination> screen_goal(

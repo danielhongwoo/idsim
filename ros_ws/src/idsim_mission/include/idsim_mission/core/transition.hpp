@@ -106,7 +106,7 @@ enum class Branch : std::uint8_t
 enum class Event : std::uint8_t
 {
   // PREPARING 전체
-  kInvalidMission,  // validate_mission_runnable 미통과 미션의 첫 step
+  kInvalidMission,  // validate_mission_contract 미통과 미션의 첫 step
   // 지상 arm 진입의 발행 시작 뒤, 첫 ARMED 표본 전의 식별 불일치(공중 Offboard 진입은 감시 표
   // 순위 2)
   kPreparingIdentityMismatch,

@@ -135,7 +135,7 @@ ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.LAND	-	covered	-	미션 [TAKEOFF, LAND]
 ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.RTL	-	covered	-	-
 ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.GOTO	-	covered	-	-
 ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.TRACK_ENTITY	-	covered	-	-
-ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.TAKEOFF	-	impossible	-	validate_mission_runnable이 부르는 계약 순서 규칙이 TAKEOFF를 첫 항목에만 둔다
+ITEM.TAKEOFF	TAKEOFF_REACHED	ITEM.TAKEOFF	-	impossible	-	runner가 부르는 validate_mission_contract의 순서 규칙이 TAKEOFF를 첫 항목에만 둔다
 ITEM.TAKEOFF	TAKEOFF_REACHED	DONE	SUCCEEDED/NONE	impossible	-	마지막 setpoint 항목의 완료는 종료 단계(CLEANUP.MISSION_END.NONE)로 가고 완료 tick에 DONE으로 가지 않는다(decisions.md 쟁점 10)
 ITEM.TAKEOFF	TAKEOFF_REACHED	CLEANUP.MISSION_END.NONE	-	covered	-	미션 [TAKEOFF]. 마지막 setpoint 항목의 완료는 종료 단계로 간다(decisions.md 쟁점 10)
 ITEM.TAKEOFF	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-
@@ -162,7 +162,7 @@ ITEM.TAKEOFF	MONITOR_TIMESTAMP_FAILURE	DONE	ABORTED/INTERNAL	covered	TAKEOFF_REA
 ITEM.TAKEOFF	MONITOR_LINK_LOST	DONE	ABORTED/LINK_LOST	covered	TAKEOFF_REACHED	setpoint 순서의 대표 행
 ITEM.TAKEOFF	MONITOR_DISARMED_ON_GROUND	DONE	ABORTED/EXTERNAL_DISARM	covered	TAKEOFF_REACHED	setpoint 순서의 대표 행
 ITEM.TAKEOFF	MONITOR_MODE_EXTERNAL	DONE	ABORTED/EXTERNAL_MODE_CHANGE	covered	TAKEOFF_REACHED	setpoint 순서의 대표 행
-ITEM.LOITER	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	impossible	-	validate_mission_runnable이 부르는 계약 검사가 loiter.duration < timeout을 요구하므로 timeout이 지난 tick에는 LOITER_ELAPSED도 참이다(겹침 칸으로만 나온다)
+ITEM.LOITER	ITEM_TIMEOUT	CLEANUP.ITEM_TIMEOUT.NONE	-	impossible	-	runner가 부르는 validate_mission_contract가 loiter.duration < timeout을 요구하므로 timeout이 지난 tick에는 LOITER_ELAPSED도 참이다(겹침 칸으로만 나온다)
 ITEM.LOITER	LOITER_ELAPSED	ITEM.LAND	-	covered	-	-
 ITEM.LOITER	LOITER_ELAPSED	ITEM.RTL	-	covered	-	-
 ITEM.LOITER	LOITER_ELAPSED	ITEM.LOITER	-	covered	-	LOITER 둘 이상인 미션
@@ -201,7 +201,7 @@ ITEM.GOTO	GOTO_REACHED	ITEM.LAND	-	covered	-	-
 ITEM.GOTO	GOTO_REACHED	ITEM.RTL	-	covered	-	-
 ITEM.GOTO	GOTO_REACHED	ITEM.GOTO	-	covered	-	GOTO 둘 이상인 미션
 ITEM.GOTO	GOTO_REACHED	ITEM.TRACK_ENTITY	-	covered	-	-
-ITEM.GOTO	GOTO_REACHED	ITEM.TAKEOFF	-	impossible	-	validate_mission_runnable이 부르는 계약 순서 규칙이 TAKEOFF를 첫 항목에만 둔다
+ITEM.GOTO	GOTO_REACHED	ITEM.TAKEOFF	-	impossible	-	runner가 부르는 validate_mission_contract의 순서 규칙이 TAKEOFF를 첫 항목에만 둔다
 ITEM.GOTO	GOTO_REACHED	DONE	SUCCEEDED/NONE	impossible	-	마지막 setpoint 항목의 완료는 종료 단계(CLEANUP.MISSION_END.NONE)로 가고 완료 tick에 DONE으로 가지 않는다(decisions.md 쟁점 10)
 ITEM.GOTO	GOTO_REACHED	CLEANUP.MISSION_END.NONE	-	covered	-	미션 [TAKEOFF, GOTO], [GOTO]. 마지막 setpoint 항목의 완료는 종료 단계로 간다(decisions.md 쟁점 10)
 ITEM.GOTO	CANCEL	CLEANUP.CANCEL.NONE	-	covered	-	-

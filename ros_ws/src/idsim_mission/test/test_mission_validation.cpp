@@ -564,14 +564,13 @@ TEST(MissionRunner, UnvalidatedMissionEndsInternalOnFirstStep)
   Harness h(m);
   h.tick();
   ASSERT_TRUE(h.termination().has_value());
-  const MissionCheck check = validate_mission_runnable(m);
+  const MissionCheck check = validate_mission_contract(m);
   ASSERT_FALSE(check.valid);
-  EXPECT_EQ(check.detail, validate_mission_contract(m).detail);
   EXPECT_EQ(
-    h.termination()->detail, "mission did not pass validate_mission_runnable: " + check.detail);
+    h.termination()->detail, "mission did not pass validate_mission_contract: " + check.detail);
   EXPECT_EQ(
     h.termination()->detail,
-    "mission did not pass validate_mission_runnable: items[1].type LAND is allowed only as the "
+    "mission did not pass validate_mission_contract: items[1].type LAND is allowed only as the "
     "last item");
   expect_terminated_once(h, Status::kAborted, Reason::kInternal);
 }
@@ -607,33 +606,24 @@ std::vector<MissionSpec> all_orders_up_to_four()
 
 TEST(ValidateMission, OneAGoalAcceptsOnlyWhatRunnerAccepts)
 {
+  // runner는 계약 검증(validate_mission_contract)을 부르므로 goal 접수가 받으면 runner도 받는다.
   const std::vector<MissionSpec> missions = all_orders_up_to_four();
   ASSERT_EQ(missions.size(), 1554U);
   int goal_valid = 0;
-  int runnable_valid = 0;
+  int contract_valid = 0;
   for (const MissionSpec & m : missions) {
-    EXPECT_TRUE(validate_mission_contract(m).valid || !validate_mission_1a_goal(m).valid)
-      << order_name(m);
     const bool goal = validate_mission_1a_goal(m).valid;
-    const bool runnable = validate_mission_runnable(m).valid;
+    const bool contract = validate_mission_contract(m).valid;
     if (goal) {
-      EXPECT_TRUE(runnable) << order_name(m) << ": " << validate_mission_runnable(m).detail;
+      EXPECT_TRUE(contract) << order_name(m) << ": " << validate_mission_contract(m).detail;
     }
-    // runner가 type 여섯을 모두 받으므로 runner의 valid 집합은 계약 검증과 같다.
-    EXPECT_EQ(runnable, validate_mission_contract(m).valid) << order_name(m);
     goal_valid += goal ? 1 : 0;
-    runnable_valid += runnable ? 1 : 0;
+    contract_valid += contract ? 1 : 0;
   }
   // goal 접수: [LAND], [TAKEOFF, LAND], [TAKEOFF, LOITER, LAND], [TAKEOFF, LOITER, LOITER, LAND].
   EXPECT_EQ(goal_valid, 4);
-  // runner: 위 넷과 [RTL], [TAKEOFF, RTL], [TAKEOFF, LOITER, RTL], [TAKEOFF, LOITER, LOITER, RTL],
-  // 마지막이 setpoint 항목인 [TAKEOFF], [TAKEOFF, LOITER], [TAKEOFF, LOITER, LOITER],
-  // [TAKEOFF, LOITER, LOITER, LOITER](B9 S3 공중 종료 단계), 첫 항목이 LOITER인 [LOITER],
-  // [LOITER, LOITER], [LOITER, LAND], [LOITER, RTL], [LOITER, LOITER, LOITER],
-  // [LOITER, LOITER, LAND], [LOITER, LOITER, RTL], [LOITER x 4], [LOITER, LOITER, LOITER, LAND],
-  // [LOITER, LOITER, LOITER, RTL](B9 S4 공중 Offboard 진입), GOTO가 든 67개(B9 S5), TRACK_ENTITY가
-  // 든 177개(B9 S6).
-  EXPECT_EQ(runnable_valid, 266);
+  // 계약(runner): TAKEOFF는 첫 항목에만, LAND와 RTL은 마지막 항목에만 오는 순서 266개.
+  EXPECT_EQ(contract_valid, 266);
 }
 
 // 1b decisions.md 쟁점 12 "미션 제한의 두 자리"의 단위 테스트 (1). B9 동안 goal 접수는 1a
@@ -649,8 +639,8 @@ TEST(ScreenGoal, MissionsNewToRunnerStayInvalidMission)
     MissionSpec m;
     m.mission_id = "new";
     m.items = items;
-    EXPECT_TRUE(validate_mission_runnable(m).valid)
-      << order_name(m) << ": " << validate_mission_runnable(m).detail;
+    EXPECT_TRUE(validate_mission_contract(m).valid)
+      << order_name(m) << ": " << validate_mission_contract(m).detail;
     const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
     ASSERT_TRUE(term.has_value()) << order_name(m);
     EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
@@ -673,8 +663,8 @@ TEST(ScreenGoal, AirEndingMissionsNewToRunnerStayInvalidMission)
     MissionSpec m;
     m.mission_id = "air";
     m.items = items;
-    EXPECT_TRUE(validate_mission_runnable(m).valid)
-      << order_name(m) << ": " << validate_mission_runnable(m).detail;
+    EXPECT_TRUE(validate_mission_contract(m).valid)
+      << order_name(m) << ": " << validate_mission_contract(m).detail;
     const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
     ASSERT_TRUE(term.has_value()) << order_name(m);
     EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
@@ -703,8 +693,8 @@ TEST(ScreenGoal, LoiterFirstMissionsNewToRunnerStayInvalidMission)
     MissionSpec m;
     m.mission_id = "lf";
     m.items = c.items;
-    EXPECT_TRUE(validate_mission_runnable(m).valid)
-      << order_name(m) << ": " << validate_mission_runnable(m).detail;
+    EXPECT_TRUE(validate_mission_contract(m).valid)
+      << order_name(m) << ": " << validate_mission_contract(m).detail;
     const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
     ASSERT_TRUE(term.has_value()) << order_name(m);
     EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
@@ -729,8 +719,8 @@ TEST(ScreenGoal, GotoMissionsNewToRunnerStayInvalidMission)
     MissionSpec m;
     m.mission_id = "goto";
     m.items = items;
-    EXPECT_TRUE(validate_mission_runnable(m).valid)
-      << order_name(m) << ": " << validate_mission_runnable(m).detail;
+    EXPECT_TRUE(validate_mission_contract(m).valid)
+      << order_name(m) << ": " << validate_mission_contract(m).detail;
     const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
     ASSERT_TRUE(term.has_value()) << order_name(m);
     EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
@@ -763,8 +753,8 @@ TEST(ScreenGoal, TrackEntityMissionsNewToRunnerStayInvalidMission)
     MissionSpec m;
     m.mission_id = "track";
     m.items = c.items;
-    EXPECT_TRUE(validate_mission_runnable(m).valid)
-      << order_name(m) << ": " << validate_mission_runnable(m).detail;
+    EXPECT_TRUE(validate_mission_contract(m).valid)
+      << order_name(m) << ": " << validate_mission_contract(m).detail;
     const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
     ASSERT_TRUE(term.has_value()) << order_name(m);
     EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
