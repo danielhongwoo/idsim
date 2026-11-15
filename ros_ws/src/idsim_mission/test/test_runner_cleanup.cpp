@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 정리 분기: 취소(쟁점 3 M3-M5), setpoint 항목의 ITEM_TIMEOUT(쟁점 4), 분기 내부(Hold 확인,
-// Land 경로, 지상 disarm 확인), 지상 disarm 분기의 LINK_LOST와 거부 ack(M5), 정리의 상한(M6),
-// Hold 실패 뒤 공중 재진입(M4).
+// 정리 분기: 취소, setpoint 항목의 ITEM_TIMEOUT, 분기 내부(Hold 확인,
+// Land 경로, 지상 disarm 확인), 지상 disarm 분기의 LINK_LOST와 거부 ack, 정리의 상한,
+// Hold 실패 뒤 공중 재진입(docs/interface.md "취소", "정리", "정리의 상한").
 // 고르기의 교차표는 test_confirm_rules.cpp, PREPARING 실패의 정리는
 // test_runner_preparing.cpp에 있다.
 // 지상 setpoint 발행 중의 Hold와 이륙 직후의 지상 setpoint + disarm의 단정은 표대로다. SITL
@@ -832,7 +832,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST(CauseCrossTableSize, ThreeByThree) { EXPECT_EQ(cause_cells().size(), 9U); }
 
-// ---- Hold 실패 뒤의 공중 재진입(decisions.md 쟁점 3 M4) ----
+// ---- Hold 실패 뒤의 공중 재진입(docs/interface.md "정리") ----
 
 TEST(HoldFailedReentry, AirAgainAfterRejectedHoldSendsNavLand)
 {
@@ -899,7 +899,7 @@ TEST(HoldFailedReentry, AirAgainAfterHoldTimeoutSendsNavLand)
   EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), holds);
 }
 
-// ---- 정리의 상한(decisions.md 쟁점 3 M6) ----
+// ---- 정리의 상한(docs/interface.md "정리의 상한") ----
 // 상한 경로는 실제 PX4로 재현하기 어려워 합성 표본으로만 시험한다. 기본값에서 상한은
 // max(hold_confirm_timeout + 3 x mode_confirm_timeout, hold_confirm_timeout +
 // land_disarm_fallback_delay + mode_confirm_timeout) = 12 s = 240 tick이다.

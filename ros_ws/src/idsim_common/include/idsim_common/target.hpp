@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 표적 식별과 표적 상태 토픽 이름.
-// 결정: docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 3, 14.
+// 결정: docs/interface.md "TargetState", "계약 토픽 QoS".
 //
 // target_id 규칙은 ^[a-z][a-z0-9_]{0,31}$다(docs/interface.md "이름과 식별자"). 토픽은 절대 이름
 // /targets/<target_id>/state이고 idsim_interfaces TargetState의 TOPIC_PREFIX, TOPIC_SUFFIX 상수로

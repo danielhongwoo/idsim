@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 전이 표에서 떼어 낸 순수 규칙 셋. 상태기(mission_runner)가 쓰고 단위 테스트가 표로 시험한다.
-// 근거는 1a 6단계 설계 결정(git 이력) 쟁점 3, 4.
+// 근거는 docs/interface.md "비행 중 감시", "정리".
 //
 // SITL 시나리오 trace가 표와 다르면 고칠 곳이 한 곳이 되게 여기에 모았다(README.md "SITL 시나리오
 // trace가 다르면 고칠 곳").
@@ -71,9 +71,9 @@ struct MonitorInput
   // 이 항목 실행 중 앞선 표본에서 failsafe == true를 본 적이 있는가(순위 5의 이력 가지).
   // 지금 표본은 넣지 않는다.
   bool failsafe_history{false};
-  // AUTO_LOITER 면제(공중 Offboard 진입의 첫 OFFBOARD 표본 전. 1b decisions.md 쟁점 7). true이면
-  // 순위 7, 8은 표본의 nav가 AUTO_LOITER(kHold)일 때 맞지 않는다(의도는 보지 않는다). 순위 1-6은
-  // 바뀌지 않는다(순위 6은 AUTO_LOITER여도 맞는다).
+  // AUTO_LOITER 면제(공중 Offboard 진입의 첫 OFFBOARD 표본 전. docs/interface.md "준비 단계").
+  // true이면 순위 7, 8은 표본의 nav가 AUTO_LOITER(kHold)일 때 맞지 않는다(의도는 보지 않는다).
+  // 순위 1-6은 바뀌지 않는다(순위 6은 AUTO_LOITER여도 맞는다).
   bool hold_exempt{false};
 };
 
@@ -92,12 +92,13 @@ struct MonitorVerdict
 
 // 순위대로 처음 맞는 행. 어느 행도 맞지 않으면 nullopt(goal을 계속한다). 맞는 행 전부를 matched에
 // 함께 싣는다. OFFBOARD이고 ARMED인
-// 채 failsafe가 true인 표본은 어느 행에도 맞지 않는다(decisions.md 쟁점 4 "비행 중 감시" 표 아래
+// 채 failsafe가 true인 표본은 어느 행에도 맞지 않는다(docs/interface.md "비행 중 감시" 표 아래
 // 문단).
 std::optional<MonitorVerdict> evaluate_monitor(const MonitorInput & input);
 
-// 감시 표의 행으로 goal을 끝낼 때 강제가 아닌 disarm을 한 번 보내는가(decisions.md 쟁점 4 표 아래
-// "지상 disarm 1회"와 "순위 2의 disarm 1회"). 보낸 disarm은 재전송하지 않고 확인하지 않는다.
+// 감시 표의 행으로 goal을 끝낼 때 강제가 아닌 disarm을 한 번 보내는가(docs/interface.md "비행 중
+// 감시" 표 아래 "지상 disarm 1회"와 "순위 2의 disarm 1회"). 보낸 disarm은 재전송하지 않고 확인하지
+// 않는다.
 enum class MonitorDisarm : std::uint8_t
 {
   kNever,      // 순위 1(명령에 실을 시각이 없다), 4, 5(이미 DISARMED)
@@ -117,7 +118,7 @@ struct MonitorDisarmInput
 
 bool monitor_sends_disarm(MonitorRow row, const MonitorDisarmInput & input);
 
-// ---- 준비 단계의 진입 방식과 모드 명령 항목(1b decisions.md 쟁점 9, 12) ----
+// ---- 준비 단계의 진입 방식과 모드 명령 항목(docs/interface.md "준비 단계") ----
 
 // 진입 방식은 첫 항목 type에서 정한다.
 enum class EntryPlan : std::uint8_t
@@ -126,7 +127,7 @@ enum class EntryPlan : std::uint8_t
   kModeCommand,  // 첫 항목 LAND, RTL: landed가 아니고 ARMED에서 P2 뒤 바로 그 항목을 시작
   // 첫 항목 LOITER, GOTO, TRACK_ENTITY: landed가 아니고 ARMED이고 AUTO_LOITER(의도도 AUTO_LOITER),
   // failsafe 없음에서 지금 위치를 진입 setpoint로 발행하고 Offboard로 들어간다(P3-P5. arm을 보내지
-  // 않는다. 1b decisions.md 쟁점 7).
+  // 않는다. docs/interface.md "준비 단계").
   kAirOffboard,
 };
 
@@ -204,7 +205,7 @@ private:
   bool has_last_{false};
 };
 
-// "disarm 전송 뒤 받은 표본"의 기준(decisions.md 쟁점 3 M5 "arm을 보낸 뒤의 지상 분기"). SITL
+// "disarm 전송 뒤 받은 표본"의 기준(docs/interface.md "정리"). SITL
 // 시나리오 trace가 다르면 이 함수만 고친다. 수신 tick이 이 분기의 첫 disarm 전송 tick보다 크고,
 // timestamp가 첫 전송에 실은 Px4Timestamp보다 엄격히 뒤인 표본만 센다(두 조건 모두. 재전송의 값이
 // 아니라 첫 전송의 값과 비교한다).
@@ -234,12 +235,12 @@ private:
 
 // ---- 착지 뒤 대비책 disarm의 기한 ----
 
-// landed이고 ARMED인 상태가 land_disarm_fallback_delay 이어졌는가(decisions.md 쟁점 10 "LAND 항목의
-// 착지 뒤 fallback 계산은 함수로 빼서 지상 대기와 함께 쓴다"). 기준 시각은 그 상태가 처음 관측된
-// tick의 시각이고, 그 상태가 아닌 관측이 오면 끊고 다음 관측에서 다시 잰다. 어느 tick에 관측을
-// 반영할지(observe를 부를지)와 보낼 조건(확인 뒤, 분기)은 부르는 쪽이 정한다. observe를 부르지 않은
-// tick은 기준 시각을 끊지도 새로 시작하지도 않는다. 대비책은 한 번만 보낸다(mark_sent 뒤 due는
-// false).
+// landed이고 ARMED인 상태가 land_disarm_fallback_delay 이어졌는가(docs/interface.md "모드 명령
+// 항목(LAND, RTL)"의 착지 뒤 fallback 계산을 지상 대기와 함께 쓴다). 기준 시각은 그 상태가 처음
+// 관측된 tick의 시각이고, 그 상태가 아닌 관측이 오면 끊고 다음 관측에서 다시 잰다. 어느 tick에
+// 관측을 반영할지(observe를 부를지)와 보낼 조건(확인 뒤, 분기)은 부르는 쪽이 정한다. observe를
+// 부르지 않은 tick은 기준 시각을 끊지도 새로 시작하지도 않는다. 대비책은 한 번만 보낸다(mark_sent
+// 뒤 due는 false).
 class LandedArmedFallback
 {
 public:

@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 비행 중 감시 표(decisions.md 쟁점 4 "비행 중 감시"). 순위가 SITL 시나리오 trace와 다르면
+// 비행 중 감시 표(docs/interface.md "비행 중 감시"). 순위가 SITL 시나리오 trace와 다르면
 // rules.hpp의 kMonitorRankOrder만 고친다.
 // - 순위마다 한 건(표 주도, 테스트 이름에 순위). 표의 행 수와 parametrize 수가 같다.
 // - 같은 tick 동률: 동시에 맞을 수 있는 행 쌍 전부(1-3은 서로와 모든 행, 4-5끼리와 6-8끼리는 배타).
 // - 순위 5의 failsafe 가지와 nav_state를 보지 않는다는 것.
 // - OFFBOARD이고 ARMED인 채 failsafe가 true인 표본은 어느 행에도 맞지 않는다.
 // - 감시 표로 끝낼 때의 disarm 1회 술어(8행 전수 x 입력 조합 전수).
-// - AUTO_LOITER 면제(hold_exempt. 공중 Offboard 진입의 첫 OFFBOARD 표본 전, 1b decisions.md
-//   쟁점 7)는 순위 7, 8에만 걸린다(M1-M5).
+// - AUTO_LOITER 면제(hold_exempt. 공중 Offboard 진입의 첫 OFFBOARD 표본 전, docs/interface.md
+//   "비행 중 감시")는 순위 7, 8에만 걸린다.
 // 상태기 안에서의 같은 판정(엇갈림, 이력의 항목 경계)은 test_runner_items.cpp에 있다.
 
 #include <gtest/gtest.h>
@@ -119,7 +119,7 @@ struct RowCase
   const char * name;
 };
 
-// decisions.md 쟁점 4 감시 표의 여덟 행. 순위 5는 이 표본의 failsafe와 이력이 없을 때.
+// docs/interface.md "비행 중 감시" 표의 여덟 행. 순위 5는 이 표본의 failsafe와 이력이 없을 때.
 const std::vector<RowCase> & row_table()
 {
   static const std::vector<RowCase> table = {
@@ -189,7 +189,7 @@ TEST(MonitorTable, MissingStatusIsLinkLost)
 TEST(MonitorTable, OffboardArmedFailsafeEndsNothing)
 {
   // 방어 경로(합성 표본): PX4 v1.17.0에서 OFFBOARD이고 ARMED인 채 failsafe가 true인 표본은 나오지
-  // 않는다. 나와도 goal을 끝내지 않는다(decisions.md 쟁점 4 "비행 중 감시" 표 아래 문단).
+  // 않는다. 나와도 goal을 끝내지 않는다(docs/interface.md "비행 중 감시" 표 아래 문단).
   Probe p;
   p.status.failsafe = true;
   EXPECT_FALSE(evaluate_monitor(p.get()).has_value());
@@ -248,7 +248,8 @@ TEST_P(MonitorTieTest, HigherRankWins)
   const std::optional<MonitorVerdict> verdict = evaluate_monitor(in);
   ASSERT_TRUE(verdict.has_value());
   EXPECT_EQ(verdict->row, c.higher);
-  // matched는 맞는 행 전부를 순위 순서로 담는다(전이 관측의 겹침 칸. decisions.md 1b 쟁점 13).
+  // matched는 맞는 행 전부를 순위 순서로 담는다(전이 관측의 겹침 칸. idsim_mission README
+  // "테스트").
   const std::vector<MonitorRow> & m = verdict->matched;
   ASSERT_FALSE(m.empty());
   EXPECT_EQ(m.front(), c.higher);
@@ -417,7 +418,7 @@ TEST(MonitorRank5, NavStateOfThisSampleIsNotRead)
   }
 }
 
-// ---- 감시 표로 끝낼 때의 disarm 1회(decisions.md 쟁점 4 표 아래 "지상 disarm 1회") ----
+// ---- 감시 표로 끝낼 때의 disarm 1회(docs/interface.md "비행 중 감시") ----
 
 struct DisarmRuleCase
 {

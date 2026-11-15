@@ -14,15 +14,15 @@
 
 // 상태기의 시간 값과 계수. 모두 ROS 시각(ns)이다.
 //
-// 기본값은 px4-engineer가 정한 값이다(1a 6단계 설계 결정(git 이력) 쟁점 10).
+// 기본값은 px4-engineer가 정한 값이다(docs/interface.md "참고: 노드 파라미터").
 // 값의 변경은 px4-engineer가 필수 승인자다. 노드는 같은 이름의 노드
 // 파라미터를 선언하고 기본값을 이 구조체에서 읽는다(P3d). 지상 setpoint z 오프셋(0.5 m)은 노드
 // 파라미터가 아니라 어댑터 상수라 여기에 없다.
 //
 // 시간 경계의 규칙: 경과 시간이 값 이상이면(>=) 만료다. 같은 tick에 만료와 확인이 함께 정해지면
-// 만료가 이긴다(decisions.md 쟁점 3 "종료의 충돌 규칙"을 전이에도 같게 적용한다). 예외 둘:
-// target_timeout은 1b decisions.md 쟁점 8의 식대로 초과(>)가 소실이고, target_fresh_age는 표본
-// 나이가 값 이하(<=)이면 신선이다.
+// 만료가 이긴다(docs/interface.md "종료의 충돌 규칙"을 전이에도 같게 적용한다). 예외 둘:
+// target_timeout은 docs/interface.md "GoToItem과 TrackEntityItem"의 식대로 초과(>)가 소실이고,
+// target_fresh_age는 표본 나이가 값 이하(<=)이면 신선이다.
 
 #ifndef IDSIM_MISSION__CORE__CONFIG_HPP_
 #define IDSIM_MISSION__CORE__CONFIG_HPP_
@@ -35,12 +35,12 @@ namespace idsim_mission::core
 
 inline constexpr std::int64_t kNsPerSecond = 1000000000LL;
 
-// 전제: 모든 값은 양수여야 한다. 그리고 target_fresh_age_ns < target_timeout_ns다(1b decisions.md
-// 쟁점 8). runner는 검사하지 않고 runner를 만드는 쪽이 보장한다(노드는 configure에서 0 이하를
-// 거부한다. 두 표적 값의 관계는 노드가 표적 값을 파라미터로 받을 때 configure에서 거부한다). 전제를
-// 어긴 값에서의 상태기 동작은 정의하지 않는다. 전이 칸 목록(test/transition_cells.tsv)은 이 전제
-// 아래의 표다. 칸 목록의 ITEM.TRACK_ENTITY TARGET_LOST ... also_true TRACK_ENTITY_REACHED가 두 표적
-// 값의 관계로 impossible이다.
+// 전제: 모든 값은 양수여야 한다. 그리고 target_fresh_age_ns < target_timeout_ns다(docs/interface.md
+// "GoToItem과 TrackEntityItem"). runner는 검사하지 않고 runner를 만드는 쪽이 보장한다(노드는
+// configure에서 0 이하를 거부한다. 두 표적 값의 관계는 노드가 표적 값을 파라미터로 받을 때
+// configure에서 거부한다). 전제를 어긴 값에서의 상태기 동작은 정의하지 않는다. 전이 칸
+// 목록(test/transition_cells.tsv)은 이 전제 아래의 표다. 칸 목록의 ITEM.TRACK_ENTITY TARGET_LOST
+// ... also_true TRACK_ENTITY_REACHED가 두 표적 값의 관계로 impossible이다.
 struct Timeouts
 {
   // P0과 P2(수신, 식별, EKF gate). goal 접수 시각부터.
@@ -51,8 +51,7 @@ struct Timeouts
   // 각각 그 명령을 처음 보낸 시각부터.
   std::int64_t mode_confirm_timeout_ns{3 * kNsPerSecond};
   // P6 arm. arm을 처음 보낸 시각부터 첫 ARMED 표본을 볼 때까지만 흐른다. 그 뒤의 확인 기한은
-  // 첫 ARMED 표본을 본 시각부터 mode_confirm_timeout이다(decisions.md 쟁점 4 "P6에서 ARMED를
-  // 처음 관측한 뒤").
+  // 첫 ARMED 표본을 본 시각부터 mode_confirm_timeout이다(docs/interface.md "준비 단계").
   std::int64_t arm_timeout_ns{5 * kNsPerSecond};
   // 공중 정리와 공중 종료 단계의 Hold 확인. Hold를 처음 보낸 시각부터.
   std::int64_t hold_confirm_timeout_ns{3 * kNsPerSecond};
@@ -83,7 +82,7 @@ struct Config
 };
 
 // 정리(취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패, RTL 실패, 공중 종료 단계) 전체의
-// 상한(decisions.md 쟁점 3 M6, 1b decisions.md 쟁점 10).
+// 상한(docs/interface.md "정리의 상한", "공중에서 끝나는 미션").
 // 정리를 시작한 tick부터 ROS 시각으로 잰다. 노드 파라미터가 아니라 분기 timeout의 파생값이다:
 // 정당한 경로 둘 가운데 긴 쪽이다. (1) 지상 -> Hold 실패 -> Land 경로 -> 다시 지상
 // (hold + 3 x mode). (2) 종료 단계의 지상 경로: 지상에서 hold_confirm_timeout -> 지상 대기 ->

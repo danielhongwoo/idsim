@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 정리 단계 칸의 파라미터화 하네스(docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 13,
+// 정리 단계 칸의 파라미터화 하네스(idsim_mission README "테스트",
 // B8b). 파라미터 하나가 칸 하나(정리 원인, 분기, 사건)이고, 본문은 그 칸의 to와 reason을 이
 // runner의 전이 기록(expect_cell)과 종료 결과로 단정하고, 그 칸의 기록이 난 tick의 명령을 1a 표대로
 // 단정한다(CleanupCell::sent).
@@ -30,9 +30,9 @@
 //   CLEANUP.PREPARING_FAILURE).
 //   kRtlFailure: 공중 ARMED Hold에서 시작한 [RTL]의 NAV_RTL 거부 ack(S+1, 합성). reason
 //   MODE_SWITCH_FAILED, arm을 보내지 않았다. 공중이면 Hold 없이 Land 경로라 kAirLand가 정리 첫
-//   tick에 닿고, Hold 실패 표시는 끝까지 서지 않는다(1b decisions.md 쟁점 9).
-//   kTargetLost: [TAKEOFF, TRACK_ENTITY]에서 표적 표본 없이 TRACK_ENTITY 시작(K) 뒤 K+21의
-//   TARGET_LOST(1b decisions.md 쟁점 8). reason TARGET_LOST, arm을 보냈다.
+//   tick에 닿고, Hold 실패 표시는 끝까지 서지 않는다(docs/interface.md "모드 명령 항목(LAND,
+//   RTL)"). kTargetLost: [TAKEOFF, TRACK_ENTITY]에서 표적 표본 없이 TRACK_ENTITY 시작(K) 뒤 K+21의
+//   TARGET_LOST(docs/interface.md "GoToItem과 TrackEntityItem"). reason TARGET_LOST, arm을 보냈다.
 //   kTargetLostAirEntry: 공중 Offboard 진입 [TRACK_ENTITY]에서 같은 TARGET_LOST. arm을 보내지 않은
 //   goal이라 "정리할 것 없음"(지상 DISARMED)에 닿는다. 정리의 칸은 원인 kTargetLost와 같은
 //   CLEANUP.TARGET_LOST다.

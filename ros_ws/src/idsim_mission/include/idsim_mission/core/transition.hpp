@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 상태기 전이의 관측(docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 13).
+// 상태기 전이의 관측(idsim_mission README "테스트").
 //
 // - 상태 key: stage, 준비 단계, 현재 항목 type, 정리 원인, 정리 분기. 이름(state_key_name)에는 그
 //   stage가 읽는 성분만 넣는다. PREPARING은 준비 단계, ITEM은 항목 type, CLEANUP은 원인과 분기다.
@@ -56,13 +56,13 @@ enum class Stage : std::uint8_t
 
 // PREPARING의 단계. kWaitReady는 P0-P2이고 진입 방식 셋이 같이 쓴다.
 // - 지상 arm 진입(첫 항목 TAKEOFF): kSignal은 P3-P4, kOffboard는 P5, kOffboardAck는 P5 안의 ack
-//   대기 구간(OFFBOARD 3회 확인 뒤 마지막 DO_SET_MODE 전송 뒤의 ack를 기다린다. 1b decisions.md
-//   쟁점 12), kArm은 P6.
-// - 공중 Offboard 진입(첫 항목 LOITER, GOTO, TRACK_ENTITY. 1b decisions.md 쟁점 7): kAirSignal은
-//   P3-P4(진입 setpoint 발행, 명령 없음), kAirOffboard는 P5의 첫 OFFBOARD 표본 전(DO_SET_MODE
-//   주기 재전송), kAirOffboardSeen은 P5의 첫 OFFBOARD 표본 뒤(재전송 없음, OFFBOARD 3회 계수). 세
-//   단계 모두 P3 tick 뒤부터 감시 표를 보고, 앞의 둘은 AUTO_LOITER 면제(순위 7, 8)를 켠다. P6은
-//   없다.
+//   대기 구간(OFFBOARD 3회 확인 뒤 마지막 DO_SET_MODE 전송 뒤의 ack를 기다린다.
+//   docs/interface.md "준비 단계"), kArm은 P6.
+// - 공중 Offboard 진입(첫 항목 LOITER, GOTO, TRACK_ENTITY. docs/interface.md "준비 단계"):
+//   kAirSignal은 P3-P4(진입 setpoint 발행, 명령 없음), kAirOffboard는 P5의 첫 OFFBOARD 표본
+//   전(DO_SET_MODE 주기 재전송), kAirOffboardSeen은 P5의 첫 OFFBOARD 표본 뒤(재전송 없음, OFFBOARD
+//   3회 계수). 세 단계 모두 P3 tick 뒤부터 감시 표를 보고, 앞의 둘은 AUTO_LOITER 면제(순위 7, 8)를
+//   켠다. P6은 없다.
 // - 모드 명령 진입(첫 항목 LAND, RTL)은 kWaitReady 뒤 바로 항목이다.
 enum class PrepStep : std::uint8_t
 {
@@ -82,12 +82,12 @@ enum class CleanupCause : std::uint8_t
   kItemTimeout,
   kPreparingFailure,
   kRtlFailure,  // RTL 항목의 거부 ack나 mode_confirm_timeout. 공중이면 Hold 없이 Land 경로
-  // 마지막 setpoint 항목(TAKEOFF, LOITER, GOTO, TRACK_ENTITY)의 완료 뒤의 공중 종료 단계(1b
-  // decisions.md 쟁점 10). 분기 고르기는 다른 원인과 따로 둔다(AIR -> AIR_LAND 또는 GROUND_WAIT,
-  // GROUND_WAIT -> AIR_LAND).
+  // 마지막 setpoint 항목(TAKEOFF, LOITER, GOTO, TRACK_ENTITY)의 완료 뒤의 공중 종료 단계
+  // (docs/interface.md "공중에서 끝나는 미션"). 분기 고르기는 다른 원인과 따로 둔다(AIR ->
+  // AIR_LAND 또는 GROUND_WAIT, GROUND_WAIT -> AIR_LAND).
   kMissionEnd,
-  // TRACK_ENTITY의 TARGET_LOST(1b decisions.md 쟁점 8). 분기 고르기와 분기 동작은 kItemTimeout과
-  // 같고 끝 reason만 TARGET_LOST다.
+  // TRACK_ENTITY의 TARGET_LOST(docs/interface.md "GoToItem과 TrackEntityItem"). 분기 고르기와 분기
+  // 동작은 kItemTimeout과 같고 끝 reason만 TARGET_LOST다.
   kTargetLost,
 };
 
@@ -123,7 +123,7 @@ enum class Event : std::uint8_t
   kSignalTimeout,
   kSignalConfirmed,
   // 공중 Offboard 진입의 P4에서 이 goal이 DO_SET_MODE를 보내기 전에 본 OFFBOARD 표본(다른 주체의
-  // 전환). MODE_SWITCH_FAILED로 정리한다(1b decisions.md 쟁점 7)
+  // 전환). MODE_SWITCH_FAILED로 정리한다(docs/interface.md "준비 단계")
   kOffboardBeforeSetMode,
   // P5와 ack 대기(P5a). 거부와 기한은 공중 Offboard 진입의 AIR_OFFBOARD(거부, 기한)와
   // AIR_OFFBOARD_SEEN(기한)도 같이 쓴다.

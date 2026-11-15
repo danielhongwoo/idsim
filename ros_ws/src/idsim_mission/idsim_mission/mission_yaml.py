@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""미션 YAML 로더(1b decisions.md 쟁점 14).
+"""미션 YAML 로더(docs/interface.md "미션 정의").
 
 로더가 하는 일은 넷뿐이다. 구조 검사(모르는 key 거부, 같은 mapping 안의 중복 key와
 merge key(<<) 거부, 필수 key, 타입), 단위 변환(timeout_s, duration_s -> builtin_interfaces/Duration,

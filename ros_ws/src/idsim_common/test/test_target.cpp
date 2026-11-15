@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // TargetId 검증과 표적 상태 토픽 이름 조립. 노드를 만들지 않는다.
-// 결정: docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 3, 14. 규칙은 docs/interface.md
+// 결정: docs/interface.md "TargetState", "계약 토픽 QoS". 규칙은 docs/interface.md
 // "이름과 식별자"의 target_id(^[a-z][a-z0-9_]{0,31}$).
 
 #include <gtest/gtest.h>

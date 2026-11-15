@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 공중 종료 단계(마지막 항목이 setpoint 항목인 미션. 1b decisions.md 쟁점 10, 쟁점 11, 쟁점 12
-// "명령과 ack의 유실"). 사례 이름의 T 번호는 사례를 가리키는 일련번호다.
+// 공중 종료 단계(마지막 항목이 setpoint 항목인 미션. docs/interface.md "공중에서 끝나는 미션",
+// "시간 기준", "준비 단계" "명령과 ack의 유실"). 사례 이름의 T 번호는 사례를 가리키는 일련번호다.
 //
 // 표기: S는 마지막 setpoint 항목의 완료 tick(종료 단계 첫 tick), S+k는 그 뒤 k번째 tick(50 ms
 // 간격). 시간 값은 core/config.hpp 기본값이다: hold_confirm_timeout 3 s(S+60), 정리의 상한
@@ -159,7 +159,8 @@ bool terminated_at(const Harness & h, std::uint64_t tick)
   return out != nullptr && out->termination.has_value();
 }
 
-// 종료 단계의 feedback: phase EXECUTING, item_index N-1(decisions.md 쟁점 10 feedback 문단).
+// 종료 단계의 feedback: phase EXECUTING, item_index N-1(docs/interface.md "공중에서 끝나는 미션"의
+// feedback).
 void expect_end_feedback(const Harness & h, std::uint64_t s)
 {
   const auto last = static_cast<std::uint32_t>(h.runner().mission().items.size() - 1);
@@ -234,7 +235,8 @@ TEST(MissionEnd, T2TakeoffOnlyMission)
 
 TEST(MissionEnd, T3HoldResentAfterAcceptedAck)
 {
-  // 진행은 표본으로 하고 ack는 거부 판정에만 쓴다(쟁점 12). ACCEPTED ack로 재전송이 멈추지 않는다.
+  // 진행은 표본으로 하고 ack는 거부 판정에만 쓴다(README "구현 규칙"). ACCEPTED ack로 재전송이
+  // 멈추지 않는다.
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
   const EndStart st = start_air_end(h);
@@ -353,7 +355,7 @@ TEST(MissionEnd, T7AirTimeoutThenLandTimeout)
     "confirmed");
 }
 
-// ---- 만료가 이긴다(쟁점 10 종료 단계의 두 쌍) ----
+// ---- 만료가 이긴다(공중 종료 단계의 두 쌍) ----
 
 TEST(MissionEnd, T8HoldTimeoutBeatsThirdHoldSample)
 {
@@ -573,7 +575,8 @@ TEST(MissionEnd, T14ContrastThirdGroundDisarmedBeforeCap)
 
 TEST(MissionEnd, T15GroundDisarmedOnHoldTimeoutTick)
 {
-  // 분류 지상 규칙: 분류가 지상인 tick은 hold_confirm_timeout을 보지 않는다(쟁점 10).
+  // 분류 지상 규칙: 분류가 지상인 tick은 hold_confirm_timeout을 보지 않는다(docs/interface.md
+  // "공중에서 끝나는 미션").
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = start_ground_end(h);
   run_to(h, st.s + 58);
@@ -627,7 +630,7 @@ TEST(MissionEnd, T16ContrastLandPathCapOnGround)
 
 TEST(MissionEnd, T17aLandPathGroundDisarmed)
 {
-  // 쟁점 10: Land 경로에서 AUTO_LAND를 보기 전에 지상 DISARMED 3회면 SUCCEEDED.
+  // Land 경로에서 AUTO_LAND를 보기 전에 지상 DISARMED 3회면 SUCCEEDED.
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
   h.land_response = CommandResponse::kIgnore;
@@ -654,7 +657,7 @@ TEST(MissionEnd, T17aWaitingCommandIsClearedOnFirstGroundDisarmed)
   h.world.arming = Arming::kDisarmed;
   h.tick();  // S+3
   EXPECT_FALSE(h.view().pending_active);
-  h.world.arming = Arming::kArmed;  // 쟁점 11의 전제 밖: 다시 ARMED. 지운 재전송은 되살리지 않는다
+  h.world.arming = Arming::kArmed;  // 전제 밖: 다시 ARMED. 지운 재전송은 되살리지 않는다
   run_to(h, st.s + 12);
   EXPECT_TRUE(ticks_sending(h, CommandKind::kNavLand, st.s + 2, st.s + 11).empty());
 }
@@ -1055,7 +1058,7 @@ TEST(MissionEnd, T25LastLoiterAutoDisarmBeforeCompletion)
   expect_terminated_once_as(h, "ABORTED/EXTERNAL_DISARM");
 }
 
-// ---- 분류 지상 규칙(분류 지상 동안의 분기 판정. 쟁점 10 "지상 DISARMED를 보는 동안의 규칙") ----
+// ---- 분류 지상 규칙(분류 지상 동안의 분기 판정. docs/interface.md "공중에서 끝나는 미션") ----
 
 TEST(MissionEnd, T26DisarmedAutoLandSamplesAreNotLandObserved)
 {
@@ -1185,7 +1188,7 @@ TEST(MissionEnd, T29CapOnMismatchedTickWhileClassifiedGround)
 }
 
 // ---- 지상 대기의 대비책 기준 시각과 확인 함수(B9 S3 최종 검토 보강) ----
-// 쟁점 10의 지상 DISARMED 계수와 분류 지상 규칙, 지상 대기의 이어짐 갱신과 진입 tick의 관측,
+// 지상 DISARMED 계수와 분류 지상 규칙, 지상 대기의 이어짐 갱신과 진입 tick의 관측,
 // 대비책 disarm 뒤의 확인 함수. 칸은 기존 칸만 쓴다.
 
 // T10 경로(지상 Hold 수락, Hold 기한으로 S+60에 지상 대기)를 S+60까지 돈다.
@@ -1216,7 +1219,7 @@ TEST(MissionEnd, GroundDisarmedSamplesRestartFallbackBase)
   EXPECT_FALSE(terminated_at(h, st.s + 100));
   EXPECT_FALSE(terminated_at(h, st.s + 101));
   EXPECT_FALSE(h.runner().done());
-  h.world.arming = Arming::kArmed;  // S+102부터 ARMED landed(쟁점 11의 전제 밖)
+  h.world.arming = Arming::kArmed;  // S+102부터 ARMED landed(시간 기준의 전제 밖)
   h.tick();
   EXPECT_EQ(h.view().disarm_class, DisarmClass::kUnknown);
   EXPECT_EQ(h.view().branch, Branch::kGroundWait);
@@ -1264,7 +1267,7 @@ TEST(MissionEnd, GroundDisarmedCountRestartsAfterArmed)
 
 TEST(MissionEnd, FallbackDisarmConfirmKeptOnLandPath)
 {
-  // 쟁점 10: 대비책 disarm을 보낸 뒤 Land 경로로 옮겨도 확인 함수(DisarmConfirm)로 센다.
+  // 대비책 disarm을 보낸 뒤 Land 경로로 옮겨도 확인 함수(DisarmConfirm)로 센다.
   // S+160 대비책 disarm(무시), S+162 G8, S+165-S+167 지상 DISARMED. 세는 표본은 모두 전송 tick보다
   // 뒤 tick의 것이다.
   Harness h(takeoff_only_mission(0.2));

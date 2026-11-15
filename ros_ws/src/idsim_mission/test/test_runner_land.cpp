@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // LAND 항목(WAITING_MODE)의 세 구간 감시, 완료 우선 규칙, 대비책 disarm, LAND의 ITEM_TIMEOUT.
-// 결정: decisions.md 쟁점 4 "LAND 항목(WAITING_MODE)의 감시", 항목 표의 LAND 행, LAND 항목의
+// 결정: docs/interface.md "모드 명령 항목(LAND, RTL)", 항목 표의 LAND 행, LAND 항목의
 // ITEM_TIMEOUT.
 
 #include <gtest/gtest.h>

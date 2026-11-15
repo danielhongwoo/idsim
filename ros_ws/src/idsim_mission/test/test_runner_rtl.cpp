@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // RTL 항목, 진입 방식(EntryPlan)의 모드 명령 갈래, RTL 실패의 Land fallback(RTL_FAILURE 정리).
-// 결정: docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 9, 12, 13.
+// 결정: docs/interface.md "모드 명령 항목(LAND, RTL)", "준비 단계", idsim_mission README "테스트".
 //
 // S는 RTL 항목을 시작한 tick(NAV_RTL 첫 전송)이다. 시간 값은 core/config.hpp 기본값이다
 // (mode_confirm_timeout 3 s = 60 tick, command_resend_period 0.5 s = 10 tick).

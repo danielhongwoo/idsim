@@ -14,7 +14,7 @@
 
 // vehicle params 해석. 순수 함수만 시험한다(노드를 만들지 않는다). declare_vehicle_params는
 // 주소를 취해 Node와 LifecycleNode로 인스턴스화되는지만 본다.
-// 결정: 1a 6단계 설계 결정(git 이력) 쟁점 2, 5.
+// 결정: docs/interface.md "기체 식별과 네임스페이스".
 
 #include <gtest/gtest.h>
 

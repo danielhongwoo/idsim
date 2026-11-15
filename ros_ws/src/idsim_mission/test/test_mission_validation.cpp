@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // 미션 검증, TYPE_* 분류, goal 즉시 판정의 순서.
-// 결정: 1a 6단계 설계 결정(git 이력) 쟁점 3 M1, 쟁점 4 "미션의 정적 검증".
+// 결정: docs/interface.md "수락 정책", "미션 정의".
 
 #include <gtest/gtest.h>
 
@@ -151,7 +151,8 @@ TEST(ValidateMission, TargetIdRule)
 
 TEST(ValidateMission, CoordinateBoundPredicate)
 {
-  // 미션 검증과 노드의 표적 표본 변환이 함께 쓰는 술어(1b decisions.md 쟁점 8 "좌표 상한").
+  // 미션 검증과 노드의 표적 표본 변환이 함께 쓰는 술어(docs/interface.md "GoToItem과
+  // TrackEntityItem").
   EXPECT_EQ(kMaxContractCoordinateM, 1e5);
   EXPECT_TRUE(within_coordinate_bound(Vec3{1e5, -1e5, 0.0}));
   EXPECT_FALSE(within_coordinate_bound(Vec3{std::nextafter(1e5, 2e5), 0.0, 0.0}));
@@ -262,8 +263,8 @@ INSTANTIATE_TEST_SUITE_P(
       "track_entity.target_id"}),
   [](const ::testing::TestParamInfo<ContractCase> & info) { return std::string(info.param.name); });
 
-// 계약 좌표 상한(1b decisions.md 쟁점 8): GOTO position과 TRACK_ENTITY offset의 각 성분 절댓값이
-// 1e5 m 이하(경계 포함). 유한 검사 뒤에 보므로 NaN의 detail은 그대로다.
+// 계약 좌표 상한(docs/interface.md "GoToItem과 TrackEntityItem"): GOTO position과 TRACK_ENTITY
+// offset의 각 성분 절댓값이 1e5 m 이하(경계 포함). 유한 검사 뒤에 보므로 NaN의 detail은 그대로다.
 TEST(ValidateMissionContract, CoordinateBound)
 {
   const double above = std::nextafter(1e5, std::numeric_limits<double>::infinity());
@@ -356,7 +357,7 @@ TEST(ValidateMissionContract, CoordinateBound)
 
 TEST(ScreenGoal, AcceptsGotoTrackEntityAndRtl)
 {
-  // goal 접수는 계약 검증만 한다(1b decisions.md 쟁점 12. B10에서 1a 제한을 지웠다).
+  // goal 접수는 계약 검증만 한다(docs/interface.md "준비 단계". B10에서 1a 제한을 지웠다).
   MissionSpec m;
   m.mission_id = "other";
   m.items = {takeoff_item(), goto_item(), track_item(), rtl_item()};
@@ -376,7 +377,7 @@ TEST(ValidateMission, LandOnlyAsLast)
 
 TEST(ValidateMission, TakeoffOnlyAsFirst)
 {
-  // 계약: TAKEOFF는 첫 항목에만 온다(쟁점 6).
+  // 계약: TAKEOFF는 첫 항목에만 온다(docs/interface.md "미션 정의").
   MissionSpec m;
   m.mission_id = "tf";
   m.items = {takeoff_item(), loiter_item(), takeoff_item(), land_item()};
@@ -434,7 +435,7 @@ MissionSpec mission_of(std::vector<ItemSpec> items)
 
 TEST(ValidateMissionContract, OrderRule)
 {
-  // 1b decisions.md 쟁점 6, 12.
+  // docs/interface.md "미션 정의", "준비 단계".
   struct Case
   {
     std::vector<ItemSpec> items;
@@ -549,8 +550,8 @@ TEST(ScreenGoal, OrderIsIdThenInvalidThenBusy)
 
 TEST(ScreenGoal, MalformedTargetIdIsInvalidMission)
 {
-  // 시나리오 B의 "형식이 틀린 target_id"(1b decisions.md 쟁점 15). 형식이 맞지만 없는 표적은
-  // 접수된다(TARGET_LOST로 드러난다).
+  // 시나리오 B의 "형식이 틀린 target_id"(tests/sitl/README.md "시나리오와 판정"). 형식이 맞지만
+  // 없는 표적은 접수된다(TARGET_LOST로 드러난다).
   const std::optional<Termination> term =
     screen_goal("px4_1", "px4_1", mission_of_track("car-1"), false);
   ASSERT_TRUE(term.has_value());

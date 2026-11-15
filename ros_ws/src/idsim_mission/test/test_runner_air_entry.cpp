@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 공중 Offboard 진입(첫 항목 LOITER. docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 7).
+// 공중 Offboard 진입(첫 항목 LOITER. docs/interface.md "준비 단계").
 //
 // - 사례 이름의 A1-A27은 사례를 가리키는 일련번호다. 칸은 transition_cells.tsv의
 //   PREPARING.AIR_SIGNAL, PREPARING.AIR_OFFBOARD, PREPARING.AIR_OFFBOARD_SEEN 행과, 공중 진입이

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 전이 기록기(decisions.md 쟁점 13). test_runner 실행 파일에서는 test_transition_coverage.cpp의
-// Environment가 기록기를 켜고, Harness가 만드는 MissionRunner가 모두 여기에 기록한다. 다른 실행
-// 파일에서는 꺼져 있어(nullptr) runner가 기록하지 않는다.
+// 전이 기록기(idsim_mission README "테스트"). test_runner 실행 파일에서는
+// test_transition_coverage.cpp의 Environment가 기록기를 켜고, Harness가 만드는 MissionRunner가
+// 모두 여기에 기록한다. 다른 실행 파일에서는 꺼져 있어(nullptr) runner가 기록하지 않는다.
 
 #ifndef TRANSITION_RECORDER_HPP_
 #define TRANSITION_RECORDER_HPP_

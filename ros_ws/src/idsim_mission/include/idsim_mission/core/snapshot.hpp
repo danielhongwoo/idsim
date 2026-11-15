@@ -18,7 +18,7 @@
 // 이 헤더의 타입은 PX4 중립이다. PX4 enum 값의 해석(nav_state, arming_state, ack result, EKF 준비
 // 술어)은 어댑터만 한다. core는 px4_msgs를 include하지 않는다.
 //
-// 입력 모델(decisions.md 쟁점 6 C1)
+// 입력 모델
 // - 노드는 tick마다(20 Hz, 노드 시계 timer) core의 step()을 한 번 부른다. 입력은 tick 번호, 그
 //   tick의 ROS 시각, 아래 Snapshot, Px4ClockPort다. 출력은 StepOutput(mission_runner.hpp)이다.
 // - 구독 callback은 토픽마다 최신 표본 하나만 저장한다(덮어쓴다). 그래서 tick당 토픽마다 표본은
@@ -28,7 +28,7 @@
 // - received_tick의 정의: 표본을 처음 볼 수 있는 step()의 tick 번호. 노드는 "다음에 부를 step의
 //   tick 번호"를 하나 두고, callback은 그 값을 표본에 적고, timer는 그 번호로 step을 부른 뒤 번호를
 //   1 올린다. 그러면 step k에서 낸 명령에 대한 응답 표본은 received_tick > k다("전송 tick 뒤에
-//   받은"의 정의. decisions.md 쟁점 3 M5).
+//   받은"의 정의. docs/interface.md "정리").
 // - Snapshot의 optional은 "한 번도 받지 못함"이다. 한 번 받은 뒤에는 비우지 않는다(끊김은
 //   received_ns로 core가 판정한다).
 //
@@ -49,7 +49,7 @@
 //   xy_valid <- xy_valid, z_valid <- z_valid
 // - FlagsSample <- failsafe_flags
 //   - ekf_ready <- local_position_invalid, local_altitude_invalid, global_position_invalid,
-//     home_position_invalid가 모두 false(decisions.md 쟁점 4 P2. 술어는 어댑터에 둔다)
+//     home_position_invalid가 모두 false(docs/interface.md "준비 단계" P2. 술어는 어댑터에 둔다)
 //   - offboard_signal_lost <- offboard_control_signal_lost
 // - AckSample <- vehicle_command_ack. ack의 target이 이 Executor의 source(system, component)와
 //   같은 것만 넘긴다(아니면 버린다). command는 VEHICLE_CMD_DO_SET_MODE -> kSetMode,
@@ -68,10 +68,10 @@
 //   무관한 축 치환이고, 결과 성분이 하나라도 float32에 실을 수 없으면(비유한 포함) nullopt다.
 //   술어는 점 변환과 같은 fits_float32다. 식은
 //   idsim_common::geo::world_enu_to_local_ned(점)와 idsim_common::frames::enu_to_ned(벡터)다
-//   (decisions.md 쟁점 4).
+//   (docs/interface.md "좌표계").
 // - Snapshot.targets는 PX4 메시지가 아니다. 노드(node/conversion.cpp)가 idsim_interfaces
-//   TargetState의 유효 표본만 TargetSample로 바꿔 target_id별로 최신 하나를 둔다(decisions.md
-//   쟁점 8의 유효 표본 규칙. 아래 TargetSample 주석).
+//   TargetState의 유효 표본만 TargetSample로 바꿔 target_id별로 최신 하나를 둔다(docs/interface.md
+//   "GoToItem과 TrackEntityItem"의 유효 표본 규칙. 아래 TargetSample 주석).
 //
 // 어댑터(와 노드)가 출력에 할 것. StepOutput의 명령과 setpoint는 같은 tick의 px4_timestamp_us를
 // 실은 Px4Timestamp(Px4ClockPort가 그 tick에 돌려준 값을 만든 객체)로 만든다.
@@ -81,10 +81,10 @@
 //   kNavRtl -> rtl.
 // - SetpointOut이 있으면 idsim_common::px4::offboard_position_mode와 position_setpoint를 하나씩
 //   발행한다. 위치는 (x, y, z), yaw는 yaw_ned. kind가 kGround이면 z에 지상 setpoint 오프셋
-//   +0.5 m(NED, 아래쪽. 어댑터 상수, decisions.md 쟁점 3 M5)를 더한다. core는 이 값을 모른다.
+//   +0.5 m(NED, 아래쪽. 어댑터 상수, docs/interface.md "정리")를 더한다. core는 이 값을 모른다.
 //   velocity_valid가 true이면 velocity(로컬 NED, m/s)를 trajectory_setpoint.velocity에 싣고,
-//   false이면 velocity를 NaN으로 낸다(feedforward 없음. decisions.md 쟁점 8).
-//   offboard_control_mode는 velocity_valid와 무관하게 position만 true다.
+//   false이면 velocity를 NaN으로 낸다(feedforward 없음. docs/interface.md "GoToItem과
+//   TrackEntityItem"). offboard_control_mode는 velocity_valid와 무관하게 position만 true다.
 //   position_setpoint가 nullopt(비유한 값)를 돌려주면 그 tick은 발행하지 않고 오류 로그를 남긴다.
 // - core는 "그 tick에 발행한다"만 말한다. 발행 중단은 SetpointOut이 없는 tick이다.
 
@@ -196,8 +196,8 @@ struct AckSample
 // 표적 표본. PX4 메시지가 아니다. 노드가 유효 표본만 넣는다(target_id가 토픽 토큰과 같고,
 // frame_id가 world, 위치가 유한하고 성분의 절댓값이 kMaxContractCoordinateM 이하
 // (mission_validation.hpp의 within_coordinate_bound. 미션 검증과 같은 상수), velocity_valid이면
-// 속도가 유한(아니면 표본 전체가 무효), stamp가 0이 아니고 직전 유효 표본보다 크다. decisions.md
-// 쟁점 8).
+// 속도가 유한(아니면 표본 전체가 무효), stamp가 0이 아니고 직전 유효 표본보다 크다.
+// docs/interface.md "GoToItem과 TrackEntityItem").
 struct TargetSample
 {
   Vec3 position;  // world ENU, m
@@ -216,7 +216,7 @@ struct Snapshot
   // target_id -> 최신 유효 표본. 키가 없으면 "이 goal에서 유효 표본을 한 번도 받지 못함"이다.
   // 노드는 goal 접수 때 비우고 goal 안에서는 지우지 않는다(소실은 stamp_ns로 core가 판정한다).
   // 앞 goal의 표본이 남으면 TRACK_ENTITY가 시작 tick에 TARGET_LOST가 되어 "항목 시작부터
-  // target_timeout" 유예(decisions.md 쟁점 8)가 사라진다.
+  // target_timeout" 유예(docs/interface.md "GoToItem과 TrackEntityItem")가 사라진다.
   std::map<std::string, TargetSample> targets;
 };
 

@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // Mission Executor 노드 껍질(lifecycle, 컴포넌트 idsim_mission::MissionExecutorNode).
-// 결정: 1a 6단계 설계 결정(git 이력) 쟁점 2(실행 형태, 자기 전이), 쟁점 7
-// (사건 QoS), 쟁점 10(타임아웃 파라미터). 구현 규칙은 패키지 README.md.
+// 결정: docs/interface.md "ExecuteMission"(실행 형태, 자기 전이), "계약 토픽 QoS"(사건 QoS),
+// "참고: 노드 파라미터"(타임아웃 파라미터). 구현 규칙은 패키지 README.md.
 //
 // - 상태기는 core::MissionRunner, PX4 변환은 px4/ 어댑터다. 이 노드는 구독, 발행, action 서버,
 //   timer와 lifecycle만 맡는다.
@@ -23,9 +23,10 @@
 //   kStartFailedLogPrefix의 ERROR 로그 한 줄을 남긴다. 프로세스를 끝내지 않는다.
 // - 좌표: params world.origin.{lat,lon,alt}(읽기 전용, 누락이나 범위 밖이면 configure 실패)와
 //   vehicle_local_position의 기준으로 tick마다 px4::Px4FramePort를 만들어 step에 넘긴다. 위치와
-//   기준은 같은 표본에서 to_local_position_input으로 함께 만든다(1b decisions.md 쟁점 4).
+//   기준은 같은 표본에서 to_local_position_input으로 함께 만든다(docs/interface.md "좌표계").
 // - 표적: goal 접수 때 미션의 TRACK_ENTITY target_id마다 /targets/<id>/state 구독을 만들고 goal이
-//   끝나면 지운다. goal 접수 때 Snapshot.targets만 비운다(1b decisions.md 쟁점 8).
+//   끝나면 지운다. goal 접수 때 Snapshot.targets만 비운다(docs/interface.md "GoToItem과
+//   TrackEntityItem").
 // - callback group은 MutuallyExclusive 하나에 PX4 구독, 표적 구독, 20 Hz tick timer(노드 시계),
 //   action 서버를 모두 넣는다. goal 실행용 thread는 없다. context 종료 전 callback(다른
 //   thread)과 겹칠 수 있어 goal 상태는 mutex로 지킨다.

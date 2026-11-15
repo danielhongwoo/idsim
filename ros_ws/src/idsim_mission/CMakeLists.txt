@@ -23,7 +23,7 @@ add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 find_package(ament_cmake REQUIRED)
 
 # ---- core: 검증, 분류, 상태기, 종료 결과. ROS와 PX4에 의존하지 않는다 ----
-# 이 대상에는 어떤 패키지도 링크하지 않는다(px4_msgs, rclcpp, idsim_common 금지. decisions.md 쟁점 6).
+# 이 대상에는 어떤 패키지도 링크하지 않는다(px4_msgs, rclcpp, idsim_common 금지. README "core와 어댑터의 경계").
 # 어댑터(idsim_mission_px4, P3c)와 노드 껍질(P3d)은 별도 대상으로 이 위에 얹는다.
 add_library(idsim_mission_core SHARED
   src/core/mission_runner.cpp
@@ -78,7 +78,7 @@ target_link_libraries(mission_executor_component PUBLIC
 rclcpp_components_register_nodes(mission_executor_component "idsim_mission::MissionExecutorNode")
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
-# ---- Python: 미션 YAML 로더(idsim_mission.mission_yaml)와 CLI send_mission(1b decisions.md 쟁점 14) ----
+# ---- Python: 미션 YAML 로더(idsim_mission.mission_yaml)와 CLI send_mission(docs/interface.md "미션 정의") ----
 find_package(ament_cmake_python REQUIRED)
 ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS scripts/send_mission DESTINATION lib/${PROJECT_NAME})
@@ -153,7 +153,7 @@ if(BUILD_TESTING)
   endforeach()
   # 상태기 테스트는 실행 파일 하나로 묶는다. 모든 Harness가 같은 전이 기록기에 기록하고,
   # test_transition_coverage.cpp의 Environment::TearDown이 test/transition_cells.tsv와 대조한다
-  # (decisions.md 쟁점 13). runner를 쓰는 테스트 파일을 더하면 이 목록에 넣는다.
+  # (README "테스트"). runner를 쓰는 테스트 파일을 더하면 이 목록에 넣는다.
   ament_add_gtest(test_runner
     test/test_mission_validation.cpp
     test/test_runner_preparing.cpp
