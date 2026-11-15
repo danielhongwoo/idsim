@@ -18,21 +18,28 @@
 // - item_type, yaw_mode, FeedbackPhase, event_status와 메시지 상수.
 // - core의 enu_to_ned_yaw, wrap_pi와 idsim_common/frames의 같은 함수.
 // - 변환(conversion.hpp): 종료 결과 하나에서 만든 result와 사건이 같은 값. feedback stamp는
-//   core::Feedback.stamp_ns 그대로.
+//   core::Feedback.stamp_ns 그대로. 표적 상태의 유효 표본 규칙(1b decisions.md 쟁점 8).
+// - core::is_valid_target_id와 idsim_common::TargetId::parse가 같은 사례 표에서 같은 답.
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstdint>
+#include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "builtin_interfaces/msg/time.hpp"
 #include "idsim_common/frames.hpp"
+#include "idsim_common/target.hpp"
 #include "idsim_interfaces/action/execute_mission.hpp"
 #include "idsim_interfaces/msg/mission_event.hpp"
 #include "idsim_interfaces/msg/mission_item.hpp"
+#include "idsim_interfaces/msg/target_state.hpp"
 #include "idsim_interfaces/msg/yaw_setpoint.hpp"
 #include "idsim_mission/core/config.hpp"
+#include "idsim_mission/core/mission_validation.hpp"
 #include "idsim_mission/core/rules.hpp"
 #include "idsim_mission/core/termination.hpp"
 #include "idsim_mission/core/types.hpp"
@@ -190,6 +197,121 @@ TEST(Conversion, MissionFieldsAreCopied)
   EXPECT_DOUBLE_EQ(spec.items[0].takeoff.yaw.yaw_rad, 0.5);
   EXPECT_EQ(spec.items[1].loiter.duration.sec, 5);
   EXPECT_EQ(spec.items[1].loiter.duration.nanosec, 7U);
+}
+
+TEST(ContractConstants, TargetIdRuleMatchesIdsimCommon)
+{
+  const std::vector<std::string> cases = {"a",     "car_1",
+                                          "z9_",   "a" + std::string(31, 'b'),
+                                          "",      "a" + std::string(32, 'b'),
+                                          "1car",  "_car",
+                                          "Car-1", "car-1",
+                                          "car/1", "car 1",
+                                          "car.1", "cAr"};
+  for (const std::string & text : cases) {
+    EXPECT_EQ(core::is_valid_target_id(text), idsim_common::TargetId::parse(text).has_value())
+      << "'" << text << "'";
+  }
+}
+
+using TargetState = idsim_interfaces::msg::TargetState;
+
+TargetState valid_target_state()
+{
+  TargetState msg;
+  msg.header.frame_id = TargetState::FRAME_ID;
+  msg.header.stamp.sec = 10;
+  msg.header.stamp.nanosec = 500;
+  msg.target_id = "car_1";
+  msg.position.x = 1.0;
+  msg.position.y = -2.0;
+  msg.position.z = 3.0;
+  msg.velocity_valid = true;
+  msg.velocity.x = 0.5;
+  msg.velocity.y = 0.25;
+  msg.velocity.z = -0.125;
+  return msg;
+}
+
+TEST(TargetSampleConversion, ValidSampleIsCopied)
+{
+  const std::optional<core::TargetSample> s =
+    to_target_sample(valid_target_state(), "car_1", std::nullopt);
+  ASSERT_TRUE(s.has_value());
+  EXPECT_EQ(s->position.x, 1.0);
+  EXPECT_EQ(s->position.y, -2.0);
+  EXPECT_EQ(s->position.z, 3.0);
+  EXPECT_TRUE(s->velocity_valid);
+  EXPECT_EQ(s->velocity.x, 0.5);
+  EXPECT_EQ(s->velocity.y, 0.25);
+  EXPECT_EQ(s->velocity.z, -0.125);
+  EXPECT_EQ(s->stamp_ns, 10000000500LL);
+}
+
+TEST(TargetSampleConversion, InvalidVelocityFieldsAreIgnoredWhenNotValid)
+{
+  TargetState msg = valid_target_state();
+  msg.velocity_valid = false;
+  msg.velocity.x = std::numeric_limits<double>::quiet_NaN();
+  const std::optional<core::TargetSample> s = to_target_sample(msg, "car_1", std::nullopt);
+  ASSERT_TRUE(s.has_value());
+  EXPECT_FALSE(s->velocity_valid);
+  EXPECT_EQ(s->velocity.x, 0.0);
+}
+
+TEST(TargetSampleConversion, PositionBoundIsInclusive)
+{
+  TargetState msg = valid_target_state();
+  msg.position.x = core::kMaxContractCoordinateM;
+  msg.position.y = -core::kMaxContractCoordinateM;
+  EXPECT_TRUE(to_target_sample(msg, "car_1", std::nullopt).has_value());
+}
+
+TEST(TargetSampleConversion, InvalidSamplesAreDropped)
+{
+  struct Case
+  {
+    const char * name;
+    void (*mutate)(TargetState &);
+    std::optional<std::int64_t> last;
+  };
+  const std::vector<Case> cases = {
+    {"other target_id", [](TargetState & m) { m.target_id = "car_2"; }, std::nullopt},
+    {"frame_id", [](TargetState & m) { m.header.frame_id = "map"; }, std::nullopt},
+    {"position nan",
+     [](TargetState & m) { m.position.y = std::numeric_limits<double>::quiet_NaN(); },
+     std::nullopt},
+    {"position inf",
+     [](TargetState & m) { m.position.z = std::numeric_limits<double>::infinity(); }, std::nullopt},
+    {"position over bound", [](TargetState & m) { m.position.x = std::nextafter(1e5, 2e5); },
+     std::nullopt},
+    {"position under bound", [](TargetState & m) { m.position.y = -1e5 - 1.0; }, std::nullopt},
+    {"valid velocity nan",
+     [](TargetState & m) { m.velocity.z = std::numeric_limits<double>::quiet_NaN(); },
+     std::nullopt},
+    {"valid velocity inf",
+     [](TargetState & m) { m.velocity.x = -std::numeric_limits<double>::infinity(); },
+     std::nullopt},
+    {"zero stamp",
+     [](TargetState & m) {
+       m.header.stamp.sec = 0;
+       m.header.stamp.nanosec = 0;
+     },
+     std::nullopt},
+    {"same stamp", [](TargetState &) {}, 10000000500LL},
+    {"older stamp", [](TargetState &) {}, 10000000501LL},
+  };
+  for (const Case & c : cases) {
+    TargetState msg = valid_target_state();
+    c.mutate(msg);
+    std::string why;
+    EXPECT_FALSE(to_target_sample(msg, "car_1", c.last, &why).has_value()) << c.name;
+    EXPECT_FALSE(why.empty()) << c.name;
+  }
+  // 직전 유효 표본보다 크면 받는다. 속도 크기에는 상한이 없다.
+  TargetState msg = valid_target_state();
+  msg.velocity.x = 1e30;
+  EXPECT_TRUE(to_target_sample(msg, "car_1", 10000000499LL).has_value());
 }
 
 }  // namespace

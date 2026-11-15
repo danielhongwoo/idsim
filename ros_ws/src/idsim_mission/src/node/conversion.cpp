@@ -14,10 +14,14 @@
 
 #include "idsim_mission/node/conversion.hpp"
 
+#include <cmath>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <utility>
 
 #include "idsim_mission/core/config.hpp"
+#include "idsim_mission/core/mission_validation.hpp"
 
 namespace idsim_mission
 {
@@ -69,6 +73,14 @@ void copy_fields(const core::EventFields & fields, idsim_interfaces::msg::Missio
   event.items_completed = fields.items_completed;
   event.last_item_index = fields.last_item_index;
   event.detail = fields.detail;
+}
+
+std::optional<core::TargetSample> reject(std::string * why, std::string text)
+{
+  if (why != nullptr) {
+    *why = std::move(text);
+  }
+  return std::nullopt;
 }
 
 }  // namespace
@@ -151,6 +163,46 @@ idsim_interfaces::action::ExecuteMission::Feedback to_feedback_msg(const core::F
   msg.distance_valid = feedback.distance_valid;
   msg.distance_remaining_m = feedback.distance_remaining_m;
   return msg;
+}
+
+std::optional<core::TargetSample> to_target_sample(
+  const idsim_interfaces::msg::TargetState & msg, const std::string & topic_target_id,
+  std::optional<std::int64_t> last_stamp_ns, std::string * why)
+{
+  using TargetState = idsim_interfaces::msg::TargetState;
+  if (msg.target_id != topic_target_id) {
+    return reject(why, "target_id '" + msg.target_id + "' is not the topic token");
+  }
+  if (msg.header.frame_id != TargetState::FRAME_ID) {
+    return reject(
+      why, "frame_id '" + msg.header.frame_id + "' is not '" + TargetState::FRAME_ID + "'");
+  }
+  const core::Vec3 position = to_vec3(msg.position.x, msg.position.y, msg.position.z);
+  if (!core::within_coordinate_bound(position)) {
+    return reject(why, "position is not finite or outside [-1e5, 1e5] m");
+  }
+  core::TargetSample sample;
+  sample.position = position;
+  sample.velocity_valid = msg.velocity_valid;
+  if (msg.velocity_valid) {
+    if (
+      !std::isfinite(msg.velocity.x) || !std::isfinite(msg.velocity.y) ||
+      !std::isfinite(msg.velocity.z)) {
+      return reject(why, "velocity_valid but velocity is not finite");
+    }
+    sample.velocity = to_vec3(msg.velocity.x, msg.velocity.y, msg.velocity.z);
+  }
+  const std::int64_t stamp_ns =
+    static_cast<std::int64_t>(msg.header.stamp.sec) * core::kNsPerSecond +
+    static_cast<std::int64_t>(msg.header.stamp.nanosec);
+  if (stamp_ns <= 0) {
+    return reject(why, "stamp is not positive");
+  }
+  if (last_stamp_ns.has_value() && stamp_ns <= *last_stamp_ns) {
+    return reject(why, "stamp does not increase");
+  }
+  sample.stamp_ns = stamp_ns;
+  return sample;
 }
 
 }  // namespace idsim_mission
