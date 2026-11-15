@@ -77,7 +77,7 @@ OPS_LAUNCH_FILE = "vehicle_ops.launch.py"
 PARAMS_DIR = "params"
 OPS_STOP_SIGNAL = "SIGINT"
 OPS_STOP_GRACE = "10s"
-# lifecycle get 한 번의 상한. docker exec 한 번이 3.0-4.5 s 걸린다(decisions.md 쟁점 2 실측)
+# lifecycle get 한 번의 상한. docker exec 한 번이 3.0-4.5 s 걸린다(실측)
 OPS_PROBE_TIMEOUT_S = 8
 
 SPACING_REJECT_M = 2.0
@@ -88,21 +88,24 @@ SPACING_WARN_M = 4.0
 # CI runner의 uid 1001처럼 passwd에 없는 uid도 숫자 옵션이라 동작한다. root로 도는 gazebo는 uid 옵션 없이 root 소유다.
 MARKER_DIR = "/tmp/idsim"
 # targets(표적 어댑터). 궤적 정의의 출처는 fleet.yaml의 targets 하나이고, 생성기가 정규화한 값을 월드 SDF의 Actor,
-# params/targets.yaml, stack.json의 targets에 낸다(decisions.md 쟁점 1, 3).
+# params/targets.yaml, stack.json의 targets에 낸다(idsim_sim README "표적 어댑터").
 TARGETS_SERVICE = "targets"
 # ros2 run <패키지> <실행 이름>. 실행 이름의 출처는 이 상수 하나다(idsim_sim 패키지의 console_scripts가 같은 이름을 만든다)
 TARGET_ADAPTER_PKG = "idsim_sim"
 TARGET_ADAPTER_EXEC = "target_adapter"
 TARGETS_PARAMS_FILE = f"{PARAMS_DIR}/targets.yaml"
 TARGETS_READY_FILE = f"{MARKER_DIR}/targets_ready"
-# sim-oracle(SITL 전용 정답 pose 공급자, decisions.md 쟁점 5). sim-base 이미지에 마운트한 idsim_sim/scripts/sim_oracle.py를 돌린다.
+# sim-oracle(SITL 전용 정답 pose 공급자, idsim_sim README "정답 pose 노드"). sim-base 이미지에 마운트한 idsim_sim/scripts/sim_oracle.py를 돌린다.
 # standalone이면 표적과 무관하게 항상 만들고 embedded에는 없다.
 ORACLE_SERVICE = "sim-oracle"
 ORACLE_SCRIPT = "scripts/sim_oracle.py"  # SIM_PKG_IN_CONTAINER 기준
 ORACLE_READY_FILE = f"{MARKER_DIR}/oracle_ready"
+# target_id 형식. 사례 표의 정본은 ros_ws/src/idsim_common/test/test_target.cpp의 TargetId::parse 테스트이고 여기는 같은 규칙을 따른다.
 TARGET_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}\Z")
 TARGET_KEYS = ("id", "start_s", "loop", "waypoints")
 WAYPOINT_KEYS = ("t", "x", "y", "z")
+# 개수와 궤적 길이 상한은 Gazebo Actor의 비용을 묶는다. Actor 표본 수가 월드 전체 표본 수에 비례해 늘고 출력 크기도 같이 커지므로,
+# 표적 수, 표적당 waypoint 수, 궤적 길이의 합(아래 TARGETS_LENGTH_SUM_MAX_MS)을 함께 제한한다. 상한을 바꾸면 단위 테스트의 표본 예산 단정을 다시 본다.
 TARGETS_MAX = 32
 WAYPOINTS_MAX = 256
 TARGET_SPEED_XY_MAX_MPS = 5.0
@@ -1465,7 +1468,7 @@ def _float_str(v):
 
 
 def render_targets_params(targets):
-    """targets 서비스(표적 어댑터)의 params 파일 본문. 평탄화 형식이다(decisions.md 쟁점 3).
+    """targets 서비스(표적 어댑터)의 params 파일 본문. 평탄화 형식이다(idsim_sim README "표적 어댑터").
 
     ROS 2 파라미터가 구조체 배열을 담지 못해 target_ids와 targets.<id>.{start_s, loop, t, x, y, z}로 편다.
     실수는 모두 소수점 표기, id는 큰따옴표로 감싼다(YAML이 true, null 같은 낱말을 문자열이 아닌 값으로 읽지 않게).

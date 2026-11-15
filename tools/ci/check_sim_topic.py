@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """운용 패키지가 `/sim/` 토픽을 쓰지 않는지 검사한다. tools/ci/lint.sh의 sim-topic이 부른다. 담당: devops-engineer.
 
-`/sim/<vehicle_id>/pose` 같은 시뮬레이터 전용 토픽은 SITL 정답 판정만 쓴다(decisions.md 쟁점 5).
+`/sim/<vehicle_id>/pose` 같은 시뮬레이터 전용 토픽은 SITL 정답 판정만 쓴다(tests/sitl/README.md "시나리오와 판정").
 운용 패키지가 이 토픽에 기대면 실기체에서 없는 입력에 의존하게 된다.
 
 검사 대상(is_target): 운용 패키지의 소스, launch, params YAML.
