@@ -189,7 +189,15 @@ def test_item_completion_times_exact_and_last_item():
     t = sj.item_completion_times(fbs, 3)
     assert t[0] == (5 * US, True, 5 * US)
     assert t[1] == (int(9.05 * US), True, int(9.05 * US))
-    assert t[2] == (int(10.05 * US), False, int(9.55 * US))
+    assert t[2] == (int(10.05 * US), True, int(10.05 * US))
+
+
+def test_item_completion_times_last_item_skips_transient_invalid():
+    """실행 중 일시적인 distance_valid 거짓은 완료가 아니다. 마지막 참 뒤의 첫 거짓이 완료 tick이다."""
+    fbs = [FB(1.0, 0, sj.TYPE_GOTO, count=1), FB(1.5, 0, sj.TYPE_GOTO, valid=False, count=1),
+           FB(2.0, 0, sj.TYPE_GOTO, count=1), FB(2.35, 0, sj.TYPE_GOTO, valid=False, count=1),
+           FB(2.85, 0, sj.TYPE_GOTO, valid=False, count=1)]
+    assert sj.item_completion_times(fbs, 1) == {0: (int(2.35 * US), True, int(2.35 * US))}
 
 
 def test_item_completion_times_last_item_not_done():

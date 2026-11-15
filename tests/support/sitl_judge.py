@@ -497,16 +497,17 @@ def cancel_hover_findings(status, after_recv_us):
 
 
 def item_completion_times(feedbacks, item_count):
-    """항목마다 Executor가 완료로 넘긴 시각 t_f를 feedback에서 읽는다. 반환 {index: (t_f_us, exact, lo_us)}.
+    """항목마다 Executor가 완료로 넘긴 tick의 stamp t_f를 feedback에서 읽는다. 반환 {index: (t_f_us, exact, lo_us)}.
 
-    feedbacks: 이 goal의 FeedbackRec. 노드는 phase나 항목이 바뀐 tick에 바로, 그 밖에는 0.5 s마다 feedback을 낸다.
-    - 마지막이 아닌 항목 i: 항목 i + 1의 첫 feedback stamp. 항목이 바뀐 tick의 입력 시각이므로 완료 tick 그 자체다
-      (exact True, lo_us = t_f_us).
-    - 마지막 항목 i(공중 종료로 가는 setpoint 항목, F2의 TRACK_ENTITY): 완료 tick에 항목과 phase가 바뀌지 않아 바로
-      나가는 feedback이 없다. 그 항목에서 distance_valid가 참인 마지막 feedback 뒤의 첫 distance_valid 거짓 feedback
-      (종료 단계는 거리를 싣지 않는다)의 stamp를 t_f로 쓰고 exact False로 둔다. lo_us는 직전 참 feedback의 stamp이고
-      참 완료 시각은 (lo_us, t_f_us] 안에 있고 그 폭은 최대 0.5 s다. 판정은 상한 쪽 t_f로 하고 기준(반경)은 바꾸지
-      않는다. 노드가 종료 단계에 들어간 tick에 feedback을 내면 exact가 된다(ros2-engineer에게 요청할 사항).
+    feedbacks: 이 goal의 FeedbackRec. 노드는 phase나 항목이 바뀐 tick과 항목이 완료된 tick에 바로, 그 밖에는
+    0.5 s마다 feedback을 낸다. feedback stamp는 그 tick의 입력 시각이다.
+    - 마지막이 아닌 항목 i: 항목 i + 1의 첫 feedback stamp(항목이 바뀐 tick이 완료 tick이다).
+    - 마지막 항목 i(공중 종료로 가는 setpoint 항목, F2의 TRACK_ENTITY): 완료 tick에 item_index i, PHASE_EXECUTING,
+      distance_valid 거짓인 feedback이 바로 나간다(종료 단계는 거리를 싣지 않는다). 그 항목에서 distance_valid가
+      참인 마지막 feedback 뒤의 첫 거짓 feedback stamp가 t_f다. 실행 중의 일시적인 거짓 표본에 걸리지 않게
+      "첫 거짓"이 아니라 "마지막 참 뒤의 첫 거짓"으로 고른다. 이 보장의 근거는 계약 문장이 아니라 노드 테스트
+      test_executor_node.cpp ExecutorNodeTest.FeedbackIsPublishedOnTheTickTheLastSetpointItemCompletes다.
+    exact와 lo_us는 기록 형식을 유지하려고 남긴 값이고 항상 (True, t_f_us)다.
     완료를 보지 못한 항목은 넣지 않는다.
     """
     fbs = sorted(feedbacks, key=lambda f: f.stamp_us)
@@ -519,9 +520,8 @@ def item_completion_times(feedbacks, item_count):
     mine = [f for f in fbs if f.item_index == last]
     valid = [k for k, f in enumerate(mine) if f.distance_valid]
     if valid and valid[-1] + 1 < len(mine):
-        lo = mine[valid[-1]]
-        hi = mine[valid[-1] + 1]
-        out[last] = (hi.stamp_us, False, lo.stamp_us)
+        done = mine[valid[-1] + 1]
+        out[last] = (done.stamp_us, True, done.stamp_us)
     return out
 
 

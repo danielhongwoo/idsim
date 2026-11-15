@@ -36,7 +36,7 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--scenarios all|ci] [--attach <
 
 - 시나리오마다 사전조건(지상, DISARMED 3회 연속. F3은 공중 Hold)을 단정하고 어긋나면 그 자리에서 `PRECONDITION`으로 실패한다.
 - 비행 시나리오(A, D, F1-F4)가 실패하면 정리용 `[LAND]`를 한 번 시도하고(판정에 넣지 않는다) 뒤의 비행 시나리오는 실행하지 않고 `UPSTREAM_FAILED`(실패로 센다)다. 정리도 실패해 T의 사전조건이 맞지 않으면 T는 `PRECONDITION`이다.
-- 1b 판정은 계약 판정(계약 토픽과 PX4 토픽)과 정답 판정(SITL 전용 정답 pose `/sim/<vehicle_id>/pose`)으로 나뉜다. 정답 pose가 없으면 `ORACLE_ABSENT`, t_f를 감싸는 정답 표본 간격이 0.1 s를 넘으면 `ORACLE_STALE`이다. t_f는 다음 항목의 첫 feedback stamp이고, 공중 종료로 가는 마지막 setpoint 항목(F2의 TRACK_ENTITY)은 거리를 싣지 않는 첫 feedback의 stamp(완료 tick보다 최대 0.5 s 늦다. trace의 `t_f_exact` false)다. 판정 상수와 근거는 `tests/support/sitl_judge.py` 머리말에 있다.
+- 1b 판정은 계약 판정(계약 토픽과 PX4 토픽)과 정답 판정(SITL 전용 정답 pose `/sim/<vehicle_id>/pose`)으로 나뉜다. 정답 pose가 없으면 `ORACLE_ABSENT`, t_f를 감싸는 정답 표본 간격이 0.1 s를 넘으면 `ORACLE_STALE`이다. t_f는 다음 항목의 첫 feedback stamp이고, 공중 종료로 가는 마지막 setpoint 항목(F2의 TRACK_ENTITY)은 그 항목에서 거리를 실은 마지막 feedback 뒤의 첫 거리 없는 feedback stamp다. 노드는 그 완료 tick에 feedback을 바로 낸다(노드 테스트 `ExecutorNodeTest.FeedbackIsPublishedOnTheTickTheLastSetpointItemCompletes`). 판정 상수와 근거는 `tests/support/sitl_judge.py` 머리말에 있다.
 - gate는 첫 goal 전에 정답 pose와 표적의 발행자와 첫 표본을 확인하고, `/targets/<id>/state` 발행자 QoS를 계약 상태 행(RELIABLE, VOLATILE)과 대조하며(다르면 `QOS_MISMATCH`), Executor 파라미터 `target_fresh_age`를 판정 상수 L의 전제(0.1 s)와 대조한다. 정답 pose, 표적, `target_fresh_age`의 문제는 그것이 필요한 F 시나리오에서 실패로 드러난다.
 - 도달의 입력은 goal 직전의 `vehicle_local_position` z(`z_valid`)와 goal의 높이와 허용 오차다.
 - gate(모든 시나리오 앞): `/clock` 수신, `mission_event` 발행자와 PX4 토픽 발행자, action server 준비, 기대 sysid의 `vehicle_status`, `/clock` 정렬(노드 시각 - `vehicle_status.timestamp`의 중앙값 절대값 < 0.1 s, 최대 < 0.5 s). `mission_event` 구독은 action client보다 먼저 같은 node에서 만든다(`tests/support/mission_client.py`).

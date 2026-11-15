@@ -75,7 +75,7 @@ def main(argv=None):
                                                          _f(r["k"])),
         "GOTO s: 사건 %d, mean %s, std %s, max %s, 허용한계 %s, Shapiro-Wilk p %s" % (
             g["n"], _f(g["mean"]), _f(g["std"]), _f(g["max"]), _f(r.get("goto_limit")), _f(r["shapiro_goto"]["p"])),
-        "s_track: 사건 %d(t_f 상한 근사 %d), mean %s, std %s, max %s, 허용한계 %s, Shapiro-Wilk p %s" % (
+        "s_track: 사건 %d(t_f exact가 아닌 사건 %d), mean %s, std %s, max %s, 허용한계 %s, Shapiro-Wilk p %s" % (
             t["n"], r["track_t_f_inexact"], _f(t["mean"]), _f(t["std"]), _f(t["max"]), _f(r.get("s_track_limit")),
             _f(r["shapiro_s_track"]["p"])),
         "b 후보 %s m (0.35 m 초과 %s, 0.5 m 초과 %s), 시험 미션 acceptance_radius_m = 1.0 - b = %s" % (

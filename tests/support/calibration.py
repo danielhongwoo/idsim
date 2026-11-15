@@ -209,7 +209,7 @@ def _stats(v):
 
 
 def run_samples(trace_events):
-    """한 실행의 trace 사건에서 (GOTO s 목록, s_track 목록, RTL 착륙 [(r4, dx, dy)], t_f 상한 근사 사건 수,
+    """한 실행의 trace 사건에서 (GOTO s 목록, s_track 목록, RTL 착륙 [(r4, dx, dy)], t_f exact가 아닌 사건 수(1a56d03 전의 trace가 섞였는지 보는 표시),
     GOTO [(t_f 수평 속도, d_h, s)])."""
     s, st, r4, inexact, sp = [], [], [], 0, []
     for e in trace_events:
