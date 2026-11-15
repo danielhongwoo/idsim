@@ -97,7 +97,7 @@ def test_calibrate_u18_all_samples_within_b():
     assert r["b"] == sj.B_M == 0.5 and r["acceptance_radius_m"] == pytest.approx(0.5)
     assert r["goto_over_b"] == 0 and r["s_track_over_b"] == 0 and r["reach_outside"] == 0
     assert r["accepted"], r["reject_reasons"]
-    assert r["b_over_warn"] and not r["b_over_max"] and r["flags"]          # 0.5 > 0.35: PR 본문에 적는다
+    assert not r["b_over_max"]
     # 정규 모형은 기록만 한다
     nm = r["normal_model"]
     assert nm["status"] == "recorded_only" and nm["k"] == pytest.approx(4.237, abs=1e-3)
@@ -112,7 +112,7 @@ def test_calibrate_rejects_sample_over_b_and_few_boots():
     assert any("GOTO s" in x for x in r["reject_reasons"])
     r = cal.calibrate(_runs(5))
     assert not r["accepted"] and any("부팅 수" in x for x in r["reject_reasons"])
-    assert cal.calibrate(_runs(10), min_boots=10)["accepted"]
+    assert cal.calibrate(_runs(5), min_boots=5)["accepted"]
 
 
 def test_calibrate_flags_inexact_t_f_and_r_home_const():

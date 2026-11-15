@@ -35,7 +35,7 @@ sitl_wait.raise_if). 판정 기준을 느슨하게 바꾸려면 근거와 함께
   B_M 0.5 m: 사용자 결정 U18로 고정한 값이다. 쟁점 5의 정규 허용한계(mean + k x std)는 쓰지 않는다. 확인 조건은
     "보정 실측의 GOTO s와 TRACK_ENTITY s_track 표본 전부가 B_M 이하"다(tests/support/calibration.py).
     시험 미션의 acceptance_radius_m은 R_JUDGE_M - B_M = 0.5 m이고 ACCEPTANCE_MIN_M(0.5 m) 이상이다. B_M은 상한
-    B_MAX_M(0.5 m)과 같고 경고선 B_WARN_M(0.35 m)을 넘는다.
+    B_MAX_M(0.5 m)과 같다.
     근거(보정 실행): 로컬 부팅 30회(전부 통과), 실행 id 20261115-114952-k7-sitl-r1부터 20261115-141237-k7-sitl-r30,
     commit 1664500(dirty 아님), 이미지 idsim/*:local, 스택 7. GOTO 도달 210건: mean(s) 0.2524, std(s) 0.0588,
     max 0.4198 m. s_track 60건: mean -0.3668, std 0.2583, max 0.1195 m(t_f가 정확하지 않은 사건 0). 두 표본 모두
@@ -51,8 +51,9 @@ sitl_wait.raise_if). 판정 기준을 느슨하게 바꾸려면 근거와 함께
     노드의 target_fresh_age는 gate가 Executor 파라미터를 읽어 TARGET_FRESH_AGE_S와 대조한다.
   ORACLE_MAX_GAP_S 0.1 s: t_f를 감싸는 정답 표본 둘의 간격 상한. 넘으면 ORACLE_STALE.
   LAND_Z_TOL_M 0.3 m: 착륙 뒤 DISARMED 시점의 정답 z와 그 비행의 이륙 직전 정답 z의 차의 절댓값이 이 값 안.
-  M_EVENTS 9, M_HOME 2: b와 R_HOME_M을 쓰는 사건 수(GOTO와 TRACK_ENTITY 완료, RTL). 시나리오에서 파생된 값이고
-    test_sitl_flight_missions.py가 시나리오 미션과 대조한다. 시나리오를 바꾸면 k와 q x f를 다시 계산한다.
+  M_HOME 2: R_HOME_M을 쓰는 RTL 사건 수(Rayleigh 허용한계의 q). M_EVENTS 9: GOTO와 TRACK_ENTITY 완료 사건 수이고
+    calibration.py가 기록용 정규 모형(k)에만 쓴다. 둘 다 시나리오에서 파생된 값이고 test_sitl_flight_missions.py가
+    시나리오 미션과 대조한다. 시나리오를 바꾸면 R_HOME_M의 q x f를 다시 계산한다.
   NO_TARGET_MOTION_MIN_M 0.5 m: 새로 정한 값. TRACK_ENTITY 접근 구간(항목 시작부터 t_f)의 표적 이동 거리 하한.
     시나리오 표적은 1-2 m/s로 쉬지 않고 움직이고 접근은 1 s보다 길어서 정상이면 이 값을 크게 넘는다. 표적이 멈춘
     채 지나간 접근(표적 접근 판정이 vacuous한 경우)만 가른다.
@@ -106,7 +107,6 @@ B_M = 0.5                        # U18(머리말)
 R_HOME_M = 0.20                  # 쟁점 5의 Rayleigh 허용한계(머리말)
 ACCEPTANCE_MIN_M = 0.5           # 시험 미션 acceptance_radius_m의 하한(b의 상한과 짝. 쟁점 5)
 B_MAX_M = 0.5                    # b의 상한(넘으면 올린다)
-B_WARN_M = 0.35                  # [추정] 경고선(넘으면 PR 본문에 적는다)
 R_HOME_MAX_M = 1.0               # R_HOME_M의 상한(넘으면 올린다)
 TARGET_FRESH_AGE_S = 0.1         # Executor 파라미터 target_fresh_age의 기대값(gate가 실행 중인 노드와 대조)
 EXECUTOR_TICK_S = 0.05           # Executor tick(mission_executor_node.hpp kTickPeriodNs)

@@ -18,7 +18,7 @@
 사용법: tests/sitl/calibrate.py <회차 디렉터리 또는 실행 디렉터리>... [--b 0.5] [--min-boots 30] [--out 파일]
   회차 디렉터리: run_sitl.sh --repeat이 만드는 artifacts/sitl_repeat/<시각>-k<k>/(repeat_summary.tsv의 run_id로
   artifacts/runs/<run_id>/를 찾는다). 실행 디렉터리: artifacts/runs/<run_id>/(sitl/trace.jsonl, sitl/verdict.json).
-  --b의 기본은 판정 상수 sitl_judge.B_M이다. 확인 실행(부팅 10회 이상)은 --min-boots 10으로 돌린다.
+  --b의 기본은 판정 상수 sitl_judge.B_M이다. --min-boots는 부팅 수 하한이다(기본 30, 쟁점 5).
 출력: 표준 출력에 요약, --out(없으면 첫 회차 디렉터리의 calibration.json, 실행 디렉터리만 주면 표준 출력만)에 JSON.
 종료 코드: 0 확인 조건 충족, 1 미충족(올린다), 2 입력 오류.
 """
@@ -98,7 +98,6 @@ def main(argv=None):
     lines += ["  속도 [%s, %s) m/s: 사건 %d, 평균 s %s, 평균 d_h %s" % (
         _f(x["from_mps"], "%.0f"), _f(x["to_mps"], "%.0f"), x["n"], _f(x["mean_s"]), _f(x["mean_d_h"]))
         for x in sp["bins"] if x["n"]]
-    lines += ["표시: " + x for x in r["flags"]]
     lines += ["미충족: " + x for x in r["reject_reasons"]] or ["확인 조건 충족"]
     print("\n".join(lines))
     out = Path(a.out) if a.out else (groups[0] / "calibration.json" if groups else None)

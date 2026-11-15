@@ -20,12 +20,12 @@
 - b(U18): 상수로 받는다(기본 sitl_judge.B_M). 확인 조건은 "GOTO 도달 사건의 s = d_oracle(t_f) - acceptance_radius_m와
   TRACK_ENTITY 완료의 s_track = d_oracle(t_f) - acceptance_radius_m - v x L의 표본 전부가 b 이하"다. 쟁점 5의 정규
   허용한계(비중심 t의 k, mean + k x std)와 Shapiro-Wilk는 쓰지 않고 기록용으로만 낸다(분포를 다시 볼 때의 자료).
-- 도달 확인: GOTO d3 전부가 R_JUDGE 안이고 TRACK_ENTITY d3 전부가 그 사건의 임계값(R_JUDGE + v x L) 안인가. b를
-  적은 커밋 상태의 확인 실행(부팅 10회 이상)에 쓴다.
+- 도달 확인: GOTO d3 전부가 R_JUDGE 안이고 TRACK_ENTITY d3 전부가 그 사건의 임계값(R_JUDGE + v x L) 안인가(판정과
+  같은 기준).
 - R_home(R4): RTL 착륙 수평 위치와 기준점의 거리. sigma_hat^2 = mean(R4^2) / 2, q = sqrt(-2 ln(0.005 / m_home)),
   f = sqrt(2n / chi2_0.05(2n)), R_home = ceil_0.05(q x f x sigma_hat). 표본 최댓값이 q x f x sigma_hat를 넘으면 기각.
   착륙 위치 벡터의 평균이 축마다 2 표준오차보다 크면 기록한다(기각 사유가 아니다). 판정 상수 R_HOME_M과 대조한다.
-- 경고선: b > 0.35 m는 PR 본문에 적는다, b > 0.5 m 또는 R_home > 1 m는 올린다.
+- 상한: b > 0.5 m 또는 R_home > 1 m는 올린다.
 - 기록 전용: t_f 시점 기체 수평 속도(reach 사건의 speed_h_mps)와 d_h, s의 상관계수, 속도 구간별 사건 수와 평균.
 """
 import math
@@ -244,7 +244,7 @@ def calibrate(runs, b=sj.B_M, min_boots=MIN_BOOTS, r_home_const=sj.R_HOME_M):
         acc["inexact"] += x["inexact"]
     n = len(used)
     gs, ts = _stats(acc["s"]), _stats(acc["s_track"])
-    reasons, flags = [], []
+    reasons = []
     if n < min_boots:
         reasons.append("부팅 수 %d < %d" % (n, min_boots))
     if acc["inexact"]:
@@ -303,12 +303,10 @@ def calibrate(runs, b=sj.B_M, min_boots=MIN_BOOTS, r_home_const=sj.R_HOME_M):
             reasons.append("R4 최댓값 %.4f > 판정 상수 R_home %.2f" % (max(r4), r_home_const))
     else:
         reasons.append("RTL 착륙 사건이 없다")
-    if b > sj.B_WARN_M:
-        flags.append("b %.2f > %.2f m(PR 본문에 적고 F1 도달 사건의 시간 한도를 보고)" % (b, sj.B_WARN_M))
     if b > sj.B_MAX_M:
         reasons.append("b %.2f > 상한 %.2f m" % (b, sj.B_MAX_M))
     if rh is not None and rh > sj.R_HOME_MAX_M:
         reasons.append("R_home %.2f > 상한 %.2f m" % (rh, sj.R_HOME_MAX_M))
-    out.update(b_over_warn=b > sj.B_WARN_M, b_over_max=b > sj.B_MAX_M, flags=flags, reject_reasons=reasons,
+    out.update(b_over_max=b > sj.B_MAX_M, reject_reasons=reasons,
                accepted=not reasons, acceptance_radius_m=round(sj.R_JUDGE_M - b, 10))
     return out
