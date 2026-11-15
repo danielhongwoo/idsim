@@ -7,17 +7,14 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 계약은 `docs/interface.md`에 고정 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S5 반영. 칸 목록 covered 382, impossible 111, uncovered 0. runner가 받는 미션 89종 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6 반영. 칸 목록 covered 452, impossible 131, uncovered 0. runner는 계약 검증을 그대로 쓰고, goal 접수는 1a 미션만 받는다 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
 ## 다음 작업
 
-1. B9 S6(표적, TRACK_ENTITY, TARGET_LOST). 순서와 범위, B9와 B10의 경계는 `decisions.md` 쟁점 12.
-   - 상태기 PR마다 px4-engineer 칸 명세가 먼저이고, 칸 목록 diff의 새 칸을 같은 PR에서 덮는다.
-   - 머지 전에 로컬 `tests/sitl/run_sitl.sh`(1a 시나리오)를 돌리고 1a 미션이 지나는 덮임 칸이 그대로라는 대조를 merge 메시지에 남긴다.
-   - goal 접수가 받는 미션은 B9 동안 1a 그대로이고, 노드는 값 없는 임시 port와 빈 `Snapshot.targets`를 넘긴다.
-2. B10: 진짜 `Px4FramePort`(`to_local_position_input`, 비행 중 `ref_timestamp_us` 변경 WARN, `world.origin` 전달), 표적 구독(goal 접수 때 `Snapshot.targets`를 비우고 노드 테스트에 사례), goal 접수 제한 제거. 같은 PR에서 시나리오 B와 노드 테스트의 무효 미션 사례를 1b 무효 사례로 바꾼다(B의 사례 범위는 test-engineer). 쟁점 12 승인 조건 (2)는 B10 검토 때 본다.
+1. B10 전에 정할 것(아래 미해결 사항 첫 묶음)을 architect 주재로 정한다.
+2. B10: 진짜 `Px4FramePort`(`to_local_position_input`, 비행 중 `ref_timestamp_us` 변경 WARN, `world.origin` 전달), 표적 구독(goal 접수 때 `Snapshot.targets`를 비우고 노드 테스트에 사례), goal 접수 제한 제거, 표적 표본 좌표 상한 1e5 m(WARN throttle)와 상한 술어의 core 헤더 공개(`snapshot.hpp` `TargetSample` 주석이 상수 이름을 가리키게). FramePort는 비유한, float32 밖이면 값 없음이라는 계약을 지킨다(core는 속도 유한을 이 계약에 기댄다). 같은 PR에서 시나리오 B와 노드 테스트의 무효 미션 사례를 1b 무효 사례로 바꾼다(B의 사례 범위는 test-engineer). 쟁점 12 승인 조건 (2)는 B10 검토 때 본다.
 3. B11, B12, B13은 README 순서대로. B12(M4)는 궤적 길이 합 상한 월드(표적 4 x 600 s)의 GUI CPU, 서버 RSS, RTF도 기록한다.
 
 ## 운영 규칙
@@ -53,12 +50,18 @@ B10 전에 정할 것.
 - 공중 Offboard 진입: 첫 OFFBOARD 표본 뒤에도 감시 하한 timestamp가 P3 표본에 머문다(`monitored_status`). 늦은 AUTO_LOITER 표본이 EXTERNAL_MODE_CHANGE를 낼 수 있다(관찰 안 됨). 하한을 올릴지, 재전송이 운용자 Hold를 한 번 덮는 경우를 받아들인 위험에 올릴지, `docs/interface.md` 607행 목록에 먼저 본 OFFBOARD와 첫 OFFBOARD 표본을 넣을지(B13) 정한다(architect).
 - Px4Timestamp를 만들지 못해 끝난 goal의 `detail` 꼬리 "vehicle state unknown, may remain armed on ground"가 공중 경로에도 붙는다(GOTO의 공중 진입 포함). `landed`로 문구를 가를지 정해 별도 PR로 고친다. `COM_FAIL_ACT_T`가 `sitl_params.env`에 없어 Offboard 손실 Land 앞에 지연이 끼는지도 본다(architect, px4-engineer, ros2-engineer).
 
-S6 칸 명세 전에 정할 것.
+사용자가 미룬 것.
 
-- 표적 위치의 유효 표본 규칙에 좌표 상한을 둘지. 월드 ENU는 접평면이라 먼 좌표에서 고도 차가 커진다(1e4 m에 7.8 m)(px4-engineer, ros2-engineer, sim-engineer, architect).
-- TRACK_ENTITY에서 표적 표본이 오래된 tick이 완료 계수를 끊는지 건너뛰는지(px4-engineer, ros2-engineer).
-- 표적 추종의 수직 일치를 sim과 PX4 값으로 잴지(sim-engineer, px4-engineer).
-- B13 전에 `decisions.md` "1a 고정 계약 영향" 표에 월드 ENU 좌표계 문장을 넣을지(architect).
+- 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
+
+B11 trace에서 볼 것.
+
+- 속도 feedforward가 PX4 속도 setpoint로 전달되는지(ULog `vehicle_local_position_setpoint`의 vx, vy).
+- TRACK_ENTITY 시작 때 `target_timeout`을 넘긴 묵은 표본으로 setpoint가 바뀐 뒤 TARGET_LOST까지의 이동량.
+
+B13 전에 정할 것.
+
+-  `decisions.md` "1a 고정 계약 영향" 표에 월드 ENU 좌표계 문장을 넣을지(architect).
 
 문서 정리(정형, 다음 문서 정리 때).
 
