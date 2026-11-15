@@ -1,5 +1,5 @@
-# sitl: 이륙-호버-착륙 통합 테스트(시나리오 B, C, A, D, F1-F4, T. 기체와 표적은 tests/sitl/fleet.yaml 스택이고 targets, sim-oracle 서비스가 함께 뜬다). 실제 단계는 호스트 wrapper tests/sitl/run_sitl.sh 한 곳에
-# 있고 로컬에서도 같은 명령을 쓴다. 이 workflow는 시나리오를 모른다(decisions.md 쟁점 1, 11).
+# sitl: 이륙-호버-착륙 통합 테스트(시나리오 B, C, A, D, F1-F4, T). 실제 단계는 호스트 wrapper tests/sitl/run_sitl.sh 한 곳에
+# 있고 로컬에서도 같은 명령을 쓴다(스택은 tests/sitl/fleet.yaml, targets와 sim-oracle 포함). 이 workflow는 시나리오를 모른다(decisions.md 쟁점 1, 11).
 #
 # trigger(사용자 결정 U2): PR 머리 커밋마다(draft와 문서만 바뀐 PR 제외), main push, 수동 실행.
 #   같은 PR의 옛 실행은 취소한다. 자동 재시도는 없다(다시 돌릴 때는 re-run 또는 workflow_dispatch).
