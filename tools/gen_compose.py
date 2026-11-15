@@ -1434,19 +1434,23 @@ def build(fleet_norm, ctx):
 # ---------------------------------------------------------------- 실행 디렉터리 내용
 PARAMS_HEADER = (
     "# 생성 파일. tools/gen_compose.py가 만든다. 손으로 고치지 않는다.\n"
-    "# 식별값만 담는다. 타임아웃, 주기, command_source.*, lifecycle.self_start는 노드 선언 기본값을 쓴다.\n"
+    "# 식별값과 world.origin만 담는다. 타임아웃, 주기, command_source.*, lifecycle.self_start는 노드 선언 기본값을 쓴다.\n"
 )
 
 
-def render_ops_params(vehicle):
-    """ops-N의 params 파일 본문. /** 아래에 use_sim_time과 vehicle.* 셋뿐이다(손으로 쓴 YAML, PyYAML 불필요)."""
+def render_ops_params(vehicle, origin):
+    """ops-N의 params 파일 본문. /** 아래에 use_sim_time, vehicle.* 셋, world.origin.* 셋이다(손으로 쓴 YAML, PyYAML 불필요).
+
+    origin은 stack.json의 world.origin이다. 정수로 적은 값도 double로 나가게 소수점 표기로 쓴다.
+    """
     return (PARAMS_HEADER
             + "/**:\n"
             + "  ros__parameters:\n"
             + "    use_sim_time: true\n"
             + f"    vehicle.id: {vehicle['vehicle_id']}\n"
             + f"    vehicle.ns: {vehicle['ns']}\n"
-            + f"    vehicle.sysid: {vehicle['sysid']}\n")
+            + f"    vehicle.sysid: {vehicle['sysid']}\n"
+            + "".join(f"    world.origin.{key}: {_float_str(origin[key])}\n" for key in ORIGIN_KEYS))
 
 
 TARGETS_PARAMS_HEADER = (
@@ -1493,7 +1497,7 @@ def render_files(compose, stack, world_sdf=None):
         files[wfile] = world_sdf
     for v in stack["vehicles"]:
         if v["params_file"] is not None:
-            files[v["params_file"]] = render_ops_params(v)
+            files[v["params_file"]] = render_ops_params(v, stack["world"]["origin"])
     if stack["services"]["targets"] is not None:
         files[TARGETS_PARAMS_FILE] = render_targets_params(stack["targets"])
     return files

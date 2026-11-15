@@ -532,9 +532,19 @@ def test_ops_stop_signal_and_grace(kw):
             assert "stop_signal" not in svc, name
 
 
+def test_ops_params_carry_world_origin_as_double():
+    """fleet.yaml에 정수로 적은 alt(38)도 params에는 38.0으로 실려 ROS parameter가 double로 읽는다."""
+    compose, stack, _ = gen()
+    text = gc.render_files(compose, stack, gen_world())[stack["vehicles"][0]["params_file"]]
+    assert "    world.origin.lat: 37.5665\n    world.origin.lon: 126.978\n    world.origin.alt: 38.0\n" in text
+    got = gc.load_yaml(text)["/**"]["ros__parameters"]
+    assert [got[f"world.origin.{k}"] for k in ("lat", "lon", "alt")] == [37.5665, 126.978, 38.0]
+    assert all(isinstance(got[f"world.origin.{k}"], float) for k in ("lat", "lon", "alt"))
+
+
 @pytest.mark.parametrize("kw", OPS_CASES)
 def test_ops_params_have_identity_only(kw):
-    """성질 3: params는 /** 아래 use_sim_time과 vehicle.id, ns, sysid뿐이다. lifecycle. key와 튜닝 값이 없다."""
+    """성질 3: params는 /** 아래 use_sim_time, vehicle.id, ns, sysid, world.origin.lat, lon, alt뿐이다. lifecycle. key와 튜닝 값이 없다."""
     compose, stack, _ = gen(**kw)
     files = gc.render_files(compose, stack, gen_world(kw.get("f")))
     for v in stack["vehicles"]:
@@ -542,7 +552,8 @@ def test_ops_params_have_identity_only(kw):
         doc = gc.load_yaml(text)
         assert list(doc) == ["/**"] and list(doc["/**"]) == ["ros__parameters"]
         assert doc["/**"]["ros__parameters"] == {
-            "use_sim_time": True, "vehicle.id": v["vehicle_id"], "vehicle.ns": v["ns"], "vehicle.sysid": v["sysid"]}
+            "use_sim_time": True, "vehicle.id": v["vehicle_id"], "vehicle.ns": v["ns"], "vehicle.sysid": v["sysid"],
+            **{f"world.origin.{k}": stack["world"]["origin"][k] for k in ("lat", "lon", "alt")}}
         assert "lifecycle" not in text.split("\n", 2)[2] and "command_source" not in text.split("\n", 2)[2]
         assert not [ln for ln in text.splitlines() if ln.lstrip().startswith("lifecycle.")]
     assert set(files) == {"compose.yaml", "stack.json", "world/default.sdf"} | {v["params_file"] for v in stack["vehicles"]}
@@ -848,7 +859,7 @@ def test_cli_writes_params_and_log_dirs(tmp_path):
     assert os.listdir(out / "world") == ["default.sdf"]
     assert os.listdir(out / "params") == ["ops-1.yaml"]
     assert sorted(os.listdir(out / "ros_log")) == ["bridge", "foxglove", "ops-1", "runner", "sim-oracle"]
-    assert _read(str(out / "params" / "ops-1.yaml")) == gc.render_ops_params(_stack_of(out)["vehicles"][0])
+    assert _read(str(out / "params" / "ops-1.yaml")) == gc.render_ops_params(_stack_of(out)["vehicles"][0], _stack_of(out)["world"]["origin"])
 
 
 def test_cli_run_id_only(tmp_path):
