@@ -591,7 +591,7 @@ U6의 산출물 최소 원칙을 1b에도 쓴다. 결과는 PR 본문과, 상수
 | 이름 | 무엇 | 왜 | 담당 | 방법 |
 | --- | --- | --- | --- | --- |
 | M1 | `<skin>` 없는 Actor가 렌더링되고 움직이는가(headless ogre2 카메라 센서 영상으로 실측함. GUI와 ogre 확인은 M4) | 커스텀 모델 필요 여부(쟁점 2) | sim-engineer | 수동 1회 |
-| M4 | Actor 월드에 `gz-gui` 연결, 재접속, 120 s 생존. link visual만 가진 Actor가 GUI(ogre2, ogre)에서 보이는지. M2(Actor와 `TargetState` 차)를 육안으로 같이. 궤적 길이 합이 상한인 월드의 GUI CPU, 서버 RSS, RTF 기록 | viz 서버 생존 리스크(쟁점 17). Actor 표본 간격 250 ms의 근거(쟁점 1) | sim-engineer | 수동 절차. 간격이나 길이 합의 상한, `gui.config`를 바꾸면 다시 한다 |
+| M4 | Actor 월드에 `gz-gui` 연결, 재접속, 120 s 생존. link visual만 가진 Actor가 GUI(ogre2, ogre)에서 보이는지. M2(Actor와 `TargetState` 차)를 육안으로 같이. 궤적 길이 합이 상한인 월드의 GUI CPU, 서버 RSS, RTF 기록 | viz 서버 생존 리스크(쟁점 17). Actor 표본 간격 250 ms의 근거(쟁점 1) | sim-engineer | 수동 절차. 간격이나 길이 합의 상한, `gui.config`, sim-base의 gz-sim이나 gz-gui 버전(실측은 libgz-sim8 8.15.0, libgz-gui8 8.4.0)을 바꾸면 다시 한다. 실측은 표적 4개까지이고 표적 상한 32개의 GUI 비용은 재지 않았다. 표적을 4개 넘게 쓰는 fleet을 처음 화면으로 볼 때 다시 한다 |
 | M5 | 원점을 SDF로만 넣었을 때 스모크 S2 통과 | 런타임 원점 호출 제거(쟁점 2) | sim-engineer, test-engineer | 스모크 1회 |
 | S1-a | 지상 정지에서 oracle의 base_link 위치와 스폰 pose(x, y 같고 z는 스폰 z + 0.24에서 지상 접촉 침하분만큼 낮다. 결과는 쟁점 5 근거), Pose_V의 `x500_N` model 항목이 world 기준인지 | 오프셋 합성과 top-level pose가 world 기준이라는 [추정](쟁점 5) | sim-engineer | B7 PR의 스택 실행(`sim-oracle`이 생긴 뒤) |
 | S1-b | 호버 중 oracle 위치와 `vehicle_local_position`을 사슬 역변환한 값의 차, 수평과 수직 | 기준점이 같다는 판단과 사슬의 부호, 축(쟁점 4, 5) | sim-engineer, test-engineer | F1 trace |
