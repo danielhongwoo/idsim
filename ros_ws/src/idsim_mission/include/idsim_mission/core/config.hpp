@@ -27,6 +27,7 @@
 #ifndef IDSIM_MISSION__CORE__CONFIG_HPP_
 #define IDSIM_MISSION__CORE__CONFIG_HPP_
 
+#include <algorithm>
 #include <cstdint>
 
 namespace idsim_mission::core
@@ -84,14 +85,17 @@ struct Config
 // 정리(취소, setpoint 항목의 ITEM_TIMEOUT, PREPARING 실패, RTL 실패, 공중 종료 단계) 전체의
 // 상한(decisions.md 쟁점 3 M6, 1b decisions.md 쟁점 10).
 // 정리를 시작한 tick부터 ROS 시각으로 잰다. 노드 파라미터가 아니라 분기 타임아웃의 파생값이다:
-// 정당한 경로 중 가장 긴 것(지상 -> Hold 실패 -> Land 경로 -> 다시 지상)의 합에 대비책 disarm의
-// 지연을 더한다. 종료 단계의 지상 대기와 Land 경로 착지 뒤에는 PX4 자동 disarm이 되지 않을 때 그
-// 지연이 정당한 경로에 이어 붙기 때문이다. 기본 17 s. land_disarm_fallback_delay_ns는 음수가
-// 아니어야 한다(위 전제의 양수에 든다). 다른 기한과의 관계 검사는 두지 않는다.
+// 정당한 경로 둘 가운데 긴 쪽이다. (1) 지상 -> Hold 실패 -> Land 경로 -> 다시 지상
+// (hold + 3 x mode). (2) 종료 단계의 지상 경로: 지상에서 hold_confirm_timeout -> 지상 대기 ->
+// 대비책 disarm의 지연 -> disarm 확인(hold + delay + mode). 대비책 지연이 붙는 경로는 (2)
+// 하나다(대비책 disarm은 지상 대기에만 있고 종료 단계의 Land 경로는 착지를 기다리지 않는다).
+// 기본 12 s((1)이 길다). land_disarm_fallback_delay_ns는 음수가 아니어야 한다(위 전제의 양수에
+// 든다). 다른 기한과의 관계 검사는 두지 않는다.
 constexpr std::int64_t cleanup_cap_ns(const Timeouts & t)
 {
-  return t.hold_confirm_timeout_ns + 3 * t.mode_confirm_timeout_ns +
-         t.land_disarm_fallback_delay_ns;
+  return std::max(
+    t.hold_confirm_timeout_ns + 3 * t.mode_confirm_timeout_ns,
+    t.hold_confirm_timeout_ns + t.land_disarm_fallback_delay_ns + t.mode_confirm_timeout_ns);
 }
 
 }  // namespace idsim_mission::core
