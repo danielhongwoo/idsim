@@ -263,7 +263,7 @@ class SitlSession:
                              for r in self.r2 if r["type"] == "TRACK_ENTITY"],
                 "status": "recorded_only"},
             "R2": [{k: r.get(k) for k in ("scenario", "index", "type", "d3", "d_h", "d_v", "s", "s_track", "gap_s",
-                                          "t_f_exact")} for r in self.r2],
+                                          "t_f_exact", "speed_h_mps")} for r in self.r2],
             "R4": [{k: r.get(k) for k in ("scenario", "r4_m", "dz", "r_home_status")} for r in self.r4],
             "oracle": {"samples": len(t.oracle), "bad_frame": t.oracle_bad_frame,
                        "interval_s": sj.summary([(b.stamp_us - a.stamp_us) / US

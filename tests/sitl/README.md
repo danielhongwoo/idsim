@@ -49,6 +49,10 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--scenarios all|ci] [--attach <
 - `compose.yaml`, `stack.json`, `params/`, `px4-N/log/*.ulg`, `ros_log/`
 - `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표. 1b는 `reach`, `track`(R2, 추종 오차, 신선하지 않은 tick), `landing`(R4, RTL 소요), `r1`, `hold_end`(F2), `air_start`(F3), `flight_window`), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록, `recorded_only`(R1, R3, R2와 R4 요약)), `trace_1b.json`(ULog의 TRACK_ENTITY 구간 속도 feedforward와 z, F3 공중 시작의 DO_SET_MODE와 D. 기록 전용), `summary.md`, `steps.tsv`(단계별 벽시계 초, 서비스 종료 상태 `stop_exit_*`, ULog 끝 경계 `ulog`, 회차별 종료 코드 `rc_*` 줄), `raw_status_A.jsonl`, `raw_status_D.jsonl`, `armed_a.json`, `ps_before_stop.jsonl`(stop 전 서비스 상태), `logs/<서비스>.log`, `health_<서비스>.txt`(실패한 회나 unhealthy 서비스만), `crosscheck_a.json`
 
+## b와 R_home 보정 집계
+
+`tests/sitl/calibrate.py <회차 디렉터리 또는 실행 디렉터리>... [--out 파일]`이 `--repeat`의 회차마다 `trace.jsonl`(`reach`, `track`, `landing`)과 `verdict.json`을 읽어 b와 `R_home` 후보를 낸다(계산은 `tests/support/calibration.py`, 정의는 `decisions.md` 쟁점 5). 통과한 실행만 부팅으로 센다. 출력은 부팅 수, GOTO 사건 수, mean(s), std(s), 최댓값, s_track의 사건 수, 평균, 표준편차, 최댓값, k, 두 Shapiro-Wilk p, b 후보와 0.35 m, 0.5 m 선 초과 표시, `R_home` 후보, 실행 id, 그리고 기록 전용인 t_f 수평 속도와 d_h, s의 관계다. 회차 디렉터리를 주면 그 안에 `calibration.json`을 쓴다. 종료 코드는 0 모형 검증 통과, 1 기각이나 부족, 2 입력 오류다.
+
 유지 구간(A의 LOITER, D의 취소 뒤 유지)의 기준 고도로부터의 최대 편차는 통과한 회에도 `trace.jsonl`(`hold_deviation`), `verdict.json`(`hold_deviation_m`), `repeat_summary.tsv`(`hold_dev_*_m`)에 남는다. 항목별 임계값(A의 LOITER 0.4 m, D의 유지 0.25 m)을 넘으면 `summary.md`와 `armed_criterion.json`의 `hold_deviation_notes`에 note가 붙는다(판정 상수 0.5 m 재검토의 근거. 임계값은 `tests/support/sitl_summary.py`의 `HOLD_DEV_NOTE_M`).
 
 ## 시나리오 A의 ARMED 표본 기록

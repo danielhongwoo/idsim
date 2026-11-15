@@ -24,6 +24,7 @@ vehicle_status, vehicle_land_detected, failsafe_flags, mission_event, action의 
 UPSTREAM_FAILED로 실패한다(flight()).
 """
 import json
+import math
 from contextlib import contextmanager
 
 import pytest
@@ -353,11 +354,13 @@ TYPE_NAMES = {sj.TYPE_TAKEOFF: "TAKEOFF", sj.TYPE_GOTO: "GOTO", sj.TYPE_TRACK_EN
 
 
 def _ekf_near(raw, t_us):
-    """t에 가장 가까이 받은 vehicle_local_position(NED 로컬). S1-b 기록용(정답과 EKF를 나중에 대조한다)."""
+    """t에 가장 가까이 받은 vehicle_local_position(NED 로컬). S1-b 기록용(정답과 EKF를 나중에 대조한다).
+    vx, vy와 수평 속도 크기는 도달 거리(d_h)와 속도의 관계를 보는 기록이다(판정에 쓰지 않는다)."""
     if not raw.pos:
         return None
     p = min(raw.pos, key=lambda p: abs(p[0] - t_us))
-    return {"recv_us": p[0], "x": p[1], "y": p[2], "z": p[3], "xy_valid": p[5], "z_valid": p[6]}
+    return {"recv_us": p[0], "x": p[1], "y": p[2], "z": p[3], "xy_valid": p[5], "z_valid": p[6],
+            "vx": p[7], "vy": p[8], "speed_h_mps": round(math.hypot(p[7], p[8]), 4)}
 
 
 def _target_age_at(samples, t_us):
@@ -388,8 +391,9 @@ def _oracle_events(s, sid, spec, fbs, tf):
             rec.update(tracking=sj.tracking_errors(truth.oracle, targets, it.offset, start, t_f),
                        stale_ticks=sj.stale_ticks(targets, start, t_f),
                        target_age_at_start_s=_target_age_at(targets, start), target_id=it.target_id)
-        rec.update(scenario=sid, index=i, type=TYPE_NAMES[it.type], t_f_exact=exact, t_f_lo_us=lo,
-                   ekf=_ekf_near(raw, t_f), findings=[list(x) for x in f])
+        ekf = _ekf_near(raw, t_f)
+        rec.update(scenario=sid, index=i, type=TYPE_NAMES[it.type], t_f_exact=exact, t_f_lo_us=lo, ekf=ekf,
+                   speed_h_mps=None if ekf is None else ekf["speed_h_mps"], findings=[list(x) for x in f])
         s.r2.append(rec)
         s.trace.event("reach" if it.type == sj.TYPE_GOTO else "track", **rec)
         out += f

@@ -95,7 +95,7 @@ class Px4Raw:
         self.flags = []       # sitl_judge.FlagSample (with_flags일 때만)
         self.status = []      # StatusSample (수신 순서)
         self.landed = []      # LandedSample
-        self.pos = []         # (recv_ros_us, x, y, z, heading, xy_valid, z_valid)
+        self.pos = []         # (recv_ros_us, x, y, z, heading, xy_valid, z_valid, vx, vy). vx, vy는 1b 기록 전용
         # 마지막 vehicle_local_position의 EKF 원점(1b R1 기록 전용): (recv_ros_us, ref_lat, ref_lon, ref_alt,
         # xy_global, z_global, ref_timestamp). 판정에 쓰지 않는다
         self.pos_ref = None
@@ -209,7 +209,7 @@ class Px4Raw:
     def _on_pos(self, m):
         now = self.now_us()
         self.pos.append((now, float(m.x), float(m.y), float(m.z), float(m.heading),
-                         bool(m.xy_valid), bool(m.z_valid)))
+                         bool(m.xy_valid), bool(m.z_valid), float(m.vx), float(m.vy)))
         self.pos_ref = (now, float(m.ref_lat), float(m.ref_lon), float(m.ref_alt), bool(m.xy_global),
                         bool(m.z_global), int(m.ref_timestamp))
 
