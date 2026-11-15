@@ -14,7 +14,7 @@
 
 """ExecuteMission action client와 mission_event 구독(통합 테스트용). rclpy는 필요할 때만 가져온다.
 
-순서 규칙(필수. docs/interface.md "준비 단계", [실측] P3a): mission_event 구독을 action client보다 먼저, 같은 node 객체
+순서 규칙(필수. docs/interface.md "MissionEvent", [실측] P3a): mission_event 구독을 action client보다 먼저, 같은 node 객체
 (같은 participant)에서 만든다. 순서를 어기면 ACCEPTED 사건이 빠진다(대조군 87/400. 새 프로세스 71/200,
 새 노드 16/200). 구독 쪽 get_publisher_count() >= 1 gate는 사건 수신을 보장하지 않는다([실측] 누락 87건이 모두
 이 조건을 만족했다). 수신을 받치는 것은 이 순서 규칙이다. 구조(순서와 같은 node)는 test_mission_client.py가
@@ -122,7 +122,7 @@ class MissionClient:
     # --- gate ---
 
     def event_publisher_count(self):
-        """자기 mission_event 구독의 get_publisher_count()(graph 조회가 아니다. docs/interface.md "준비 단계")."""
+        """자기 mission_event 구독의 get_publisher_count()(graph 조회가 아니다. docs/interface.md "MissionEvent")."""
         return self.event_sub.get_publisher_count()
 
     def server_ready(self):

@@ -15,7 +15,7 @@
 """mission_client 단위 테스트. DDS 효과(ACCEPTED 누락 87/400)는 단위로 재현되지 않으므로 구조만 고정한다.
 
 고정하는 것: mission_event 구독이 action client보다 먼저, 같은 node 객체로 만들어진다. 이름과 메시지 변환.
-효과는 docs/interface.md "준비 단계"의 0/400 실측과 시나리오의 EVENT_MISSING 분류가 받친다.
+효과는 docs/interface.md "MissionEvent"의 구독 규칙과 시나리오의 EVENT_MISSING 분류가 받친다.
 """
 from types import SimpleNamespace as NS
 
