@@ -205,4 +205,13 @@ std::optional<core::TargetSample> to_target_sample(
   return sample;
 }
 
+bool reference_changed_in_flight(
+  const std::optional<core::LandSample> & land, std::uint64_t previous_ref_timestamp_us,
+  std::uint64_t current_ref_timestamp_us)
+{
+  const bool airborne = land.has_value() && !land->landed;
+  return airborne && previous_ref_timestamp_us != 0 && current_ref_timestamp_us != 0 &&
+         current_ref_timestamp_us != previous_ref_timestamp_us;
+}
+
 }  // namespace idsim_mission

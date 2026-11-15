@@ -20,6 +20,7 @@
 // - 변환(conversion.hpp): 종료 결과 하나에서 만든 result와 사건이 같은 값. feedback stamp는
 //   core::Feedback.stamp_ns 그대로. 표적 상태의 유효 표본 규칙(1b decisions.md 쟁점 8).
 // - core::is_valid_target_id와 idsim_common::TargetId::parse가 같은 사례 표에서 같은 답.
+// - 비행 중 원점 변경 WARN의 판정(reference_changed_in_flight).
 
 #include <gtest/gtest.h>
 
@@ -312,6 +313,29 @@ TEST(TargetSampleConversion, InvalidSamplesAreDropped)
   TargetState msg = valid_target_state();
   msg.velocity.x = 1e30;
   EXPECT_TRUE(to_target_sample(msg, "car_1", 10000000499LL).has_value());
+}
+
+core::LandSample land(bool landed)
+{
+  core::LandSample sample;
+  sample.landed = landed;
+  return sample;
+}
+
+TEST(ReferenceChangedInFlight, WarnsOnlyWhenAirborneAndBothStampsKnown)
+{
+  // 비행 중(landed false)에 ref_timestamp가 바뀌면 WARN.
+  EXPECT_TRUE(reference_changed_in_flight(land(false), 1000, 2000));
+  // 같은 원점이면 없음.
+  EXPECT_FALSE(reference_changed_in_flight(land(false), 1000, 1000));
+  // 지상의 첫 원점 설정(직전 0)과 지상의 재설정은 없음.
+  EXPECT_FALSE(reference_changed_in_flight(land(true), 0, 1000));
+  EXPECT_FALSE(reference_changed_in_flight(land(true), 1000, 2000));
+  // 비행 중이어도 직전이나 지금이 0이면(원점 없음) 없음.
+  EXPECT_FALSE(reference_changed_in_flight(land(false), 0, 1000));
+  EXPECT_FALSE(reference_changed_in_flight(land(false), 1000, 0));
+  // 지상 판정 표본을 아직 받지 못했으면 비행 중으로 보지 않는다.
+  EXPECT_FALSE(reference_changed_in_flight(std::nullopt, 1000, 2000));
 }
 
 }  // namespace

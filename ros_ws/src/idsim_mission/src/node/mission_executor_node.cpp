@@ -657,11 +657,8 @@ void MissionExecutorNode::on_local_position(const px4_msgs::msg::VehicleLocalPos
 {
   const px4::LocalPositionInput input = px4::to_local_position_input(msg, next_tick_);
   // 비행 중 원점 변경(1b decisions.md 쟁점 4 "원점 변경"). 변환은 tick마다 최신 기준으로 하므로
-  // 다시 만들 것은 없고 로그만 남긴다. 비행 중은 지상 판정 표본이 landed false인 동안이다.
-  const bool airborne = snapshot_.land.has_value() && !snapshot_.land->landed;
-  if (
-    airborne && ref_timestamp_us_ != 0 && input.ref_timestamp_us != 0 &&
-    input.ref_timestamp_us != ref_timestamp_us_) {
+  // 다시 만들 것은 없고 로그만 남긴다. 판정은 reference_changed_in_flight(node/conversion.hpp).
+  if (reference_changed_in_flight(snapshot_.land, ref_timestamp_us_, input.ref_timestamp_us)) {
     RCLCPP_WARN(
       get_logger(), "local position reference changed in flight (ref_timestamp %llu -> %llu us)",
       static_cast<unsigned long long>(ref_timestamp_us_),        // NOLINT(runtime/int)

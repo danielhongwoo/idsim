@@ -84,6 +84,13 @@ std::optional<core::TargetSample> to_target_sample(
   const idsim_interfaces::msg::TargetState & msg, const std::string & topic_target_id,
   std::optional<std::int64_t> last_stamp_ns, std::string * why = nullptr);
 
+// 비행 중 원점 변경 WARN의 판정(1b decisions.md 쟁점 4 "원점 변경"). 지상 판정 표본이 있고
+// landed가 false이며, 직전과 지금의 vehicle_local_position.ref_timestamp(us)가 둘 다 0이 아니고
+// 서로 다르면 true다. 지상에서 원점이 처음 정해지거나 다시 정해지는 것은 WARN하지 않는다.
+bool reference_changed_in_flight(
+  const std::optional<core::LandSample> & land, std::uint64_t previous_ref_timestamp_us,
+  std::uint64_t current_ref_timestamp_us);
+
 }  // namespace idsim_mission
 
 #endif  // IDSIM_MISSION__NODE__CONVERSION_HPP_
