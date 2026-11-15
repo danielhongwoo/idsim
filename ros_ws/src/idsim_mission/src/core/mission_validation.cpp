@@ -33,7 +33,7 @@ constexpr std::uint32_t kNanosecPerSecond = 1000000000U;
 // 계약 좌표 상한(m). GOTO position과 TRACK_ENTITY offset의 각 성분 절댓값이 이 값 이하(경계
 // 포함)여야 한다. 1b decisions.md 쟁점 8 "좌표 상한"의 값이다. 올리는 쪽이 호환된다(받던 미션을
 // 계속 받는다).
-constexpr double kMaxMissionCoordinateM = 1e6;
+constexpr double kMaxMissionCoordinateM = 1e5;
 
 bool lower_or_digit(char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); }
 
@@ -145,7 +145,7 @@ std::string check_used(const ItemSpec & item, std::size_t index)
         return field(index, "go_to.position") + " must be finite";
       }
       if (!within_coordinate_bound(s.position)) {
-        return field(index, "go_to.position") + " components must be within [-1e6, 1e6] m";
+        return field(index, "go_to.position") + " components must be within [-1e5, 1e5] m";
       }
       if (!positive_finite(s.acceptance_radius_m)) {
         return field(index, "go_to.acceptance_radius_m") + " must be finite and > 0";
@@ -161,7 +161,7 @@ std::string check_used(const ItemSpec & item, std::size_t index)
         return field(index, "track_entity.offset") + " must be finite and non-zero";
       }
       if (!within_coordinate_bound(s.offset)) {
-        return field(index, "track_entity.offset") + " components must be within [-1e6, 1e6] m";
+        return field(index, "track_entity.offset") + " components must be within [-1e5, 1e5] m";
       }
       if (!positive_finite(s.acceptance_radius_m)) {
         return field(index, "track_entity.acceptance_radius_m") + " must be finite and > 0";
