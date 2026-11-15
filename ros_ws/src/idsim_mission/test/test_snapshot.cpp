@@ -90,7 +90,7 @@ public:
     return Vec3{world_enu.y, world_enu.x, -world_enu.z};
   }
 
-  Vec3 world_velocity_to_local(const Vec3 & world_enu) const override
+  std::optional<Vec3> world_velocity_to_local(const Vec3 & world_enu) const override
   {
     return Vec3{world_enu.y, world_enu.x, -world_enu.z};
   }
@@ -104,10 +104,11 @@ TEST(Snapshot, FramePortInvalidReferenceGivesNoPoint)
   const FakeFramePort invalid(false);
   const FramePort & port = invalid;
   EXPECT_FALSE(port.world_to_local(Vec3{1.0, 2.0, 3.0}).has_value());
-  const Vec3 v = port.world_velocity_to_local(Vec3{1.0, 2.0, 3.0});
-  EXPECT_EQ(v.x, 2.0);
-  EXPECT_EQ(v.y, 1.0);
-  EXPECT_EQ(v.z, -3.0);
+  const std::optional<Vec3> v = port.world_velocity_to_local(Vec3{1.0, 2.0, 3.0});
+  ASSERT_TRUE(v.has_value());
+  EXPECT_EQ(v->x, 2.0);
+  EXPECT_EQ(v->y, 1.0);
+  EXPECT_EQ(v->z, -3.0);
 }
 
 }  // namespace

@@ -75,7 +75,10 @@ LocalPositionInput to_local_position_input(
 //   float32 범위 밖이면(idsim_common::px4::fits_float32가 거짓) nullopt다. 그런 setpoint는 어댑터
 //   출력에서 짝째 버려져 발행이 끊기므로, core가 직전 setpoint를 유지하도록 값 없음으로 둔다.
 //   비유한 입력은 비유한 결과라 함께 걸러진다.
-// - world_velocity_to_local: 기준과 무관한 축 치환. 비유한 입력은 비유한 출력이다.
+// - world_velocity_to_local: 기준과 무관한 축 치환(기준이 없어도 값이 있다). 결과의 성분이
+//   하나라도 비유한이거나 float32 범위 밖이면(fits_float32가 거짓) nullopt다. 점 변환과 같은
+//   이유다(속도가 실을 수 없는 값이면 어댑터 출력에서 짝째 버려진다). 비유한 입력은 비유한
+//   결과라 함께 걸러진다.
 class Px4FramePort final : public core::FramePort
 {
 public:
@@ -87,7 +90,7 @@ public:
   }
 
   std::optional<core::Vec3> world_to_local(const core::Vec3 & world_enu) const override;
-  core::Vec3 world_velocity_to_local(const core::Vec3 & world_enu) const override;
+  std::optional<core::Vec3> world_velocity_to_local(const core::Vec3 & world_enu) const override;
 
   bool reference_valid() const { return reference_.has_value(); }
 

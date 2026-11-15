@@ -70,10 +70,14 @@ std::optional<core::Vec3> Px4FramePort::world_to_local(const core::Vec3 & world_
   return core::Vec3{ned.x(), ned.y(), ned.z()};
 }
 
-core::Vec3 Px4FramePort::world_velocity_to_local(const core::Vec3 & world_enu) const
+std::optional<core::Vec3> Px4FramePort::world_velocity_to_local(const core::Vec3 & world_enu) const
 {
   const Eigen::Vector3d ned =
     idsim_common::frames::enu_to_ned(Eigen::Vector3d(world_enu.x, world_enu.y, world_enu.z));
+  // 점 변환과 같은 술어. 기준과 무관하다(decisions.md 쟁점 4).
+  if (!idsim_common::px4::fits_float32(ned)) {
+    return std::nullopt;
+  }
   return core::Vec3{ned.x(), ned.y(), ned.z()};
 }
 

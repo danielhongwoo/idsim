@@ -23,6 +23,7 @@
 #include <limits>
 #include <optional>
 #include <stdexcept>
+#include <vector>
 
 #include "Eigen/Core"
 #include "idsim_common/frames.hpp"
@@ -195,10 +196,11 @@ TEST(Px4FramePort, NoReferenceGivesNoPointButVelocityStillMaps)
   const core::FramePort & port = frame;
   EXPECT_FALSE(frame.reference_valid());
   EXPECT_FALSE(port.world_to_local(Vec3{0.0, 0.0, 0.0}).has_value());
-  const Vec3 v = port.world_velocity_to_local(Vec3{1.0, 2.0, 3.0});
-  EXPECT_DOUBLE_EQ(v.x, 2.0);   // north <- ENU y
-  EXPECT_DOUBLE_EQ(v.y, 1.0);   // east <- ENU x
-  EXPECT_DOUBLE_EQ(v.z, -3.0);  // down <- -up
+  const std::optional<Vec3> v = port.world_velocity_to_local(Vec3{1.0, 2.0, 3.0});
+  ASSERT_TRUE(v.has_value());
+  EXPECT_DOUBLE_EQ(v->x, 2.0);   // north <- ENU y
+  EXPECT_DOUBLE_EQ(v->y, 1.0);   // east <- ENU x
+  EXPECT_DOUBLE_EQ(v->z, -3.0);  // down <- -up
 }
 
 TEST(Px4FramePort, PointDelegatesToGeo)
@@ -273,7 +275,7 @@ TEST(Px4FramePort, PointOutsideFloat32GivesNoValue)
 TEST(Px4FramePort, ReturnedPointIsNeverDroppedBySetpointOutput)
 {
   // Px4FramePort가 값을 돌려준 점은 to_setpoint_messages가 버리지 않는다(decisions.md 쟁점 4의 대조
-  // 테스트. 벡터 쪽은 S6에서 반환형과 함께 더한다).
+  // 테스트. 벡터 쪽은 ReturnedVelocityIsNeverDroppedBySetpointOutput).
   const Px4FramePort frame(origin(), local_reference_from_px4(valid_msg()));
   const idsim_common::Px4Timestamp ts = stamp_at(1'000'000);
   int with_value = 0;
@@ -316,11 +318,73 @@ TEST(Px4FramePort, VelocityDelegatesToFramesAndIgnoresReference)
   for (const std::optional<LocalReference> & ref :
        {local_reference_from_px4(valid_msg()), local_reference_from_px4(far),
         std::optional<LocalReference>{}}) {
-    const Vec3 got = Px4FramePort(origin(), ref).world_velocity_to_local(v_enu);
-    EXPECT_DOUBLE_EQ(got.x, want.x());
-    EXPECT_DOUBLE_EQ(got.y, want.y());
-    EXPECT_DOUBLE_EQ(got.z, want.z());
+    const std::optional<Vec3> got = Px4FramePort(origin(), ref).world_velocity_to_local(v_enu);
+    ASSERT_TRUE(got.has_value());
+    EXPECT_DOUBLE_EQ(got->x, want.x());
+    EXPECT_DOUBLE_EQ(got->y, want.y());
+    EXPECT_DOUBLE_EQ(got->z, want.z());
   }
+}
+
+// 벡터 변환의 대조 입력. 값이 있는 것과 없는 것이 섞여 있다.
+std::vector<Vec3> velocity_inputs()
+{
+  const double flt_max = static_cast<double>(std::numeric_limits<float>::max());
+  const double above = std::nextafter(flt_max, kInf);
+  return {Vec3{1.0, 2.0, 3.0},  Vec3{flt_max, 0.0, 0.0}, Vec3{above, 0.0, 0.0},
+          Vec3{0.0, 1e39, 0.0}, Vec3{0.0, 0.0, -1e39},   Vec3{kInf, 0.0, 0.0},
+          Vec3{kNaN, 0.0, 0.0}};
+}
+
+TEST(Px4FramePort, VelocityOutsideFloat32GivesNoValue)
+{
+  // 벡터 변환은 기준과 무관하게 결과가 float32에 실을 수 없으면 nullopt다(decisions.md 쟁점 4).
+  const double flt_max = static_cast<double>(std::numeric_limits<float>::max());
+  for (const std::optional<LocalReference> & ref :
+       {local_reference_from_px4(valid_msg()), std::optional<LocalReference>{}}) {
+    const Px4FramePort frame(origin(), ref);
+    EXPECT_TRUE(frame.world_velocity_to_local(Vec3{1.0, 2.0, 3.0}).has_value());
+    EXPECT_TRUE(frame.world_velocity_to_local(Vec3{flt_max, 0.0, 0.0}).has_value());
+    EXPECT_FALSE(
+      frame.world_velocity_to_local(Vec3{std::nextafter(flt_max, kInf), 0.0, 0.0}).has_value());
+    EXPECT_FALSE(frame.world_velocity_to_local(Vec3{0.0, 1e39, 0.0}).has_value());
+    EXPECT_FALSE(frame.world_velocity_to_local(Vec3{0.0, 0.0, -1e39}).has_value());
+    EXPECT_FALSE(frame.world_velocity_to_local(Vec3{kInf, 0.0, 0.0}).has_value());
+    EXPECT_FALSE(frame.world_velocity_to_local(Vec3{kNaN, 0.0, 0.0}).has_value());
+  }
+}
+
+TEST(Px4FramePort, ReturnedVelocityIsNeverDroppedBySetpointOutput)
+{
+  // Px4FramePort가 값을 돌려준 벡터는 velocity_valid setpoint로 실어도 to_setpoint_messages가
+  // 버리지 않는다(decisions.md 쟁점 4의 대조 테스트 벡터 쪽).
+  const Px4FramePort frame(origin(), local_reference_from_px4(valid_msg()));
+  const idsim_common::Px4Timestamp ts = stamp_at(1'000'000);
+  int with_value = 0;
+  int without_value = 0;
+  for (const Vec3 & w : velocity_inputs()) {
+    const std::optional<Vec3> v = frame.world_velocity_to_local(w);
+    if (!v.has_value()) {
+      ++without_value;
+      continue;
+    }
+    ++with_value;
+    core::SetpointOut sp;
+    sp.kind = core::SetpointKind::kTarget;
+    sp.x = 0.0;
+    sp.y = 0.0;
+    sp.z = -5.0;
+    sp.yaw_ned = 0.0;
+    sp.velocity_valid = true;
+    sp.velocity = *v;
+    const std::optional<SetpointMessages> msgs = to_setpoint_messages(sp, ts);
+    ASSERT_TRUE(msgs.has_value()) << w.x << " " << w.y << " " << w.z;
+    EXPECT_EQ(msgs->trajectory.velocity[0], static_cast<float>(v->x));
+    EXPECT_EQ(msgs->trajectory.velocity[1], static_cast<float>(v->y));
+    EXPECT_EQ(msgs->trajectory.velocity[2], static_cast<float>(v->z));
+  }
+  EXPECT_GE(with_value, 1);
+  EXPECT_GE(without_value, 1);
 }
 
 }  // namespace

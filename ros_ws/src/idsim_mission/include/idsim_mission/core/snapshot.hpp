@@ -64,13 +64,14 @@
 //   유한, ref_alt가 정확히 0.0이 아님)는 기준을 읽는 px4 어댑터 함수에 둔다. 술어가 거짓이면
 //   world_to_local은 nullopt다. 점 변환은 결과의 성분이 하나라도 trajectory_setpoint(float32)에
 //   실을 수 없으면(비유한이거나 절댓값이 float 최댓값보다 크면) nullopt다. 술어는
-//   idsim_common::px4::fits_float32이고 position_setpoint의 수용 조건과 같다. 벡터 변환의 같은
-//   술어는 decisions.md 쟁점 12의 S6에서 반환형과 함께 더한다. 식은
+//   idsim_common::px4::fits_float32이고 position_setpoint의 수용 조건과 같다. 벡터 변환은 기준과
+//   무관한 축 치환이고, 결과 성분이 하나라도 float32에 실을 수 없으면(비유한 포함) nullopt다.
+//   술어는 점 변환과 같은 fits_float32다. 식은
 //   idsim_common::geo::world_enu_to_local_ned(점)와 idsim_common::frames::enu_to_ned(벡터)다
 //   (decisions.md 쟁점 4).
 // - Snapshot.targets는 PX4 메시지가 아니다. 노드(node/conversion.cpp)가 idsim_interfaces
 //   TargetState의 유효 표본만 TargetSample로 바꿔 target_id별로 최신 하나를 둔다(decisions.md
-//   쟁점 8의 유효 표본 규칙).
+//   쟁점 8의 유효 표본 규칙. 아래 TargetSample 주석).
 //
 // 어댑터(와 노드)가 출력에 할 것. StepOutput의 명령과 setpoint는 같은 tick의 px4_timestamp_us를
 // 실은 Px4Timestamp(Px4ClockPort가 그 tick에 돌려준 값을 만든 객체)로 만든다.
@@ -193,7 +194,8 @@ struct AckSample
 };
 
 // 표적 표본. PX4 메시지가 아니다. 노드가 유효 표본만 넣는다(target_id가 토픽 토큰과 같고,
-// frame_id가 world, 값이 유한, stamp가 0이 아니고 직전 유효 표본보다 크다).
+// frame_id가 world, 위치가 유한하고 성분의 절댓값이 1e5 m 이하, velocity_valid이면 속도가
+// 유한(아니면 표본 전체가 무효), stamp가 0이 아니고 직전 유효 표본보다 크다. decisions.md 쟁점 8).
 struct TargetSample
 {
   Vec3 position;  // world ENU, m
@@ -219,7 +221,8 @@ struct Snapshot
 // world ENU -> 기체 로컬 NED 변환 port. 노드는 tick마다 Snapshot.position과 같은 표본의 기준으로
 // 구현을 만든다(위 "어댑터가 채울 것"의 FramePort). 기준이 무효이거나 입력 또는 결과가
 // 비유한이거나 결과가 float32 범위 밖이면 점 변환은 nullopt다. 벡터 변환은 기준에 의존하지 않는
-// 축 치환(ENU -> NED)이라 늘 값이 있다.
+// 축 치환(ENU -> NED)이고, 결과 성분이 하나라도 float32에 실을 수 없으면(비유한 포함) nullopt다.
+// 술어는 점 변환과 같은 fits_float32다.
 class FramePort
 {
 public:
@@ -234,8 +237,9 @@ public:
   // float32 범위 밖이면 nullopt.
   virtual std::optional<Vec3> world_to_local(const Vec3 & world_enu) const = 0;
 
-  // world ENU 벡터(m/s) -> 로컬 NED 벡터(m/s).
-  virtual Vec3 world_velocity_to_local(const Vec3 & world_enu) const = 0;
+  // world ENU 벡터(m/s) -> 로컬 NED 벡터(m/s). 결과 성분이 하나라도 비유한이거나 float32 범위
+  // 밖이면 nullopt.
+  virtual std::optional<Vec3> world_velocity_to_local(const Vec3 & world_enu) const = 0;
 };
 
 // Px4Timestamp 공급 port. 노드 구현은 idsim_common::Px4Timestamp::now(clock)를 부르고, 성공하면 그
