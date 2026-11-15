@@ -65,7 +65,7 @@ MissionCheck validate_mission_contract(const MissionSpec & mission);
 // handle_accepted의 즉시 판정. goal과 노드 자신의 상태만 본다. 순서는 VEHICLE_ID_MISMATCH ->
 // INVALID_MISSION -> BUSY다(틀린 기체로 온 goal에 BUSY를 주면 Fleet이 다른 기체로 재시도해
 // 설정 오류를 덮는다). 끝낼 goal이면 Termination(ABORTED, 완료 0, index 0), 실행할 goal이면
-// nullopt. 이 경우들은 feedback 0건이다(M1).
+// nullopt. 이 경우들은 feedback 0건이다.
 std::optional<Termination> screen_goal(
   const std::string & goal_vehicle_id, const std::string & own_vehicle_id,
   const MissionSpec & mission, bool busy);

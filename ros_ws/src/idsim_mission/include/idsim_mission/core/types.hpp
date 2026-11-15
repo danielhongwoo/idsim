@@ -15,7 +15,7 @@
 // core의 값 타입: reason, 종료 상태, 항목 type과 분류, feedback phase, 미션 명세.
 //
 // core는 ROS와 PX4에 의존하지 않는다(README "core와 어댑터의 경계"). 그래서 idsim_interfaces의
-// 메시지를 쓰지 않고 같은 값을 여기에 다시 적는다. 값이 메시지 상수와 같은지는 노드 쪽 gtest(P3d)가
+// 메시지를 쓰지 않고 같은 값을 여기에 다시 적는다. 값이 메시지 상수와 같은지는 노드 쪽 gtest가
 // 교차 검사한다(상수가 늘면 깨진다). MissionSpec은 ExecuteMission goal의 Mission을 필드 그대로
 // 옮긴 것이고, 변환은 노드가 한다. 좌표와 yaw는 계약 그대로 world ENU다.
 
@@ -31,7 +31,7 @@
 namespace idsim_mission::core
 {
 
-// ExecuteMission result의 REASON_*. 13, 14는 1a 6단계가 더한다(P3e가 메시지 상수를 더한다).
+// ExecuteMission result의 REASON_*. 13, 14는 DISARM_FAILED와 EXTERNAL_DISARM이다.
 enum class Reason : std::uint8_t
 {
   kNone = 0,
@@ -104,7 +104,7 @@ inline constexpr std::array<std::uint8_t, 6> kAllItemTypes = {
 
 const char * item_type_name(std::uint8_t type);
 
-// 항목 분류(5단계 넘김). setpoint 항목은 Offboard에서 setpoint를 발행하는 항목이고, 모드 명령
+// 항목 분류. setpoint 항목은 Offboard에서 setpoint를 발행하는 항목이고, 모드 명령
 // 항목은 PX4 모드 명령을 보내고 모드 전이를 확인하는 항목이다. 모든 TYPE_*는 정확히 한 분류에
 // 속한다. TYPE_*가 아니면 nullopt.
 enum class ItemKind : std::uint8_t

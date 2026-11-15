@@ -16,7 +16,7 @@
 //
 // 기본값은 px4-engineer가 정한 값이다(docs/interface.md "참고: 노드 파라미터").
 // 값의 변경은 px4-engineer가 필수 승인자다. 노드는 같은 이름의 노드
-// 파라미터를 선언하고 기본값을 이 구조체에서 읽는다(P3d). 지상 setpoint z 오프셋(0.5 m)은 노드
+// 파라미터를 선언하고 기본값을 이 구조체에서 읽는다. 지상 setpoint z 오프셋(0.5 m)은 노드
 // 파라미터가 아니라 어댑터 상수라 여기에 없다.
 //
 // 시간 경계의 규칙: 경과 시간이 값 이상이면(>=) 만료다. 같은 tick에 만료와 확인이 함께 정해지면
@@ -47,7 +47,7 @@ struct Timeouts
   std::int64_t ready_timeout_ns{30 * kNsPerSecond};
   // P4(발행 10회와 신호 확인). 발행 시작(P3)부터.
   std::int64_t offboard_signal_timeout_ns{2 * kNsPerSecond};
-  // P5 Offboard 확인, LAND 항목의 AUTO_LAND 확인, Hold 실패 뒤 Land 경로, 지상 disarm 확인(M5).
+  // P5 Offboard 확인, LAND 항목의 AUTO_LAND 확인, Hold 실패 뒤 Land 경로, 지상 disarm 확인.
   // 각각 그 명령을 처음 보낸 시각부터.
   std::int64_t mode_confirm_timeout_ns{3 * kNsPerSecond};
   // P6 arm. arm을 처음 보낸 시각부터 첫 ARMED 표본을 볼 때까지만 흐른다. 그 뒤의 확인 기한은

@@ -23,7 +23,7 @@
 // - key는 (방향, 논리 이름)이다. mode_completed는 in과 out 양쪽에 있다.
 // - 골든 tests/fixtures/px4/<PX4_TAG>/topics.txt와 양방향으로 일치해야 한다(test_topics_golden).
 //
-// /fmu/in 발행 허용(Allowed)은 1a에서 offboard_control_mode, trajectory_setpoint,
+// /fmu/in 발행 허용(Allowed)은 offboard_control_mode, trajectory_setpoint,
 // vehicle_command 셋뿐이다.
 // 나머지 /fmu/in은 Restricted이며 공개 API(topic_name, create_publisher)로 쓸 수 없다.
 // Restricted -> Allowed로 바꾸려면 한 PR 안에 다음 다섯 가지가 함께 있어야 한다.
@@ -63,7 +63,7 @@ IDSIM_PX4_TOPIC(VehicleThrustSetpoint, px4_msgs::msg::VehicleThrustSetpoint, In,
 IDSIM_PX4_TOPIC(VehicleTorqueSetpoint, px4_msgs::msg::VehicleTorqueSetpoint, In, "vehicle_torque_setpoint", Restricted)
 
 // ---- /fmu/in 차단: 보류 ----
-// 위치 제어 계열이지만 1a에서 쓰지 않는다. 1b에서 공개를 검토한다.
+// 위치 제어 계열이지만 쓰지 않는다. 공개는 필요할 때 검토한다.
 IDSIM_PX4_TOPIC(GotoSetpoint, px4_msgs::msg::GotoSetpoint, In, "goto_setpoint", Restricted)
 
 // ---- /fmu/in 차단: 추정기 주입 ----

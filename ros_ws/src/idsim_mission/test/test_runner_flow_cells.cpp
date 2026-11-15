@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// PREPARING과 항목 단계의 칸(idsim_mission README "테스트", B8b).
+// PREPARING과 항목 단계의 칸(idsim_mission README "테스트").
 // 테스트 하나가 칸 하나를 덮고, 그 칸의 to와 reason을 이 runner의 전이 기록(expect_cell)과 종료
 // 결과로 단정한다. 정리 단계의 칸은 test_runner_cleanup_cells.cpp의 파라미터화 하네스가 덮는다.
 //
@@ -99,7 +99,7 @@ TEST(FlowCells, InvalidMissionWithCancelSendsNothing)
 {
   // 무효 미션의 첫 step(step_tick의 따로 된 호출 지점)과 취소. 취소는 무시되고 아무것도
   // 보내지 않는다. 미션은 계약상 무효인 것(TAKEOFF가 첫 항목이 아니다)을 쓴다. runner가 받는
-  // 미션의 범위는 B9 동안 넓어지지만 이 미션은 그 뒤에도 무효로 남는다.
+  // 받는 미션의 범위가 넓어져도 이 미션은 무효로 남는다.
   MissionSpec m;
   m.mission_id = "bad";
   m.items = {loiter_item(), takeoff_item()};

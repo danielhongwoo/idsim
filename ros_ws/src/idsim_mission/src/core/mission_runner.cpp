@@ -1408,7 +1408,7 @@ bool MissionRunner::cleanup_cap_reached(const Tick & t) const
 
 void MissionRunner::end_at_cleanup_cap(Tick & t, bool on_ground)
 {
-  // 정리의 상한 tick(M6): 발행을 멈추고 대기 중인 명령을 지운 뒤 명령 하나를 보내고 끝낸다.
+  // 정리의 상한 tick: 발행을 멈추고 대기 중인 명령을 지운 뒤 명령 하나를 보내고 끝낸다.
   // 지상이면 강제가 아닌 disarm, 공중이면 NAV_LAND. NAV_LAND의 force는 모드 가용성 검사를
   // 우회하지만 TEMPORARILY_REJECTED 경로가 남아 있고 그 조건은 미확인이다. LAND 항목과 Land 경로의
   // NAV_LAND는 거부 ack로 끝내지 않고 mode_confirm_timeout으로 끝낸다. 상한 tick의 NAV_LAND는

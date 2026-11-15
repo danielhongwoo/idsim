@@ -517,7 +517,7 @@ TEST(MissionEnd, T12GroundRejectThenAirReentry)
     "sent, AUTO_LAND observed");
 }
 
-// T10 경로(지상 Hold 수락, Hold 기한으로 지상 대기)를 S+160 직전까지. disarm 반응은 끈다.
+// 지상 Hold 수락, Hold 기한으로 지상 대기하는 경로를 S+160 직전까지. disarm 반응은 끈다.
 EndStart drive_ground_wait(Harness & h, std::uint64_t until_offset)
 {
   h.disarm_response = CommandResponse::kIgnore;
@@ -1187,11 +1187,11 @@ TEST(MissionEnd, T29CapOnMismatchedTickWhileClassifiedGround)
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
 
-// ---- 지상 대기의 대비책 기준 시각과 확인 함수(B9 S3 최종 검토 보강) ----
+// ---- 지상 대기의 대비책 기준 시각과 확인 함수 ----
 // 지상 DISARMED 계수와 분류 지상 규칙, 지상 대기의 이어짐 갱신과 진입 tick의 관측,
 // 대비책 disarm 뒤의 확인 함수. 칸은 기존 칸만 쓴다.
 
-// T10 경로(지상 Hold 수락, Hold 기한으로 S+60에 지상 대기)를 S+60까지 돈다.
+// 지상 Hold 수락, Hold 기한으로 S+60에 지상 대기하는 경로를 S+60까지 돈다.
 // drive_ground_wait와 달리 S+60 tick까지 실행해 AIR -> GROUND_WAIT(HOLD_TIMEOUT) 칸을 단정하고,
 // disarm 반응을 끄지 않는다.
 EndStart drive_into_ground_wait(Harness & h)
@@ -1268,7 +1268,7 @@ TEST(MissionEnd, GroundDisarmedCountRestartsAfterArmed)
 TEST(MissionEnd, FallbackDisarmConfirmKeptOnLandPath)
 {
   // 대비책 disarm을 보낸 뒤 Land 경로로 옮겨도 확인 함수(DisarmConfirm)로 센다.
-  // S+160 대비책 disarm(무시), S+162 G8, S+165-S+167 지상 DISARMED. 세는 표본은 모두 전송 tick보다
+  // S+160 대비책 disarm(무시), S+162 확인 시작, S+165-S+167 지상 DISARMED. 세는 표본은 모두 전송 tick보다
   // 뒤 tick의 것이다.
   Harness h(takeoff_only_mission(0.2));
   h.land_response = CommandResponse::kIgnore;

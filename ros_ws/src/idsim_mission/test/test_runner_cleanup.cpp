@@ -254,7 +254,7 @@ TEST(CancelGround, StaleDisarmedSamplesDoNotConfirm)
 
 TEST(CancelGround, LinkLostDuringGroundDisarm)
 {
-  // M5: 지상 disarm 분기에서 vehicle_status가 link_timeout(2 s) 동안 없으면 발행을 멈추고 disarm을
+  // 지상 disarm 분기에서 vehicle_status가 link_timeout(2 s) 동안 없으면 발행을 멈추고 disarm을
   // 한 번 더 보낸 뒤 ABORTED, LINK_LOST. mode_confirm_timeout(3 s)보다 먼저다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
@@ -296,7 +296,7 @@ TEST(CancelGround, LinkLostDuringGroundDisarmWithTimestampFailureDropsDisarm)
 
 TEST(CancelGround, DeniedDisarmAckKeepsRetrying)
 {
-  // M5. 방어 경로(합성 ack): v1.17.0의 ARM_DISARM은 DENIED를 돌려주지 않는다. 거부 ack는 종류와
+  // 방어 경로(합성 ack): v1.17.0의 ARM_DISARM은 DENIED를 돌려주지 않는다. 거부 ack는 종류와
   // 무관하게 그 자리에서 끝내지 않고 landed인 동안 재전송하며, 타임아웃에 끝나며 detail에 적는다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
@@ -484,7 +484,7 @@ TEST(TakeoffTimeout, CancelDuringCleanupIsIgnored)
 
 TEST(TakeoffTimeout, GroundDisarmLinkLostKeepsReason)
 {
-  // M5: 정리 중의 LINK_LOST는 원래 reason(ITEM_TIMEOUT)을 유지하고 detail에 적는다.
+  // 정리 중의 LINK_LOST는 원래 reason(ITEM_TIMEOUT)을 유지하고 detail에 적는다.
   Harness h(standard_mission());
   to_takeoff_timeout(h, true);
   h.auto_px4 = false;
@@ -583,7 +583,7 @@ TEST(CancelAir, HoldInProgressAckIsNotRejection)
 
 TEST(UntrustedSample, NotCountedForGroundDisarm)
 {
-  // M2: 정리 중 식별이 어긋난 표본은 분기 고르기와 확인 계수에 쓰지 않는다. 남의 기체의
+  // 정리 중 식별이 어긋난 표본은 분기 고르기와 확인 계수에 쓰지 않는다. 남의 기체의
   // DISARMED로 CANCELED가 되지 않고, 분기의 타임아웃이 끝낸다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));

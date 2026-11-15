@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// PREPARING(docs/interface.md "준비 단계" P0-P6, 첫 항목이 LAND인 분기)와 PREPARING 실패의
+// PREPARING(docs/interface.md "준비 단계"(idsim_mission README의 P0-P6 정의), 첫 항목이 LAND인 분기)와 PREPARING 실패의
 // 정리(docs/interface.md "정리"). P6에서 ARMED를 처음 관측한 뒤의 감시 표, arm 재전송 중단, 확인
 // 기한, 같은 tick의 순서, failsafe 이력의 구간(docs/interface.md "준비 단계").
 
@@ -96,7 +96,7 @@ TEST(Preparing, SignalNeedsFlagsReceivedAfterPublishStart)
 
 TEST(Preparing, ReadyTimeoutBoundaryAndFeedbackBeforeNotReady)
 {
-  // P2 EKF gate가 풀리지 않으면 ready_timeout(30 s, goal 접수부터)에 NOT_READY. M1: 그 앞에
+  // P2 EKF gate가 풀리지 않으면 ready_timeout(30 s, goal 접수부터)에 NOT_READY. 그 앞에
   // PHASE_PREPARING feedback이 나갈 수 있다.
   Harness h(standard_mission());
   h.world.ekf_ready = false;
@@ -378,7 +378,7 @@ TEST(Preparing, InProgressAckIsNotRejection)
 
 TEST(Preparing, IdentityMismatchAfterArmSentSendsOneDisarm)
 {
-  // M2: 첫 ARMED 표본 전, arm을 보낸 뒤의 식별 불일치. 정리 분기는 고르지 않지만 강제가 아닌
+  // 첫 ARMED 표본 전, arm을 보낸 뒤의 식별 불일치. 정리 분기는 고르지 않지만 강제가 아닌
   // disarm을 한 번 보낸다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
@@ -395,7 +395,7 @@ TEST(Preparing, IdentityMismatchAfterArmSentSendsOneDisarm)
 TEST(Preparing, SetpointItemsStartAfterArmSent)
 {
   // 불변식: setpoint 항목이 시작될 때 이 goal에서 arm을 보낸 적이 있다(TAKEOFF와 LOITER).
-  // 그래서 1a에서 ITEM_TIMEOUT의 "지상 disarm이면 바로 끝" 분기에는 닿지 않는다.
+  // 그래서 ITEM_TIMEOUT의 "지상 disarm이면 바로 끝" 분기에는 닿지 않는다.
   Harness h(standard_mission());
   h.drive_to_takeoff();
   EXPECT_EQ(h.view().item_index, 0U);

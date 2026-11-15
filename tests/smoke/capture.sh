@@ -5,7 +5,7 @@
 #   capture.sh [--ns NS] [--hz-seconds N] [--spin-time S] OUT_DIR
 #
 #   --ns NS          PX4 네임스페이스(빗금 없음, stack.json vehicles[].px4_ns, 예: px4_1).
-#                    없으면 접두사 없음(인스턴스 0. 3단계부터 스모크는 쓰지 않는다).
+#                    없으면 접두사 없음(인스턴스 0. 스모크는 쓰지 않는다).
 #   --hz-seconds N   ros2 topic hz 측정 시간(초, 벽시계). 기본 30.
 #   --spin-time S    --no-daemon 디스커버리 대기 시간(초). 기본 5.
 #   OUT_DIR          원문을 쓸 디렉터리. run_smoke.sh golden은 artifacts/runs/<run_id>/smoke/ros

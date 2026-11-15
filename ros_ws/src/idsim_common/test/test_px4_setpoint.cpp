@@ -15,7 +15,6 @@
 // Offboard position setpoint 헬퍼의 필드 표와 비유한 거부. 노드를 만들지 않는다.
 // 결정: docs/interface.md "Offboard setpoint". 속도 feedforward 인자는
 // docs/interface.md "GoToItem과 TrackEntityItem".
-// 필드 값은 px4-engineer 의견서(git 이력) 넘김 표 (2).
 
 #include <gtest/gtest.h>
 
@@ -146,7 +145,7 @@ TEST(Px4Setpoint, PositionSetpointRejectsNonFinite)
   }
 }
 
-// ---- 속도 feedforward 인자(1b) ----
+// ---- 속도 feedforward 인자 ----
 
 TEST(Px4Setpoint, PositionSetpointExplicitNoVelocityMatchesDefault)
 {

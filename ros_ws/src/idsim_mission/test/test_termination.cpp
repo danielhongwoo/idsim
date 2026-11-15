@@ -15,7 +15,7 @@
 // status와 reason의 전수 대응표, reason 값, 종료 결과 == 종료 사건.
 // 결정: docs/interface.md "종료의 충돌 규칙"(종료 사건은 정확히 1건)과 "GoalStatus와 reason"의
 // reason 상수.
-// core의 reason 값과 생성된 메시지 상수 값의 교차 검사는 노드 쪽 gtest(P3d)에 둔다.
+// core의 reason 값과 생성된 메시지 상수 값의 교차 검사는 노드 쪽 gtest에 둔다.
 
 #include <gtest/gtest.h>
 
@@ -41,7 +41,7 @@ struct ReasonRow
   bool aborted_only;  // true: ABORTED에만 대응. false: SUCCEEDED와 CANCELED에 대응(REASON_NONE)
 };
 
-// ExecuteMission.action result의 REASON_* 전수(13, 14는 6단계가 더한다).
+// ExecuteMission.action result의 REASON_* 전수(13, 14는 DISARM_FAILED와 EXTERNAL_DISARM).
 const std::vector<ReasonRow> & reason_table()
 {
   static const std::vector<ReasonRow> table = {

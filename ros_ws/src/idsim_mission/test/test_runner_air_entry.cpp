@@ -1122,7 +1122,7 @@ TEST(AirEntry, A21b_StaleSampleRightAfterPublishStart)
   EXPECT_FALSE(h.view().landed_false_seen);
 }
 
-// 첫 OFFBOARD 표본 뒤에는 대기 명령이 없어 DO_SET_MODE의 거부 ack를 보지 않는다(N1 impossible).
+// 첫 OFFBOARD 표본 뒤에는 대기 명령이 없어 DO_SET_MODE의 거부 ack를 보지 않는다(불가능한 경로).
 TEST(AirEntry, A16b_RejectionAckAfterFirstOffboardSampleIsIgnored)
 {
   Harness h(air_loiter_mission());

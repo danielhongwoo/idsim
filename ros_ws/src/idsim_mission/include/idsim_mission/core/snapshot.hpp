@@ -32,7 +32,7 @@
 // - Snapshot의 optional은 "한 번도 받지 못함"이다. 한 번 받은 뒤에는 비우지 않는다(끊김은
 //   received_ns로 core가 판정한다).
 //
-// 어댑터(P3c)가 채울 것. 왼쪽이 이 헤더의 필드, 오른쪽이 px4_msgs 필드다.
+// 어댑터가 채울 것. 왼쪽이 이 헤더의 필드, 오른쪽이 px4_msgs 필드다.
 // - StatusSample <- vehicle_status
 //   - timestamp_us <- timestamp
 //   - received_tick, received_ns <- callback이 적은 tick 번호와 노드 시계 ROS 시각(ns)
