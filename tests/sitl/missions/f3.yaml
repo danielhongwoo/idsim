@@ -1,0 +1,12 @@
+# F3(1b decisions.md 쟁점 15): [GOTO, RTL]. F2가 남긴 공중 Hold에서 시작한다(공중 시작). 따로 돌릴 수 없다.
+# 보는 것: 공중 시작, RTL 완료(착륙 위치, disarm). R_home의 표본(R4). 끝 상태 지상 DISARMED.
+# RTL은 PX4 home(F2가 arm한 점 (6, 7))으로 돌아간다. 착륙 위치의 기준점은 F2의 이륙 직전 정답 위치다.
+# RTL timeout은 60 s다(쟁점 9). acceptance_radius_m은 1.0 - b = 0.5 m다(b 0.5 m, U18).
+mission_id: f3-air-rtl
+items:
+  - type: GOTO
+    timeout_s: 15
+    position: [16.0, 7.0, 5.0]
+    acceptance_radius_m: 0.5
+  - type: RTL
+    timeout_s: 60

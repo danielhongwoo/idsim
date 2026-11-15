@@ -35,6 +35,7 @@ def test_reason_constants():
     assert sj.REASON_NONE == r.REASON_NONE
     assert sj.REASON_INVALID_MISSION == r.REASON_INVALID_MISSION
     assert sj.REASON_VEHICLE_ID_MISMATCH == r.REASON_VEHICLE_ID_MISMATCH
+    assert sj.REASON_TARGET_LOST == r.REASON_TARGET_LOST
 
 
 def test_phase_and_item_type_constants():
@@ -48,3 +49,19 @@ def test_phase_and_item_type_constants():
 def test_names_come_from_generated_constants():
     assert msgs.MissionEvent.TOPIC_NAME == "mission_event"
     assert msgs.Mission.ACTION_NAME == "execute_mission"
+
+
+def test_px4_nav_state_constants():
+    """sitl_judge와 measure_judge의 nav_state 값이 px4_msgs VehicleStatus 상수와 같다(1b의 AUTO_RTL 포함)."""
+    px4 = pytest.importorskip("px4_msgs.msg")
+    from tests.support import measure_judge as mj
+    vs = px4.VehicleStatus
+    assert sj.NAV_STATE_AUTO_RTL == vs.NAVIGATION_STATE_AUTO_RTL
+    assert (mj.NAV_STATE_AUTO_LOITER, mj.NAV_STATE_OFFBOARD, mj.NAV_STATE_AUTO_LAND) == (
+        vs.NAVIGATION_STATE_AUTO_LOITER, vs.NAVIGATION_STATE_OFFBOARD, vs.NAVIGATION_STATE_AUTO_LAND)
+
+
+def test_target_state_names():
+    """TargetState 토픽 이름 조립(sim_truth)이 쓰는 상수."""
+    ts = msgs.TargetState
+    assert (ts.TOPIC_PREFIX, ts.TOPIC_SUFFIX, ts.FRAME_ID) == ("/targets", "state", "world")

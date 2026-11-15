@@ -20,7 +20,13 @@ OFFBOARD가 아닌 ARMED 표본의 부류별 판정은 measure_judge.judge_armed
 """
 from tests.support import measure_judge as mj
 
-SCENARIOS = ("B", "C", "A", "D", "T")     # 실행 순서(decisions.md 쟁점 9)
+# 실행 순서(1b decisions.md 쟁점 15). 한 스택에서 이 순서로 돌고 로컬과 CI가 같은 목록이다. F1-F4가 있으므로
+# 판정 상수 b와 R_home이 정해져 있어야 한다(test_sitl_flight_missions.py가 단정한다)
+SCENARIOS = ("B", "C", "A", "D", "F1", "F2", "F3", "F4", "T")
+# 비행 시나리오. 하나가 실패하면 뒤의 비행 시나리오는 실행하지 않고 UPSTREAM_FAILED다(쟁점 15)
+FLIGHT_SCENARIOS = ("A", "D", "F1", "F2", "F3", "F4")
+# 정답 pose가 있어야 하는 시나리오(없으면 ORACLE_ABSENT)
+ORACLE_SCENARIOS = ("F1", "F2", "F3", "F4")
 SCHEMA = 1
 # 유지 구간 최대 편차가 이 값을 넘으면 note(판정 상수 0.5 m 재검토 근거). 항목마다 따로 둔다(architect 결정):
 # D는 허용(0.5 m)의 절반 0.25 m, A는 도달 허용 0.3 m + 수렴 과도 0.1 m = 0.4 m. A의 LOITER는 도달 허용에 들자마자
@@ -38,7 +44,7 @@ def scenario_result(sid, outcome, category=None, message=None, sim_s=None, wall_
 
 
 def run_passed(verdict):
-    """게이트가 통과하고 다섯 시나리오가 모두 passed인가. 하나라도 빠지면 실패다."""
+    """게이트가 통과하고 SCENARIOS가 모두 passed인가. 하나라도 빠지면 실패다."""
     if not verdict.get("gate", {}).get("ok"):
         return False
     by_id = {s["id"]: s for s in verdict.get("scenarios", [])}

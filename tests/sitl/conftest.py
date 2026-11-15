@@ -110,8 +110,15 @@ def pytest_sessionfinish(session, exitstatus):
     stack = stk.load_from_env()
     gate = _STATE["gate_error"] or {"ok": s is not None and bool(s.gate_info), "category": None, "message": None,
                                     **(s.gate_info if s else {})}
+    recorded = None
+    if s is not None:
+        try:
+            recorded = s.recorded_only()
+        except Exception as e:  # noqa: BLE001 기록 실패가 verdict.json을 막지 않게 한다
+            recorded = {"error": repr(e)}
     verdict = {
         "schema": ss.SCHEMA, "run_id": stack.run_id, "stack_index": stack.stack_index,
+        "recorded_only": recorded,
         "git_commit": stack.git_commit, "git_dirty": stack.git_dirty,
         "images": {k: v for k, v in stack.images.items() if v}, "gate": gate,
         "scenarios": [_STATE["results"][i] for i in ss.SCENARIOS if i in _STATE["results"]],
@@ -125,4 +132,4 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "scenario(id): 시나리오 이름(B, C, A, D, T). verdict.json의 행 이름")
+    config.addinivalue_line("markers", "scenario(id): 시나리오 이름(sitl_summary.SCENARIOS). verdict.json의 행 이름")

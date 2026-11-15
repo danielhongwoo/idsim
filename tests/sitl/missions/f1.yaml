@@ -1,0 +1,24 @@
+# F1(1b decisions.md 쟁점 15): [TAKEOFF 5 m, GOTO x 3, LAND]. 한 변 10 m의 세 변을 돈다.
+# 보는 것: waypoint 도달(정답 판정), 항목 순서, 착륙 후 disarm. b의 표본(R2, GOTO 3개). 끝 상태 지상 DISARMED.
+# 좌표는 world ENU m. 기체는 tests/sitl/fleet.yaml의 스폰 (6, -3, 0)에서 이륙한다.
+# acceptance_radius_m은 1.0 - b = 0.5 m다(b 0.5 m, U18. tests/support/sitl_judge.py 머리말).
+mission_id: f1-square
+items:
+  - type: TAKEOFF
+    timeout_s: 20
+    height_m: 5.0
+    acceptance_m: 0.3
+  - type: GOTO
+    timeout_s: 15
+    position: [16.0, -3.0, 5.0]
+    acceptance_radius_m: 0.5
+  - type: GOTO
+    timeout_s: 15
+    position: [16.0, 7.0, 5.0]
+    acceptance_radius_m: 0.5
+  - type: GOTO
+    timeout_s: 15
+    position: [6.0, 7.0, 5.0]
+    acceptance_radius_m: 0.5
+  - type: LAND
+    timeout_s: 30

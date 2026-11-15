@@ -66,9 +66,11 @@ def test_event_and_feedback_conversion():
     rec = mc.event_rec(ev, 99)
     assert rec.stamp_us == 3_500_000 and rec.recv_us == 99
     assert rec.goal_id == bytes(range(16)).hex()
-    fb = NS(goal_id=NS(uuid=list(range(16))), feedback=NS(stamp=t, item_index=1, item_count=3, item_type=4, phase=2))
+    fb = NS(goal_id=NS(uuid=list(range(16))), feedback=NS(stamp=t, item_index=1, item_count=3, item_type=4, phase=2,
+                                                          distance_valid=True, distance_remaining_m=0.25))
     f = mc.feedback_rec(fb, 5)
     assert f.goal_id == rec.goal_id and f.item_index == 1 and f.phase == 2
+    assert f.distance_valid is True and f.distance_m == 0.25
     r = mc.result_rec(NS(status=5, result=NS(reason=0, items_completed=1, last_item_index=1, detail="d")), 7)
     assert (r.status, r.items_completed, r.detail) == (5, 1, "d")
 
@@ -129,3 +131,12 @@ def test_require_server_maps_timeout_to_server_absent():
     with pytest.raises(sw.SitlFailure) as e:
         mc.require_server(W(), NS(server_ready=lambda: False), 5.0)
     assert e.value.category == sw.SERVER_ABSENT
+
+
+def test_placeholder_fills_loader_required_keys():
+    """default_sub 항목의 자리값은 로더의 구조 검사를 통과하고, 서브메시지는 뒤에서 기본값으로 되돌린다."""
+    from tests.support import sitl_missions as sm
+    for t in ("TAKEOFF", "GOTO", "TRACK_ENTITY", "LOITER", "RTL", "LAND"):
+        it = mc._placeholder(sm.default_sub_item(t))
+        sm.mission_yaml().parse_item(it, 0)
+        assert (t in mc._SUB_FIELD) == (t not in ("RTL", "LAND"))

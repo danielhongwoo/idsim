@@ -7,13 +7,13 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 계약은 `docs/interface.md`에 고정 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6, B10 전 core 수정, B10(진짜 `Px4FramePort`, 표적 구독, goal 접수는 계약 검증만, 미션 YAML 로더와 `send_mission`), B12(M4 화면 확인, Actor 표본 간격 250 ms 확정) 반영. 칸 목록 covered 452, impossible 131, uncovered 0 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6, B10 전 core 수정, B10(진짜 `Px4FramePort`, 표적 구독, goal 접수는 계약 검증만, 미션 YAML 로더와 `send_mission`), B11(F1-F4, 정답 판정, b 0.5 m와 `R_home` 0.20 m), B12(M4 화면 확인, Actor 표본 간격 250 ms 확정) 반영. 칸 목록 covered 452, impossible 131, uncovered 0 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
 ## 다음 작업
 
-1. B11, B13은 README 순서대로.
+1. B13(계약 고정 문서). 초안은 branch `feat/1b-b13`에 있고 B11 머지 뒤 rebase해 (v) 행과 함께 낸다.
 
 ## 운영 규칙
 
@@ -38,6 +38,7 @@
 - U13: roadmap 1b 목표를 그대로 덮는 합친 미션 시나리오 F4를 둔다. F1-F3은 경계 상황 검증용.
 - U14: 1b waypoint 판정 반경은 1 m. 시험 미션의 `acceptance_radius_m`은 `1 m - b` 이하.
 - U16: `docs-for-agent/file-ownership.md`의 소유자는 architect.
+- U18: b는 0.5 m 고정. 정규 허용한계를 쓰지 않고 보정 실측의 GOTO `s`와 `s_track` 표본 전부가 b 이하임을 확인한다. CI에서 b를 넘는 사건이 나오면 b를 올리지 않고 시각 정렬을 먼저 본다.
 
 ## 미해결 사항
 
@@ -45,14 +46,10 @@
 
 - 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
 
-B11 trace에서 볼 것.
-
-- 속도 feedforward가 PX4 속도 setpoint로 전달되는지(ULog `vehicle_local_position_setpoint`의 vx, vy).
-- TRACK_ENTITY 시작 때 `target_timeout`을 넘긴 묵은 표본으로 setpoint가 바뀐 뒤 TARGET_LOST까지의 이동량.
-
 B13 전에 정할 것.
 
 -  `decisions.md` "1a 고정 계약 영향" 표에 월드 ENU 좌표계 문장을 넣을지(architect).
+- `target_id` 사례 표의 단일 출처(architect).
 
 문서 정리(정형, 다음 문서 정리 때).
 
@@ -70,16 +67,10 @@ B13 전에 정할 것.
 - `test_px4_topic_names.py::test_argument_checks`의 SpinThread `InvalidHandle` 경고, `tools/vehicle_arming_state.py`의 rc 2 사례 테스트(test-engineer).
 - 스모크 images 단계가 `LLVM_MAJOR`, `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다(test-engineer). `ros_ws.sh`에 `versions.env` 이름 기준 존재 검사를 둘지(devops-engineer, test-engineer).
 
-B11 판정에서 챙길 것(test-engineer).
-
-- 시험 미션 YAML은 `idsim_mission.mission_yaml` 형식으로 쓰고 `tests/support/sitl_missions.py`의 항목 key를 그에 맞춘다. lint pytest에는 `idsim_mission`이 import 경로에 없으니 시간 합산 테스트의 실행 위치를 정한다.
-- `tests/support`에 `/sim/<vehicle_id>/pose` 조립 순수 함수와 `sim_oracle.py`의 `ORACLE_TOPIC_CASES`, `ORACLE_TOPIC_INVALID`와 같은 사례 표(import로 공유하지 않음). `target_id` 사례 표의 단일 출처는 이때 정한다(architect).
-- 정답 pose 구독은 첫 `mission_event` 전에 discovery와 `sim-oracle` 준비를 확인하고 depth를 크게 둔다(발행은 RELIABLE, VOLATILE, KEEP_LAST 10). QoS 짝을 `tests/support` 머리말에 적는다. `ORACLE_STALE`은 `/clock`이 `t_f + 0.1 s`를 지날 때까지 기다린 뒤 판정한다.
-- start 뒤 health가 healthy가 되기를 기다린다(interval 10 s). uid 1001로 스택 전체가 도는지는 CI sitl에서 본다.
-- F2 trace: Land 경로 뒤 DISARMED 표본의 `nav_state`, 지상 Hold 뒤 자동 disarm, Hold 3회 소요. F3 trace: D와 P5의 DO_SET_MODE 전송 수, 첫 OFFBOARD 표본 뒤 OFFBOARD가 아닌 표본의 timestamp 순서.
-
 빌드와 CI.
 
+- 첫 CI `sitl`(9개 시나리오)의 step 시간으로 U15 15분 목표를 확인한다(추정 보통 10-12분, 최악 14-15분). 넘으면 U15 순서로 줄인다(devops-engineer, test-engineer).
+- GOTO 도달의 판정 반경 여유가 0.08 m다(보정 max d3 0.92 m). EKF 위치가 정답보다 진행 방향으로 약 0.47 m 앞선다. SITL GPS 경로에는 실제 지연이 없는데 `EKF2_GPS_DELAY`는 기본 110 ms다([소스] `GZBridge.cpp` navSatCallback, ULog 값 110). 이것이 앞섬의 약 v x 0.11 s를 만든다는 몫은 [추정]이다. 다음 작업 단위에서 `EKF2_GPS_DELAY` 0으로 로컬 몇 회를 돌려 앞섬이 줄어드는지 먼저 보고, 그 뒤 SITL 계약 파라미터와 재보정을 정한다(architect, px4-engineer, test-engineer).
 - `sitl.yml`은 GHCR에서 이미지 key로 pull하므로 이미지 key가 바뀌는 PR은 PR과 머지 직후 main 양쪽에서 pull이 실패한다. 지금은 로컬 `run_sitl.sh`로 대신하고 publish 뒤 main에서 `sitl`을 다시 돌린다. `workflow_run`으로 묶을지 등은 devops-engineer와 architect가 정한다.
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
 - clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다. `tools/ros_ws.sh tidy`의 대상 0개 통과를 `ci`에서 바꿀지(ros2-engineer, devops-engineer).

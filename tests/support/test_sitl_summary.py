@@ -43,6 +43,14 @@ def test_run_passed_needs_gate_and_all_five():
     assert not ss.run_passed(v)
 
 
+def test_scenarios_order():
+    assert ss.SCENARIOS == ("B", "C", "A", "D", "F1", "F2", "F3", "F4", "T")
+    assert set(ss.FLIGHT_SCENARIOS) <= set(ss.SCENARIOS) and set(ss.ORACLE_SCENARIOS) <= set(ss.FLIGHT_SCENARIOS)
+    v = verdict()
+    v["scenarios"] = [r for r in v["scenarios"] if r["id"] != "F3"]     # F3이 빠진 실행은 통과가 아니다
+    assert not ss.run_passed(v)
+
+
 def test_verdict_cell():
     v = verdict(passed=False)
     assert ss.verdict_cell(v, "B") == "PASS"

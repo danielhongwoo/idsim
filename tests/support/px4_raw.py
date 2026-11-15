@@ -95,7 +95,10 @@ class Px4Raw:
         self.flags = []       # sitl_judge.FlagSample (with_flags일 때만)
         self.status = []      # StatusSample (수신 순서)
         self.landed = []      # LandedSample
-        self.pos = []         # (recv_ros_us, x, y, z, heading, xy_valid, z_valid)
+        self.pos = []         # (recv_ros_us, x, y, z, heading, xy_valid, z_valid, vx, vy). vx, vy는 1b 기록 전용
+        # 마지막 vehicle_local_position의 EKF 원점(1b R1 기록 전용): (recv_ros_us, ref_lat, ref_lon, ref_alt,
+        # xy_global, z_global, ref_timestamp). 판정에 쓰지 않는다
+        self.pos_ref = None
         self.acks = []        # dict(recv_ros_us, command, result, target_system)
         self.sends = []       # dict(kind, recv_ros_us, ts_us). 송신기가 채운다
         self._clock_us = 0
@@ -204,8 +207,11 @@ class Px4Raw:
         self.landed.append(mj.LandedSample(int(m.timestamp), self.now_us(), bool(m.landed)))
 
     def _on_pos(self, m):
-        self.pos.append((self.now_us(), float(m.x), float(m.y), float(m.z), float(m.heading),
-                         bool(m.xy_valid), bool(m.z_valid)))
+        now = self.now_us()
+        self.pos.append((now, float(m.x), float(m.y), float(m.z), float(m.heading),
+                         bool(m.xy_valid), bool(m.z_valid), float(m.vx), float(m.vy)))
+        self.pos_ref = (now, float(m.ref_lat), float(m.ref_lon), float(m.ref_alt), bool(m.xy_global),
+                        bool(m.z_global), int(m.ref_timestamp))
 
     def _on_ack(self, m):
         # ack에는 원 명령을 가리키는 필드가 없다. arm과 disarm(command 400)의 ack는 전송 시각으로 가른다.

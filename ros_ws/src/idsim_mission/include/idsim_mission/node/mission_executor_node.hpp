@@ -85,7 +85,8 @@ inline constexpr const char * kParamOriginAlt = "world.origin.alt";
 
 // 20 Hz tick(노드 시계).
 inline constexpr std::int64_t kTickPeriodNs = 50000000LL;
-// feedback 발행: phase나 항목이 바뀐 tick과 그 밖에는 10 tick(0.5 s)마다.
+// feedback 발행: phase나 항목이 바뀐 tick, 항목이 완료된 tick(items_completed가 바뀐 tick),
+// 그 밖에는 10 tick(0.5 s)마다.
 inline constexpr int kFeedbackEveryTicks = 10;
 // on_activate의 첫 /clock 대기(벽시계 예외. 파라미터가 아니다).
 inline constexpr std::int64_t kClockWaitNs = 2000000000LL;
@@ -204,6 +205,7 @@ private:
   int ticks_since_feedback_{0};
   std::uint32_t last_feedback_item_{0};
   std::uint8_t last_feedback_phase_{0};
+  std::uint32_t last_feedback_completed_{0};
   bool self_start_{true};
 };
 

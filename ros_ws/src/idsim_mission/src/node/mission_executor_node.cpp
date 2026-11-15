@@ -532,6 +532,7 @@ void MissionExecutorNode::handle_accepted(const std::shared_ptr<GoalHandle> & go
   ticks_since_feedback_ = 0;
   last_feedback_item_ = 0;
   last_feedback_phase_ = 0;
+  last_feedback_completed_ = 0;
 }
 
 void MissionExecutorNode::finish(
@@ -713,15 +714,20 @@ void MissionExecutorNode::on_tick()
     pubs_.command->publish(command);
   }
   if (out.feedback.has_value()) {
+    // 항목이 완료된 tick에도 바로 낸다. 마지막 setpoint 항목이 완료되어 공중 종료 단계로 들어가는
+    // tick은 항목과 phase가 그대로라(decisions.md 쟁점 10) 이 조건이 없으면 다음 주기까지 늦는다.
+    const std::uint32_t completed = runner_->view().items_completed;
     const auto phase = static_cast<std::uint8_t>(out.feedback->phase);
-    const bool changed =
-      phase != last_feedback_phase_ || out.feedback->item_index != last_feedback_item_;
+    const bool changed = phase != last_feedback_phase_ ||
+                         out.feedback->item_index != last_feedback_item_ ||
+                         completed != last_feedback_completed_;
     if (changed || ++ticks_since_feedback_ >= kFeedbackEveryTicks) {
       goal_->publish_feedback(
         std::make_shared<ExecuteMission::Feedback>(to_feedback_msg(*out.feedback)));
       ticks_since_feedback_ = 0;
       last_feedback_phase_ = phase;
       last_feedback_item_ = out.feedback->item_index;
+      last_feedback_completed_ = completed;
     }
   }
   if (out.termination.has_value()) {

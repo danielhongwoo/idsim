@@ -44,7 +44,7 @@ CLI: `ros2 run idsim_mission send_mission <file> --vehicle <vehicle_id>`. 미션
 
 구독 QoS와 ack: PX4 토픽의 QoS는 `idsim_common::px4::px4_out_qos()`(BEST_EFFORT, VOLATILE, KEEP_LAST 5)로 고정이고 바꾸지 않는다(idsim_common이 qos_overrides도 끈다. PX4 writer가 BEST_EFFORT라 RELIABLE로는 붙지 않는다). ack는 PX4 쪽 큐가 4라 한 tick에 여럿 올 수 있으므로, 노드는 command 묶음(DO_SET_MODE, ARM_DISARM, NAV_LAND, NAV_RTL, 그 밖)별로 최신 ack 하나를 두고 tick마다 대기 중인 명령의 묶음 것만 Snapshot에 넣는다. 다른 묶음의 ack가 대기 중인 명령의 거부를 덮지 않는다. 같은 묶음 안에서 한 tick에 둘이 오면 나중 것이 남는다(거부가 ACCEPTED에 덮이면 타임아웃이 잡는다. 안전 방향).
 
-feedback: phase나 항목이 바뀐 tick에는 바로, 그 밖에는 10 tick(0.5 s, 2 Hz)마다 낸다(`kFeedbackEveryTicks`). stamp는 `Feedback.stamp_ns`, 곧 그 tick의 `TickInput.now_ns`다. 노드는 tick 시각을 tick 머리에서 한 번만 읽고, core가 경과 시간을 재는 시각과 stamp가 같은 값이 된다(발행 때 다시 읽으면 `/clock` 한 양자만큼 어긋날 수 있다). `Px4ClockPort`의 `Px4Timestamp`는 따로 읽는 값이라 이 시각과 다를 수 있다.
+feedback: phase나 항목이 바뀐 tick과 항목이 완료된 tick(`items_completed`가 바뀐 tick. 마지막 setpoint 항목이 완료되어 공중 종료 단계로 들어가는 tick 포함)에는 바로, 그 밖에는 10 tick(0.5 s, 2 Hz)마다 낸다(`kFeedbackEveryTicks`). stamp는 `Feedback.stamp_ns`, 곧 그 tick의 `TickInput.now_ns`다. 노드는 tick 시각을 tick 머리에서 한 번만 읽고, core가 경과 시간을 재는 시각과 stamp가 같은 값이 된다(발행 때 다시 읽으면 `/clock` 한 양자만큼 어긋날 수 있다). `Px4ClockPort`의 `Px4Timestamp`는 따로 읽는 값이라 이 시각과 다를 수 있다.
 
 ## 구현 규칙
 
