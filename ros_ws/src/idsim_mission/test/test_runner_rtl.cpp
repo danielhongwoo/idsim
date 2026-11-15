@@ -97,7 +97,9 @@ TEST(EntryPlan, DerivedFromFirstItemType)
   EXPECT_EQ(entry_plan(item_type::kRtl), EntryPlan::kModeCommand);
   EXPECT_EQ(entry_plan(item_type::kLoiter), EntryPlan::kAirOffboard);
   EXPECT_EQ(entry_plan(item_type::kGoTo), EntryPlan::kAirOffboard);
-  EXPECT_FALSE(entry_plan(item_type::kTrackEntity).has_value());
+  EXPECT_EQ(entry_plan(item_type::kTrackEntity), EntryPlan::kAirOffboard);
+  EXPECT_FALSE(entry_plan(0).has_value());
+  EXPECT_FALSE(entry_plan(7).has_value());
 }
 
 TEST(EntryPlan, ModeItemSpecPerType)

@@ -61,6 +61,8 @@ const char * cause_name(CleanupCause cause)
       return "RTL_FAILURE";
     case CleanupCause::kMissionEnd:
       return "MISSION_END";
+    case CleanupCause::kTargetLost:
+      return "TARGET_LOST";
   }
   return "UNKNOWN";
 }
@@ -153,6 +155,10 @@ const char * event_name(Event event)
       return "LOITER_ELAPSED";
     case Event::kGotoReached:
       return "GOTO_REACHED";
+    case Event::kTrackEntityReached:
+      return "TRACK_ENTITY_REACHED";
+    case Event::kTargetLost:
+      return "TARGET_LOST";
     case Event::kModeItemIdentityMismatch:
       return "MODE_ITEM_IDENTITY_MISMATCH";
     case Event::kModeItemLinkLost:

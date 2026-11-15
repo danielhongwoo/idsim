@@ -37,6 +37,12 @@
 //   실패시킨다. 그래서 GOTO가 없는 미션의 모든 사례가 "1a type 미션은 FramePort를 부르지 않는다"(1b
 //   decisions.md 쟁점 12)를 함께 단정한다. GOTO 사례는 kAxis(축 치환)나 kNone(점 값 없음)으로
 //   바꾸거나 tick마다 값을 고르는 hook(점)과 vector_hook(벡터)을 둔다.
+// - 표적: world.targets에 등록한 표적마다 tick마다 stamp_ns = 그 tick의 now_ns인 새 표본을
+//   Snapshot.targets에 넣는다(위치와 flags와 함께). target_hook이 있으면 표본을 바꾸거나 그 tick에
+//   주지 않는다(nullopt). 표본은 한 번 넣으면 지우지 않는다(노드와 같다). 표적을 등록하지 않은
+//   사례는 Snapshot.targets가 비어 있다.
+// - 모든 step 뒤 속도 불변식을 단정한다: setpoint의 velocity_valid가 true이면 세 성분이 모두
+//   유한하고, 그 tick의 끝 상태가 TRACK_ENTITY 항목이다(1b decisions.md 쟁점 8).
 // - 방어 경로(PX4 v1.17.0에서 나오지 않는 조합과 ack)는 합성 표본과 합성 ack로만 시험한다.
 //   해당 테스트에 그렇게 적는다.
 
@@ -46,9 +52,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -194,6 +202,21 @@ inline MissionSpec takeoff_goto_land_mission()
   m.mission_id = "goto3";
   m.items = {takeoff_item(), goto_item(), land_item()};
   return m;
+}
+
+// TRACK_ENTITY 항목. offset은 world ENU다. MODE_KEEP.
+inline ItemSpec track_entity_item(
+  const std::string & target_id = "t1", Vec3 offset = Vec3{0.0, 0.0, 5.0}, double radius = 0.5,
+  std::int32_t timeout_s = 10)
+{
+  ItemSpec item;
+  item.type = item_type::kTrackEntity;
+  item.timeout = seconds(timeout_s);
+  item.track_entity.target_id = target_id;
+  item.track_entity.offset = offset;
+  item.track_entity.acceptance_radius_m = radius;
+  item.track_entity.yaw.mode = yaw_mode::kKeep;
+  return item;
 }
 
 // 공중 Offboard 진입의 [GOTO].
@@ -362,6 +385,8 @@ struct World
   std::optional<std::uint64_t> position_timestamp_us;
   bool ekf_ready{true};
   bool signal_lost{true};
+  // 등록한 표적(target_id -> 기본 표본. stamp_ns는 tick마다 그 tick의 now_ns로 바꾼다).
+  std::map<std::string, TargetSample> targets;
 };
 
 // tick 열의 한 칸: 이번 tick에 들어올 vehicle_status 표본(fresh가 false이면 새 표본 없음).
@@ -484,6 +509,15 @@ public:
     flags.offboard_signal_lost = world.signal_lost;
     flags.received_tick = tick_no;
     snapshot.flags = flags;
+    for (const auto & [id, base] : world.targets) {
+      TargetSample sample = base;
+      sample.stamp_ns = now_ns;
+      const std::optional<TargetSample> pushed =
+        target_hook ? target_hook(id, tick_no, sample) : std::optional<TargetSample>(sample);
+      if (pushed.has_value()) {
+        snapshot.targets[id] = *pushed;
+      }
+    }
   }
 
   void push_status(std::optional<std::uint64_t> timestamp_us = std::nullopt)
@@ -549,6 +583,7 @@ public:
     if (out.feedback.has_value()) {
       EXPECT_EQ(out.feedback->stamp_ns, input.now_ns) << "tick " << input.tick;
     }
+    expect_velocity_invariant(out, input.tick);
     record(out);
     ++tick_no;
     now_ns += kTickNs;
@@ -693,6 +728,11 @@ public:
   // Px4ClockPort가 보는 시각 - tick 입력 시각(ns). 노드에서 두 시각은 따로 읽혀 tick마다 0 또는
   // /clock 한 양자만큼 어긋날 수 있다. tick 번호를 받아 그 tick의 값을 돌려준다. 비어 있으면 0.
   std::function<std::int64_t(std::uint64_t)> port_skew;
+  // 표적 표본을 바꾸거나 그 tick에 주지 않는다(nullopt). 인자는 target_id, tick 번호, 기본 표본
+  // (stamp_ns = 그 tick의 now_ns). 비어 있으면 기본 표본을 준다.
+  std::function<std::optional<TargetSample>(
+    const std::string & id, std::uint64_t tick, const TargetSample & base)>
+    target_hook;
   bool auto_samples{true};
   bool auto_px4{true};
   bool auto_offboard_ack{true};
@@ -704,6 +744,24 @@ public:
   CommandResponse disarm_response{CommandResponse::kAccept};
 
 private:
+  // 속도 불변식(1b decisions.md 쟁점 8): 속도가 있으면 세 성분이 모두 유한하고 끝 상태가
+  // TRACK_ENTITY 항목이다.
+  void expect_velocity_invariant(const StepOutput & out, std::uint64_t tick) const
+  {
+    if (!out.setpoint.has_value() || !out.setpoint->velocity_valid) {
+      return;
+    }
+    const Vec3 & v = out.setpoint->velocity;
+    EXPECT_TRUE(std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z))
+      << "non-finite velocity at tick " << tick;
+    const RunnerView v_after = runner_.view();
+    EXPECT_EQ(v_after.stage, Stage::kItem) << "velocity outside an item at tick " << tick;
+    if (v_after.stage == Stage::kItem) {
+      EXPECT_EQ(runner_.mission().items.at(v_after.item_index).type, item_type::kTrackEntity)
+        << "velocity outside TRACK_ENTITY at tick " << tick;
+    }
+  }
+
   void record(const StepOutput & out)
   {
     outputs_.push_back(out);

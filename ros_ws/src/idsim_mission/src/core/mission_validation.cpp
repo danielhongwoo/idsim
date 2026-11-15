@@ -213,7 +213,8 @@ bool supported_in_1a(std::uint8_t type)
 
 bool supported_by_runner(std::uint8_t type)
 {
-  return supported_in_1a(type) || type == item_type::kRtl || type == item_type::kGoTo;
+  return supported_in_1a(type) || type == item_type::kRtl || type == item_type::kGoTo ||
+         type == item_type::kTrackEntity;
 }
 
 // 계약 + 1a 임시 제한. validate_mission_1a_goal이 쓴다.
@@ -314,7 +315,7 @@ MissionCheck validate_mission_runnable(const MissionSpec & mission)
         " is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, RTL only)");
     }
   }
-  // 첫 항목 type은 모두 진입 방식이 있다(TAKEOFF, GOTO, LOITER, LAND, RTL. rules.hpp entry_plan).
+  // 첫 항목 type은 모두 진입 방식이 있다(type 여섯. rules.hpp entry_plan).
   return check;
 }
 

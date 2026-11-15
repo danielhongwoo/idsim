@@ -557,24 +557,22 @@ TEST(ScreenGoal, AirEndingMissionIsInvalidMission)
 
 TEST(MissionRunner, UnvalidatedMissionEndsInternalOnFirstStep)
 {
-  // runner가 아직 받지 않는 type(TRACK_ENTITY. 1b decisions.md 쟁점 12의 S6까지)으로 본다.
+  // 계약 순서 규칙을 어긴 미션(LAND가 마지막이 아니다). runner는 첫 step에서 INTERNAL로 끝낸다.
   MissionSpec m;
-  m.mission_id = "track";
-  m.items = {takeoff_item(), track_item(), land_item()};
+  m.mission_id = "order";
+  m.items = {takeoff_item(), land_item(), loiter_item()};
   Harness h(m);
   h.tick();
   ASSERT_TRUE(h.termination().has_value());
   const MissionCheck check = validate_mission_runnable(m);
   ASSERT_FALSE(check.valid);
+  EXPECT_EQ(check.detail, validate_mission_contract(m).detail);
   EXPECT_EQ(
     h.termination()->detail, "mission did not pass validate_mission_runnable: " + check.detail);
   EXPECT_EQ(
-    h.termination()->detail.rfind(
-      "mission did not pass validate_mission_runnable: items[1].type TRACK_ENTITY is not supported "
-      "by the runner yet (TAKEOFF, GOTO, LOITER, LAND, RTL only)",
-      0),
-    0U)
-    << h.termination()->detail;
+    h.termination()->detail,
+    "mission did not pass validate_mission_runnable: items[1].type LAND is allowed only as the "
+    "last item");
   expect_terminated_once(h, Status::kAborted, Reason::kInternal);
 }
 
@@ -621,6 +619,8 @@ TEST(ValidateMission, OneAGoalAcceptsOnlyWhatRunnerAccepts)
     if (goal) {
       EXPECT_TRUE(runnable) << order_name(m) << ": " << validate_mission_runnable(m).detail;
     }
+    // runner가 type 여섯을 모두 받으므로 runner의 valid 집합은 계약 검증과 같다.
+    EXPECT_EQ(runnable, validate_mission_contract(m).valid) << order_name(m);
     goal_valid += goal ? 1 : 0;
     runnable_valid += runnable ? 1 : 0;
   }
@@ -631,8 +631,9 @@ TEST(ValidateMission, OneAGoalAcceptsOnlyWhatRunnerAccepts)
   // [TAKEOFF, LOITER, LOITER, LOITER](B9 S3 공중 종료 단계), 첫 항목이 LOITER인 [LOITER],
   // [LOITER, LOITER], [LOITER, LAND], [LOITER, RTL], [LOITER, LOITER, LOITER],
   // [LOITER, LOITER, LAND], [LOITER, LOITER, RTL], [LOITER x 4], [LOITER, LOITER, LOITER, LAND],
-  // [LOITER, LOITER, LOITER, RTL](B9 S4 공중 Offboard 진입), GOTO가 든 67개(B9 S5).
-  EXPECT_EQ(runnable_valid, 89);
+  // [LOITER, LOITER, LOITER, RTL](B9 S4 공중 Offboard 진입), GOTO가 든 67개(B9 S5), TRACK_ENTITY가
+  // 든 177개(B9 S6).
+  EXPECT_EQ(runnable_valid, 266);
 }
 
 // 1b decisions.md 쟁점 12 "미션 제한의 두 자리"의 단위 테스트 (1). B9 동안 goal 접수는 1a
@@ -713,36 +714,6 @@ TEST(ScreenGoal, LoiterFirstMissionsNewToRunnerStayInvalidMission)
   }
 }
 
-// runner가 아직 실행하지 않는 type(TRACK_ENTITY. 1b decisions.md 쟁점 12의 S6까지)은 type 검사가
-// 거른다. 첫 항목 검사는 없다.
-TEST(ValidateMission, TrackEntityIsNotRunnableByType)
-{
-  struct Case
-  {
-    std::vector<ItemSpec> items;
-    const char * detail;
-  };
-  const std::vector<Case> cases = {
-    {{track_item()},
-     "items[0].type TRACK_ENTITY is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, "
-     "RTL only)"},
-    {{track_item(), land_item()},
-     "items[0].type TRACK_ENTITY is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, "
-     "RTL only)"},
-    {{takeoff_item(), track_item()},
-     "items[1].type TRACK_ENTITY is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, "
-     "RTL only)"},
-  };
-  for (const Case & c : cases) {
-    MissionSpec m;
-    m.mission_id = "tf";
-    m.items = c.items;
-    const MissionCheck check = validate_mission_runnable(m);
-    EXPECT_FALSE(check.valid) << order_name(m);
-    EXPECT_EQ(check.detail, c.detail) << order_name(m);
-  }
-}
-
 // 같은 단위 테스트 (1)의 S5 몫. GOTO가 든 미션은 runner가 받고 goal 접수는 1a 그대로
 // INVALID_MISSION으로 끝낸다(GOTO는 노드와 SITL에서 닿지 않는다).
 TEST(ScreenGoal, GotoMissionsNewToRunnerStayInvalidMission)
@@ -765,6 +736,40 @@ TEST(ScreenGoal, GotoMissionsNewToRunnerStayInvalidMission)
     EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
     EXPECT_EQ(term->reason, Reason::kInvalidMission) << order_name(m);
     EXPECT_NE(term->detail.find("type GOTO is not supported in 1a"), std::string::npos)
+      << order_name(m) << ": " << term->detail;
+  }
+}
+
+// 같은 단위 테스트 (1)의 S6 몫. TRACK_ENTITY가 든 미션은 runner가 받고 goal 접수는 1a 그대로
+// INVALID_MISSION으로 끝낸다(TRACK_ENTITY는 노드와 SITL에서 닿지 않는다). detail은 1a에서 받지 않는
+// 첫 항목의 type이다.
+TEST(ScreenGoal, TrackEntityMissionsNewToRunnerStayInvalidMission)
+{
+  struct Case
+  {
+    std::vector<ItemSpec> items;
+    const char * detail;
+  };
+  const std::vector<Case> cases = {
+    {{track_item()}, "items[0].type TRACK_ENTITY is not supported in 1a"},
+    {{track_item(), land_item()}, "items[0].type TRACK_ENTITY is not supported in 1a"},
+    {{takeoff_item(), track_item(), land_item()},
+     "items[1].type TRACK_ENTITY is not supported in 1a"},
+    {{loiter_item(), track_item()}, "items[1].type TRACK_ENTITY is not supported in 1a"},
+    {{goto_item(), track_item(), rtl_item()}, "items[0].type GOTO is not supported in 1a"},
+    {{takeoff_item(), track_item()}, "items[1].type TRACK_ENTITY is not supported in 1a"},
+  };
+  for (const Case & c : cases) {
+    MissionSpec m;
+    m.mission_id = "track";
+    m.items = c.items;
+    EXPECT_TRUE(validate_mission_runnable(m).valid)
+      << order_name(m) << ": " << validate_mission_runnable(m).detail;
+    const std::optional<Termination> term = screen_goal("px4_1", "px4_1", m, false);
+    ASSERT_TRUE(term.has_value()) << order_name(m);
+    EXPECT_EQ(term->status, Status::kAborted) << order_name(m);
+    EXPECT_EQ(term->reason, Reason::kInvalidMission) << order_name(m);
+    EXPECT_NE(term->detail.find(c.detail), std::string::npos)
       << order_name(m) << ": " << term->detail;
   }
 }
