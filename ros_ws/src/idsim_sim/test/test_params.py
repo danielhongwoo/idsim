@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""params 평탄화 형식의 해석과 거부 조건(decisions.md 쟁점 3)."""
+"""params 평탄화 형식의 해석과 거부 조건(README.md "표적 어댑터")."""
 
 import pytest
 

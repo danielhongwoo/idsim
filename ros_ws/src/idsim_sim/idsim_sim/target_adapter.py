@@ -14,7 +14,7 @@
 """표적 어댑터 노드. fleet 파일의 궤적 정의(params)를 노드 시계에서 평가해 TargetState를 발행한다.
 
 실행: ros2 run idsim_sim target_adapter --ros-args --params-file <실행 디렉터리>/params/targets.yaml
-결정: docs-for-agent/plan-1b-mission-target/decisions.md 쟁점 1, 3.
+규칙: README.md "표적 어댑터".
 
 - Gazebo를 구독하지 않는다. 표적 위치의 원천은 params이고 Gazebo Actor는 화면 확인용이다.
 - 노드 하나가 모든 표적을 발행한다(표적별 publisher). 토픽은 /targets/<target_id>/state(절대 이름).

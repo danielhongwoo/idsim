@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""config/gui.config의 plugin 목록 고정(decisions.md 쟁점 2).
+"""config/gui.config의 plugin 목록 고정(docker/README.md "Gazebo GUI (viz 프로필)").
 
 고정 목록은 gz-sim8 기본 gui.config(/usr/share/gz/gz-sim8/gui/gui.config, sim-base 이미지의 libgz-sim8 8.15.0)에서
 WorldControl을 빼고 GridConfig를 더한 것이다. 설정의 <topic>으로 구독 대상을 받는 plugin(TopicEcho,

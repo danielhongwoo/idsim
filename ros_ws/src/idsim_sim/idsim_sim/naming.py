@@ -15,7 +15,7 @@
 
 규칙은 docs/interface.md "이름과 식별자"의 target_id(^[a-z][a-z0-9_]{0,31}$)이고, C++ 쪽은
 idsim_common/target.hpp가 같은 규칙을 가진다. 토픽은 TargetState 상수로 조립한다
-(TOPIC_PREFIX + "/" + target_id + "/" + TOPIC_SUFFIX). 결정: decisions.md 쟁점 3.
+(TOPIC_PREFIX + "/" + target_id + "/" + TOPIC_SUFFIX). 규칙: README.md "표적 어댑터".
 """
 
 import re
