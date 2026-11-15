@@ -222,7 +222,9 @@ MissionExecutorNode::CallbackReturn MissionExecutorNode::on_configure(
   }
   // 정리의 상한(decisions.md 쟁점 3 M6)은 노드 파라미터가 아니라 파생값이라 계산값을 남긴다.
   RCLCPP_INFO(
-    get_logger(), "cleanup cap %.3f s (hold_confirm_timeout + 3 x mode_confirm_timeout)",
+    get_logger(),
+    "cleanup cap %.3f s (hold_confirm_timeout + 3 x mode_confirm_timeout + "
+    "land_disarm_fallback_delay)",
     ns_to_seconds(core::cleanup_cap_ns(t)));
   create_entities(*vehicle_, *builder_);
   return CallbackReturn::SUCCESS;

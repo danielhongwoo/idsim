@@ -17,7 +17,7 @@
 //
 // 표기: S는 마지막 setpoint 항목의 완료 tick(종료 단계 첫 tick), S+k는 그 뒤 k번째 tick(50 ms
 // 간격). 시간 값은 core/config.hpp 기본값이다: hold_confirm_timeout 3 s(S+60), 정리의 상한
-// 12 s(S+240), command_resend_period 0.5 s(10 tick), link_timeout 2 s(40 tick),
+// 17 s(S+340), command_resend_period 0.5 s(10 tick), link_timeout 2 s(40 tick),
 // land_disarm_fallback_delay 5 s(100 tick), mode_confirm_timeout 3 s(60 tick).
 // 별도 표기가 없으면 미션은 [TAKEOFF, LOITER](LOITER 5 s)이고 S에 공중 OFFBOARD다. 지상 사례는
 // [TAKEOFF] height 0.2, acceptance 0.3이라 landed true인 채 도달한다(이륙 이력 없음).
@@ -39,6 +39,7 @@ namespace
 {
 
 constexpr std::uint64_t kLoiterTicks = 100;  // LOITER 5 s
+constexpr std::uint64_t kCapTicks = 340;     // 정리의 상한 17 s
 
 MissionSpec takeoff_loiter_mission()
 {
@@ -192,7 +193,7 @@ const char kNone[] = "CLEANUP.MISSION_END.NONE";
 const char kAir[] = "CLEANUP.MISSION_END.AIR";
 const char kAirLand[] = "CLEANUP.MISSION_END.AIR_LAND";
 const char kGroundWait[] = "CLEANUP.MISSION_END.GROUND_WAIT";
-const char kCapPrefix[] = "mission end: cleanup cap reached (12000 ms), last branch ";
+const char kCapPrefix[] = "mission end: cleanup cap reached (17000 ms), last branch ";
 
 // ---- 공중 Hold ----
 
@@ -388,7 +389,7 @@ TEST(MissionEnd, T9CapBeatsThirdHoldSample)
   Harness h(takeoff_loiter_mission());
   const EndStart st = start_air_end(h);
   run_to(h, st.s + 3);  // S+1, S+2 공중 AUTO_LOITER
-  h.now_ns = st.s_ns + 12 * kNsPerSecond;
+  h.now_ns = st.s_ns + 17 * kNsPerSecond;
   const std::size_t before = tick_marked(h);
   expect_cell(h, kAir, Event::kCleanupCap, "DONE", "ABORTED/MODE_SWITCH_FAILED", {}, before);
   EXPECT_EQ(h.outputs().back().commands, std::vector<CommandKind>{CommandKind::kNavLand});
@@ -432,6 +433,25 @@ TEST(MissionEnd, T10GroundEndWithFallbackDisarm)
   EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 6);
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 1);
   EXPECT_EQ(h.count_command(CommandKind::kNavLand), 0);
+  expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
+}
+
+TEST(MissionEnd, T10LongFallbackDelayStillEndsByDisarm)
+{
+  // 대비책 지연이 상한에 들어 있으므로 지연을 길게(10 s) 줘도 지상 대기는 상한이 아니라 대비책
+  // disarm의 확인으로 끝난다. Hold 기한 S+60, disarm S+260, 확인 S+263, 상한 22 s(S+440).
+  Config config;
+  config.timeouts.land_disarm_fallback_delay_ns = 10 * kNsPerSecond;
+  Harness h(takeoff_only_mission(0.2), config);
+  const EndStart st = start_ground_end(h);
+  run_to(h, st.s + 260);
+  EXPECT_TRUE(ticks_sending(h, CommandKind::kDisarm, st.s, st.s + 259).empty());
+  h.tick();
+  EXPECT_EQ(commands_at(h, st.s + 260), std::vector<CommandKind>{CommandKind::kDisarm});
+  run_to(h, st.s + 263);
+  const std::size_t before = tick_marked(h);
+  expect_cell(h, kGroundWait, Event::kGroundDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {}, before);
+  EXPECT_TRUE(terminated_at(h, st.s + 263));
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
@@ -510,15 +530,15 @@ TEST(MissionEnd, T13FallbackFailsAndCapEnds)
   h.push_ack(AckCommand::kArmDisarm, AckResult::kAccepted);
   run_to(h, st.s + 171);
   h.push_ack(AckCommand::kArmDisarm, AckResult::kTemporarilyRejected);
-  run_to(h, st.s + 240);
+  run_to(h, st.s + kCapTicks);
   const std::size_t before = tick_marked(h);
   expect_cell(h, kGroundWait, Event::kCleanupCap, "DONE", "ABORTED/MODE_SWITCH_FAILED", {}, before);
-  EXPECT_EQ(
-    ticks_sending(h, CommandKind::kDisarm, st.s, st.s + 239),
-    (std::vector<std::uint64_t>{
-      st.s + 160, st.s + 170, st.s + 180, st.s + 190, st.s + 200, st.s + 210, st.s + 220,
-      st.s + 230}));
-  EXPECT_EQ(commands_at(h, st.s + 240), std::vector<CommandKind>{CommandKind::kDisarm});
+  std::vector<std::uint64_t> disarm_ticks;  // S+160부터 10 tick마다 상한 전까지
+  for (std::uint64_t k = 160; k < kCapTicks; k += 10) {
+    disarm_ticks.push_back(st.s + k);
+  }
+  EXPECT_EQ(ticks_sending(h, CommandKind::kDisarm, st.s, st.s + kCapTicks - 1), disarm_ticks);
+  EXPECT_EQ(commands_at(h, st.s + kCapTicks), std::vector<CommandKind>{CommandKind::kDisarm});
   expect_end(
     h, st.s, "ABORTED/MODE_SWITCH_FAILED",
     std::string(kCapPrefix) +
@@ -529,12 +549,12 @@ TEST(MissionEnd, T13FallbackFailsAndCapEnds)
 TEST(MissionEnd, T14CapBeatsThirdGroundDisarmed)
 {
   Harness h(takeoff_only_mission(0.2));
-  const EndStart st = drive_ground_wait(h, 238);
-  h.world.arming = Arming::kDisarmed;  // S+238, S+239, S+240
-  run_to(h, st.s + 240);
+  const EndStart st = drive_ground_wait(h, kCapTicks - 2);
+  h.world.arming = Arming::kDisarmed;  // S+338, S+339, S+340
+  run_to(h, st.s + kCapTicks);
   const std::size_t before = tick_marked(h);
   expect_cell(h, kGroundWait, Event::kCleanupCap, "DONE", "ABORTED/MODE_SWITCH_FAILED", {}, before);
-  EXPECT_EQ(commands_at(h, st.s + 240), std::vector<CommandKind>{CommandKind::kDisarm});
+  EXPECT_EQ(commands_at(h, st.s + kCapTicks), std::vector<CommandKind>{CommandKind::kDisarm});
   EXPECT_FALSE(has_edge(h, Event::kGroundDisarmConfirmed, st.before));
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
@@ -542,9 +562,9 @@ TEST(MissionEnd, T14CapBeatsThirdGroundDisarmed)
 TEST(MissionEnd, T14ContrastThirdGroundDisarmedBeforeCap)
 {
   Harness h(takeoff_only_mission(0.2));
-  const EndStart st = drive_ground_wait(h, 237);
-  h.world.arming = Arming::kDisarmed;  // S+237, S+238, S+239
-  run_to(h, st.s + 239);
+  const EndStart st = drive_ground_wait(h, kCapTicks - 3);
+  h.world.arming = Arming::kDisarmed;  // S+337, S+338, S+339
+  run_to(h, st.s + kCapTicks - 1);
   const std::size_t before = tick_marked(h);
   expect_cell(h, kGroundWait, Event::kGroundDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {}, before);
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
@@ -573,15 +593,15 @@ TEST(MissionEnd, T16LandPathCapInAir)
 {
   Harness h(takeoff_only_mission(0.2));
   h.land_response = CommandResponse::kIgnore;
-  const EndStart st = drive_ground_wait(h, 235);
-  h.world.landed = false;  // S+235: ARMED landed false
+  const EndStart st = drive_ground_wait(h, kCapTicks - 5);
+  h.world.landed = false;  // S+335: ARMED landed false
   std::size_t before = tick_marked(h);
   expect_cell(h, kGroundWait, Event::kEnterAir, kAirLand, "-", {}, before);
-  EXPECT_EQ(commands_at(h, st.s + 235), std::vector<CommandKind>{CommandKind::kNavLand});
-  run_to(h, st.s + 240);
+  EXPECT_EQ(commands_at(h, st.s + kCapTicks - 5), std::vector<CommandKind>{CommandKind::kNavLand});
+  run_to(h, st.s + kCapTicks);
   before = tick_marked(h);
   expect_cell(h, kAirLand, Event::kCleanupCap, "DONE", "ABORTED/MODE_SWITCH_FAILED", {}, before);
-  EXPECT_EQ(commands_at(h, st.s + 240), std::vector<CommandKind>{CommandKind::kNavLand});
+  EXPECT_EQ(commands_at(h, st.s + kCapTicks), std::vector<CommandKind>{CommandKind::kNavLand});
   const std::string detail = termination_or_empty(h).detail;
   EXPECT_EQ(detail.rfind(std::string(kCapPrefix) + "air (Land path)", 0), 0U) << detail;
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
@@ -591,14 +611,14 @@ TEST(MissionEnd, T16ContrastLandPathCapOnGround)
 {
   Harness h(takeoff_only_mission(0.2));
   h.land_response = CommandResponse::kIgnore;
-  const EndStart st = drive_ground_wait(h, 235);
+  const EndStart st = drive_ground_wait(h, kCapTicks - 5);
   h.world.landed = false;
-  run_to(h, st.s + 237);
-  h.world.landed = true;  // S+237부터 ARMED landed true
-  run_to(h, st.s + 240);
+  run_to(h, st.s + kCapTicks - 3);
+  h.world.landed = true;  // S+337부터 ARMED landed true
+  run_to(h, st.s + kCapTicks);
   const std::size_t before = tick_marked(h);
   expect_cell(h, kAirLand, Event::kCleanupCap, "DONE", "ABORTED/MODE_SWITCH_FAILED", {}, before);
-  EXPECT_EQ(commands_at(h, st.s + 240), std::vector<CommandKind>{CommandKind::kDisarm});
+  EXPECT_EQ(commands_at(h, st.s + kCapTicks), std::vector<CommandKind>{CommandKind::kDisarm});
   const std::string detail = termination_or_empty(h).detail;
   EXPECT_EQ(detail.rfind(std::string(kCapPrefix) + "air (Land path)", 0), 0U) << detail;
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
@@ -1096,7 +1116,7 @@ TEST(MissionEnd, T27cCapWhileClassifiedGroundSendsDisarm)
   h.world.landed = true;
   h.world.arming = Arming::kDisarmed;  // S+59, S+60
   run_to(h, st.s + 61);
-  h.now_ns = st.s_ns + 12 * kNsPerSecond;
+  h.now_ns = st.s_ns + 17 * kNsPerSecond;
   const std::size_t before = tick_marked(h);
   expect_cell(h, kAir, Event::kCleanupCap, "DONE", "ABORTED/MODE_SWITCH_FAILED", {}, before);
   EXPECT_EQ(h.outputs().back().commands, std::vector<CommandKind>{CommandKind::kDisarm});
@@ -1151,7 +1171,7 @@ TEST(MissionEnd, T29CapOnMismatchedTickWhileClassifiedGround)
   h.world.identity = IdentityCheck::kMismatch;
   h.world.arming = Arming::kArmed;
   h.world.landed = false;
-  h.now_ns = st.s_ns + 12 * kNsPerSecond;
+  h.now_ns = st.s_ns + 17 * kNsPerSecond;
   const std::size_t before = tick_marked(h);
   expect_cell(h, kAir, Event::kCleanupCap, "DONE", "ABORTED/MODE_SWITCH_FAILED", {}, before);
   EXPECT_EQ(h.outputs().back().commands, std::vector<CommandKind>{CommandKind::kDisarm});

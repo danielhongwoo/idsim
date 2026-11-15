@@ -41,7 +41,7 @@
 //   시작한다. kAirLand는 kAir에서 Hold 거부 ack로 Land 경로에 간 상태, kGroundAfterHoldFailure는
 //   kAirLand에서 landed true로 지상 분기에 간 상태다(Hold 실패 표시가 남아 공중 재진입이 Land
 //   경로가 된다).
-// - 정리의 상한(12 s)은 분기 타임아웃(3 s)보다 길어 한 분기에 머물러서는 닿지 않는다. 상한 칸은
+// - 정리의 상한(17 s)은 분기 타임아웃(3 s)보다 길어 한 분기에 머물러서는 닿지 않는다. 상한 칸은
 //   landed를 바꿔 분기를 나갔다 바로 다시 들어오기를 되풀이해(재진입이 분기 타이머를 다시 시작한다)
 //   목표 분기에 있는 채 상한 tick을 맞는다. 상한 tick의 표본이 그 tick의 고르기를 정하므로 그
 //   표본의 landed를 칸의 입력(cap_on_ground)으로 따로 둔다. 머무는 tick 수는 분기 타임아웃과 tick

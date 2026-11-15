@@ -901,23 +901,27 @@ TEST(HoldFailedReentry, AirAgainAfterHoldTimeoutSendsNavLand)
 
 // ---- 정리의 상한(decisions.md 쟁점 3 M6) ----
 // 상한 경로는 실제 PX4로 재현하기 어려워 합성 표본으로만 시험한다. 기본값에서 상한은
-// hold_confirm_timeout + 3 x mode_confirm_timeout = 12 s = 240 tick이다.
+// hold_confirm_timeout + 3 x mode_confirm_timeout + land_disarm_fallback_delay = 17 s = 340
+// tick이다.
 
-constexpr int kCapTicks = 240;
+constexpr int kCapTicks = 340;
 constexpr int kToggleTicks = 50;  // landed가 2.5 s마다 바뀐다(분기 타임아웃 3 s보다 짧다)
 
 TEST(CleanupCap, DerivedValue)
 {
   const Timeouts t;
-  EXPECT_EQ(cleanup_cap_ns(t), 12 * kNsPerSecond);
+  EXPECT_EQ(cleanup_cap_ns(t), 17 * kNsPerSecond);
   EXPECT_EQ(cleanup_cap_ns(t), static_cast<std::int64_t>(kCapTicks) * kTickNs);
   Timeouts other;
   other.hold_confirm_timeout_ns = 2 * kNsPerSecond;
   other.mode_confirm_timeout_ns = 4 * kNsPerSecond;
-  EXPECT_EQ(cleanup_cap_ns(other), 14 * kNsPerSecond);
+  EXPECT_EQ(cleanup_cap_ns(other), 19 * kNsPerSecond);
+  // 대비책 지연이 상한에 그대로 더해진다(지연을 길게 준 설정의 지상 대기가 상한에 먼저 닿지 않게).
+  other.land_disarm_fallback_delay_ns = 10 * kNsPerSecond;
+  EXPECT_EQ(cleanup_cap_ns(other), 24 * kNsPerSecond);
 }
 
-// 정리 시작 tick을 0으로 둔 k번째 tick의 landed. k = 240(상한 tick)에는 start_landed와 같다.
+// 정리 시작 tick을 0으로 둔 k번째 tick의 landed. k = 340(상한 tick)에는 start_landed와 같다.
 bool toggled_landed(bool start_landed, int k)
 {
   return start_landed != ((k / kToggleTicks) % 2 == 1);
@@ -1006,7 +1010,7 @@ TEST_P(CleanupCapCell, EndsExactlyOnCapTickWithOneCommand)
       ++switches;
     }
   }
-  EXPECT_EQ(switches, 4);
+  EXPECT_EQ(switches, (kCapTicks - 1) / kToggleTicks);
   const std::vector<StepOutput> end =
     h.feed({armed(NavMode::kOffboard, toggled_landed(cell.on_ground, kCapTicks))});
   ASSERT_TRUE(end[0].termination.has_value());
@@ -1036,7 +1040,7 @@ TEST(CleanupCap, LongestLegitimatePathEndsByItsBranch)
 {
   // 지상 -> Hold 실패(hold_confirm_timeout) -> Land 경로 -> 다시 지상이 상한 전에 끝나면 분기의
   // 결과다.
-  // 지상 2.9 s, Hold 3 s, Land 경로 2.9 s, 지상 3 s(disarm 실패) = 11.8 s < 12 s.
+  // 지상 2.9 s, Hold 3 s, Land 경로 2.9 s, 지상 3 s(disarm 실패) = 11.8 s < 17 s.
   Harness h(standard_mission());
   start_cancel(h, true);
   ASSERT_EQ(h.view().branch, Branch::kGround);
@@ -1073,7 +1077,7 @@ TEST(CleanupCapSameTick, CapBeatsThirdConfirmSample)
   h.feed(toggling(true, 1, kCapTicks - 3));
   ASSERT_EQ(h.view().branch, Branch::kGround);
   const std::vector<StepOutput> outs =
-    h.feed({disarmed(true), disarmed(true), disarmed(true)});  // k = 238, 239, 240
+    h.feed({disarmed(true), disarmed(true), disarmed(true)});  // k = 338, 339, 340
   EXPECT_FALSE(outs[1].termination.has_value());
   ASSERT_TRUE(outs[2].termination.has_value());
   EXPECT_EQ(outs[2].commands, std::vector<CommandKind>{CommandKind::kDisarm});
@@ -1083,10 +1087,10 @@ TEST(CleanupCapSameTick, CapBeatsThirdConfirmSample)
 
 TEST(CleanupCapSameTick, LinkLostBeatsCap)
 {
-  // 마지막 표본이 k = 200이면 k = 240에 link_timeout(2 s)과 상한이 함께 닿는다. 상태 끊김이 먼저다.
+  // 마지막 표본이 k = 300이면 k = 340에 link_timeout(2 s)과 상한이 함께 닿는다. 상태 끊김이 먼저다.
   Harness h(standard_mission());
   start_cancel(h, true);
-  h.feed(toggling(true, 1, 200));
+  h.feed(toggling(true, 1, kCapTicks - 40));
   const std::vector<StepOutput> quiet = h.feed(std::vector<Sample>(39, no_new_sample()));
   for (const StepOutput & out : quiet) {
     ASSERT_FALSE(out.termination.has_value());
@@ -1142,7 +1146,7 @@ TEST(CleanupCap, UntrustedSampleOnCapTickUsesPreviousBranch)
     SCOPED_TRACE(ground ? "ground" : "air");
     Harness h(standard_mission());
     start_cancel(h, ground);
-    h.feed(toggling(ground, 1, 230));
+    h.feed(toggling(ground, 1, kCapTicks - 10));
     h.world.identity = IdentityCheck::kMismatch;
     const std::vector<StepOutput> outs =
       h.feed(std::vector<Sample>(9, armed(NavMode::kOffboard, !ground)));
@@ -1150,7 +1154,7 @@ TEST(CleanupCap, UntrustedSampleOnCapTickUsesPreviousBranch)
       ASSERT_FALSE(out.termination.has_value());
     }
     EXPECT_EQ(h.view().branch, ground ? Branch::kGround : Branch::kAir);
-    const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, !ground)});  // k = 240
+    const std::vector<StepOutput> end = h.feed({armed(NavMode::kOffboard, !ground)});  // k = 340
     EXPECT_EQ(
       end[0].commands,
       std::vector<CommandKind>{ground ? CommandKind::kDisarm : CommandKind::kNavLand});
@@ -1271,7 +1275,7 @@ TEST(BranchReentry, AirReentryNeedsThreeNewHoldSamples)
 
 TEST(CleanupCapSameTick, CapTickChoiceFollowsThatTickNotPreviousBranch)
 {
-  // 상한 tick의 명령은 그 tick의 고르기로 정한다. k = 239까지 지상 분기였어도 k = 240 표본이
+  // 상한 tick의 명령은 그 tick의 고르기로 정한다. k = 339까지 지상 분기였어도 k = 340 표본이
   // landed false이면 NAV_LAND이고, 반대도 같다.
   {
     Harness h(standard_mission());
@@ -1316,12 +1320,13 @@ TEST(CleanupCap, LastBranchLandPathIsNamed)
 {
   // 합성 표본: Hold 실패 뒤 지상과 Land 경로를 오가다 Land 경로에서 상한에 닿는다.
   // k: 0-99 공중(60에 Hold 실패 -> Land 경로), 100-149 지상, 150-199 공중(Land 경로 재진입),
-  // 200-229 지상, 230-240 공중(Land 경로 재진입). 분기마다 타임아웃(3 s)보다 짧다.
+  // 200-249 지상, 250-299 공중, 300-329 지상, 330-340 공중(Land 경로 재진입). 분기마다
+  // 타임아웃(3 s)보다 짧다.
   Harness h(standard_mission());
   start_cancel(h, false);
   std::vector<Sample> seq;
   for (int k = 1; k < kCapTicks; ++k) {
-    const bool landed = (k >= 100 && k < 150) || (k >= 200 && k < 230);
+    const bool landed = (k >= 100 && k < 150) || (k >= 200 && k < 250) || (k >= 300 && k < 330);
     seq.push_back(armed(NavMode::kOffboard, landed));
   }
   const std::vector<StepOutput> outs = h.feed(seq);
