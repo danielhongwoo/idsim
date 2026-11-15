@@ -89,6 +89,19 @@ struct MissionRunner::Tick
 namespace
 {
 
+// Px4Timestamp를 만들지 못해 끝난 goal(이 goal이 발행이나 명령을 낸 뒤)의 detail 꼬리. 그 tick의
+// 최신 landed로 가른다. Snapshot은 최신 표본을 tick 사이에 들고 있으므로 land가 없으면 표본을 한
+// 번도 받지 못한 것이다. 아무것도 보내지 못한 종료라 PX4가 그 뒤에 할 동작은 적지 않는다(1b
+// decisions.md 쟁점 12).
+std::string state_unknown_tail(const LandSample * land)
+{
+  if (land == nullptr) {
+    return "vehicle state unknown";
+  }
+  return land->landed ? "vehicle state unknown, may remain armed on ground"
+                      : "vehicle state unknown, may remain armed in air";
+}
+
 bool position_finite(const PositionSample & p)
 {
   return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
@@ -753,8 +766,10 @@ void MissionRunner::prepare_air_offboard(Tick & t)
   if (s != nullptr && s->nav == NavMode::kOffboard) {
     // 첫 OFFBOARD 표본: 대기 명령을 지워 재전송을 멈추고(그 뒤 ack는 받지 않는다) AUTO_LOITER
     // 면제를 끈다(다음 상태는 면제 없이 감시 표를 본다). 표본 하나로 정해지는 관측이라 종료를
-    // 정하지 않고, 같은 tick에 기한과 3회 확인을 이어서 본다.
+    // 정하지 않고, 같은 tick에 기한과 3회 확인을 이어서 본다. 감시 하한 timestamp를 이 표본으로
+    // 올려, 순서가 뒤바뀌어 늦게 닿은 그 전의 표본(AUTO_LOITER 등)을 판정에 쓰지 않는다.
     clear_pending();
+    first_armed_timestamp_us_ = s->timestamp_us;
     enter_prep(Event::kOffboardFirstSample, t, PrepStep::kAirOffboardSeen);
     air_offboard_seen_checks(t);
     return;
@@ -805,7 +820,8 @@ void MissionRunner::air_offboard_seen_checks(Tick & t)
 const StatusSample * MissionRunner::monitored_status(const Tick & t)
 {
   // 감시 구간에서 판정에 쓰는 vehicle_status. 식별이 어긋난 표본은 그대로 넘긴다(순위 2).
-  // timestamp가 첫 ARMED 표본보다 작은 표본은 판정에 쓰지 않고 직전에 쓴 표본을 다시 본다(그래서
+  // timestamp가 하한(지상 arm 진입은 첫 ARMED 표본, 공중 Offboard 진입은 P3 표본이고 첫 OFFBOARD
+  // 표본에서 그 표본으로 올린다)보다 작은 표본은 판정에 쓰지 않고 직전에 쓴 표본을 다시 본다(그래서
   // 순위 3의 link_timeout은 그 표본의 수신 시각부터 흐른다).
   const StatusSample * const s = t.status;
   if (s != nullptr && s->identity == IdentityCheck::kMismatch) {
@@ -878,7 +894,7 @@ void MissionRunner::end_by_monitor(
     send_final(t, CommandKind::kDisarm, detail);
   }
   if (verdict.row == MonitorRow::kTimestampFailure && acted_) {
-    detail += "; vehicle state unknown, may remain armed on ground";
+    detail += "; " + state_unknown_tail(t.land);
   }
   terminate(event, t, aborted(verdict.reason, detail));
 }
@@ -1118,8 +1134,10 @@ void MissionRunner::step_setpoint_item(Tick & t)
 
 void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
 {
-  // 모드 명령 항목(LAND, RTL)의 한 tick. 판정 순서는 LAND 1a 그대로이고, RTL은 확인 전 거부 ack와
-  // mode_confirm_timeout에서 Land fallback(RTL 실패의 정리)으로 간다(1b decisions.md 쟁점 9).
+  // 모드 명령 항목(LAND, RTL)의 한 tick. 같은 tick의 순서는 식별 불일치, 상태 끊김,
+  // 공중 DISARMED -> 거부 ack(RTL만 끝낸다) -> mode_confirm_timeout -> 3회 확인 -> ITEM_TIMEOUT
+  // -> 완료 -> 대비책 disarm -> 재전송이다. RTL은 확인 전 거부 ack와 mode_confirm_timeout에서
+  // Land fallback(RTL 실패의 정리)으로 간다(1b decisions.md 쟁점 9).
   apply_publish_rule(t);
   const StatusSample * const s = t.status;
   if (s != nullptr && s->identity == IdentityCheck::kMismatch) {
@@ -1160,14 +1178,11 @@ void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
       disarm_class_ = DisarmClass::kUnknown;
       mode_item_.disarm_count = 0;
       if (!mode_item_.confirmed) {
-        // 확인 전: 이탈 판정을 하지 않는다. 확인 대상 모드는 failsafe와 무관하게 센다.
+        // 확인 전: 이탈 판정을 하지 않는다. 확인 대상 모드는 failsafe와 무관하게 센다. 확정은
+        // 거부 ack와 mode_confirm_timeout 뒤에 한다(같은 tick이면 둘이 이긴다).
         mode_item_.mode_count = s->nav == spec.mode ? mode_item_.mode_count + 1 : 0;
-        if (mode_item_.mode_count >= kConfirmSamples) {
-          mode_item_.confirmed = true;
-          clear_pending();
-        }
       } else if (s->nav != spec.mode) {
-        // 확인 뒤: ARMED인 동안 확인 대상 모드를 벗어나면 이탈.
+        // 확인 뒤(앞 tick까지 확정): ARMED인 동안 확인 대상 모드를 벗어나면 이탈.
         terminate(
           Event::kModeItemLeftMode, t,
           aborted(
@@ -1183,7 +1198,8 @@ void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
     mode_item_.command_accepted = true;
   }
   if (spec.land_fallback && command_ack && is_rejection(ack.result)) {
-    // 확인 전에만 닿는다(확인하면 대기 명령을 지운다. 확인 뒤의 대기 명령은 대비책 disarm이다).
+    // 확정 전에만 닿는다(확정하면 대기 명령을 지운다. 확정 뒤의 대기 명령은 대비책 disarm이다).
+    // 3회째 표본의 tick은 아직 확정 전이라 그 tick의 거부 ack도 여기서 끝낸다.
     begin_cleanup(
       Event::kModeItemRejected, t, CleanupCause::kRtlFailure, Reason::kModeSwitchFailed,
       item_label() + ": " + spec.command_name + " rejected: " + ack_result_name(ack.result));
@@ -1202,6 +1218,11 @@ void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
     }
     terminate(Event::kModeItemModeTimeout, t, aborted(Reason::kModeSwitchFailed, detail));
     return;
+  }
+  if (!mode_item_.confirmed && mode_item_.mode_count >= kConfirmSamples) {
+    // 확인 대상 모드 3회 확인. 재전송을 멈춘다.
+    mode_item_.confirmed = true;
+    clear_pending();
   }
   if (elapsed(t, item_start_ns_) >= current_item().timeout.to_ns()) {
     mode_item_timeout(t, spec, landed);
@@ -1936,9 +1957,8 @@ void MissionRunner::finalize(Tick & t)
                                cause_ != CleanupCause::kMissionEnd;
       // 명령을 만들 수 없으므로 기체 상태를 모른다(decisions.md 쟁점 4 "Px4Timestamp 공급이 실패한
       // tick").
-      const std::string what =
-        std::string("Px4Timestamp unavailable") +
-        (acted_ ? "; vehicle state unknown, may remain armed on ground" : "");
+      const std::string what = std::string("Px4Timestamp unavailable") +
+                               (acted_ ? "; " + state_unknown_tail(t.land) : std::string());
       const std::string prefix =
         stage_ == Stage::kCleanup && cause_ == CleanupCause::kMissionEnd ? "mission end: " : "";
       terminate(

@@ -285,6 +285,30 @@ TEST(MissionEnd, T5AirRejectedThenLandObserved)
     "mission end: Hold rejected: TEMPORARILY_REJECTED; Land sent, AUTO_LAND observed");
 }
 
+TEST(MissionEnd, T5HoldRejectedOnThirdHoldSampleTick)
+{
+  // Hold 3회째 표본과 Hold 거부 ack가 같은 tick이면 거부가 먼저다(Land 경로, Hold 확인 없음).
+  Harness h(takeoff_loiter_mission());
+  h.hold_response = HoldResponse::kIgnore;
+  const EndStart st = start_air_end(h);
+  run_to(h, st.s + 8);
+  h.world.nav = NavMode::kHold;
+  h.tick();  // S+8
+  h.tick();  // S+9
+  h.push_ack(AckCommand::kSetMode, AckResult::kTemporarilyRejected);
+  std::size_t before = tick_marked(h);  // S+10
+  expect_cell(h, kAir, Event::kHoldRejected, kAirLand, "-", {}, before);
+  EXPECT_FALSE(has_edge(h, Event::kHoldConfirmed, st.before));
+  EXPECT_EQ(commands_at(h, st.s + 10), std::vector<CommandKind>{CommandKind::kNavLand});
+  EXPECT_FALSE(terminated_at(h, st.s + 10));
+  before = tick_marked(h);  // S+11: AUTO_LAND
+  expect_cell(
+    h, kAirLand, Event::kLandPathModeObserved, "DONE", "ABORTED/MODE_SWITCH_FAILED", {}, before);
+  expect_end(
+    h, st.s, "ABORTED/MODE_SWITCH_FAILED",
+    "mission end: Hold rejected: TEMPORARILY_REJECTED; Land sent, AUTO_LAND observed");
+}
+
 TEST(MissionEnd, T6LostRejectAckIsCaughtOnResend)
 {
   Harness h(takeoff_loiter_mission());
@@ -408,6 +432,27 @@ TEST(MissionEnd, T10GroundEndWithFallbackDisarm)
   EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 6);
   EXPECT_EQ(h.count_command(CommandKind::kDisarm), 1);
   EXPECT_EQ(h.count_command(CommandKind::kNavLand), 0);
+  expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
+}
+
+TEST(MissionEnd, T10LongFallbackDelayStillEndsByDisarm)
+{
+  // 지상 대기에 대비책 지연이 붙는 경로가 상한 식에 있으므로 지연을 길게(10 s) 줘도 지상 대기는
+  // 상한이 아니라 대비책 disarm의 확인으로 끝난다. Hold 기한 S+60, disarm S+260, 확인 S+263,
+  // 상한 hold + delay + mode = 16 s(S+320).
+  Config config;
+  config.timeouts.land_disarm_fallback_delay_ns = 10 * kNsPerSecond;
+  ASSERT_EQ(cleanup_cap_ns(config.timeouts), 16 * kNsPerSecond);
+  Harness h(takeoff_only_mission(0.2), config);
+  const EndStart st = start_ground_end(h);
+  run_to(h, st.s + 260);
+  EXPECT_TRUE(ticks_sending(h, CommandKind::kDisarm, st.s, st.s + 259).empty());
+  h.tick();
+  EXPECT_EQ(commands_at(h, st.s + 260), std::vector<CommandKind>{CommandKind::kDisarm});
+  run_to(h, st.s + 263);
+  const std::size_t before = tick_marked(h);
+  expect_cell(h, kGroundWait, Event::kGroundDisarmConfirmed, "DONE", "SUCCEEDED/NONE", {}, before);
+  EXPECT_TRUE(terminated_at(h, st.s + 263));
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
@@ -729,8 +774,10 @@ TEST(MissionEnd, T19AirDisarmInGroundWait)
 
 // ---- Px4Timestamp 실패 ----
 
-const char kStampDetail[] =
+const char kStampDetailGround[] =
   "mission end: Px4Timestamp unavailable; vehicle state unknown, may remain armed on ground";
+const char kStampDetailAir[] =
+  "mission end: Px4Timestamp unavailable; vehicle state unknown, may remain armed in air";
 
 TEST(MissionEnd, T20StampFailureInAir)
 {
@@ -743,7 +790,7 @@ TEST(MissionEnd, T20StampFailureInAir)
   EXPECT_TRUE(commands_at(h, st.s + 1).empty());
   EXPECT_FALSE(setpoint_at(h, st.s + 1));
   h.clock.fail = false;
-  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetail);
+  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetailAir);
 }
 
 TEST(MissionEnd, T20StampFailureOnLandPath)
@@ -758,7 +805,7 @@ TEST(MissionEnd, T20StampFailureOnLandPath)
   expect_cell(h, kAirLand, Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL", {}, before);
   EXPECT_TRUE(commands_at(h, st.s + 11).empty());
   h.clock.fail = false;
-  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetail);
+  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetailAir);
 }
 
 TEST(MissionEnd, T20StampFailureInGroundWait)
@@ -770,7 +817,7 @@ TEST(MissionEnd, T20StampFailureInGroundWait)
   expect_cell(h, kGroundWait, Event::kStampUnavailable, "DONE", "ABORTED/INTERNAL", {}, before);
   EXPECT_TRUE(commands_at(h, st.s + 170).empty());
   h.clock.fail = false;
-  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetail);
+  expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetailGround);
 }
 
 TEST(MissionEnd, T20StampFailureOnFirstTickIsMonitorRow)

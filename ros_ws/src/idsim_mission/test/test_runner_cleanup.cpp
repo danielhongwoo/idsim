@@ -901,20 +901,30 @@ TEST(HoldFailedReentry, AirAgainAfterHoldTimeoutSendsNavLand)
 
 // ---- 정리의 상한(decisions.md 쟁점 3 M6) ----
 // 상한 경로는 실제 PX4로 재현하기 어려워 합성 표본으로만 시험한다. 기본값에서 상한은
-// hold_confirm_timeout + 3 x mode_confirm_timeout = 12 s = 240 tick이다.
+// max(hold_confirm_timeout + 3 x mode_confirm_timeout, hold_confirm_timeout +
+// land_disarm_fallback_delay + mode_confirm_timeout) = 12 s = 240 tick이다.
 
-constexpr int kCapTicks = 240;
+constexpr int kCapTicks = static_cast<int>(cleanup_cap_ns(Timeouts{}) / kTickNs);
 constexpr int kToggleTicks = 50;  // landed가 2.5 s마다 바뀐다(분기 타임아웃 3 s보다 짧다)
 
 TEST(CleanupCap, DerivedValue)
 {
   const Timeouts t;
   EXPECT_EQ(cleanup_cap_ns(t), 12 * kNsPerSecond);
-  EXPECT_EQ(cleanup_cap_ns(t), static_cast<std::int64_t>(kCapTicks) * kTickNs);
+  EXPECT_EQ(kCapTicks, 240);
   Timeouts other;
   other.hold_confirm_timeout_ns = 2 * kNsPerSecond;
   other.mode_confirm_timeout_ns = 4 * kNsPerSecond;
   EXPECT_EQ(cleanup_cap_ns(other), 14 * kNsPerSecond);
+  // 지연이 길면 종료 단계의 지상 경로(hold + delay + mode)가 이긴다. 기본값에서 지연 6 s까지는
+  // 앞 항(12 s)이고, 그보다 길면 뒤 항이다.
+  Timeouts delay = t;
+  delay.land_disarm_fallback_delay_ns = 6 * kNsPerSecond;
+  EXPECT_EQ(cleanup_cap_ns(delay), 12 * kNsPerSecond);
+  delay.land_disarm_fallback_delay_ns = 9 * kNsPerSecond;
+  EXPECT_EQ(cleanup_cap_ns(delay), 15 * kNsPerSecond);
+  delay.land_disarm_fallback_delay_ns = 10 * kNsPerSecond;
+  EXPECT_EQ(cleanup_cap_ns(delay), 16 * kNsPerSecond);
 }
 
 // 정리 시작 tick을 0으로 둔 k번째 tick의 landed. k = 240(상한 tick)에는 start_landed와 같다.
@@ -1316,7 +1326,7 @@ TEST(CleanupCap, LastBranchLandPathIsNamed)
 {
   // 합성 표본: Hold 실패 뒤 지상과 Land 경로를 오가다 Land 경로에서 상한에 닿는다.
   // k: 0-99 공중(60에 Hold 실패 -> Land 경로), 100-149 지상, 150-199 공중(Land 경로 재진입),
-  // 200-229 지상, 230-240 공중(Land 경로 재진입). 분기마다 타임아웃(3 s)보다 짧다.
+  // 200-229 지상, 230-240 공중(Land 경로 재진입). 분기마다 timeout(3 s)보다 짧다.
   Harness h(standard_mission());
   start_cancel(h, false);
   std::vector<Sample> seq;
