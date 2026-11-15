@@ -49,7 +49,8 @@
 //   xy_valid <- xy_valid, z_valid <- z_valid
 // - FlagsSample <- failsafe_flags
 //   - ekf_ready <- local_position_invalid, local_altitude_invalid, global_position_invalid,
-//     home_position_invalid가 모두 false(docs/interface.md "준비 단계" P2. 술어는 어댑터에 둔다)
+//     home_position_invalid가 모두 false(docs/interface.md "준비 단계" 순서 표의 "EKF 준비" 행.
+//     술어는 어댑터에 둔다)
 //   - offboard_signal_lost <- offboard_control_signal_lost
 // - AckSample <- vehicle_command_ack. ack의 target이 이 Executor의 source(system, component)와
 //   같은 것만 넘긴다(아니면 버린다). command는 VEHICLE_CMD_DO_SET_MODE -> kSetMode,

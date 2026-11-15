@@ -36,7 +36,7 @@
 // - 전체 취소(goal id 미지정, async_cancel_all_goals): 실행 중 goal은 handle_cancel을 거쳐 취소
 //   분기(공중 -> Hold)로 CANCELED가 되고, 실행 중 goal이 없으면 아무 일도 일어나지 않는다.
 // 시계: 별도 thread가 /clock을 발행한다(on_activate의 2 s 대기는 파라미터가 아니다). 사건 구독은
-// action client보다 먼저, 같은 노드에서 만든다(docs/interface.md "계약 토픽 QoS").
+// action client보다 먼저, 같은 노드에서 만든다(docs/interface.md "MissionEvent").
 
 #include <gtest/gtest.h>
 
@@ -523,8 +523,8 @@ TEST_F(ExecutorNodeTest, ConfigureFailsWhenTargetFreshAgeIsNotShorterThanTimeout
     << node->last_failure();
 }
 
-// action client와 사건 구독. 구독을 client보다 먼저, 같은 노드에서 만든다(docs/interface.md "계약
-// 토픽 QoS").
+// action client와 사건 구독. 구독을 client보다 먼저, 같은 노드에서 만든다(docs/interface.md
+// "MissionEvent").
 class Client
 {
 public:
