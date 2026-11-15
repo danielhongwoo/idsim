@@ -17,7 +17,7 @@
 
 판정 시간은 모두 ROS 시각이다. 계약 판정의 입력은 토픽에서만 읽는다(goal의 목표값과 vehicle_local_position,
 vehicle_status, vehicle_land_detected, failsafe_flags, mission_event, action의 feedback과 result, TargetState).
-노드가 낸 setpoint는 입력으로 쓰지 않는다. 1b 비행 시나리오(F1-F4)는 여기에 정답 판정(SITL 전용 정답 pose)을
+노드가 낸 setpoint는 입력으로 쓰지 않는다. 비행 시나리오(F1-F4)는 여기에 정답 판정(SITL 전용 정답 pose)을
 더한다. 판정 함수는 tests/support/sitl_judge.py(순수 코드)에 있다.
 각 시나리오 시작 전에 사전조건(지상, DISARMED N회 연속. F3은 공중 Hold)을 단정하고 어긋나면 그 자리에서 실패한다.
 비행 시나리오(A, D, F1-F4)가 실패하면 정리용 [LAND]를 한 번 시도하고(판정에 넣지 않는다) 뒤의 비행 시나리오는
@@ -117,7 +117,7 @@ def first_feedback(fbs, item_type):
 
 @pytest.mark.scenario("B")
 def test_b_invalid_mission(session):
-    """1b 무효 사례(sitl_missions.B_INVALID_CASES)를 순서대로 하나씩 보낸다. 사례마다 ABORTED, INVALID_MISSION,
+    """무효 사례(sitl_missions.B_INVALID_CASES)를 순서대로 하나씩 보낸다. 사례마다 ABORTED, INVALID_MISSION,
     접수와 종료 사건, feedback 0건, detail의 기대 조각(의도한 검사에서 거부됐는가).
     첫 goal 전송부터 끝까지 한 구간에서 ARMED 표본 없음(끝에 일정 ROS 시간 유지).
     거부가 아닌 결과(feedback, ARMED, 다른 result)가 나오면 그 사례에서 바로 실패하고 goal 취소와 비상 정리를 한다."""
@@ -345,7 +345,7 @@ def _scenario_d(s, raw):
 
 
 # ---------------------------------------------------------------------------
-# 1b 비행 시나리오 F1-F4(tests/sitl/README.md "시나리오와 판정"). 미션은 tests/sitl/missions/의 YAML(로더 형식)이다.
+# 비행 시나리오 F1-F4(tests/sitl/README.md "시나리오와 판정"). 미션은 tests/sitl/missions/의 YAML(로더 형식)이다.
 
 FLIGHT_SAMPLE_WAIT_S = 1.0        # result 뒤 늦게 도착하는 표본(vehicle_status, 정답 pose)을 기다리는 ROS 시각
 HOLD_CONFIRM_WAIT_S = 10.0        # 공중 종료 뒤 AUTO_LOITER 3회 연속을 기다리는 상한(D의 취소 뒤와 같다)
@@ -354,7 +354,7 @@ TYPE_NAMES = {sj.TYPE_TAKEOFF: "TAKEOFF", sj.TYPE_GOTO: "GOTO", sj.TYPE_TRACK_EN
 
 
 def _ekf_near(raw, t_us):
-    """t에 가장 가까이 받은 vehicle_local_position(NED 로컬). S1-b 기록용(정답과 EKF를 나중에 대조한다).
+    """t에 가장 가까이 받은 vehicle_local_position(NED 로컬). 기록용(정답과 EKF를 나중에 대조한다).
     vx, vy와 수평 속도 크기는 도달 거리(d_h)와 속도의 관계를 보는 기록이다(판정에 쓰지 않는다)."""
     if not raw.pos:
         return None
@@ -453,7 +453,7 @@ def _hold_airborne(s, sid, tf_last_lo, t_goal):
 
 def _air_start_record(s, sid, run, t_goal):
     """공중 시작 구간(goal 전송부터 첫 항목 실행 시작까지)의 기록(F3 trace). DO_SET_MODE 전송 수와 D는 ULog에서
-    trace_1b.py가 낸다."""
+    trace_ulog.py가 낸다."""
     raw, fbs = s.raw, s.mission.feedbacks_of(run)
     exe = next((f for f in sorted(fbs, key=lambda f: f.stamp_us) if f.phase == sj.PHASE_EXECUTING), None)
     prep = next((f for f in sorted(fbs, key=lambda f: f.stamp_us) if f.phase == sj.PHASE_PREPARING), None)

@@ -52,7 +52,7 @@ def test_names_come_from_generated_constants():
 
 
 def test_px4_nav_state_constants():
-    """sitl_judge와 measure_judge의 nav_state 값이 px4_msgs VehicleStatus 상수와 같다(1b의 AUTO_RTL 포함)."""
+    """sitl_judge와 measure_judge의 nav_state 값이 px4_msgs VehicleStatus 상수와 같다(비행 시나리오의 AUTO_RTL 포함)."""
     px4 = pytest.importorskip("px4_msgs.msg")
     from tests.support import measure_judge as mj
     vs = px4.VehicleStatus

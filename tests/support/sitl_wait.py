@@ -39,7 +39,7 @@ EVENT_MISMATCH = "EVENT_MISMATCH"
 PRECONDITION = "PRECONDITION"
 WRONG_RESULT = "WRONG_RESULT"
 INFRA_UP = "INFRA_UP"
-# 1b(tests/sitl/README.md "시나리오와 판정"). 앞 비행 시나리오가 실패해 실행하지 않은 비행 시나리오(실패로 센다)
+# 비행 시나리오(tests/sitl/README.md "시나리오와 판정"). 앞 비행 시나리오가 실패해 실행하지 않은 비행 시나리오(실패로 센다)
 UPSTREAM_FAILED = "UPSTREAM_FAILED"
 # 정답 pose가 있어야 하는 실행에서 정답 pose가 없다 / t_f를 감싸는 정답 표본 간격이 상한을 넘는다
 ORACLE_ABSENT = "ORACLE_ABSENT"

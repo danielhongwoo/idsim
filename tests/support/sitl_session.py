@@ -18,13 +18,13 @@
 준비 상태를 검증만 한다. 준비 검증(gate)이 실패하면 skip이 아니라 오류다(tests/sitl/README.md "실행").
 
 노드 둘이 한 프로세스(한 participant)에 있다: Px4Raw의 노드(PX4 토픽, /clock)와 미션 노드(mission_event 구독,
-action client, 1b의 정답 pose와 TargetState 구독). 미션 노드 안에서는 mission_event 구독이 action client보다 먼저
+action client, 비행 시나리오의 정답 pose와 TargetState 구독). 미션 노드 안에서는 mission_event 구독이 action client보다 먼저
 만들어진다(mission_client).
 
-1b(tests/sitl/README.md "시나리오와 판정"): gate는 첫 goal 전에 정답 pose와 표적 발행자, 첫 표본을 확인하고, 표적 발행자의 QoS를
+비행 시나리오(tests/sitl/README.md "시나리오와 판정"): gate는 첫 goal 전에 정답 pose와 표적 발행자, 첫 표본을 확인하고, 표적 발행자의 QoS를
 계약 상태 행과 대조하며(다르면 QOS_MISMATCH로 gate 실패), Executor의 target_fresh_age를 판정 상수와 대조한다.
 정답 pose, 표적, target_fresh_age의 문제는 gate를 실패시키지 않고 기록해 두었다가 그것이 필요한 비행 시나리오가
-시작할 때 실패시킨다(require_truth). 1a 시나리오는 정답 pose를 쓰지 않기 때문이다.
+시작할 때 실패시킨다(require_truth). 시나리오 A, D는 정답 pose를 쓰지 않기 때문이다.
 """
 import json
 import time
@@ -74,7 +74,7 @@ class SitlSession:
         self.truth_problems = {}  # 이름 -> 설명. 정답 pose, 표적, target_fresh_age(require_truth가 본다)
         self.flights = Flights()
         self.last_run = None      # 마지막으로 보낸 goal(실패 뒤 정리가 끝나지 않은 goal을 취소한다)
-        self.r1 = None            # R1 기록(첫 1b 비행에서 한 번)
+        self.r1 = None            # R1 기록(첫 비행에서 한 번)
         self.r2 = []              # GOTO, TRACK_ENTITY 완료 사건의 정답 판정 기록
         self.r4 = []              # 착륙 판정 기록
         self._spin = SpinThread(self.node)
@@ -207,7 +207,7 @@ class SitlSession:
             self.node.destroy_client(cli)
 
     def require_truth(self, scenario, target_ids=()):
-        """1b 비행 시나리오의 사전조건: 정답 pose(없으면 ORACLE_ABSENT), 쓰는 표적, target_fresh_age 대조."""
+        """비행 시나리오의 사전조건: 정답 pose(없으면 ORACLE_ABSENT), 쓰는 표적, target_fresh_age 대조."""
         p = self.truth_problems
         if "oracle" in p:
             raise sw.SitlFailure(sw.ORACLE_ABSENT, "시나리오 %s: %s" % (scenario, p["oracle"]))

@@ -24,7 +24,7 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 
 | 시나리오 | 내용 | 판정 필드 |
 | --- | --- | --- |
-| B | 1b 무효 사례 8개(`tests/support/sitl_missions.py`의 `B_INVALID_CASES`: `[]`, 첫 항목이 아닌 TAKEOFF, `[LAND, GOTO]`, 가운데 RTL, `[RTL, GOTO]`, TRACK_ENTITY의 0 `offset`, 형식이 틀린 `target_id`, 기본값 TRACK_ENTITY 서브메시지)를 순서대로 | 사례마다 result ABORTED와 `REASON_INVALID_MISSION`, `detail`에 사례의 기대 조각(의도한 검사에서 거부됐는가. 문구는 계약이 아니다), 접수와 종료 사건 한 쌍(종료 사건 == result), feedback 0건. 첫 goal부터 끝(마지막 사례 뒤 5 s)까지 한 구간에서 ARMED 표본 없음. 거부가 아닌 결과는 그 사례에서 바로 실패하고 goal 취소와 비상 정리를 한다 |
+| B | 무효 사례 8개(`tests/support/sitl_missions.py`의 `B_INVALID_CASES`: `[]`, 첫 항목이 아닌 TAKEOFF, `[LAND, GOTO]`, 가운데 RTL, `[RTL, GOTO]`, TRACK_ENTITY의 0 `offset`, 형식이 틀린 `target_id`, 기본값 TRACK_ENTITY 서브메시지)를 순서대로 | 사례마다 result ABORTED와 `REASON_INVALID_MISSION`, `detail`에 사례의 기대 조각(의도한 검사에서 거부됐는가. 문구는 계약이 아니다), 접수와 종료 사건 한 쌍(종료 사건 == result), feedback 0건. 첫 goal부터 끝(마지막 사례 뒤 5 s)까지 한 구간에서 ARMED 표본 없음. 거부가 아닌 결과는 그 사례에서 바로 실패하고 goal 취소와 비상 정리를 한다 |
 | C | goal의 `vehicle_id`가 다른 값 | result ABORTED와 `REASON_VEHICLE_ID_MISMATCH`. 사건의 `vehicle_id`는 Executor 자신의 값. feedback 0건. 5 s 동안 ARMED 표본 없음 |
 | A | `[TAKEOFF 5 m, LOITER 5 s, LAND]` | SUCCEEDED, `REASON_NONE`, `items_completed` 3. 사건 짝과 result 일치. 이정표 순서(goal 전송, 접수, ARMED, TAKEOFF 시작, 도달, LAND 시작, AUTO_LAND, DISARMED, result)가 테스트 노드 수신 시각으로 줄어들지 않음. LOITER 유지 5 s 이상과 고도 허용 0.5 m. TAKEOFF와 LOITER 동안 `failsafe`가 false이고 `nav_state`가 OFFBOARD. ARMED를 본 뒤의 AUTO_LAND, 그 뒤 DISARMED 3회 연속. OFFBOARD가 아닌 ARMED 표본 0개 |
 | D | 도달 뒤 cancel, 이어서 `[LAND]` | cancel 응답 `ERROR_NONE`, CANCELED와 `REASON_NONE`. AUTO_LOITER 3회 연속, 그 뒤 5 s 동안 고도 변화 0.5 m 이하이고 ARMED, `landed` false. `[LAND]` 미션 SUCCEEDED, ARMED 뒤 AUTO_LAND, DISARMED 3회 연속, `landed` true |
@@ -36,7 +36,7 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 
 - 시나리오마다 사전조건(지상, DISARMED 3회 연속. F3은 공중 Hold)을 단정하고 어긋나면 그 자리에서 `PRECONDITION`으로 실패한다.
 - 비행 시나리오(A, D, F1-F4)가 실패하면 정리용 `[LAND]`를 한 번 시도하고(판정에 넣지 않는다) 뒤의 비행 시나리오는 실행하지 않고 `UPSTREAM_FAILED`(실패로 센다)다. 정리도 실패해 T의 사전조건이 맞지 않으면 T는 `PRECONDITION`이다.
-- 1b 판정은 계약 판정(계약 토픽과 PX4 토픽)과 정답 판정(SITL 전용 정답 pose `/sim/<vehicle_id>/pose`)으로 나뉜다. 정답 pose가 없으면 `ORACLE_ABSENT`, t_f를 감싸는 정답 표본 간격이 0.1 s를 넘으면 `ORACLE_STALE`이다. t_f는 다음 항목의 첫 feedback stamp이고, 공중 종료로 가는 마지막 setpoint 항목(F2의 TRACK_ENTITY)은 그 항목에서 거리를 실은 마지막 feedback 뒤의 첫 거리 없는 feedback stamp다. 노드는 그 완료 tick에 feedback을 바로 낸다(노드 테스트 `ExecutorNodeTest.FeedbackIsPublishedOnTheTickTheLastSetpointItemCompletes`). trace의 `flight_window`에 마지막 항목 t_f 앞뒤 feedback 간격(`last_item_feedback_gaps`)을 남긴다. gate의 `/clock` 정렬 중앙값과 최대는 `gate_ok` 사건과 `verdict.json` gate에 남는다. 판정 상수와 근거는 `tests/support/sitl_judge.py` 머리말에 있다.
+- 판정은 계약 판정(계약 토픽과 PX4 토픽)과 정답 판정(SITL 전용 정답 pose `/sim/<vehicle_id>/pose`)으로 나뉜다. 정답 pose가 없으면 `ORACLE_ABSENT`, t_f를 감싸는 정답 표본 간격이 0.1 s를 넘으면 `ORACLE_STALE`이다. t_f는 다음 항목의 첫 feedback stamp이고, 공중 종료로 가는 마지막 setpoint 항목(F2의 TRACK_ENTITY)은 그 항목에서 거리를 실은 마지막 feedback 뒤의 첫 거리 없는 feedback stamp다. 노드는 그 완료 tick에 feedback을 바로 낸다(노드 테스트 `ExecutorNodeTest.FeedbackIsPublishedOnTheTickTheLastSetpointItemCompletes`). trace의 `flight_window`에 마지막 항목 t_f 앞뒤 feedback 간격(`last_item_feedback_gaps`)을 남긴다. gate의 `/clock` 정렬 중앙값과 최대는 `gate_ok` 사건과 `verdict.json` gate에 남는다. 판정 상수와 근거는 `tests/support/sitl_judge.py` 머리말에 있다.
 - gate는 첫 goal 전에 정답 pose와 표적의 발행자와 첫 표본을 확인하고, `/targets/<id>/state` 발행자 QoS를 계약 상태 행(RELIABLE, VOLATILE)과 대조하며(다르면 `QOS_MISMATCH`), Executor 파라미터 `target_fresh_age`를 판정 상수 L의 전제(0.1 s)와 대조한다. 정답 pose, 표적, `target_fresh_age`의 문제는 그것이 필요한 F 시나리오에서 실패로 드러난다.
 - 도달의 입력은 goal 직전의 `vehicle_local_position` z(`z_valid`)와 goal의 높이와 허용 오차다.
 - gate(모든 시나리오 앞): `/clock` 수신, `mission_event` 발행자와 PX4 토픽 발행자, action server 준비, 기대 sysid의 `vehicle_status`, `/clock` 정렬(노드 시각 - `vehicle_status.timestamp`의 중앙값 절대값 < 0.1 s, 최대 < 0.5 s). `mission_event` 구독은 action client보다 먼저 같은 node에서 만든다(`tests/support/mission_client.py`).
@@ -47,14 +47,16 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 
 ## 산출물
 
-`artifacts/runs/<실행 id>/` 아래. 실패하면 이 디렉터리 전체를, 성공하면 `sitl/junit.xml`, `sitl/trace.jsonl`, `sitl/summary.md`, `sitl/trace_1b.json`을 CI가 올린다.
+`artifacts/runs/<실행 id>/` 아래. 실패하면 이 디렉터리 전체를, 성공하면 `sitl/junit.xml`, `sitl/trace.jsonl`, `sitl/summary.md`, `sitl/trace_ulog.json`을 CI가 올린다.
 
 - `compose.yaml`, `stack.json`, `params/`, `px4-N/log/*.ulg`, `ros_log/`
-- `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표. 1b는 `reach`, `track`(R2, 추종 오차, 신선하지 않은 tick), `landing`(R4, RTL 소요), `r1`, `hold_end`(F2), `air_start`(F3), `flight_window`), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록, `recorded_only`(R1, R3, R2와 R4 요약)), `trace_1b.json`(ULog의 TRACK_ENTITY 구간 속도 feedforward와 z, F3 공중 시작의 DO_SET_MODE와 D. 기록 전용), `summary.md`, `steps.tsv`(단계별 벽시계 초, 서비스 종료 상태 `stop_exit_*`, ULog 끝 경계 `ulog`, 회차별 종료 코드 `rc_*` 줄), `raw_status_A.jsonl`, `raw_status_D.jsonl`, `armed_a.json`, `ps_before_stop.jsonl`(stop 전 서비스 상태), `logs/<서비스>.log`, `health_<서비스>.txt`(실패한 회나 unhealthy 서비스만), `crosscheck_a.json`
+- `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표. 비행 시나리오는 `reach`, `track`(R2, 추종 오차, 신선하지 않은 tick), `landing`(R4, RTL 소요), `r1`, `hold_end`(F2), `air_start`(F3), `flight_window`), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록, `recorded_only`), `trace_ulog.json`(ULog의 TRACK_ENTITY 구간 속도 feedforward와 z, F3 공중 시작의 DO_SET_MODE와 D. 기록 전용), `summary.md`, `steps.tsv`(단계별 벽시계 초, 서비스 종료 상태 `stop_exit_*`, ULog 끝 경계 `ulog`, 회차별 종료 코드 `rc_*` 줄), `raw_status_A.jsonl`, `raw_status_D.jsonl`, `armed_a.json`, `ps_before_stop.jsonl`(stop 전 서비스 상태), `logs/<서비스>.log`, `health_<서비스>.txt`(실패한 회나 unhealthy 서비스만), `crosscheck_a.json`
+
+`recorded_only`의 이름: R1 EKF 원점과 기대 스폰 GPS의 차, R2 TRACK_ENTITY 추종 오차와 신선하지 않은 tick, R3 표적 age와 간격, `/clock` 간격과 상태 지연, R4 RTL 착륙 수평 위치와 기준점의 거리. 판정에 쓰지 않는다.
 
 ## b와 R_home 보정 확인
 
-`tests/sitl/calibrate.py <회차 디렉터리 또는 실행 디렉터리>... [--b 0.5] [--min-boots 30] [--out 파일]`이(`--min-boots`는 부팅 수 하한) `--repeat`의 회차마다 `trace.jsonl`(`reach`, `track`, `landing`)과 `verdict.json`을 읽는다(계산은 `tests/support/calibration.py`, 상수와 근거는 `tests/support/sitl_judge.py` 머리말). 통과한 실행만 부팅으로 센다. b는 상수로 받고(사용자 결정 U18) 확인 조건은 GOTO s와 s_track 표본 전부가 b 이하인 것이다. 정규 허용한계(mean + k x std)와 Shapiro-Wilk는 기록으로만 낸다. 도달 사건이 모두 판정 반경 안인지, `R_home`의 Rayleigh 허용한계와 판정 상수 대조, 기록 전용인 t_f 수평 속도와 d_h, s의 관계도 낸다. 회차 디렉터리를 주면 그 안에 `calibration.json`을 쓴다. 종료 코드는 0 충족, 1 미충족, 2 입력 오류다.
+`tests/sitl/calibrate.py <회차 디렉터리 또는 실행 디렉터리>... [--b 0.5] [--min-boots 30] [--out 파일]`이(`--min-boots`는 부팅 수 하한) `--repeat`의 회차마다 `trace.jsonl`(`reach`, `track`, `landing`)과 `verdict.json`을 읽는다(계산은 `tests/support/calibration.py`, 상수와 근거는 `tests/support/sitl_judge.py` 머리말). 통과한 실행만 부팅으로 센다. b는 상수로 받고(사용자 결정) 확인 조건은 GOTO s와 s_track 표본 전부가 b 이하인 것이다. 정규 허용한계(mean + k x std)와 Shapiro-Wilk는 기록으로만 낸다. 도달 사건이 모두 판정 반경 안인지, `R_home`의 Rayleigh 허용한계와 판정 상수 대조, 기록 전용인 t_f 수평 속도와 d_h, s의 관계도 낸다. 회차 디렉터리를 주면 그 안에 `calibration.json`을 쓴다. 종료 코드는 0 충족, 1 미충족, 2 입력 오류다.
 
 - b는 0.5 m로 고정한다. 시험 미션 반경의 하한 0.5 m와 판정 반경 1.0 m 사이의 최대 여유이고 표본에서 추정한 값이 아니다. 도달 사건마다 부호 있는 초과량 `s = d_oracle(t_f) - acceptance_radius_m`을 재고(0으로 자르지 않는다), TRACK_ENTITY 완료는 표적 지연 항 때문에 분포가 달라 `s_track = d_oracle(t_f) - acceptance_radius_m - v x L`로 따로 잰다.
 - 확인 조건: 부팅 30회 이상이고 `s`와 `s_track` 표본 전부가 b 이하여야 b를 적는다. 하나라도 넘거나 부팅이 모자라면 상수를 적지 않고 보정 결과(분포, `d_h`, `d_v`, 도달 속도, R1)를 들고 architect와 사용자에게 올린다. 반경을 줄이거나 판정을 넓혀서 맞추지 않는다. GOTO나 TRACK_ENTITY 항목, 표적 속도, 변 길이를 바꾸면 도달 속도가 달라지므로 보정을 다시 한다.

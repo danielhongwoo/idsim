@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ulog_1b(1b ULog 기록 요약) 단위 테스트."""
+"""ulog_flight(ULog 기록 요약) 단위 테스트."""
 import math
 
-from tests.support import ulog_1b as u
+from tests.support import ulog_flight as u
 
 NAN = math.nan
 

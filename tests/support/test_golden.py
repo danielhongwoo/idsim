@@ -1,7 +1,7 @@
 """golden.py 단위 테스트. rclpy 없이 돈다.
 
 아래 원문 예시는 ROS 2 Jazzy의 `ros2 topic list -t`와 `ros2 topic info -v`
-출력 형식을 기억에 따라 만든 가정이다. 실제 출력은 S4 캡처로 확인해야 한다.
+출력 형식을 기억에 따라 만든 가정이다. 실제 출력은 스모크 golden 단계의 캡처로 확인해야 한다.
 """
 import os
 

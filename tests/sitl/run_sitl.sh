@@ -31,14 +31,14 @@
 #   stdout     마지막 줄이 (마지막 회의) 실행 디렉터리 절대 경로 artifacts/runs/<실행 id>. 나머지는 모두 stderr
 #   요약       GITHUB_STEP_SUMMARY가 있으면 단계별 초와 판정 구간 RTF를 표로 덧붙인다
 #   산출물     <실행 디렉터리>/sitl/: junit.xml, trace.jsonl, verdict.json, summary.md, steps.tsv, raw_status_A.jsonl,
-#              raw_status_D.jsonl(D 실패 때만), armed_a.json, crosscheck_a.json, trace_1b.json, ps_before_stop.jsonl, logs/<서비스>.log,
+#              raw_status_D.jsonl(D 실패 때만), armed_a.json, crosscheck_a.json, trace_ulog.json, ps_before_stop.jsonl, logs/<서비스>.log,
 #              health_<서비스>.txt(실패한 회나 unhealthy 서비스만). steps.tsv 끝에 서비스 종료 상태(stop_exit_*),
 #              ULog 끝 경계(ulog), 회차별 종료 코드(rc_*)가 줄로 붙는다. 실행 디렉터리 안에는 compose.yaml, stack.json, params/, px4-N/log/*.ulg, ros_log/
 #              --repeat이면 artifacts/sitl_repeat/<시각>-k<k>/ 에 repeat_summary.tsv, armed_criterion.json
 #   소유       artifacts/runs/ 아래 파일은 모두 호스트 사용자 소유다(컨테이너를 호스트 uid:gid로 돌린다)
 #
 # 순서(회마다): sim_stack.sh up -> pytest(바깥 timeout) -> (Phase 2에 recorder 정지가 들어올 자리) -> stop 전 ps 기록,
-#   compose stop -t 15 -> 종료 코드와 서비스 로그 수집 -> down -> ULog 교차 확인(A), 1b ULog 기록(trace_1b.py. 기록 전용이라
+#   compose stop -t 15 -> 종료 코드와 서비스 로그 수집 -> down -> ULog 교차 확인(A), ULog 기록(trace_ulog.py. 기록 전용이라
 #   종료 코드에 넣지 않는다). 중단돼도 trap으로 down이 돈다(--attach 제외).
 # 스택은 tools/sim_stack.sh로만 올리고 내린다. 수집에만 docker compose ps/logs/stop과 inspect를 직접 쓴다.
 # pytest를 다시 돌리는 재시도는 없다. 실패한 회의 증거는 그대로 남긴다.
@@ -222,8 +222,8 @@ PY
   # 2(입력 없음과 판정 불가)는 INFRA로 따로 센다
   python3 tests/sitl/crosscheck_a.py "$run_dir" --sitl-dir "$out_name" >&2
   local cross_rc=$?
-  # 1b ULog 기록(속도 feedforward, F3 공중 시작의 DO_SET_MODE와 D, TRACK_ENTITY 구간의 z). 기록 전용이다
-  python3 tests/sitl/trace_1b.py "$run_dir" --sitl-dir "$out_name" >&2 || say "trace_1b.py가 실패했다(기록 전용, 판정과 무관)"
+  # ULog 기록(속도 feedforward, F3 공중 시작의 DO_SET_MODE와 D, TRACK_ENTITY 구간의 z). 기록 전용이다
+  python3 tests/sitl/trace_ulog.py "$run_dir" --sitl-dir "$out_name" >&2 || say "trace_ulog.py가 실패했다(기록 전용, 판정과 무관)"
   # steps.tsv: 단계별 초, 서비스 종료 상태(stop_exit_*), ULog 끝 경계(ulog), 그리고 아래의 rc_ 줄
   { printf '%s\n' "$steps" | tr ',' '\n' | tr '=' '\t'; printf '%s' "${stop_lines:-}"; [ -z "$ulog_lines" ] || printf '%s\n' "$ulog_lines"; } \
     >"${run_dir}/${out_name}/steps.tsv"
