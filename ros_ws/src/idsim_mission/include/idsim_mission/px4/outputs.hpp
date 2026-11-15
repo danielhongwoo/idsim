@@ -57,7 +57,7 @@ namespace idsim_mission::px4
 {
 
 // 지상 setpoint 오프셋(m, NED +z = 아래쪽). 지상에 있는 기체에 현재 위치보다 0.5 m 아래를 주어
-// 이륙 의도가 켜지지 않게 한다(decisions.md 쟁점 3 M5). PX4의 이륙 판정은 setpoint z가 현재 z보다
+// 이륙 의도가 켜지지 않게 한다(docs/interface.md "발행 규칙"). PX4의 이륙 판정은 setpoint z가 현재 z보다
 // 위일 때만 켜진다(MulticopterPositionControl). 값의 변경은 px4-engineer가 정한다. 노드 파라미터가
 // 아니다.
 inline constexpr double kGroundSetpointOffsetDownM = 0.5;
