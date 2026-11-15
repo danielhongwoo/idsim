@@ -30,10 +30,7 @@ namespace
 constexpr double kPi = 3.14159265358979323846;
 constexpr std::size_t kMissionIdMaxLength = 64;
 constexpr std::uint32_t kNanosecPerSecond = 1000000000U;
-// 계약 좌표 상한(m). GOTO position과 TRACK_ENTITY offset의 각 성분 절댓값이 이 값 이하(경계
-// 포함)여야 한다. 1b decisions.md 쟁점 8 "좌표 상한"의 값이다. 올리는 쪽이 호환된다(받던 미션을
-// 계속 받는다).
-constexpr double kMaxMissionCoordinateM = 1e5;
+constexpr std::size_t kTargetIdMaxLength = 32;
 
 bool lower_or_digit(char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); }
 
@@ -45,13 +42,6 @@ bool finite(const Vec3 & v)
 }
 
 bool is_zero(const Vec3 & v) { return v.x == 0.0 && v.y == 0.0 && v.z == 0.0; }
-
-// 유한한 성분에만 뜻이 있다(유한 검사 뒤에 부른다).
-bool within_coordinate_bound(const Vec3 & v)
-{
-  return std::fabs(v.x) <= kMaxMissionCoordinateM && std::fabs(v.y) <= kMaxMissionCoordinateM &&
-         std::fabs(v.z) <= kMaxMissionCoordinateM;
-}
 
 bool is_zero(const Duration & d) { return d.sec == 0 && d.nanosec == 0; }
 
@@ -154,8 +144,9 @@ std::string check_used(const ItemSpec & item, std::size_t index)
     }
     case item_type::kTrackEntity: {
       const TrackEntitySpec & s = item.track_entity;
-      if (s.target_id.empty()) {
-        return field(index, "track_entity.target_id") + " must not be empty";
+      if (!is_valid_target_id(s.target_id)) {
+        return field(index, "track_entity.target_id") + " '" + s.target_id +
+               "' does not match ^[a-z][a-z0-9_]{0,31}$";
       }
       if (!finite(s.offset) || is_zero(s.offset)) {
         return field(index, "track_entity.offset") + " must be finite and non-zero";
@@ -206,38 +197,30 @@ MissionCheck invalid(std::string detail)
   return check;
 }
 
-bool supported_in_1a(std::uint8_t type)
+}  // namespace
+
+bool within_coordinate_bound(const Vec3 & v)
 {
-  return type == item_type::kTakeoff || type == item_type::kLoiter || type == item_type::kLand;
+  return std::fabs(v.x) <= kMaxContractCoordinateM && std::fabs(v.y) <= kMaxContractCoordinateM &&
+         std::fabs(v.z) <= kMaxContractCoordinateM;
 }
 
-// 계약 + 1a 임시 제한. validate_mission_1a_goal이 쓴다.
-MissionCheck check_1a_limits(const MissionSpec & mission)
+bool is_valid_target_id(const std::string & target_id)
 {
-  MissionCheck check = validate_mission_contract(mission);
-  if (!check.valid) {
-    return check;
+  if (target_id.empty() || target_id.size() > kTargetIdMaxLength) {
+    return false;
   }
-  const std::size_t count = mission.items.size();
-  for (std::size_t i = 0; i < count; ++i) {
-    const std::uint8_t type = mission.items[i].type;
-    if (!supported_in_1a(type)) {
-      return invalid(
-        field(i, "type") + " " + item_type_name(type) +
-        " is not supported in 1a (TAKEOFF, LOITER, LAND only)");
+  if (target_id.front() < 'a' || target_id.front() > 'z') {
+    return false;
+  }
+  for (std::size_t i = 1; i < target_id.size(); ++i) {
+    const char c = target_id[i];
+    if (!lower_or_digit(c) && c != '_') {
+      return false;
     }
   }
-  if (mission.items.back().type != item_type::kLand) {
-    return invalid("last item must be LAND in 1a (missions ending in the air are 1b)");
-  }
-  const std::uint8_t first = mission.items.front().type;
-  if (first != item_type::kTakeoff && first != item_type::kLand) {
-    return invalid("first item must be TAKEOFF or LAND in 1a");
-  }
-  return check;
+  return true;
 }
-
-}  // namespace
 
 bool is_valid_mission_id(const std::string & mission_id)
 {
@@ -288,11 +271,6 @@ MissionCheck validate_mission_contract(const MissionSpec & mission)
   return ok;
 }
 
-MissionCheck validate_mission_1a_goal(const MissionSpec & mission)
-{
-  return check_1a_limits(mission);
-}
-
 std::optional<Termination> screen_goal(
   const std::string & goal_vehicle_id, const std::string & own_vehicle_id,
   const MissionSpec & mission, bool busy)
@@ -305,7 +283,7 @@ std::optional<Termination> screen_goal(
       "goal vehicle_id '" + goal_vehicle_id + "' is not this executor '" + own_vehicle_id + "'";
     return termination;
   }
-  MissionCheck check = validate_mission_1a_goal(mission);
+  MissionCheck check = validate_mission_contract(mission);
   if (!check.valid) {
     termination.reason = Reason::kInvalidMission;
     termination.detail = std::move(check.detail);
