@@ -295,7 +295,8 @@ private:
     if (cmd.command == VC::VEHICLE_CMD_DO_SET_MODE && cmd.param2 == 4.0F && cmd.param3 == 3.0F) {
       ++holds_;
       if (first_hold_stamp_ns_ == 0) {
-        // 노드가 명령에 실은 timestamp(us, 노드 시계). 받은 때의 벽시계 스케줄링과 무관하다.
+        // 노드가 명령에 실은 timestamp(us, 노드 시계). 가짜 PX4가 받은 때의 벽시계 지연은 들어가지
+        // 않는다.
         first_hold_stamp_ns_ = static_cast<std::int64_t>(cmd.timestamp) * 1000;
       }
     }
@@ -762,7 +763,8 @@ TEST_F(ExecutorNodeTest, FeedbackIsPublishedOnTheTickTheLastSetpointItemComplete
   // 곧 완료되고 공중 종료 단계로 들어간다. 그 tick은 항목(1)과 phase(EXECUTING)가 그대로지만
   // 항목이 완료됐으므로 feedback이 바로 나간다. 종료 단계는 들어가는 tick에 Hold를 보내므로, 거리가
   // 없는 첫 항목 1 feedback의 stamp는 첫 Hold 명령의 timestamp와 같은 tick의 값이다(주기 feedback만
-  // 있으면 최대 10 tick 늦다). 둘 다 노드 시계 값이라 벽시계 스케줄링과 무관하다.
+  // 있으면 최대 10 tick 늦다). 비교는 같은 tick 안의 두 노드 시계 읽기 차(보통 /clock 양자 하나)를
+  // 보고, 가짜 PX4가 명령을 받은 때의 벽시계 지연은 들어가지 않는다.
   auto node = make_executor(true);
   auto test_node = std::make_shared<rclcpp::Node>("test_client");
   Client client(test_node);
@@ -803,8 +805,8 @@ TEST_F(ExecutorNodeTest, FeedbackIsPublishedOnTheTickTheLastSetpointItemComplete
   ASSERT_NE(end_stage, nullptr);
   EXPECT_EQ(end_stage->phase, ExecuteMission::Feedback::PHASE_EXECUTING);
   const std::int64_t stamp_ns = rclcpp::Time(end_stage->stamp).nanoseconds();
-  // Hold 명령의 timestamp와 feedback stamp는 같은 tick에서 노드 시계로 읽은 값이다(feedback은
-  // 그 tick의 입력 시각, 명령은 같은 tick의 Px4Timestamp. /clock 양자 하나만큼 다를 수 있다).
+  // feedback stamp는 그 tick의 input.now_ns, Hold timestamp는 같은 tick의 step 안에서
+  // Px4Timestamp::now로 노드 시계를 따로 읽은 값이다. 그 차(보통 /clock 양자 하나)를 본다.
   // 다음 주기 tick의 feedback이면 차가 한 tick(50 ms) 가까이 되므로 반 tick을 경계로 둔다.
   const std::int64_t diff_ns = px4.first_hold_stamp_ns() - stamp_ns;
   EXPECT_LT(std::llabs(diff_ns), kTickPeriodNs / 2)
