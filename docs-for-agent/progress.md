@@ -7,13 +7,13 @@
 | Phase | 상태 |
 | --- | --- |
 | 1a | 완료. 계약은 `docs/interface.md`에 고정 |
-| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약은 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6, B10 전 core 수정, B10(진짜 `Px4FramePort`, 표적 구독, goal 접수는 계약 검증만, 미션 YAML 로더와 `send_mission`), B11(F1-F4, 정답 판정, b 0.5 m와 `R_home` 0.20 m), B12(M4 화면 확인, Actor 표본 간격 250 ms 확정) 반영. 칸 목록 covered 452, impossible 131, uncovered 0 |
+| 1b | 구현 중. 계획은 `docs-for-agent/plan-1b-mission-target/README.md`, 계약 정본은 `docs/interface.md`이고 결정의 근거는 같은 디렉터리 `decisions.md`. B1-B8b, B9 snapshot 헤더, B9 S1-S6, B10 전 core 수정, B10(진짜 `Px4FramePort`, 표적 구독, goal 접수는 계약 검증만, 미션 YAML 로더와 `send_mission`), B11(F1-F4, 정답 판정, b 0.5 m와 `R_home` 0.20 m), B12(M4 화면 확인, Actor 표본 간격 250 ms 확정), B13(1b 계약 고정 문서) 반영. 칸 목록 covered 452, impossible 131, uncovered 0 |
 | 2 | 시작 전 |
 | 3 | 시작 전 |
 
 ## 다음 작업
 
-1. B13(계약 고정 문서). 초안은 branch `feat/1b-b13`에 있고 B11 머지 뒤 rebase해 (v) 행과 함께 낸다.
+1. 1b 완료 처리(완료 기준 대조, `decisions.md`의 "1a 고정 계약 영향"과 "문서 반영 목록" 정리, 이 파일의 1b 상태 갱신).
 
 ## 운영 규칙
 
@@ -46,17 +46,10 @@
 
 - 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
 
-B13 전에 정할 것.
-
--  `decisions.md` "1a 고정 계약 영향" 표에 월드 ENU 좌표계 문장을 넣을지(architect).
-- `target_id` 사례 표의 단일 출처(architect).
-
 문서 정리(정형, 다음 문서 정리 때).
 
-- `decisions.md` 쟁점 12 근거의 "DISARMED에서 DO_SET_MODE 거부는 TERMINATION뿐이다" 인용을 `UserModeIntention.cpp` 73-74행(결과 값은 `Commander.cpp` 927-932행)으로 고친다. 쟁점 7의 "루프"는 loop로.
-- 유효 ack 뒤 재전송을 멈추는 규칙의 전제 "ACCEPTED면 모드 전환이 일어난다"(`Commander.cpp` 912-927행, [실측] 17회)를 쟁점 12 근거에 적고, `docs/interface.md` 341행을 1a 고정 계약 영향 (t)에 넣을지 정한다(architect).
+- `tools/gen_compose.py` `TARGET_ID_RE` 주석이 사례 표 정본(`idsim_common` `TargetId::parse` 테스트)을 가리키게 한다(devops-engineer).
 - `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
-- `docs/architecture.md`의 `tools/sim_stack.sh` 운영 규칙 문단에 restart-ops 뒤 attach 경로를 적을지(architect). `docs/interface.md` SITL 파라미터 표에 `IMU_GYRO_CAL_EN`을 넣을지(architect).
 
 테스트 보강.
 
