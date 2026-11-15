@@ -70,7 +70,7 @@ B13 전에 정할 것.
 빌드와 CI.
 
 - 첫 CI `sitl`(9개 시나리오)의 step 시간으로 U15 15분 목표를 확인한다(추정 보통 10-12분, 최악 14-15분). 넘으면 U15 순서로 줄인다(devops-engineer, test-engineer).
-- GOTO 도달의 판정 반경 여유가 0.08 m다(보정 max d3 0.92 m). EKF 위치가 정답보다 진행 방향으로 약 0.47 m 앞서고, 그 절반은 SITL GPS 경로에 실제 지연이 없는데 `EKF2_GPS_DELAY`가 기본 110 ms인 탓이다([소스] `GZBridge.cpp` navSatCallback, ULog 값 110). 다음 작업 단위에서 SITL 계약 파라미터 `EKF2_GPS_DELAY` 0과 재보정을 정한다(architect, px4-engineer, test-engineer). 나머지 약 0.23 m는 원인 미확인.
+- GOTO 도달의 판정 반경 여유가 0.08 m다(보정 max d3 0.92 m). EKF 위치가 정답보다 진행 방향으로 약 0.47 m 앞선다. SITL GPS 경로에는 실제 지연이 없는데 `EKF2_GPS_DELAY`는 기본 110 ms다([소스] `GZBridge.cpp` navSatCallback, ULog 값 110). 이것이 앞섬의 약 v x 0.11 s를 만든다는 몫은 [추정]이다. 다음 작업 단위에서 `EKF2_GPS_DELAY` 0으로 로컬 몇 회를 돌려 앞섬이 줄어드는지 먼저 보고, 그 뒤 SITL 계약 파라미터와 재보정을 정한다(architect, px4-engineer, test-engineer).
 - `sitl.yml`은 GHCR에서 이미지 key로 pull하므로 이미지 key가 바뀌는 PR은 PR과 머지 직후 main 양쪽에서 pull이 실패한다. 지금은 로컬 `run_sitl.sh`로 대신하고 publish 뒤 main에서 `sitl`을 다시 돌린다. `workflow_run`으로 묶을지 등은 devops-engineer와 architect가 정한다.
 - 같은 key로 두 번째 main build가 돌 때 이미지 5종이 모두 SKIP되는지 확인한다(devops-engineer).
 - clang-tidy가 `px4_topics.hpp`, `px4_io.hpp`를 보지 않는다. `tools/ros_ws.sh tidy`의 대상 0개 통과를 `ci`에서 바꿀지(ros2-engineer, devops-engineer).
