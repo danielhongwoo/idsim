@@ -285,6 +285,30 @@ TEST(MissionEnd, T5AirRejectedThenLandObserved)
     "mission end: Hold rejected: TEMPORARILY_REJECTED; Land sent, AUTO_LAND observed");
 }
 
+TEST(MissionEnd, T5HoldRejectedOnThirdHoldSampleTick)
+{
+  // Hold 3회째 표본과 Hold 거부 ack가 같은 tick이면 거부가 먼저다(Land 경로, Hold 확인 없음).
+  Harness h(takeoff_loiter_mission());
+  h.hold_response = HoldResponse::kIgnore;
+  const EndStart st = start_air_end(h);
+  run_to(h, st.s + 8);
+  h.world.nav = NavMode::kHold;
+  h.tick();  // S+8
+  h.tick();  // S+9
+  h.push_ack(AckCommand::kSetMode, AckResult::kTemporarilyRejected);
+  std::size_t before = tick_marked(h);  // S+10
+  expect_cell(h, kAir, Event::kHoldRejected, kAirLand, "-", {}, before);
+  EXPECT_FALSE(has_edge(h, Event::kHoldConfirmed, st.before));
+  EXPECT_EQ(commands_at(h, st.s + 10), std::vector<CommandKind>{CommandKind::kNavLand});
+  EXPECT_FALSE(terminated_at(h, st.s + 10));
+  before = tick_marked(h);  // S+11: AUTO_LAND
+  expect_cell(
+    h, kAirLand, Event::kLandPathModeObserved, "DONE", "ABORTED/MODE_SWITCH_FAILED", {}, before);
+  expect_end(
+    h, st.s, "ABORTED/MODE_SWITCH_FAILED",
+    "mission end: Hold rejected: TEMPORARILY_REJECTED; Land sent, AUTO_LAND observed");
+}
+
 TEST(MissionEnd, T6LostRejectAckIsCaughtOnResend)
 {
   Harness h(takeoff_loiter_mission());

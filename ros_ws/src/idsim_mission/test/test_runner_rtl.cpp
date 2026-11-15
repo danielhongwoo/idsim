@@ -18,8 +18,6 @@
 // S는 RTL 항목을 시작한 tick(NAV_RTL 첫 전송)이다. 시간 값은 core/config.hpp 기본값이다
 // (mode_confirm_timeout 3 s = 60 tick, command_resend_period 0.5 s = 10 tick).
 //
-// 쟁점 9의 미정 경계 둘(RTL 확인과 mode_confirm_timeout이 같은 tick, 확인 tick에 온 거부 ack)은
-// 어느 쪽으로도 단정하지 않는다. 확인 3회째 표본은 만료 전 tick에, 거부 ack는 확인 전 tick에 둔다.
 // 거부 ack와 공중 DISARMED 표본의 겹침 같은 합성 ack 사례는 PX4 v1.17.0에서 재현하기 어려운 방어
 // 경로라 합성 표본과 합성 ack로만 시험한다.
 
@@ -81,6 +79,16 @@ void expect_rtl_failure_tick(const Harness & h, const StepOutput & out)
     EXPECT_EQ(out.feedback->phase, FeedbackPhase::kWaitingMode);
     EXPECT_EQ(out.feedback->item_type, item_type::kRtl);
   }
+}
+
+bool has_edge_event(const Harness & h, Event event, std::size_t from_index)
+{
+  for (std::size_t i = from_index; i < h.edges().size(); ++i) {
+    if (h.edges()[i].tagged && h.edges()[i].event == event) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool starts_with(const std::string & text, const std::string & prefix)
@@ -554,7 +562,7 @@ TEST(Rtl, FallbackDisarmAfterLandedArmed)
 
 TEST(Rtl, SameTickOrder)
 {
-  // T12 (b), (c). 확인과 만료, 확인 tick의 거부 ack는 미정이라 단정하지 않는다(머리 주석).
+  // T12 (b)-(e). 같은 tick의 순서는 거부 ack -> mode_confirm_timeout -> 3회 확인이다.
   {
     // (b) 거부 ack와 mode_confirm_timeout이 같은 tick: 거부가 이긴다(detail은 거부 문구).
     Harness h(rtl_only_mission());
@@ -586,6 +594,74 @@ TEST(Rtl, SameTickOrder)
       h, "ITEM.RTL", Event::kModeItemDisarmedInAir, "DONE", "ABORTED/FAILSAFE", {}, before);
     expect_terminated_once_as(h, "ABORTED/FAILSAFE");
     EXPECT_EQ(h.count_command(CommandKind::kNavLand), 0);
+  }
+  for (const bool on_timeout_tick : {false, true}) {
+    // (d) 3회째 AUTO_RTL 표본과 거부 ack가 같은 tick(만료 전): 거부가 이긴다. (e) 그 tick이
+    // mode_confirm_timeout tick이어도 거부가 이긴다(detail은 거부 문구).
+    SCOPED_TRACE(on_timeout_tick);
+    Harness h(rtl_only_mission());
+    h.auto_px4 = false;
+    const std::uint64_t s = start_rtl(h);
+    const std::uint64_t third = on_timeout_tick ? s + kModeConfirmTicks : s + 7;
+    run_to_tick(h, third - 2);
+    h.world.nav = NavMode::kRtl;
+    h.tick();
+    h.tick();
+    h.push_ack(AckCommand::kNavRtl, AckResult::kTemporarilyRejected);
+    const std::size_t before = h.edges().size();
+    const StepOutput out = h.tick();
+    ASSERT_EQ(h.tick_no, third + 1);
+    expect_cell(
+      h, "ITEM.RTL", Event::kModeItemRejected, "CLEANUP.RTL_FAILURE.NONE", "-", {}, before);
+    EXPECT_FALSE(has_edge_event(h, Event::kModeItemModeTimeout, before));
+    EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kNavLand});
+    EXPECT_FALSE(h.view().land_confirmed);
+    h.world.nav = NavMode::kLand;
+    h.tick();
+    expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+    EXPECT_TRUE(starts_with(
+      termination_or_empty(h).detail,
+      "item 0 (RTL): NAV_RETURN_TO_LAUNCH rejected: TEMPORARILY_REJECTED; cleanup: RTL not "
+      "confirmed"));
+  }
+}
+
+TEST(Rtl, ThirdAutoRtlSampleOnModeConfirmTimeoutTick)
+{
+  // 3회째 AUTO_RTL 표본이 mode_confirm_timeout tick(S+60)에 오면 만료가 이겨 Land fallback이다.
+  for (const bool on_timeout_tick : {true, false}) {
+    SCOPED_TRACE(on_timeout_tick);
+    Harness h(rtl_only_mission());
+    h.auto_px4 = false;
+    const std::uint64_t s = start_rtl(h);
+    run_to_tick(h, on_timeout_tick ? s + 58 : s + 57);
+    h.world.nav = NavMode::kRtl;
+    run_to_tick(h, s + kModeConfirmTicks);
+    const std::size_t before = h.edges().size();
+    const StepOutput out = h.tick();  // S+60
+    if (!on_timeout_tick) {
+      // 대조: S+59에 확인되어 S+60에는 기록도 NAV_RTL 재전송도 없다.
+      EXPECT_EQ(h.edges().size(), before);
+      EXPECT_TRUE(out.commands.empty());
+      EXPECT_TRUE(h.view().land_confirmed);
+      EXPECT_EQ(h.view().stage, Stage::kItem);
+      continue;
+    }
+    expect_cell(
+      h, "ITEM.RTL", Event::kModeItemModeTimeout, "CLEANUP.RTL_FAILURE.NONE", "-", {}, before);
+    expect_cell(
+      h, "CLEANUP.RTL_FAILURE.NONE", Event::kEnterAir, "CLEANUP.RTL_FAILURE.AIR_LAND", "-", {},
+      before);
+    EXPECT_EQ(out.commands, std::vector<CommandKind>{CommandKind::kNavLand});
+    EXPECT_FALSE(out.setpoint.has_value());
+    expect_rtl_failure_tick(h, out);
+    h.world.nav = NavMode::kLand;
+    h.tick();
+    expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+    EXPECT_EQ(
+      termination_or_empty(h).detail,
+      "item 0 (RTL): mode_confirm_timeout: AUTO_RTL not confirmed; cleanup: RTL not confirmed; "
+      "Land sent, AUTO_LAND observed");
   }
 }
 

@@ -1118,8 +1118,10 @@ void MissionRunner::step_setpoint_item(Tick & t)
 
 void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
 {
-  // 모드 명령 항목(LAND, RTL)의 한 tick. 판정 순서는 LAND 1a 그대로이고, RTL은 확인 전 거부 ack와
-  // mode_confirm_timeout에서 Land fallback(RTL 실패의 정리)으로 간다(1b decisions.md 쟁점 9).
+  // 모드 명령 항목(LAND, RTL)의 한 tick. 같은 tick의 순서는 식별 불일치, 상태 끊김,
+  // 공중 DISARMED -> 거부 ack(RTL만 끝낸다) -> mode_confirm_timeout -> 3회 확인 -> ITEM_TIMEOUT
+  // -> 완료 -> 대비책 disarm -> 재전송이다. RTL은 확인 전 거부 ack와 mode_confirm_timeout에서
+  // Land fallback(RTL 실패의 정리)으로 간다(1b decisions.md 쟁점 9).
   apply_publish_rule(t);
   const StatusSample * const s = t.status;
   if (s != nullptr && s->identity == IdentityCheck::kMismatch) {
@@ -1160,14 +1162,11 @@ void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
       disarm_class_ = DisarmClass::kUnknown;
       mode_item_.disarm_count = 0;
       if (!mode_item_.confirmed) {
-        // 확인 전: 이탈 판정을 하지 않는다. 확인 대상 모드는 failsafe와 무관하게 센다.
+        // 확인 전: 이탈 판정을 하지 않는다. 확인 대상 모드는 failsafe와 무관하게 센다. 확정은
+        // 거부 ack와 mode_confirm_timeout 뒤에 한다(같은 tick이면 둘이 이긴다).
         mode_item_.mode_count = s->nav == spec.mode ? mode_item_.mode_count + 1 : 0;
-        if (mode_item_.mode_count >= kConfirmSamples) {
-          mode_item_.confirmed = true;
-          clear_pending();
-        }
       } else if (s->nav != spec.mode) {
-        // 확인 뒤: ARMED인 동안 확인 대상 모드를 벗어나면 이탈.
+        // 확인 뒤(앞 tick까지 확정): ARMED인 동안 확인 대상 모드를 벗어나면 이탈.
         terminate(
           Event::kModeItemLeftMode, t,
           aborted(
@@ -1183,7 +1182,8 @@ void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
     mode_item_.command_accepted = true;
   }
   if (spec.land_fallback && command_ack && is_rejection(ack.result)) {
-    // 확인 전에만 닿는다(확인하면 대기 명령을 지운다. 확인 뒤의 대기 명령은 대비책 disarm이다).
+    // 확정 전에만 닿는다(확정하면 대기 명령을 지운다. 확정 뒤의 대기 명령은 대비책 disarm이다).
+    // 3회째 표본의 tick은 아직 확정 전이라 그 tick의 거부 ack도 여기서 끝낸다.
     begin_cleanup(
       Event::kModeItemRejected, t, CleanupCause::kRtlFailure, Reason::kModeSwitchFailed,
       item_label() + ": " + spec.command_name + " rejected: " + ack_result_name(ack.result));
@@ -1202,6 +1202,11 @@ void MissionRunner::step_mode_item(Tick & t, const ModeItemSpec & spec)
     }
     terminate(Event::kModeItemModeTimeout, t, aborted(Reason::kModeSwitchFailed, detail));
     return;
+  }
+  if (!mode_item_.confirmed && mode_item_.mode_count >= kConfirmSamples) {
+    // 확인 대상 모드 3회 확인. 재전송을 멈춘다.
+    mode_item_.confirmed = true;
+    clear_pending();
   }
   if (elapsed(t, item_start_ns_) >= current_item().timeout.to_ns()) {
     mode_item_timeout(t, spec, landed);

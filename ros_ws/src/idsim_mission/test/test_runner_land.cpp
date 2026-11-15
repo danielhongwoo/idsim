@@ -194,6 +194,48 @@ TEST(Land, ModeConfirmTimeoutBoundary)
   EXPECT_EQ(h.count_command(CommandKind::kNavLand), 6);
 }
 
+TEST(Land, ThirdAutoLandSampleOnModeConfirmTimeoutTick)
+{
+  // AUTO_LAND 3회째 표본이 mode_confirm_timeout tick(S+60)에 오면 만료가 이긴다. S는 NAV_LAND 첫
+  // 전송 tick이다.
+  for (const bool on_timeout_tick : {true, false}) {
+    SCOPED_TRACE(on_timeout_tick);
+    Harness h(standard_mission());
+    h.drive_to_land();
+    const std::uint64_t s = h.tick_no - 1;
+    h.auto_px4 = false;
+    h.world.nav = NavMode::kOffboard;
+    const std::uint64_t first_land = on_timeout_tick ? s + 58 : s + 57;
+    while (h.tick_no < first_land) {
+      h.tick();
+    }
+    h.world.nav = NavMode::kLand;
+    while (h.tick_no < s + 60) {
+      const StepOutput out = h.tick();
+      EXPECT_FALSE(out.setpoint.has_value());
+      EXPECT_FALSE(h.runner().done());
+    }
+    const std::size_t before = h.edges().size();
+    const StepOutput out = h.tick();  // S+60
+    EXPECT_TRUE(out.commands.empty());
+    EXPECT_EQ(h.count_command(CommandKind::kNavLand), 6);
+    if (on_timeout_tick) {
+      expect_cell(
+        h, "ITEM.LAND", Event::kModeItemModeTimeout, "DONE", "ABORTED/MODE_SWITCH_FAILED", {},
+        before);
+      expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
+      EXPECT_EQ(
+        termination_or_empty(h).detail,
+        "item 2 (LAND): mode_confirm_timeout: AUTO_LAND not confirmed");
+    } else {
+      // 대조: S+59에 확인되어 S+60에는 끝나지 않고 NAV_LAND 재전송도 없다.
+      EXPECT_FALSE(h.runner().done());
+      EXPECT_TRUE(h.view().land_confirmed);
+      EXPECT_EQ(h.edges().size(), before);
+    }
+  }
+}
+
 TEST(Land, FallbackDisarmAfterDelayOnly)
 {
   // 대비책: AUTO_LAND 확인 뒤 landed이고 ARMED인 채 land_disarm_fallback_delay(5 s)가 지나면
