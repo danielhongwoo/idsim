@@ -31,6 +31,11 @@
 //   kRtlFailure: 공중 ARMED Hold에서 시작한 [RTL]의 NAV_RTL 거부 ack(S+1, 합성). reason
 //   MODE_SWITCH_FAILED, arm을 보내지 않았다. 공중이면 Hold 없이 Land 경로라 kAirLand가 정리 첫
 //   tick에 닿고, Hold 실패 표시는 끝까지 서지 않는다(1b decisions.md 쟁점 9).
+//   kTargetLost: [TAKEOFF, TRACK_ENTITY]에서 표적 표본 없이 TRACK_ENTITY 시작(K) 뒤 K+21의
+//   TARGET_LOST(1b decisions.md 쟁점 8). reason TARGET_LOST, arm을 보냈다.
+//   kTargetLostAirEntry: 공중 Offboard 진입 [TRACK_ENTITY]에서 같은 TARGET_LOST. arm을 보내지 않은
+//   goal이라 "정리할 것 없음"(지상 DISARMED)에 닿는다. 정리의 칸은 원인 kTargetLost와 같은
+//   CLEANUP.TARGET_LOST다.
 // - 분기(Reach): kNone은 정리 첫 tick에 끝나는 칸이라 사건이 시작 표본을 정한다(표본 없음, 상태
 //   끊김, 공중 DISARMED). kAir는 ARMED이고 landed false, kGround는 ARMED이고 landed true로
 //   시작한다. kAirLand는 kAir에서 Hold 거부 ack로 Land 경로에 간 상태, kGroundAfterHoldFailure는
@@ -82,6 +87,8 @@ enum class Cause : std::uint8_t
   kPrepModeSwitch,
   kPrepArm,
   kRtlFailure,
+  kTargetLost,
+  kTargetLostAirEntry,
 };
 
 enum class Reach : std::uint8_t
@@ -99,6 +106,7 @@ enum class Sent : std::uint8_t
   kNothing,
   kDisarm,
   kNavLand,
+  kHold,
 };
 
 // 칸 하나. from은 원인과 분기에서 나온다(cleanup_state). sent는 기대 명령이고, cap_on_ground는
@@ -123,6 +131,8 @@ std::vector<CommandKind> commands_of(Sent sent)
       return {CommandKind::kDisarm};
     case Sent::kNavLand:
       return {CommandKind::kNavLand};
+    case Sent::kHold:
+      return {CommandKind::kSetModeHold};
   }
   return {};
 }
@@ -139,6 +149,9 @@ const char * cause_state(Cause cause)
       return "PREPARING_FAILURE";
     case Cause::kRtlFailure:
       return "RTL_FAILURE";
+    case Cause::kTargetLost:
+    case Cause::kTargetLostAirEntry:
+      return "TARGET_LOST";
   }
   return "?";
 }
@@ -177,6 +190,10 @@ const char * cause_tag(Cause cause)
       return "PrepArm";
     case Cause::kRtlFailure:
       return "RtlFailure";
+    case Cause::kTargetLost:
+      return "TargetLost";
+    case Cause::kTargetLostAirEntry:
+      return "TargetLostAirEntry";
   }
   return "Unknown";
 }
@@ -255,6 +272,10 @@ public:
         break;
       case Cause::kRtlFailure:
         enter_rtl_failure(start);
+        break;
+      case Cause::kTargetLost:
+      case Cause::kTargetLostAirEntry:
+        enter_target_lost(start);
         break;
     }
     h_.auto_samples = true;
@@ -385,6 +406,14 @@ private:
     if (cause == Cause::kRtlFailure) {
       m = rtl_only_mission();
     }
+    if (cause == Cause::kTargetLost) {
+      m.mission_id = "lost";
+      m.items = {takeoff_item(), track_entity_item()};
+    }
+    if (cause == Cause::kTargetLostAirEntry) {
+      m.mission_id = "lostair";
+      m.items = {track_entity_item()};
+    }
     return m;
   }
 
@@ -402,10 +431,13 @@ private:
           start.landed = false;
           // ITEM_TIMEOUT은 감시 표가, RTL 실패는 모드 명령 항목 처리가 같은 tick에 먼저 보므로,
           // 정리만 보는 묵은 표본이어야 닿는다.
-          start.stale_timestamp = cause_ == Cause::kItemTimeout || cause_ == Cause::kRtlFailure;
+          start.stale_timestamp = cause_ == Cause::kItemTimeout || cause_ == Cause::kRtlFailure ||
+                                  cause_ == Cause::kTargetLost;
         } else if (event == Event::kCleanupNothingToDo) {
           start.arming = Arming::kDisarmed;
           start.landed = true;
+          // TARGET_LOST는 감시 표가 같은 tick에 먼저 보므로 정리만 보는 묵은 표본이어야 닿는다.
+          start.stale_timestamp = cause_ == Cause::kTargetLostAirEntry;
         } else if (event == Event::kEnterGround) {
           start.landed = true;
         } else if (event == Event::kEnterAir) {
@@ -555,6 +587,36 @@ private:
     h_.tick();
   }
 
+  void enter_target_lost(const StartSample & start)
+  {
+    // 표적 표본이 없으므로 TARGET_LOST는 TRACK_ENTITY 시작 tick(K)부터 target_timeout을 넘는
+    // tick이다. 그 tick에 시작 표본을 넣는다.
+    if (cause_ == Cause::kTargetLostAirEntry) {
+      h_.start_in_air();
+      ASSERT_TRUE(h_.run_until([this] { return h_.view().stage == Stage::kItem; }, 100));
+    } else {
+      ASSERT_NO_FATAL_FAILURE(h_.drive_to_takeoff());
+      h_.world.landed = false;
+      h_.world.z = -5.0;
+      ASSERT_TRUE(h_.run_until([this] { return h_.view().item_index == 1U; }, 10));
+    }
+    h_.auto_px4 = false;
+    const int lost_ticks = ticks_of(h_.config().timeouts.target_timeout_ns) + 1;
+    for (int i = 1; i < lost_ticks; ++i) {
+      h_.tick();
+    }
+    ASSERT_EQ(h_.view().stage, Stage::kItem);
+    mark_start();
+    if (start.stale_timestamp) {
+      Sample stale = disarmed(start.landed);
+      stale.timestamp_us = 1;
+      h_.feed({stale});
+      return;
+    }
+    set_world(start.arming, start.landed);
+    h_.tick();
+  }
+
   void reject_hold()
   {
     h_.push_ack(AckCommand::kSetMode, AckResult::kDenied);
@@ -676,9 +738,10 @@ constexpr const char * kDone = "DONE";
 constexpr const char * kMsf = "ABORTED/MODE_SWITCH_FAILED";
 constexpr const char * kArmRej = "ABORTED/ARM_REJECTED";
 constexpr const char * kItemTo = "ABORTED/ITEM_TIMEOUT";
+constexpr const char * kLost = "ABORTED/TARGET_LOST";
 
-// 1a 칸 목록(transition_cells.tsv)에서 B8 때 미덮임이던 정리 칸. 순서는 목록과 같다. 열은 원인,
-// 분기, 사건, to, reason, 그 tick의 기대 명령, (상한 칸만) 상한 tick 표본의 landed다.
+// 정리 칸(transition_cells.tsv의 CLEANUP.* 가운데 이 rig로 덮는 칸). 순서는 목록과 같다. 열은
+// 원인, 분기, 사건, to, reason, 그 tick의 기대 명령, (상한 칸만) 상한 tick 표본의 landed다.
 const CleanupCell kCleanupCells[] = {
   // 취소
   {Cause::kCancel, Reach::kNone, Event::kCleanupNoSample, kDone, "CANCELED/NONE", Sent::kNothing},
@@ -766,7 +829,7 @@ const CleanupCell kCleanupCells[] = {
   {Cause::kPrepModeSwitch, Reach::kGround, Event::kGroundDisarmConfirmed, kDone, kMsf,
    Sent::kNothing},
   {Cause::kPrepModeSwitch, Reach::kGround, Event::kGroundDisarmTimeout, kDone, kMsf, Sent::kDisarm},
-  // RTL 실패(S2). 칸 목록의 CLEANUP.RTL_FAILURE.* covered 19칸이다.
+  // RTL 실패. 칸 목록의 CLEANUP.RTL_FAILURE.* covered 19칸이다.
   {Cause::kRtlFailure, Reach::kNone, Event::kCleanupAirDisarm, kDone, kMsf, Sent::kNothing},
   {Cause::kRtlFailure, Reach::kNone, Event::kCleanupNothingToDo, kDone, kMsf, Sent::kNothing},
   {Cause::kRtlFailure, Reach::kNone, Event::kEnterGround, "CLEANUP.RTL_FAILURE.GROUND", "-",
@@ -790,6 +853,47 @@ const CleanupCell kCleanupCells[] = {
    Sent::kNavLand},
   {Cause::kRtlFailure, Reach::kGround, Event::kGroundDisarmConfirmed, kDone, kMsf, Sent::kNothing},
   {Cause::kRtlFailure, Reach::kGround, Event::kGroundDisarmTimeout, kDone, kMsf, Sent::kDisarm},
+  // TARGET_LOST. 칸 목록의 CLEANUP.TARGET_LOST.* covered 29칸이다. 정리할 것 없음(지상
+  // DISARMED이고 arm을 보내지 않음)은 공중 Offboard 진입 입구로 닿는다.
+  {Cause::kTargetLost, Reach::kNone, Event::kCleanupAirDisarm, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLostAirEntry, Reach::kNone, Event::kCleanupNothingToDo, kDone, kLost,
+   Sent::kNothing},
+  {Cause::kTargetLost, Reach::kNone, Event::kEnterGround, "CLEANUP.TARGET_LOST.GROUND", "-",
+   Sent::kDisarm},
+  {Cause::kTargetLost, Reach::kNone, Event::kEnterAir, "CLEANUP.TARGET_LOST.AIR", "-", Sent::kHold},
+  {Cause::kTargetLost, Reach::kAir, Event::kCleanupLinkLost, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLost, Reach::kAir, Event::kCleanupAirDisarm, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLostAirEntry, Reach::kAir, Event::kCleanupNothingToDo, kDone, kLost,
+   Sent::kNothing},
+  {Cause::kTargetLost, Reach::kAir, Event::kCleanupCap, kDone, kLost, Sent::kNavLand, false},
+  {Cause::kTargetLost, Reach::kAir, Event::kStampUnavailable, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLost, Reach::kAirLand, Event::kCleanupLinkLost, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLost, Reach::kAirLand, Event::kCleanupAirDisarm, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLostAirEntry, Reach::kAirLand, Event::kCleanupNothingToDo, kDone, kLost,
+   Sent::kNothing},
+  {Cause::kTargetLost, Reach::kAirLand, Event::kCleanupCap, kDone, kLost, Sent::kNavLand, false},
+  {Cause::kTargetLost, Reach::kAirLand, Event::kStampUnavailable, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLost, Reach::kGround, Event::kCleanupLinkLost, kDone, kLost, Sent::kDisarm},
+  {Cause::kTargetLost, Reach::kGround, Event::kCleanupAirDisarm, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLost, Reach::kGround, Event::kCleanupCap, kDone, kLost, Sent::kDisarm, true},
+  {Cause::kTargetLost, Reach::kGround, Event::kStampUnavailable, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLost, Reach::kAir, Event::kEnterGround, "CLEANUP.TARGET_LOST.GROUND", "-",
+   Sent::kDisarm},
+  {Cause::kTargetLost, Reach::kAirLand, Event::kEnterGround, "CLEANUP.TARGET_LOST.GROUND", "-",
+   Sent::kDisarm},
+  {Cause::kTargetLost, Reach::kGround, Event::kEnterAir, "CLEANUP.TARGET_LOST.AIR", "-",
+   Sent::kHold},
+  {Cause::kTargetLost, Reach::kGroundAfterHoldFailure, Event::kEnterAir,
+   "CLEANUP.TARGET_LOST.AIR_LAND", "-", Sent::kNavLand},
+  {Cause::kTargetLost, Reach::kAir, Event::kHoldConfirmed, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLost, Reach::kAir, Event::kHoldRejected, "CLEANUP.TARGET_LOST.AIR_LAND", "-",
+   Sent::kNavLand},
+  {Cause::kTargetLost, Reach::kAir, Event::kHoldTimeout, "CLEANUP.TARGET_LOST.AIR_LAND", "-",
+   Sent::kNavLand},
+  {Cause::kTargetLost, Reach::kAirLand, Event::kLandPathModeObserved, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLost, Reach::kAirLand, Event::kLandPathTimeout, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLost, Reach::kGround, Event::kGroundDisarmConfirmed, kDone, kLost, Sent::kNothing},
+  {Cause::kTargetLost, Reach::kGround, Event::kGroundDisarmTimeout, kDone, kLost, Sent::kDisarm},
 };
 
 INSTANTIATE_TEST_SUITE_P(

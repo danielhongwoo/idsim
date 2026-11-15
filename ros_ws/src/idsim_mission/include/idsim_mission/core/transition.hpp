@@ -23,7 +23,7 @@
 //   기록이 열린 동안 상태 key가 두 번째로 바뀌면 그 변경은 untagged 기록(tagged false)이 된다.
 //   두 번째 변경은 앞 기록의 to에 넣지 않는다(앞 기록은 그 변경 직전의 상태 key로 닫는다).
 // - 겹침: 결정 지점에서 함께 참이던 사건을 also_true에 싣는다(감시 표의 다른 행, setpoint 항목의
-//   ITEM_TIMEOUT과 완료, 그 tick에 무시된 취소).
+//   TARGET_LOST, ITEM_TIMEOUT과 완료, 그 tick에 무시된 취소).
 // - observer는 MissionRunner 생성자의 마지막 인자다. 기본값 nullptr이면 아무것도 기록하지 않고
 //   동작은 같다. 노드는 넘기지 않는다.
 //
@@ -58,10 +58,11 @@ enum class Stage : std::uint8_t
 // - 지상 arm 진입(첫 항목 TAKEOFF): kSignal은 P3-P4, kOffboard는 P5, kOffboardAck는 P5 안의 ack
 //   대기 구간(OFFBOARD 3회 확인 뒤 마지막 DO_SET_MODE 전송 뒤의 ack를 기다린다. 1b decisions.md
 //   쟁점 12), kArm은 P6.
-// - 공중 Offboard 진입(첫 항목 LOITER, GOTO. 1b decisions.md 쟁점 7): kAirSignal은 P3-P4(진입
-//   setpoint 발행, 명령 없음), kAirOffboard는 P5의 첫 OFFBOARD 표본 전(DO_SET_MODE 주기 재전송),
-//   kAirOffboardSeen은 P5의 첫 OFFBOARD 표본 뒤(재전송 없음, OFFBOARD 3회 계수). 세 단계 모두 P3
-//   tick 뒤부터 감시 표를 보고, 앞의 둘은 AUTO_LOITER 면제(순위 7, 8)를 켠다. P6은 없다.
+// - 공중 Offboard 진입(첫 항목 LOITER, GOTO, TRACK_ENTITY. 1b decisions.md 쟁점 7): kAirSignal은
+//   P3-P4(진입 setpoint 발행, 명령 없음), kAirOffboard는 P5의 첫 OFFBOARD 표본 전(DO_SET_MODE
+//   주기 재전송), kAirOffboardSeen은 P5의 첫 OFFBOARD 표본 뒤(재전송 없음, OFFBOARD 3회 계수). 세
+//   단계 모두 P3 tick 뒤부터 감시 표를 보고, 앞의 둘은 AUTO_LOITER 면제(순위 7, 8)를 켠다. P6은
+//   없다.
 // - 모드 명령 진입(첫 항목 LAND, RTL)은 kWaitReady 뒤 바로 항목이다.
 enum class PrepStep : std::uint8_t
 {
@@ -81,10 +82,13 @@ enum class CleanupCause : std::uint8_t
   kItemTimeout,
   kPreparingFailure,
   kRtlFailure,  // RTL 항목의 거부 ack나 mode_confirm_timeout. 공중이면 Hold 없이 Land 경로
-  // 마지막 setpoint 항목(TAKEOFF, LOITER, GOTO)의 완료 뒤의 공중 종료 단계(1b decisions.md 쟁점
-  // 10). 분기 고르기는 다른 원인과 따로 둔다(AIR -> AIR_LAND 또는 GROUND_WAIT, GROUND_WAIT ->
-  // AIR_LAND).
+  // 마지막 setpoint 항목(TAKEOFF, LOITER, GOTO, TRACK_ENTITY)의 완료 뒤의 공중 종료 단계(1b
+  // decisions.md 쟁점 10). 분기 고르기는 다른 원인과 따로 둔다(AIR -> AIR_LAND 또는 GROUND_WAIT,
+  // GROUND_WAIT -> AIR_LAND).
   kMissionEnd,
+  // TRACK_ENTITY의 TARGET_LOST(1b decisions.md 쟁점 8). 분기 고르기와 분기 동작은 kItemTimeout과
+  // 같고 끝 reason만 TARGET_LOST다.
+  kTargetLost,
 };
 
 enum class Branch : std::uint8_t
@@ -102,7 +106,7 @@ enum class Branch : std::uint8_t
 enum class Event : std::uint8_t
 {
   // PREPARING 전체
-  kInvalidMission,  // validate_mission_runnable 미통과 미션의 첫 step
+  kInvalidMission,  // validate_mission_contract 미통과 미션의 첫 step
   // 지상 arm 진입의 발행 시작 뒤, 첫 ARMED 표본 전의 식별 불일치(공중 Offboard 진입은 감시 표
   // 순위 2)
   kPreparingIdentityMismatch,
@@ -112,7 +116,8 @@ enum class Event : std::uint8_t
   kReadyTimeout,           // ready_timeout
   kReadyTakeoff,           // 첫 항목 TAKEOFF: P3 발행 시작
   kReadyModeItem,          // 첫 항목이 모드 명령 항목(LAND, RTL): 항목 시작
-  kReadyAirOffboard,  // 첫 항목 LOITER, GOTO: P3 진입 setpoint로 발행 시작(공중 Offboard 진입)
+  // 첫 항목 LOITER, GOTO, TRACK_ENTITY: P3 진입 setpoint로 발행 시작(공중 Offboard 진입)
+  kReadyAirOffboard,
   // P3-P4. 두 사건은 지상 arm 진입(SIGNAL -> OFFBOARD)과 공중 Offboard 진입(AIR_SIGNAL ->
   // AIR_OFFBOARD)이 같이 쓴다.
   kSignalTimeout,
@@ -151,6 +156,11 @@ enum class Event : std::uint8_t
   kTakeoffReached,
   kLoiterElapsed,
   kGotoReached,  // 서로 다른 위치 표본 3개 연속 도달 반경 안
+  // GOTO와 같은 조건이고 그 tick의 표적 표본이 신선할 때만 센다
+  kTrackEntityReached,
+  // TRACK_ENTITY의 표적 소실: 유효 표본이 없으면 항목 시작부터, 있으면 마지막 유효 표본의 stamp부터
+  // target_timeout을 넘었다
+  kTargetLost,
   // 모드 명령 항목(LAND, RTL). 칸은 상태 key(ITEM.LAND, ITEM.RTL)로 갈린다
   kModeItemIdentityMismatch,  // 식별 불일치
   kModeItemLinkLost,          // 상태 끊김
@@ -187,7 +197,7 @@ enum class Event : std::uint8_t
   kStampUnavailable,  // Px4Timestamp 공급 실패
 };
 
-inline constexpr std::array<Event, 58> kAllEvents = {
+inline constexpr std::array<Event, 60> kAllEvents = {
   Event::kInvalidMission,
   Event::kPreparingIdentityMismatch,
   Event::kReadyIdentityMismatch,
@@ -221,6 +231,8 @@ inline constexpr std::array<Event, 58> kAllEvents = {
   Event::kTakeoffReached,
   Event::kLoiterElapsed,
   Event::kGotoReached,
+  Event::kTrackEntityReached,
+  Event::kTargetLost,
   Event::kModeItemIdentityMismatch,
   Event::kModeItemLinkLost,
   Event::kModeItemDisarmedInAir,

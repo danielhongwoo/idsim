@@ -787,6 +787,8 @@ TEST(FramePortCalls, GotoToGotoCallsTwiceOnCompletionTick)
   const std::uint64_t land_start = h.tick_no - 1;
   land_and_disarm(h);
   EXPECT_EQ(h.frame.point_calls_from(land_start + 1), 0);
+  // GOTO는 벡터 변환을 부르지 않는다.
+  EXPECT_EQ(h.frame.vector_calls, 0);
   expect_end(h, "SUCCEEDED/NONE", 4, 3);
 }
 

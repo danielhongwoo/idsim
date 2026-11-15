@@ -33,10 +33,16 @@
 //   실행 파일에서만 켜져 있고, 칸 목록 대조는 test_transition_coverage.cpp가 한다. 기록기가 켜져
 //   있으면 Harness는 자기 runner의 기록을 edges()에도 모은다(expect_cell이 한 시나리오의 칸을
 //   단정할 때 쓴다). 꺼져 있으면 runner에 observer를 넘기지 않는다.
-// - FramePort는 HarnessFramePort(frame)다. 기본 모드 kFail은 부르면 테스트를 실패시킨다. 그래서
-//   GOTO가 없는 미션의 모든 사례가 "1a type 미션은 FramePort를 부르지 않는다"(1b decisions.md
-//   쟁점 12)를 함께 단정한다. GOTO 사례는 kAxis(축 치환)나 kNone(값 없음)으로 바꾸거나 tick마다
-//   값을 고르는 hook을 둔다.
+// - FramePort는 HarnessFramePort(frame)다. 기본 모드 kFail은 부르면(점, 벡터 모두) 테스트를
+//   실패시킨다. 그래서 GOTO가 없는 미션의 모든 사례가 "1a type 미션은 FramePort를 부르지 않는다"(1b
+//   decisions.md 쟁점 12)를 함께 단정한다. GOTO 사례는 kAxis(축 치환)나 kNone(점 값 없음)으로
+//   바꾸거나 tick마다 값을 고르는 hook(점)과 vector_hook(벡터)을 둔다.
+// - 표적: world.targets에 등록한 표적마다 tick마다 stamp_ns = 그 tick의 now_ns인 새 표본을
+//   Snapshot.targets에 넣는다(위치와 flags와 함께). target_hook이 있으면 표본을 바꾸거나 그 tick에
+//   주지 않는다(nullopt). 표본은 한 번 넣으면 지우지 않는다(노드와 같다). 표적을 등록하지 않은
+//   사례는 Snapshot.targets가 비어 있다.
+// - 모든 step 뒤 속도 불변식을 단정한다: setpoint의 velocity_valid가 true이면 세 성분이 모두
+//   유한하고, 그 tick의 끝 상태가 TRACK_ENTITY 항목이다(1b decisions.md 쟁점 8).
 // - 방어 경로(PX4 v1.17.0에서 나오지 않는 조합과 ack)는 합성 표본과 합성 ack로만 시험한다.
 //   해당 테스트에 그렇게 적는다.
 
@@ -46,10 +52,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <limits>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -197,6 +204,21 @@ inline MissionSpec takeoff_goto_land_mission()
   return m;
 }
 
+// TRACK_ENTITY 항목. offset은 world ENU다. MODE_KEEP.
+inline ItemSpec track_entity_item(
+  const std::string & target_id = "t1", Vec3 offset = Vec3{0.0, 0.0, 5.0}, double radius = 0.5,
+  std::int32_t timeout_s = 10)
+{
+  ItemSpec item;
+  item.type = item_type::kTrackEntity;
+  item.timeout = seconds(timeout_s);
+  item.track_entity.target_id = target_id;
+  item.track_entity.offset = offset;
+  item.track_entity.acceptance_radius_m = radius;
+  item.track_entity.yaw.mode = yaw_mode::kKeep;
+  return item;
+}
+
 // 공중 Offboard 진입의 [GOTO].
 inline MissionSpec air_goto_mission()
 {
@@ -246,12 +268,12 @@ public:
   int calls{0};
 };
 
-// FramePort의 시험 구현. 호출을 센다(const 메서드라 mutable).
+// FramePort의 시험 구현. 점 변환과 벡터 변환의 호출을 따로 센다(const 메서드라 mutable).
 enum class FrameMode : std::uint8_t
 {
-  kFail,  // 부르면 ADD_FAILURE()하고 값 없음(점은 nullopt, 벡터는 NaN)
-  kAxis,  // world ENU -> 로컬 NED 축 치환에 shift를 더한다(원점 이동 없음)
-  kNone,  // 점 변환은 늘 nullopt(기준 무효)
+  kFail,  // 부르면 ADD_FAILURE()하고 nullopt(점, 벡터 모두)
+  kAxis,  // world ENU -> 로컬 NED 축 치환. 점에는 shift를 더한다(원점 이동 없음)
+  kNone,  // 점 변환은 늘 nullopt(기준 무효). 벡터 변환은 기준과 무관해 축 치환 값이 있다
 };
 
 class HarnessFramePort final : public FramePort
@@ -287,15 +309,18 @@ public:
     return std::nullopt;
   }
 
-  Vec3 world_velocity_to_local(const Vec3 & world_enu) const override
+  std::optional<Vec3> world_velocity_to_local(const Vec3 & world_enu) const override
   {
     ++vector_calls;
+    vector_inputs.push_back(PointCall{tick, world_enu});
+    if (vector_hook) {
+      return vector_hook(tick, world_enu);
+    }
     if (mode == FrameMode::kFail && !hook) {
       ADD_FAILURE() << "FramePort::world_velocity_to_local called at tick " << tick;
-      const double nan = std::numeric_limits<double>::quiet_NaN();
-      return Vec3{nan, nan, nan};
+      return std::nullopt;
     }
-    return Vec3{world_enu.y, world_enu.x, -world_enu.z};
+    return axis(world_enu);
   }
 
   // 이 tick의 점 변환 호출 수.
@@ -313,13 +338,32 @@ public:
       [from](const PointCall & c) { return c.tick >= from; }));
   }
 
+  // 이 tick의 벡터 변환 호출 수.
+  int vector_calls_at(std::uint64_t at) const
+  {
+    return static_cast<int>(std::count_if(
+      vector_inputs.begin(), vector_inputs.end(),
+      [at](const PointCall & c) { return c.tick == at; }));
+  }
+
+  // tick이 from 이상인 벡터 변환 호출 수.
+  int vector_calls_from(std::uint64_t from) const
+  {
+    return static_cast<int>(std::count_if(
+      vector_inputs.begin(), vector_inputs.end(),
+      [from](const PointCall & c) { return c.tick >= from; }));
+  }
+
   FrameMode mode{FrameMode::kFail};
   Vec3 shift;
   // 있으면 mode 대신 tick 번호와 입력으로 점 변환 값을 고른다.
   std::function<std::optional<Vec3>(std::uint64_t tick, const Vec3 & world)> hook;
+  // 있으면 mode 대신 tick 번호와 입력으로 벡터 변환 값을 고른다.
+  std::function<std::optional<Vec3>(std::uint64_t tick, const Vec3 & world)> vector_hook;
   std::uint64_t tick{0};  // Harness가 step 직전에 그 tick 번호로 둔다
   mutable std::vector<PointCall> point_calls;
   mutable int vector_calls{0};
+  mutable std::vector<PointCall> vector_inputs;  // 벡터 변환의 tick과 입력
 };
 
 // 가짜 PX4가 보고하는 기체 상태.
@@ -341,6 +385,8 @@ struct World
   std::optional<std::uint64_t> position_timestamp_us;
   bool ekf_ready{true};
   bool signal_lost{true};
+  // 등록한 표적(target_id -> 기본 표본. stamp_ns는 tick마다 그 tick의 now_ns로 바꾼다).
+  std::map<std::string, TargetSample> targets;
 };
 
 // tick 열의 한 칸: 이번 tick에 들어올 vehicle_status 표본(fresh가 false이면 새 표본 없음).
@@ -463,6 +509,15 @@ public:
     flags.offboard_signal_lost = world.signal_lost;
     flags.received_tick = tick_no;
     snapshot.flags = flags;
+    for (const auto & [id, base] : world.targets) {
+      TargetSample sample = base;
+      sample.stamp_ns = now_ns;
+      const std::optional<TargetSample> pushed =
+        target_hook ? target_hook(id, tick_no, sample) : std::optional<TargetSample>(sample);
+      if (pushed.has_value()) {
+        snapshot.targets[id] = *pushed;
+      }
+    }
   }
 
   void push_status(std::optional<std::uint64_t> timestamp_us = std::nullopt)
@@ -528,6 +583,7 @@ public:
     if (out.feedback.has_value()) {
       EXPECT_EQ(out.feedback->stamp_ns, input.now_ns) << "tick " << input.tick;
     }
+    expect_velocity_invariant(out, input.tick);
     record(out);
     ++tick_no;
     now_ns += kTickNs;
@@ -672,6 +728,11 @@ public:
   // Px4ClockPort가 보는 시각 - tick 입력 시각(ns). 노드에서 두 시각은 따로 읽혀 tick마다 0 또는
   // /clock 한 양자만큼 어긋날 수 있다. tick 번호를 받아 그 tick의 값을 돌려준다. 비어 있으면 0.
   std::function<std::int64_t(std::uint64_t)> port_skew;
+  // 표적 표본을 바꾸거나 그 tick에 주지 않는다(nullopt). 인자는 target_id, tick 번호, 기본 표본
+  // (stamp_ns = 그 tick의 now_ns). 비어 있으면 기본 표본을 준다.
+  std::function<std::optional<TargetSample>(
+    const std::string & id, std::uint64_t tick, const TargetSample & base)>
+    target_hook;
   bool auto_samples{true};
   bool auto_px4{true};
   bool auto_offboard_ack{true};
@@ -683,6 +744,24 @@ public:
   CommandResponse disarm_response{CommandResponse::kAccept};
 
 private:
+  // 속도 불변식(1b decisions.md 쟁점 8): 속도가 있으면 세 성분이 모두 유한하고 끝 상태가
+  // TRACK_ENTITY 항목이다.
+  void expect_velocity_invariant(const StepOutput & out, std::uint64_t tick) const
+  {
+    if (!out.setpoint.has_value() || !out.setpoint->velocity_valid) {
+      return;
+    }
+    const Vec3 & v = out.setpoint->velocity;
+    EXPECT_TRUE(std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z))
+      << "non-finite velocity at tick " << tick;
+    const RunnerView v_after = runner_.view();
+    EXPECT_EQ(v_after.stage, Stage::kItem) << "velocity outside an item at tick " << tick;
+    if (v_after.stage == Stage::kItem) {
+      EXPECT_EQ(runner_.mission().items.at(v_after.item_index).type, item_type::kTrackEntity)
+        << "velocity outside TRACK_ENTITY at tick " << tick;
+    }
+  }
+
   void record(const StepOutput & out)
   {
     outputs_.push_back(out);

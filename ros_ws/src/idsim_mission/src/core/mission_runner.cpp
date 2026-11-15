@@ -21,18 +21,20 @@
 // 4. 출력 마무리(timestamp, setpoint, feedback)
 // 정리 중의 순서는 따로 있다(쟁점 3 M6): 상태 끊김 -> 공중 DISARMED -> 정리할 것 없음 -> 정리의
 // 상한 -> 그 분기의 실행. step_cleanup 머리 주석.
-// 공중 Offboard 진입(첫 항목 LOITER, GOTO. 1b decisions.md 쟁점 7)의 순서: P4는 감시 표 -> 먼저 본
-// OFFBOARD -> offboard_signal_timeout -> 신호 확인, P5는 감시 표 -> 거부 ack -> 첫 OFFBOARD 표본의
-// 관측 -> mode_confirm_timeout -> OFFBOARD 3회 확인이고 취소는 그 뒤다. 첫 OFFBOARD 표본의 관측은
-// 종료를 정하지 않으므로 같은 tick의 mode_confirm_timeout이 그대로 끝낸다(확인과 만료가 같은
-// tick이면 만료가 이긴다). 마지막 setpoint 항목 뒤의 공중 종료 단계(1b
+// 공중 Offboard 진입(첫 항목 LOITER, GOTO, TRACK_ENTITY. 1b decisions.md 쟁점 7)의 순서: P4는
+// 감시 표 -> 먼저 본 OFFBOARD -> offboard_signal_timeout -> 신호 확인, P5는 감시 표 -> 거부 ack
+// -> 첫 OFFBOARD 표본의 관측 -> mode_confirm_timeout -> OFFBOARD 3회 확인이고 취소는 그 뒤다. 첫
+// OFFBOARD 표본의 관측은 종료를 정하지 않으므로 같은 tick의 mode_confirm_timeout이 그대로
+// 끝낸다(확인과 만료가 같은 tick이면 만료가 이긴다). 마지막 setpoint 항목 뒤의 공중 종료 단계(1b
 // decisions.md 쟁점 10)는 같은 정리 단계 안의 원인 kMissionEnd이고 순서는 step_mission_end 머리
 // 주석에 있다.
 
 #include "idsim_mission/core/mission_runner.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -56,22 +58,25 @@ struct MissionRunner::Tick
     position = snapshot.position.has_value() ? &*snapshot.position : nullptr;
     flags = snapshot.flags.has_value() ? &*snapshot.flags : nullptr;
     ack = snapshot.ack.has_value() ? &*snapshot.ack : nullptr;
+    targets = &snapshot.targets;
   }
 
   const TickInput & input;
   Px4ClockPort & clock;
-  const FramePort & frame;  // GOTO 항목만 부른다
+  const FramePort & frame;  // GOTO, TRACK_ENTITY 항목만 부른다
   StepOutput & out;
   const StatusSample * status{nullptr};
   const LandSample * land{nullptr};
   const PositionSample * position{nullptr};
   const FlagsSample * flags{nullptr};
   const AckSample * ack{nullptr};
+  const std::map<std::string, TargetSample> * targets{nullptr};  // TRACK_ENTITY 항목만 본다
   bool stamp_queried{false};
   bool stamp_ok{false};
   std::uint64_t stamp_us{0};
-  // GOTO 항목이 이 tick에 얻은 점 변환 값(로컬 NED. 값이 없으면 nullopt). 완료 판정과 feedback
-  // 거리가 쓴다. GOTO 완료 tick에 다음 항목도 GOTO이면 새 항목의 값으로 덮는다.
+  // GOTO, TRACK_ENTITY 항목이 이 tick에 얻은 점 변환 값(로컬 NED. 값이 없으면 nullopt). 완료
+  // 판정과 feedback 거리가 쓴다. 완료 tick에 다음 항목도 GOTO나 TRACK_ENTITY이면 새 항목의 값으로
+  // 덮는다.
   std::optional<Vec3> goto_local;
   // 전이 관측(observer가 있을 때만 쓴다). checkpoint는 마지막으로 닫은 기록의 to(처음은 tick 시작).
   std::vector<TransitionEdge> edges;
@@ -89,7 +94,8 @@ bool position_finite(const PositionSample & p)
   return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
 }
 
-// GOTO 도달 판정과 feedback 거리에 쓰는 표본인가(수평과 수직 추정이 유효하고 값이 유한).
+// GOTO, TRACK_ENTITY 도달 판정과 feedback 거리에 쓰는 표본인가(수평과 수직 추정이 유효하고 값이
+// 유한).
 bool position_usable(const PositionSample & p)
 {
   return p.xy_valid && p.z_valid && position_finite(p);
@@ -137,11 +143,11 @@ MissionRunner::MissionRunner(
   MissionSpec mission, Config config, std::int64_t accept_ns, TransitionObserver * observer)
 : accept_ns_(accept_ns), observer_(observer), mission_(std::move(mission)), config_(config)
 {
-  MissionCheck check = validate_mission_runnable(mission_);
+  MissionCheck check = validate_mission_contract(mission_);
   mission_valid_ = check.valid;
   invalid_detail_ = std::move(check.detail);
   if (mission_valid_) {
-    // validate_mission_runnable이 첫 항목을 진입 방식이 있는 type으로 둔다.
+    // 계약 valid 미션의 첫 항목 type은 모두 진입 방식이 있다. 아래 갈래는 방어다.
     const std::optional<EntryPlan> plan = entry_plan(mission_.items.front().type);
     mission_valid_ = plan.has_value();
     entry_plan_ = plan.value_or(EntryPlan::kGroundArm);
@@ -192,7 +198,7 @@ void MissionRunner::step_tick(Tick & t)
     terminate(
       Event::kInvalidMission, t,
       aborted(
-        Reason::kInternal, "mission did not pass validate_mission_runnable: " + invalid_detail_));
+        Reason::kInternal, "mission did not pass validate_mission_contract: " + invalid_detail_));
     if (t.input.cancel_requested) {
       note_ignored_cancel(t);
     }
@@ -630,7 +636,7 @@ void MissionRunner::prepare_arm_before_armed(Tick & t)
   resend_due(t);
 }
 
-// ---- 공중 Offboard 진입(첫 항목 LOITER, GOTO. 1b decisions.md 쟁점 7) ----
+// ---- 공중 Offboard 진입(첫 항목 LOITER, GOTO, TRACK_ENTITY. 1b decisions.md 쟁점 7) ----
 
 namespace
 {
@@ -641,9 +647,10 @@ void MissionRunner::start_air_signal(Event event, Tick & t)
 {
   // P3: 이 tick의 위치와 heading을 진입 setpoint로 발행을 시작하고 감시 구간을 연다. 진입
   // setpoint는 OFFBOARD 3회 확인까지 바꾸지 않는다. 첫 항목 LOITER는 그대로 쓰고(LOITER는 직전
-  // setpoint를 유지한다) 첫 항목 GOTO는 시작 tick에 그 점으로 바꾼다(변환 값이 있으면). 이 tick은
-  // 감시 표를 보지 않는다(P0, P1이 같은 표본으로 순위 2-8에 걸리지 않음을 봤다). 그래서 이 tick의
-  // Px4Timestamp 실패는 finalize의 STAMP_UNAVAILABLE이고 다음 tick부터는 감시 표 순위 1이다.
+  // setpoint를 유지한다) 첫 항목 GOTO와 TRACK_ENTITY는 항목 시작 tick에 그 점으로 바꾼다(변환
+  // 값이 있으면). 이 tick은 감시 표를 보지 않는다(P0, P1이 같은 표본으로 순위 2-8에 걸리지 않음을
+  // 봤다). 그래서 이 tick의 Px4Timestamp 실패는 finalize의 STAMP_UNAVAILABLE이고 다음 tick부터는
+  // 감시 표 순위 1이다.
   const PositionSample * const p = t.position;
   const StatusSample * const s = t.status;
   if (p == nullptr || s == nullptr) {
@@ -786,8 +793,8 @@ void MissionRunner::air_offboard_seen_checks(Tick & t)
     return;
   }
   if (counter_.count() >= kConfirmSamples) {
-    // 첫 항목을 시작한다(LOITER는 진입 setpoint를 유지하고 GOTO는 그 점으로 바꾼다). 감시 구간에서
-    // 넘어온 첫 항목이라 이력을 지우지 않는다(start_item).
+    // 첫 항목을 시작한다(LOITER는 진입 setpoint를 유지하고 GOTO와 TRACK_ENTITY는 그 점으로
+    // 바꾼다). 감시 구간에서 넘어온 첫 항목이라 이력을 지우지 않는다(start_item).
     start_item(Event::kOffboardConfirmed, t, 0);
   }
 }
@@ -889,7 +896,7 @@ void MissionRunner::start_item(Event event, Tick & t, std::uint32_t index)
   item_start_tick_ = t.input.tick;
   if (index != 0 || !monitor_active_) {
     // 감시 구간에서 넘어온 첫 항목(지상 arm 진입: P6 -> TAKEOFF, 공중 Offboard 진입: P5 ->
-    // LOITER나 GOTO)은 그 구간과 한 이력 구간이다. 모드 명령 진입의 첫 항목은 지운다.
+    // LOITER, GOTO, TRACK_ENTITY)은 그 구간과 한 이력 구간이다. 모드 명령 진입의 첫 항목은 지운다.
     failsafe_history_ = false;
     history_after_tick_ = t.input.tick;
   }
@@ -909,6 +916,14 @@ void MissionRunner::start_item(Event event, Tick & t, std::uint32_t index)
     goto_transformed_ = false;
     goto_transform(t);
   }
+  if (current_item().type == item_type::kTrackEntity) {
+    // GOTO와 같다. 시작 tick에는 TARGET_LOST, ITEM_TIMEOUT, 완료를 보지 않는다(다음 tick부터).
+    const YawSpec & yaw = current_item().track_entity.yaw;
+    goto_yaw_ned_ = yaw.mode == yaw_mode::kFixed ? enu_to_ned_yaw(yaw.yaw_rad) : setpoint_.yaw_ned;
+    goto_counter_.reset();
+    goto_transformed_ = false;
+    track_transform(t, track_target(t));
+  }
 }
 
 void MissionRunner::goto_transform(Tick & t)
@@ -925,8 +940,61 @@ void MissionRunner::goto_transform(Tick & t)
   goto_transformed_ = true;
 }
 
+MissionRunner::TrackTarget MissionRunner::track_target(const Tick & t) const
+{
+  // 유효 표본은 이 goal에서 받은 것이다(앞 항목 동안 받은 것도 센다). 나이가 음수이면 0으로 본다.
+  // 소실은 두 형태 모두 초과(>)다(1b decisions.md 쟁점 8).
+  TrackTarget target;
+  const Timeouts & timeouts = config_.timeouts;
+  const auto it = t.targets->find(current_item().track_entity.target_id);
+  if (it == t.targets->end()) {
+    target.lost = t.input.now_ns - item_start_ns_ > timeouts.target_timeout_ns;
+    return target;
+  }
+  target.sample = &it->second;
+  const std::int64_t age = std::max<std::int64_t>(0, t.input.now_ns - target.sample->stamp_ns);
+  target.fresh = age <= timeouts.target_fresh_age_ns;
+  target.lost = age > timeouts.target_timeout_ns;
+  return target;
+}
+
+void MissionRunner::track_transform(Tick & t, const TrackTarget & target)
+{
+  // 표본이 없거나 점 변환 값이 없는 tick은 위치와 yaw를 그대로 두고 속도를 싣지 않는다(벡터 변환을
+  // 부르지 않는다). 점 변환 값이 있으면 setpoint를 그 점으로 바꾸고, 표본이 신선하고 속도가
+  // 유효하면 벡터 변환 값(세 성분을 통째로)을 feedforward로 싣는다. 벡터 변환이 값 없음이면 속도만
+  // 싣지 않는다(1b decisions.md 쟁점 8).
+  t.goto_local.reset();
+  setpoint_.velocity_valid = false;
+  setpoint_.velocity = Vec3{};
+  if (target.sample == nullptr) {
+    return;
+  }
+  const Vec3 & offset = current_item().track_entity.offset;
+  const Vec3 & p = target.sample->position;
+  t.goto_local = t.frame.world_to_local(Vec3{p.x + offset.x, p.y + offset.y, p.z + offset.z});
+  if (!t.goto_local.has_value()) {
+    return;
+  }
+  const Vec3 & local = *t.goto_local;
+  setpoint_ =
+    SetpointOut{SetpointKind::kTarget, local.x, local.y, local.z, goto_yaw_ned_, false, Vec3{}};
+  goto_transformed_ = true;
+  if (target.fresh && target.sample->velocity_valid) {
+    const std::optional<Vec3> v = t.frame.world_velocity_to_local(target.sample->velocity);
+    if (v.has_value()) {
+      setpoint_.velocity_valid = true;
+      setpoint_.velocity = *v;
+    }
+  }
+}
+
 void MissionRunner::complete_item(Event event, Tick & t)
 {
+  // 속도는 끝 상태가 TRACK_ENTITY 항목인 tick에만 나간다(1b decisions.md 쟁점 8). 다음 항목이
+  // TRACK_ENTITY이면 그 시작에서 다시 싣는다.
+  setpoint_.velocity_valid = false;
+  setpoint_.velocity = Vec3{};
   ++items_completed_;
   const std::uint32_t next = item_index_ + 1;
   if (next >= mission_.items.size()) {
@@ -951,15 +1019,18 @@ void MissionRunner::step_item(Tick & t)
 
 void MissionRunner::step_setpoint_item(Tick & t)
 {
-  // 감시 표를 먼저 본다(같은 tick이면 감시 표의 행이 ITEM_TIMEOUT과 완료를 이긴다). 그 뒤는
-  // ITEM_TIMEOUT -> 완료다. 셋의 조건은 상태 key를 바꾸지 않는 식이라 먼저 계산해 겹침 칸에
-  // 싣는다(GOTO의 점 변환과 완료 계수도 여기서 한다. 감시 표로 끝나는 tick에도 변환은 1회 불린다).
+  // 감시 표를 먼저 본다(같은 tick이면 감시 표의 행이 TARGET_LOST, ITEM_TIMEOUT, 완료를 이긴다). 그
+  // 뒤는 TARGET_LOST(TRACK_ENTITY만) -> ITEM_TIMEOUT -> 완료다. 조건은 상태 key를 바꾸지 않는
+  // 식이라 먼저 계산해 겹침 칸에 싣는다(GOTO, TRACK_ENTITY의 변환과 완료 계수도 여기서 한다. 감시
+  // 표로 끝나는 tick에도 변환은 1회 불린다).
   const ItemSpec & item = current_item();
   const bool timed_out = elapsed(t, item_start_ns_) >= item.timeout.to_ns();
   bool completed = false;
+  bool lost = false;
+  bool track_has_sample = false;
   Event completion = Event::kLoiterElapsed;
   if (item.type == item_type::kTakeoff) {
-    // validate_mission_runnable이 부르는 계약 순서 규칙이 TAKEOFF를 첫 항목에만 두므로
+    // runner가 부르는 validate_mission_contract의 순서 규칙이 TAKEOFF를 첫 항목에만 두므로
     // takeoff_target_z_는 이 항목의 목표다.
     const PositionSample * const p = t.position;
     completed = p != nullptr && p->z_valid && std::isfinite(p->z) &&
@@ -982,7 +1053,25 @@ void MissionRunner::step_setpoint_item(Tick & t)
     }
     completed = goto_counter_.count() >= kConfirmSamples;
     completion = Event::kGotoReached;
+  } else if (item.type == item_type::kTrackEntity) {
+    // GOTO와 같고, 그 tick의 표적 표본이 신선하지 않으면 완료 계수를 0으로 되돌린다. 신선한 표본의
+    // 나이는 target_fresh_age 이하라 core/config.hpp의 전제로 소실과 완료는 함께 참이 아니다.
+    const TrackTarget target = track_target(t);
+    track_transform(t, target);
+    if (!target.fresh || !t.goto_local.has_value()) {
+      goto_counter_.reset();
+    } else if (t.position != nullptr) {
+      const PositionSample & p = *t.position;
+      goto_counter_.observe(
+        p.timestamp_us, position_usable(p) &&
+                          distance_to(p, *t.goto_local) < item.track_entity.acceptance_radius_m);
+    }
+    completed = goto_counter_.count() >= kConfirmSamples;
+    completion = Event::kTrackEntityReached;
+    lost = target.lost;
+    track_has_sample = target.sample != nullptr;
   }
+  // later는 kAllEvents 순서다.
   std::vector<Event> later;
   if (observer_ != nullptr) {
     if (timed_out) {
@@ -991,16 +1080,32 @@ void MissionRunner::step_setpoint_item(Tick & t)
     if (completed) {
       later.push_back(completion);
     }
+    if (lost) {
+      later.push_back(Event::kTargetLost);
+    }
   }
   if (monitor_flight(t, item_label(), later)) {
+    return;
+  }
+  if (lost) {
+    if (timed_out) {
+      tag(Event::kTargetLost, t, {Event::kItemTimeout});
+    }
+    begin_cleanup(
+      Event::kTargetLost, t, CleanupCause::kTargetLost, Reason::kTargetLost,
+      item_label() + " target '" + item.track_entity.target_id + "' lost: " +
+        (track_has_sample ? "last valid sample older than target_timeout"
+                          : "no valid sample since item start"));
     return;
   }
   if (timed_out) {
     if (completed) {
       tag(Event::kItemTimeout, t, {completion});
     }
-    // GOTO가 항목 시작부터 점 변환 값을 한 번도 얻지 못했으면 detail에 적는다(앞부분은 같다).
-    const bool no_transform = item.type == item_type::kGoTo && !goto_transformed_;
+    // GOTO, TRACK_ENTITY가 항목 시작부터 점 변환 값을 한 번도 얻지 못했으면(TRACK_ENTITY에서 표본이
+    // 없어 변환을 부르지 않은 경우 포함) detail에 적는다(앞부분은 같다).
+    const bool no_transform =
+      (item.type == item_type::kGoTo || item.type == item_type::kTrackEntity) && !goto_transformed_;
     begin_cleanup(
       Event::kItemTimeout, t, CleanupCause::kItemTimeout, Reason::kItemTimeout,
       item_label() + " timeout" + (no_transform ? " (no frame transform since item start)" : ""));
@@ -1151,6 +1256,9 @@ void MissionRunner::begin_cleanup(
   Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail)
 {
   tag(event, t);
+  // 정리와 종료 단계의 setpoint에는 속도가 없다(1b decisions.md 쟁점 8).
+  setpoint_.velocity_valid = false;
+  setpoint_.velocity = Vec3{};
   // 분기나 단계가 바뀌는 tick에 이전 명령의 재전송을 지운다(arm 재전송은 이 tick에 멈춘다).
   t.out.commands.clear();
   clear_pending();
@@ -1776,8 +1884,8 @@ void MissionRunner::finish(Event event, Tick & t, Outcome outcome, const std::st
     return;
   }
   if (cause_ != CleanupCause::kCancel) {
-    // ITEM_TIMEOUT, PREPARING 실패, RTL 실패: reason은 원래 것을 유지하고 정리 결과는 detail에만
-    // 적는다.
+    // ITEM_TIMEOUT, TARGET_LOST, PREPARING 실패, RTL 실패: reason은 원래 것을 유지하고 정리 결과는
+    // detail에만 적는다.
     terminate(event, t, aborted(cleanup_reason_, cleanup_detail_ + "; cleanup: " + what));
     return;
   }
@@ -1868,9 +1976,11 @@ Feedback MissionRunner::make_feedback(const Tick & t) const
       f.distance_remaining_m = std::abs(p->z - takeoff_target_z_);
     }
   }
+  const bool point_item =
+    current_item().type == item_type::kGoTo || current_item().type == item_type::kTrackEntity;
   if (
-    stage_ == Stage::kItem && current_item().type == item_type::kGoTo && t.goto_local.has_value() &&
-    t.position != nullptr && position_usable(*t.position)) {
+    stage_ == Stage::kItem && point_item && t.goto_local.has_value() && t.position != nullptr &&
+    position_usable(*t.position)) {
     f.distance_valid = true;
     f.distance_remaining_m = distance_to(*t.position, *t.goto_local);
   }

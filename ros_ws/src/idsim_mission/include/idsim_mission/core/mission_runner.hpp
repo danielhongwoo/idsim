@@ -19,8 +19,8 @@
 // 쓰는 법(노드, P3d)
 // - screen_goal(mission_validation.hpp)을 통과한 goal마다 MissionRunner를 하나 만든다.
 // - 20 Hz timer tick마다 step(TickInput, Snapshot, Px4ClockPort, FramePort)를 한 번 부른다. 입력과
-//   출력의 뜻은 snapshot.hpp 머리 주석에 있다. FramePort는 GOTO 항목만 부른다(1a type 미션은 부르지
-//   않는다).
+//   출력의 뜻은 snapshot.hpp 머리 주석에 있다. FramePort는 GOTO와 TRACK_ENTITY 항목만 부른다(1a
+//   type 미션은 부르지 않는다). Snapshot.targets는 TRACK_ENTITY 항목만 본다.
 // - 출력의 setpoint가 있으면 그 tick에 offboard_control_mode와 trajectory_setpoint를 발행하고,
 //   commands를 순서대로 보내고, feedback이 있으면 publish_feedback, termination이 있으면 그 값으로
 //   goal을 끝내고 종료 사건을 낸다(termination.hpp). termination은 정확히 한 번 나온다. 그 뒤의
@@ -108,7 +108,7 @@ struct RunnerView
 class MissionRunner
 {
 public:
-  // mission은 validate_mission_runnable을 통과한 것이어야 한다. 통과하지 않으면 첫 step에서
+  // mission은 validate_mission_contract를 통과한 것이어야 한다. 통과하지 않으면 첫 step에서
   // INTERNAL로 끝낸다. accept_ns는 goal 접수 ROS 시각(ready_timeout의 기준). observer가 있으면
   // step마다 그 tick의 전이 기록을 넘긴다(transition.hpp. 테스트가 쓴다). 없으면 기록하지 않고
   // 동작은 같다.
@@ -230,6 +230,17 @@ private:
   void step_setpoint_item(Tick & t);
   // GOTO 항목의 점 변환 1회(항목 시작 tick과 그 뒤 매 tick). 1b decisions.md 쟁점 8.
   void goto_transform(Tick & t);
+  // TRACK_ENTITY 항목의 그 tick 표적 판정(표본, 신선, 소실). 1b decisions.md 쟁점 8.
+  struct TrackTarget
+  {
+    const TargetSample * sample{nullptr};  // 이 goal에서 받은 최신 유효 표본(없으면 nullptr)
+    bool fresh{false};
+    bool lost{false};
+  };
+  TrackTarget track_target(const Tick & t) const;
+  // TRACK_ENTITY 항목의 setpoint 계산(항목 시작 tick과 그 뒤 매 tick). 표본이 있으면 표적 위치 +
+  // offset을 점 변환 1회, 그 값이 있고 표본이 신선하고 속도가 유효하면 속도를 벡터 변환 1회.
+  void track_transform(Tick & t, const TrackTarget & target);
   void step_mode_item(Tick & t, const ModeItemSpec & spec);
   void mode_item_timeout(Tick & t, const ModeItemSpec & spec, bool landed);
   void begin_cleanup(Event event, Tick & t, CleanupCause cause, Reason reason, std::string detail);
@@ -297,7 +308,7 @@ private:
   std::int64_t item_start_ns_{0};
   std::uint64_t item_start_tick_{0};
   double takeoff_target_z_{0.0};
-  double goto_yaw_ned_{0.0};         // GOTO 항목 시작에 정한 setpoint yaw
+  double goto_yaw_ned_{0.0};         // GOTO, TRACK_ENTITY 항목 시작에 정한 setpoint yaw
   std::int64_t signal_start_ns_{0};  // P3 발행 시작
   std::uint64_t signal_start_tick_{0};
   std::int64_t step_start_ns_{0};  // P5, P6 시작(ack 대기는 P5의 것을 그대로 쓴다)
@@ -315,7 +326,8 @@ private:
   std::uint64_t history_after_tick_{0};
   std::optional<StatusSample> trusted_status_;  // 감시 구간에서 판정에 쓰는 최신 vehicle_status
   SampleCounter counter_;                       // OFFBOARD, ARMED, AUTO_LOITER 확인
-  SampleCounter goto_counter_;  // GOTO 완료(서로 다른 위치 표본 3개 연속. timestamp로 가른다)
+  // GOTO, TRACK_ENTITY 완료(서로 다른 위치 표본 3개 연속. timestamp로 가른다)
+  SampleCounter goto_counter_;
   // 종료 단계의 지상 DISARMED 계수(대비책 disarm 전. 뒤는 disarm_confirm_. 쟁점 10, 쟁점 11)
   SampleCounter ground_disarm_counter_;
   LandedArmedFallback ground_wait_fallback_;  // 종료 단계 지상 대기의 대비책 disarm
@@ -334,7 +346,7 @@ private:
   std::uint32_t publish_count_{0};
   bool mission_valid_{false};
   EntryPlan entry_plan_{EntryPlan::kGroundArm};  // 첫 항목 type에서 정한 진입 방식
-  std::string invalid_detail_;  // mission_valid_가 false일 때 validate_mission_runnable의 detail
+  std::string invalid_detail_;  // mission_valid_가 false일 때 validate_mission_contract의 detail
   Stage stage_{Stage::kPreparing};
   PrepStep prep_{PrepStep::kWaitReady};
   bool acted_{false};  // 발행이나 명령을 한 번이라도 했는가
@@ -348,8 +360,9 @@ private:
   bool monitor_active_{false};
   bool landed_false_seen_{false};
   bool hold_failed_{false};
-  bool hold_observed_{false};     // 정리 중 AUTO_LOITER 표본을 본 적이 있다
-  bool goto_transformed_{false};  // 이 GOTO 항목에서 점 변환 값을 한 번이라도 얻었다
+  bool hold_observed_{false};  // 정리 중 AUTO_LOITER 표본을 본 적이 있다
+  // 이 GOTO, TRACK_ENTITY 항목에서 점 변환 값을 한 번이라도 얻었다
+  bool goto_transformed_{false};
   DisarmClass disarm_class_{DisarmClass::kUnknown};
   CleanupCause cause_{CleanupCause::kCancel};
   Reason cleanup_reason_{Reason::kNone};

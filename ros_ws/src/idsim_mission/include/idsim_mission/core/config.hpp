@@ -20,7 +20,9 @@
 // 파라미터가 아니라 어댑터 상수라 여기에 없다.
 //
 // 시간 경계의 규칙: 경과 시간이 값 이상이면(>=) 만료다. 같은 tick에 만료와 확인이 함께 정해지면
-// 만료가 이긴다(decisions.md 쟁점 3 "종료의 충돌 규칙"을 전이에도 같게 적용한다).
+// 만료가 이긴다(decisions.md 쟁점 3 "종료의 충돌 규칙"을 전이에도 같게 적용한다). 예외 둘:
+// target_timeout은 1b decisions.md 쟁점 8의 식대로 초과(>)가 소실이고, target_fresh_age는 표본
+// 나이가 값 이하(<=)이면 신선이다.
 
 #ifndef IDSIM_MISSION__CORE__CONFIG_HPP_
 #define IDSIM_MISSION__CORE__CONFIG_HPP_
@@ -32,9 +34,12 @@ namespace idsim_mission::core
 
 inline constexpr std::int64_t kNsPerSecond = 1000000000LL;
 
-// 전제: 모든 값은 양수여야 한다. runner는 검사하지 않고 runner를 만드는 쪽이 보장한다(노드는
-// configure에서 0 이하를 거부한다). 0 이하에서의 상태기 동작은 정의하지 않는다. 전이 칸 목록
-// (test/transition_cells.tsv)은 이 전제 아래의 표다.
+// 전제: 모든 값은 양수여야 한다. 그리고 target_fresh_age_ns < target_timeout_ns다(1b decisions.md
+// 쟁점 8). runner는 검사하지 않고 runner를 만드는 쪽이 보장한다(노드는 configure에서 0 이하를
+// 거부한다. 두 표적 값의 관계는 노드가 표적 값을 파라미터로 받을 때 configure에서 거부한다). 전제를
+// 어긴 값에서의 상태기 동작은 정의하지 않는다. 전이 칸 목록(test/transition_cells.tsv)은 이 전제
+// 아래의 표다. 칸 목록의 ITEM.TRACK_ENTITY TARGET_LOST ... also_true TRACK_ENTITY_REACHED가 두 표적
+// 값의 관계로 impossible이다.
 struct Timeouts
 {
   // P0과 P2(수신, 식별, EKF gate). goal 접수 시각부터.
@@ -57,6 +62,12 @@ struct Timeouts
   std::int64_t land_disarm_fallback_delay_ns{5 * kNsPerSecond};
   // 확인을 기다리는 명령의 재전송 주기.
   std::int64_t command_resend_period_ns{kNsPerSecond / 2};
+  // TRACK_ENTITY의 TARGET_LOST. 유효 표본이 있으면 now - stamp_ns가, 없으면 항목 시작부터 경과가 이
+  // 값을 넘으면(>) 소실이다.
+  std::int64_t target_timeout_ns{kNsPerSecond};
+  // TRACK_ENTITY 표적 표본의 신선도. 나이(now - stamp_ns, 음수이면 0)가 이 값 이하이면 신선하다.
+  // 신선한 tick에만 속도 feedforward를 싣고 완료 계수를 센다.
+  std::int64_t target_fresh_age_ns{kNsPerSecond / 10};
 };
 
 // "N회 연속" 확인의 N(OFFBOARD, ARMED, AUTO_LOITER, AUTO_LAND, DISARMED). 서로 다른 표본 N개다.

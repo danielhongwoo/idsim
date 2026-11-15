@@ -164,6 +164,7 @@ if(BUILD_TESTING)
     test/test_runner_mission_end.cpp
     test/test_runner_air_entry.cpp
     test/test_runner_goto.cpp
+    test/test_runner_track.cpp
     test/test_transition_coverage.cpp)
   target_link_libraries(test_runner idsim_mission_core)
   target_compile_definitions(test_runner PRIVATE

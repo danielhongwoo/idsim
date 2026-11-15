@@ -188,6 +188,7 @@ std::optional<EntryPlan> entry_plan(std::uint8_t first_item_type)
       return EntryPlan::kModeCommand;
     case item_type::kLoiter:
     case item_type::kGoTo:
+    case item_type::kTrackEntity:
       return EntryPlan::kAirOffboard;
     default:
       return std::nullopt;

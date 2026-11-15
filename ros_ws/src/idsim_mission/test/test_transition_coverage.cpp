@@ -280,6 +280,10 @@ void expect_same_outputs(const Harness & on, const Harness & off)
       EXPECT_EQ(a.setpoint->y, b.setpoint->y) << "tick " << i;
       EXPECT_EQ(a.setpoint->z, b.setpoint->z) << "tick " << i;
       EXPECT_EQ(a.setpoint->yaw_ned, b.setpoint->yaw_ned) << "tick " << i;
+      EXPECT_EQ(a.setpoint->velocity_valid, b.setpoint->velocity_valid) << "tick " << i;
+      EXPECT_EQ(a.setpoint->velocity.x, b.setpoint->velocity.x) << "tick " << i;
+      EXPECT_EQ(a.setpoint->velocity.y, b.setpoint->velocity.y) << "tick " << i;
+      EXPECT_EQ(a.setpoint->velocity.z, b.setpoint->velocity.z) << "tick " << i;
     }
     ASSERT_EQ(a.feedback.has_value(), b.feedback.has_value()) << "tick " << i;
     if (a.feedback.has_value()) {
@@ -321,6 +325,8 @@ enum class Scenario
   kAirEntryOffboardBeforeSetMode,
   kGotoGroundSuccess,
   kGotoAirSuccess,
+  kTrackGroundSuccess,
+  kTrackAirSuccess,
 };
 
 bool expects_overlap(Scenario scenario)
@@ -341,6 +347,8 @@ Reason expected_reason(Scenario scenario)
     case Scenario::kAirEntrySuccess:
     case Scenario::kGotoGroundSuccess:
     case Scenario::kGotoAirSuccess:
+    case Scenario::kTrackGroundSuccess:
+    case Scenario::kTrackAirSuccess:
       return Reason::kNone;
     case Scenario::kRtlRejectedLandPath:
     case Scenario::kMissionEndGroundReentry:
@@ -386,9 +394,31 @@ MissionSpec mission_for(Scenario scenario)
       return takeoff_goto_land_mission();
     case Scenario::kGotoAirSuccess:
       return air_goto_mission();
+    case Scenario::kTrackGroundSuccess: {
+      MissionSpec m;
+      m.mission_id = "track3";
+      m.items = {takeoff_item(), track_entity_item(), land_item()};
+      return m;
+    }
+    case Scenario::kTrackAirSuccess: {
+      MissionSpec m;
+      m.mission_id = "track1";
+      m.items = {track_entity_item()};
+      return m;
+    }
     default:
       return standard_mission();
   }
+}
+
+// 표적 t1: world (10, 20, 0), 속도 world (1, 0, 0). track_entity_item()의 점은 로컬 (20, 10, -5)다.
+void add_default_target(Harness & h)
+{
+  TargetSample s;
+  s.position = Vec3{10.0, 20.0, 0.0};
+  s.velocity_valid = true;
+  s.velocity = Vec3{1.0, 0.0, 0.0};
+  h.world.targets["t1"] = s;
 }
 
 void run_scenario(Harness & h, Scenario scenario)
@@ -511,6 +541,29 @@ void run_scenario(Harness & h, Scenario scenario)
       h.world.x = 20.0;
       h.world.y = 10.0;
       break;
+    case Scenario::kTrackGroundSuccess:
+      // [TAKEOFF, TRACK_ENTITY, LAND]: 표적 점 도달(속도 feedforward), LAND, 착지 뒤 DISARMED.
+      add_default_target(h);
+      h.frame.mode = FrameMode::kAxis;
+      h.drive_to_takeoff();
+      h.world.landed = false;
+      h.world.z = -5.0;
+      h.tick();
+      h.world.x = 20.0;
+      h.world.y = 10.0;
+      h.run_until([&h] { return h.view().land_confirmed; }, 100);
+      h.world.landed = true;
+      h.world.arming = Arming::kDisarmed;
+      break;
+    case Scenario::kTrackAirSuccess:
+      // [TRACK_ENTITY]: 공중 Offboard 진입, 표적 점 도달, 종료 단계의 공중 Hold 확인.
+      add_default_target(h);
+      h.frame.mode = FrameMode::kAxis;
+      h.start_in_air();
+      h.run_until([&h] { return h.view().stage == Stage::kItem; }, 100);
+      h.world.x = 20.0;
+      h.world.y = 10.0;
+      break;
   }
   h.run_until([&h] { return h.runner().done(); }, 600);
   h.tick();
@@ -525,7 +578,7 @@ TEST(TransitionObserver, RecorderDoesNotChangeOutputs)
         Scenario::kRtlSuccess, Scenario::kRtlRejectedLandPath, Scenario::kMissionEndAirHold,
         Scenario::kMissionEndGroundReentry, Scenario::kAirEntrySuccess,
         Scenario::kAirEntryOffboardBeforeSetMode, Scenario::kGotoGroundSuccess,
-        Scenario::kGotoAirSuccess}) {
+        Scenario::kGotoAirSuccess, Scenario::kTrackGroundSuccess, Scenario::kTrackAirSuccess}) {
     SCOPED_TRACE(static_cast<int>(scenario));
     TransitionRecorder * const saved = active_transition_recorder();
     TransitionRecorder local;

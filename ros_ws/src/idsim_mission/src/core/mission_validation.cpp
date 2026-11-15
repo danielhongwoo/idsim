@@ -33,7 +33,7 @@ constexpr std::uint32_t kNanosecPerSecond = 1000000000U;
 // 계약 좌표 상한(m). GOTO position과 TRACK_ENTITY offset의 각 성분 절댓값이 이 값 이하(경계
 // 포함)여야 한다. 1b decisions.md 쟁점 8 "좌표 상한"의 값이다. 올리는 쪽이 호환된다(받던 미션을
 // 계속 받는다).
-constexpr double kMaxMissionCoordinateM = 1e6;
+constexpr double kMaxMissionCoordinateM = 1e5;
 
 bool lower_or_digit(char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); }
 
@@ -145,7 +145,7 @@ std::string check_used(const ItemSpec & item, std::size_t index)
         return field(index, "go_to.position") + " must be finite";
       }
       if (!within_coordinate_bound(s.position)) {
-        return field(index, "go_to.position") + " components must be within [-1e6, 1e6] m";
+        return field(index, "go_to.position") + " components must be within [-1e5, 1e5] m";
       }
       if (!positive_finite(s.acceptance_radius_m)) {
         return field(index, "go_to.acceptance_radius_m") + " must be finite and > 0";
@@ -161,7 +161,7 @@ std::string check_used(const ItemSpec & item, std::size_t index)
         return field(index, "track_entity.offset") + " must be finite and non-zero";
       }
       if (!within_coordinate_bound(s.offset)) {
-        return field(index, "track_entity.offset") + " components must be within [-1e6, 1e6] m";
+        return field(index, "track_entity.offset") + " components must be within [-1e5, 1e5] m";
       }
       if (!positive_finite(s.acceptance_radius_m)) {
         return field(index, "track_entity.acceptance_radius_m") + " must be finite and > 0";
@@ -209,11 +209,6 @@ MissionCheck invalid(std::string detail)
 bool supported_in_1a(std::uint8_t type)
 {
   return type == item_type::kTakeoff || type == item_type::kLoiter || type == item_type::kLand;
-}
-
-bool supported_by_runner(std::uint8_t type)
-{
-  return supported_in_1a(type) || type == item_type::kRtl || type == item_type::kGoTo;
 }
 
 // 계약 + 1a 임시 제한. validate_mission_1a_goal이 쓴다.
@@ -296,26 +291,6 @@ MissionCheck validate_mission_contract(const MissionSpec & mission)
 MissionCheck validate_mission_1a_goal(const MissionSpec & mission)
 {
   return check_1a_limits(mission);
-}
-
-MissionCheck validate_mission_runnable(const MissionSpec & mission)
-{
-  // 계약 + runner가 아직 실행하지 못하는 미션의 제한. 1b decisions.md 쟁점 12의 PR마다 푼다.
-  MissionCheck check = validate_mission_contract(mission);
-  if (!check.valid) {
-    return check;
-  }
-  const std::size_t count = mission.items.size();
-  for (std::size_t i = 0; i < count; ++i) {
-    const std::uint8_t type = mission.items[i].type;
-    if (!supported_by_runner(type)) {
-      return invalid(
-        field(i, "type") + " " + item_type_name(type) +
-        " is not supported by the runner yet (TAKEOFF, GOTO, LOITER, LAND, RTL only)");
-    }
-  }
-  // 첫 항목 type은 모두 진입 방식이 있다(TAKEOFF, GOTO, LOITER, LAND, RTL. rules.hpp entry_plan).
-  return check;
 }
 
 std::optional<Termination> screen_goal(
