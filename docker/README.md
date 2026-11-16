@@ -126,7 +126,7 @@ python3 tools/ci/image_keys.py --explain px4
 - 외부 이미지(`UBUNTU_IMAGE`, `LICHTBLICK_IMAGE`, `LINT_*`)는 multi-arch index digest로 고정한다. 한 줄이 두 플랫폼을 함께 고정하고 docker가 호스트에 맞는 manifest를 고른다. 갱신할 때도 index digest(`docker buildx imagetools inspect <이미지>:<태그>`의 맨 위 `Digest`)를 적는다.
 - Dockerfile 안의 apt 아키텍처는 `dpkg --print-architecture`로 얻는다(ROS, OSRF 저장소 줄).
 
-이미지 key는 플랫폼과 무관하게 이미지마다 하나다. 빌드 호스트는 key 재료가 아니고, 플랫폼별 값은 모든 플랫폼의 값이 재료에 들어간다(arm64 값만 바꿔도 key가 바뀐다. 미러는 어느 플랫폼 값도 key에 들어가지 않는다). 그래서 같은 commit이면 amd64 Linux와 arm64 Mac에서 `tools/ci/image_keys.py`의 결과와 `stack.json`의 이미지 태그가 같다. 레지스트리에서는 한 태그(`<이미지>:<key>`) 아래 플랫폼별 manifest를 묶을 수 있는 구조다.
+이미지 key는 플랫폼과 무관하게 이미지마다 하나다. 빌드 호스트는 key 재료가 아니고, 플랫폼별 값은 모든 플랫폼의 값이 재료에 들어간다(arm64 값만 바꿔도 key가 바뀐다. 미러는 어느 플랫폼 값도 key에 들어가지 않는다). 그래서 같은 commit이면 amd64 Linux와 arm64 Mac에서 `tools/ci/image_keys.py`의 결과와 `stack.json`의 이미지 태그가 같다. key와 태그 체계는 플랫폼별 이미지를 한 태그(`<이미지>:<key>`) 아래 둘 수 있게 되어 있으나, push 경로(`build_images.py --mode push`)에는 index 병합(`docker buildx imagetools create`)과 플랫폼별 존재 판정이 아직 없다. 지금 push는 태그가 있으면 플랫폼을 보지 않고 건너뛰고, `bake --push`는 태그를 그 플랫폼 이미지로 통째로 바꾼다. arm64를 레지스트리에 올리려면 그 둘을 먼저 더한다.
 
 key가 같아도 그 태그에 모든 플랫폼의 이미지가 있는 것은 아니다. GHCR에는 지금 amd64 이미지만 올린다. `--mode pull`은 태그에 이 호스트 플랫폼의 manifest가 있는지 확인하고, 없으면 받지 않고 `--mode load`로 안내하며 실패한다(다른 플랫폼 이미지를 에뮬레이션으로 돌리지 않는다). `pr`과 `push`는 `linux/amd64`에서만 받는다. 로컬의 `idsim/<이미지>:local`이 호스트와 다른 아키텍처이면 `tools/check_host.sh`가 FAIL로 알린다. arm64의 apt 미러는 아래 "apt 미러" 절을 본다.
 

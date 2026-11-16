@@ -62,10 +62,23 @@ else
   fail "PATH의 bash($(command -v bash || echo 없음))가 ${env_bash_major:-?}이다. ${MIN_BASH_MAJOR} 이상이 필요하다. macOS는 brew install bash 뒤 그 bash가 PATH 앞에 오게 한다"
 fi
 
+# (a3) 기본 도구. timeout은 아래 (b)의 docker 데몬 검사가 쓰므로 그보다 먼저 본다. perl은 lint.sh의 문자 검사가 쓴다
+has_timeout=0
+for cmd in git curl sha256sum perl timeout; do
+  if command -v "$cmd" > /dev/null 2>&1; then
+    ok "$cmd 있음"
+    [ "$cmd" = timeout ] && has_timeout=1
+  else
+    fail "$cmd 가 없다"
+  fi
+done
+
 # (b) docker 명령과 데몬 접근
 docker_ok=0
 if ! command -v docker > /dev/null 2>&1; then
   fail "docker 명령이 없다. Docker Engine을 설치하라"
+elif [ "$has_timeout" -eq 0 ]; then
+  fail "timeout 명령이 없어 docker 데몬 접근을 확인하지 못했다(위 (a3) 참조)"
 elif timeout 15 docker info > /dev/null 2>&1; then
   ok "docker 데몬 접근 가능"
   docker_ok=1
@@ -118,15 +131,6 @@ if command -v python3 > /dev/null 2>&1; then
 else
   fail "python3가 없다(3.10 이상 필요)"
 fi
-
-# (f) git, curl, sha256sum
-for cmd in git curl sha256sum; do
-  if command -v "$cmd" > /dev/null 2>&1; then
-    ok "$cmd 있음"
-  else
-    fail "$cmd 가 없다"
-  fi
-done
 
 # (f2) gh. PR 작업에만 필요하다
 if command -v gh > /dev/null 2>&1; then
@@ -220,7 +224,15 @@ if command -v python3 > /dev/null 2>&1; then
       conflict=1
     fi
   done
-  [ "$conflict" -eq 0 ] && [ -n "$agent_port" ] && ok "UDP ${agent_port}(에이전트), ${gcs_port}(GCS) 사용 중이지 않음 (스택 번호 ${k})"
+  [ "$conflict" -eq 0 ] && [ -n "$agent_port" ] && ok "UDP ${agent_port}(에이전트), ${gcs_port}(GCS) 사용 중이지 않음 (스택 번호 ${k}, 이 호스트 쪽)"
+  # 스택은 docker 엔진의 host network에서 bind한다. 엔진 커널이 이 호스트 커널과 다르면(macOS의 Docker VM, 원격 DOCKER_HOST)
+  # 위 검사는 이 호스트 쪽 포트만 본 것이다
+  if [ "$docker_ok" -eq 1 ] && [ -n "$agent_port" ]; then
+    engine_kernel="$(docker info --format '{{.KernelVersion}}' 2> /dev/null || true)"
+    if [ "$engine_kernel" != "$(uname -r)" ]; then
+      warn "docker 엔진이 다른 커널(${engine_kernel:-?})에서 돈다(VM 또는 원격). 포트 검사는 이 호스트 쪽만 확인했고 엔진 쪽에서 쓰이는 포트는 보지 못한다"
+    fi
+  fi
 else
   warn "python3가 없어 포트 충돌을 확인하지 못했다"
 fi
@@ -235,9 +247,18 @@ if [ "$docker_ok" -eq 1 ]; then
   fi
 fi
 
-# (k2) 로컬 이미지의 아키텍처. 호스트와 다른 아키텍처의 이미지는 에뮬레이션으로 돌게 되므로 FAIL로 둔다
+# (k2) 빌드 플랫폼과 로컬 이미지의 아키텍처. 호스트와 다른 아키텍처의 이미지는 에뮬레이션으로 돌게 되므로 FAIL로 둔다
 if [ "$docker_ok" -eq 1 ] && command -v python3 > /dev/null 2>&1; then
+  # build_images.py는 python의 platform.machine()으로 빌드 플랫폼을 정한다. docker 엔진의 아키텍처와 어긋나면
+  # (Rosetta로 도는 x86_64 python, 다른 아키텍처의 원격 DOCKER_HOST) 에뮬레이션 빌드가 되므로 FAIL로 둔다
   host_plat="$(python3 "$IMAGE_KEYS_PY" --print-platform 2> /dev/null || true)"
+  engine_arch="$(docker info --format '{{.Architecture}}' 2> /dev/null || true)"
+  engine_plat="$(python3 "$IMAGE_KEYS_PY" --print-platform --machine "$engine_arch" 2> /dev/null || true)"
+  if [ -n "$host_plat" ] && [ "$host_plat" = "$engine_plat" ]; then
+    ok "빌드 플랫폼 $host_plat (python과 docker 엔진이 같다)"
+  else
+    fail "python의 빌드 플랫폼(${host_plat:-?})과 docker 엔진의 아키텍처(${engine_arch:-?})가 다르다. 네이티브 python3를 쓰거나 같은 아키텍처의 docker 엔진을 쓴다"
+  fi
   for img in ros-base xrce-agent ros-ws sim-base px4; do
     ref="idsim/${img}:local"
     img_plat="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$ref" 2> /dev/null || true)"

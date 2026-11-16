@@ -469,7 +469,7 @@ GUI와 GPU. 개발 중 Gazebo 화면은 `viz` 프로필의 `gz-gui` 서비스로
 
 시간 동기화. 모든 ROS 2 노드는 `use_sim_time:=true`로 Gazebo `/clock`을 따르고, rosbag2 기록도 `--use-sim-time`으로 한다. 그래야 `PX4_SIM_SPEED_FACTOR`로 배속 실행해도 로그와 테스트 타이밍이 흔들리지 않고, 재생 시 `ros2 bag play --clock`이 만드는 시계가 기록 당시 시계와 같아진다. `/clock` 자체는 기록 대상에서 제외한다. 재생기가 만드는 시계와 충돌하기 때문이다.
 
-개발 호스트. x86_64 Linux가 기준 환경이다. CI와 레지스트리(GHCR)의 이미지는 linux/amd64이고 판정 상수도 이 환경에서 보정한다. Apple Silicon Mac(macOS, arm64)은 개발 호스트로 지원한다. 같은 Dockerfile, bake 파일, 생성기, 스크립트를 쓰고 이미지만 linux/arm64로 로컬에서 빌드한다(아키텍처별 사본을 두지 않는다). 이미지 key는 아키텍처와 무관하게 이미지마다 하나이며, 레지스트리의 한 태그 아래 두 아키텍처를 묶을 수 있는 구조다. arm64 이미지는 레지스트리에 올리지 않는다. Mac에서는 컨테이너가 Linux VM 안에서 돌므로 `network_mode: host`는 그 VM의 네트워크를 뜻한다. 스택 안의 통신은 Linux와 같고, Mac 쪽에서 스택의 포트에 닿는지는 컨테이너 런타임에 달렸다. 요구 조건과 제약은 `README.md`의 "호스트 조건"에 둔다.
+개발 호스트. x86_64 Linux가 기준 환경이다. CI와 레지스트리(GHCR)의 이미지는 linux/amd64이고 판정 상수도 이 환경에서 보정한다. Apple Silicon Mac(macOS, arm64)은 개발 호스트로 지원한다. 같은 Dockerfile, bake 파일, 생성기, 스크립트를 쓰고 이미지만 linux/arm64로 로컬에서 빌드한다(아키텍처별 사본을 두지 않는다). 이미지 key는 아키텍처와 무관하게 이미지마다 하나라서 레지스트리의 태그도 이미지마다 하나다. arm64 이미지는 레지스트리에 올리지 않으며, 올리려면 push 경로에 index 병합과 플랫폼별 존재 판정을 먼저 더해야 한다. Mac에서는 컨테이너가 Linux VM 안에서 돌므로 `network_mode: host`는 그 VM의 네트워크를 뜻한다. 스택 안의 통신은 Linux와 같고, Mac 쪽에서 스택의 포트에 닿는지는 컨테이너 런타임에 달렸다. 요구 조건과 제약은 `README.md`의 "호스트 조건"에 둔다.
 
 저장소 레이아웃(초안):
 

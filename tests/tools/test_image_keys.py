@@ -217,7 +217,6 @@ def test_multiline_list_and_trailing_commas_parse():
     assert image_keys.bake_material(blocks, "c")[1] == "bake platforms linux/amd64,linux/arm64"
 
 
-
 # 플랫폼: 같은 Dockerfile과 bake 파일이 linux/amd64(CI, GHCR)와 linux/arm64(로컬)를 빌드하고 key는 하나다.
 
 ARM64 = "linux/arm64"
@@ -310,11 +309,36 @@ def test_build_images_platform_and_mode():
 
 def test_build_images_dry_run_sets_platform_and_same_key(capsys, monkeypatch):
     monkeypatch.delenv("UBUNTU_APT_MIRROR", raising=False)
-    key = _keys(_versions())["xrce-agent"]
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    envs = []
+    real_make_env = build_images.make_env
+    monkeypatch.setattr(build_images, "make_env", lambda *a: envs.append(real_make_env(*a)) or envs[-1])
+    v = _versions()
+    key = _keys(v)["xrce-agent"]
     for platform in (AMD64, ARM64):
         rc = build_images.main(["--mode", "load", "--dry-run", "--platform", platform, "xrce-agent"])
         out = capsys.readouterr().out
         assert rc == 0 and f"--set *.platform={platform}" in out and f"key={key}" in out
+    # bake에 넘기는 미러는 그 플랫폼의 값이다
+    assert envs[0]["UBUNTU_APT_MIRROR"] == v["UBUNTU_APT_MIRROR"]
+    assert envs[1]["UBUNTU_APT_MIRROR"] == v["UBUNTU_APT_MIRROR_ARM64"]
+
+
+def test_build_images_main_pull_wires_platform(capsys, monkeypatch):
+    # main의 pull 경로가 --platform을 pull_images까지 넘기고, 태그에 그 플랫폼이 없으면 실패한다
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    monkeypatch.setattr(build_images, "registry_has", lambda ref, strict=False: (True, "manifest 있음"))
+    monkeypatch.setattr(build_images, "registry_platforms", lambda ref: {AMD64})
+    seen = []
+    real_pull = build_images.pull_images
+    monkeypatch.setattr(build_images, "pull_images",
+                        lambda targets, images, ref, platform, dry_run:
+                        seen.append(platform) or real_pull(targets, images, ref, platform, dry_run,
+                                                           platforms_of=build_images.registry_platforms))
+    assert build_images.main(["--mode", "pull", "--platform", ARM64, "--dry-run", "px4"]) == 1
+    assert seen == [ARM64] and "linux/arm64 이미지가 없다" in capsys.readouterr().out
 
 
 def test_manifest_platforms():
@@ -326,6 +350,30 @@ def test_manifest_platforms():
     assert build_images.manifest_platforms(index) == {AMD64, ARM64}
     single = {"mediaType": "application/vnd.oci.image.manifest.v1+json", "config": {}}
     assert build_images.manifest_platforms(single, lambda: {"os": "linux", "architecture": "amd64"}) == {AMD64}
+    assert build_images.manifest_platforms(single, lambda: {"os": "linux", "architecture": "arm64"}) == {ARM64}
+    # attestation만 있는 index, 플랫폼을 읽지 못한 단일 manifest는 빈 집합이다
+    only_att = {"mediaType": "application/vnd.oci.image.index.v1+json",
+                "manifests": [{"platform": {"os": "unknown", "architecture": "unknown"}}]}
+    assert build_images.manifest_platforms(only_att) == set()
+    assert build_images.manifest_platforms(single, lambda: {}) == set()
+
+
+def test_pull_accepts_single_arm64_manifest_on_arm64(monkeypatch, capsys):
+    class Done:
+        returncode = 0
+    monkeypatch.setattr(build_images, "registry_has", lambda ref, strict=False: (True, "manifest 있음"))
+    calls = []
+    monkeypatch.setattr(build_images.subprocess, "run", lambda cmd, **k: calls.append(cmd) or Done())
+    images = image_keys.load_images()
+    image_keys.compute(images, _versions())
+    rc = build_images.pull_images(["px4"], images, lambda n: f"r/{n}:{images[n].key}", ARM64, False,
+                                  platforms_of=lambda ref: {ARM64})
+    assert rc == 0 and calls[0][:5] == ["docker", "pull", "--quiet", "--platform", ARM64]
+
+
+def test_pull_rejects_tag_with_no_platforms(monkeypatch, capsys):
+    rc, out, calls = _pull(monkeypatch, capsys, AMD64, set())
+    assert rc == 1 and "태그에 있는 플랫폼: 없음" in out and not calls
 
 
 def _pull(monkeypatch, capsys, platform, have):
@@ -357,3 +405,16 @@ def test_pull_passes_platform_to_docker_pull(monkeypatch, capsys):
                                   platforms_of=lambda ref: {AMD64, ARM64})
     assert rc == 0
     assert calls[0][:5] == ["docker", "pull", "--quiet", "--platform", AMD64]
+
+
+def test_dockerfiles_have_no_arch_literals():
+    # CI는 amd64만 빌드하므로 Dockerfile에 아키텍처 literal이 생기면 arm64(로컬)만 조용히 깨진다.
+    # 아키텍처는 dpkg --print-architecture 등 빌드 시점 값으로 얻는다. 주석 줄은 보지 않는다
+    import re
+    pat = re.compile(r"amd64|x86_64|aarch64|arm64")
+    for img in image_keys.load_images().values():
+        path = os.path.join(image_keys.DOCKER_DIR, img.dockerfile)
+        with open(path, encoding="utf-8") as f:
+            bad = [f"{img.dockerfile}:{i}: {line.strip()}" for i, line in enumerate(f, 1)
+                   if not line.lstrip().startswith("#") and pat.search(line)]
+        assert not bad, bad

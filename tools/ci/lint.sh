@@ -64,9 +64,12 @@ check_charset() {
   if [ "${#files[@]}" -eq 0 ]; then result charset PASS-NO-TARGETS "(0 files)"; return 0; fi
   local out rc=0
   # CLAUDE.md의 검사 명령과 같은 패턴. grep -P는 macOS의 grep에 없으므로 Linux와 macOS에 모두 있는 perl로 돈다.
-  # 파일을 UTF-8로 읽고(-CSD) 잘못된 UTF-8은 오류로 멈춘다. 파일마다 줄 번호를 다시 센다(close ARGV)
+  # 파일을 UTF-8로 읽고(-CSD) 잘못된 UTF-8은 오류로 멈춘다. 파일마다 줄 번호를 다시 센다(close ARGV).
+  # perl은 파일을 열지 못하면 경고만 내고 0으로 끝나므로, 경고가 하나라도 있으면 exit 2로 끝나게 한다(grep의 exit 2와 같다)
   out="$(perl -CSD -Mwarnings=FATAL,utf8 -ne \
-    'print "$ARGV:$.:$_" if /[^\x00-\x7F\x{AC00}-\x{D7A3}]/; close ARGV if eof' -- "${files[@]}")" || rc=$?
+    'BEGIN { $SIG{__WARN__} = sub { print STDERR @_; $w = 1 } }
+     print "$ARGV:$.:$_" if /[^\x00-\x7F\x{AC00}-\x{D7A3}]/; close ARGV if eof;
+     END { $? = 2 if $w && !$? }' -- "${files[@]}")" || rc=$?
   if [ "$rc" -eq 0 ] && [ -z "$out" ]; then result charset PASS "(${#files[@]} files)"; return 0; fi
   [ -n "$out" ] && printf '%s\n' "$out"
   result charset FAIL "완성형 한글과 아스키 밖의 문자 (perl exit ${rc})"

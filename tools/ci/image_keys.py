@@ -25,8 +25,10 @@ bake 정규화 규칙. 근거: key는 "같은 key면 같은 이미지"를 뜻해
   - args의 식은 변수 이름 그대로 해시한다. 변수의 값은 6번(versions.env)이 따로 넣는다.
 
 플랫폼. key는 플랫폼과 무관하게 이미지마다 하나다. 같은 commit이면 amd64 Linux와 arm64 Mac에서 같은 key가 나온다.
-key 하나가 그 이미지의 플랫폼별 빌드(SUPPORTED_PLATFORMS) 전체를 가리키고, 레지스트리에서는 한 태그 아래
-플랫폼별 manifest로 묶인다(multi-arch). 그래서
+key 하나가 그 이미지의 플랫폼별 빌드(SUPPORTED_PLATFORMS) 전체를 가리킨다. key와 태그 체계는 플랫폼별 이미지를
+한 태그(<이미지>:<key>) 아래 둘 수 있게 되어 있으나, push 경로(build_images.py)에는 index 병합(imagetools create)과
+플랫폼별 존재 판정이 아직 없다(push는 태그 존재만 보고 건너뛰고, bake --push는 태그를 그 플랫폼 이미지로 통째로 바꾼다).
+arm64를 레지스트리에 올리려면 그 둘을 먼저 더한다. 그래서
   - bake 파일에는 platforms를 두지 않는다. 빌드 플랫폼은 build_images.py가 호스트에서 정해 --set *.platform으로 준다.
     빌드 호스트는 key 재료가 아니다.
   - 플랫폼에 따라 값이 갈리는 versions.env 줄은 PLATFORM_DEPENDENT_NAMES에 등록하고 플랫폼마다
@@ -529,13 +531,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--format", choices=["table", "env", "json"], default="table")
     p.add_argument("--explain", metavar="IMAGE", help="이 이미지의 해시 재료를 출력")
     p.add_argument("--print-platform", action="store_true", help="이 호스트의 빌드 플랫폼만 출력")
+    p.add_argument("--machine", help="--print-platform에서 호스트 대신 쓸 아키텍처 이름 (예: docker info의 Architecture)")
     p.add_argument("--print-value", metavar="NAME",
                    help="이 호스트 플랫폼의 빌드가 쓰는 versions.env 값 하나만 출력 (key는 계산하지 않는다)")
     args = p.parse_args(argv)
 
     versions = read_versions(VERSIONS_FILE)
     if args.print_platform:
-        print(host_platform())
+        print(host_platform(args.machine))
         return 0
     if args.print_value:
         eff = effective_versions(versions, host_platform())
