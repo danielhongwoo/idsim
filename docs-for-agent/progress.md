@@ -13,6 +13,13 @@
 ## 다음 작업
 
 1. Phase 2 착수 전 설계 토론("Phase 2와 3 전에 정할 것"의 첫 항목).
+2. SITL 전용 가정 문서화의 후속. Linux 머신에서 테스트와 함께 한다(생성기 입력 해시, golden, 계약 테스트에 닿을 수 있다).
+   - `VehicleState.msg`의 `altitude_amsl_m`과 `position` 주석에 고도 datum을 적는다(architect).
+   - `config/fleet.yaml`의 `world.origin` 주석("월드 SDF로만 들어간다")을 고치고 key 분류 주석을 단다(devops-engineer).
+   - `config/px4/sitl_params.env`를 SITL 전용, 미션 계약, 현장별 세 묶음 주석으로 나눈다. 값은 바꾸지 않는다(px4-engineer).
+   - `rules.cpp`의 `is_after_disarm_send`가 하는 PX4 timestamp와 노드 ROS 시각의 비교가 `UXRCE_DDS_SYNCT=1`에서 같은 축인지 확인한다(px4-engineer, ros2-engineer).
+   - gz NavSat altitude의 datum을 확인한다(sim-engineer, px4-engineer).
+   - 링크 단절 중 `MissionEvent`(RELIABLE KEEP_LAST 10) 유실 여부를 Phase 2 계약 고정 전에 확인한다(ros2-engineer).
 
 ## 운영 규칙
 
@@ -37,6 +44,8 @@
 
 사용자가 미룬 것.
 
+- 실기체 적용 범위: 다음을 할지와 언제 할지를 사용자가 정한다. field 시간 모드(`/clock` 없는 실행과 `UXRCE_DDS_SYNCT=1`), 배치 경계(어느 토픽이 무선 링크를 넘는지, 기록기와 Collector의 위치), `stack.json` 기체 항목의 식별값과 SITL 배치값 분리, 현장용 DDS 설정, arm64 이미지 빌드, FMU(NuttX)의 식별 설정.
+- `world.origin.alt`의 datum(AMSL 또는 타원체 고)을 정하지 않았다. 아래 고도 제한과 함께 정한다(상하한의 기준 높이가 datum에 달려 있다).
 - 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
 
 문서 정리(정형, 다음 문서 정리 때).

@@ -21,9 +21,9 @@
 
 ## 전체 아키텍처
 
-세 레이어로 나눈다. 아래의 시뮬레이션 레이어(PX4 SITL x N + Gazebo)는 실제 기체를 대신하고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. 운용 서비스는 시뮬레이터를 전혀 모르도록 설계해, 나중에 PX4 SITL 컨테이너를 실기체로 바꿔도 그대로 동작하게 한다.
+세 레이어로 나눈다. 아래의 시뮬레이션 레이어(PX4 SITL x N + Gazebo)는 실제 기체를 대신하고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. 운용 서비스는 시뮬레이터의 토픽과 프로세스에 의존하지 않도록 설계해, PX4 SITL 컨테이너를 실기체로 바꿀 때 고칠 곳이 아래에 적은 SITL 전용 가정으로 좁혀지게 한다.
 
-이 절의 그림은 논리 레이어, 즉 누가 무엇을 주고받는지를 보인다. 어느 컨테이너에서 어떤 프로세스가 도는지와 프로토콜, 포트는 "Docker Compose 실행 환경 설계" 절의 그림이 보인다. 큰 그림은 다음과 같다.
+이 절의 그림은 논리 레이어, 즉 누가 무엇을 주고받는지를 보이고, 환경별 배치 그림 둘은 실행 주체가 어느 장비에 놓이는지만 보인다. 어느 컨테이너에서 어떤 프로세스가 도는지와 프로토콜, 포트는 "Docker Compose 실행 환경 설계" 절의 그림이 보인다. 큰 그림은 다음과 같다.
 
 ```mermaid
 flowchart TB
@@ -36,13 +36,83 @@ flowchart TB
   BUS <-->|"uXRCE-DDS Agent"| SIM
 ```
 
-- 운용 서비스는 ROS 2 버스만 보고, 아래가 시뮬레이터인지 실기체인지 모른다. 버스로 명령과 setpoint를 내리고 상태를 받는다.
+- 운용 서비스는 ROS 2 버스만 보고, Gazebo 토픽을 구독하거나 시뮬레이터 프로세스를 참조하지 않는다. 버스로 명령과 setpoint를 내리고 상태를 받는다.
 - 시뮬레이션 레이어는 실기체로 바꿀 수 있는 자리다. 기체 하나가 PX4 하나다.
 - 외부 클라이언트는 ROS 2를 모르고 Fleet Manager의 API로만 플릿을 본다.
 
+운용 쪽에 남아 있는 SITL 전용 가정으로 확인된 것은 다음 셋이다. 이 밖의 가정이 없다는 것은 확인하지 않았다. 셋이 배치에서 어디에 해당하는지는 이 목록 아래의 환경별 배치 그림 둘이 보인다.
+
+- 시간 출처: 운용 노드는 `/clock`(시뮬레이션 시간)이 있어야 돈다. Executor는 `use_sim_time`이 true가 아니면 configure를 거부하고, /fmu/in에 넣는 timestamp는 ROS 시간 override가 켜진 시계에서만 만들어진다. 생성기도 운용 노드 params에 `use_sim_time: true`를 고정해 넣는다. PX4 쪽의 `UXRCE_DDS_SYNCT=0`도 SITL 전용 값이다(`docs/interface.md` "시간 기준" 절).
+- 고도 기준: world ENU와 기체 로컬 NED 사이의 변환(`idsim_common`의 geo)은 `world.origin`의 고도를 타원체 고로 다루고, PX4의 원점 고도는 AMSL이다. SITL에서는 두 값이 같은 수로 공급되어 차이가 드러나지 않는다(`docs/interface.md` "좌표계" 절). 이 변환은 Gazebo(gz-math)의 좌표 식을 그대로 옮긴 것이라 `idsim_common`에 Gazebo의 식과 이름이 있다. Gazebo 토픽과 include 의존은 없다.
+- 한 호스트 배치: DDS 설정(`config/cyclonedds.xml`)은 multicast를 끄고 peer를 127.0.0.1 하나로 둔다. 운용 노드, Agent, PX4가 한 호스트에 있다는 가정이다. 어느 토픽이 호스트 경계를 넘는지는 정하지 않았다.
+
+환경별 배치. 아래 두 그림은 실행 주체가 어느 장비에 놓이는지를 보인다. 큰 그림이 논리 레이어를, "Docker Compose 실행 환경 설계" 절의 그림이 컨테이너와 프로토콜을 보이는 것과 구분되며, 컨테이너와 프로토콜은 여기에 그리지 않는다. 같은 실행 주체는 두 그림에서 같은 이름과 같은 순서로 둔다. 상자 테두리(subgraph)는 장비 한 대다.
+
+시뮬레이션 환경. 모든 실행 주체가 개발 호스트 한 대에 있다.
+
+```mermaid
+flowchart TB
+  subgraph HOST["개발 호스트 한 대"]
+    FM["Fleet Manager<br/>Phase 3"]
+    OPS["기체 운용 노드 x N<br/>Executor, Collector(Phase 2)"]
+    AG["uXRCE-DDS Agent<br/>모든 기체에 하나"]
+    PX["PX4 SITL x N<br/>비행제어"]
+    GZ["Gazebo<br/>물리, 센서, 시계"]
+    TP["표적 어댑터<br/>표적 생산자"]
+  end
+  FM <-->|"미션, 상태"| OPS
+  OPS <-->|"/fmu 토픽"| AG
+  AG <-->|"토픽 중계"| PX
+  PX <-->|"센서, 구동"| GZ
+  GZ -->|"/clock"| OPS
+  TP -->|"TargetState"| OPS
+```
+
+실기체 환경. 아래 배치는 이 문서가 전제하는 기준 배치이고, 실기체 적용의 범위와 배치는 정해지지 않았다. 전제는 다음과 같다. PX4는 FMU에서 돌고, 기체마다 companion computer가 Agent와 그 기체의 운용 노드를 돌리며, 지상국이 Fleet Manager를 돌리고, 기체와 지상국은 무선 IP 링크로 이어진다.
+
+```mermaid
+flowchart TB
+  subgraph GND["지상국"]
+    FM["Fleet Manager<br/>Phase 3"]
+  end
+  subgraph CC["companion computer<br/>기체마다 하나"]
+    OPS["기체 운용 노드<br/>Executor, Collector(Phase 2)"]
+    AG["uXRCE-DDS Agent<br/>기체마다 하나"]
+  end
+  subgraph FMU["FMU<br/>기체마다 하나"]
+    PX["PX4<br/>비행제어"]
+  end
+  HW["기체와 센서<br/>실물"]
+  TP["추적기<br/>위치 정하지 않음"]
+  FM <-->|"무선 IP 링크"| OPS
+  OPS <-->|"/fmu 토픽"| AG
+  AG <-->|"토픽 중계"| PX
+  PX <-->|"센서, 구동"| HW
+  TP -->|"TargetState"| OPS
+```
+
+위의 가정 셋은 두 그림의 차이에 다음과 같이 해당한다. 시간 출처는 시뮬레이션 그림의 `/clock` 화살표이고 실기체 그림에는 그 화살표가 없다. 고도 기준은 "센서, 구동"의 상대가 Gazebo에서 실제 GNSS로 바뀌는 곳이다. 한 호스트 배치는 상자 테두리가 하나에서 셋으로 나뉘는 것이고, 이 전제에서 무선 링크를 넘는 것은 Fleet Manager와 기체 운용 노드 사이의 계약(`ExecuteMission`, `VehicleState`, `MissionEvent`)이며 `/fmu` 토픽은 companion computer 안에 머문다.
+
+환경별 실체. 역할은 두 환경에서 같고 실체가 다르다. 실기체 환경 열은 위의 전제를 따른다.
+
+| 컴포넌트 | 역할 | 시뮬레이션 환경 | 실기체 환경 |
+| --- | --- | --- | --- |
+| 비행제어(PX4) | 자세와 위치 제어, 모드와 failsafe, arm과 disarm | PX4 SITL 프로세스(기체마다 컨테이너 하나) | FMU의 PX4 펌웨어 |
+| 기체 물리와 센서 | 기체의 운동과 IMU, GNSS 등의 측정값 | Gazebo(모든 기체가 월드 하나를 공유) | 실제 기체와 센서 |
+| uXRCE-DDS Agent | PX4의 uORB 토픽과 ROS 2 토픽 사이의 중계 | 인스턴스 하나가 모든 기체를 UDP로 받는다 | companion computer마다 하나, FMU와 serial 또는 Ethernet |
+| ROS 2 버스(DDS 도메인) | 기체별 네임스페이스의 토픽 전달 | 한 호스트 안의 도메인 하나(peer는 loopback) | 정하지 않음(장비 사이의 발견과 설정) |
+| Mission Executor | 미션을 Offboard setpoint와 명령으로 실행 | 개발 호스트의 `ops-N` 컨테이너 | 그 기체의 companion computer |
+| Telemetry Collector(Phase 2) | PX4 상태를 `VehicleState`로 요약 | Executor와 같은 컨테이너 | 그 기체의 companion computer |
+| Fleet Manager(Phase 3) | 기체 레지스트리, 미션 배분, 외부 API | 개발 호스트 | 지상국 |
+| 표적 생산자 | `TargetState` 발행 | 표적 어댑터(fleet 파일의 궤적 정의를 평가) | 추적기. 위치는 정하지 않음 |
+| 시간 출처 | 판정, 집계, 기록의 시각 기준 | Gazebo 시뮬레이션 시간(`/clock`) | 정하지 않음(실기체에는 `/clock`을 공급하는 주체가 없다) |
+| 정답 pose | 판정이 쓰는 기체의 참값 위치 | `sim-oracle`이 Gazebo에서 읽어 발행 | 없음 |
+| GCS | MAVLink 지상 관제 | idsim이 띄우는 GCS는 없다. 외부 GCS가 GCS 포트로 붙을 수 있다 | 정하지 않음 |
+| 기록(ULog, rosbag2) | 비행 기록과 토픽 기록 | ULog는 px4 컨테이너의 실행 디렉터리, rosbag2는 개발 호스트(Phase 2) | ULog는 FMU의 저장 장치, rosbag2의 위치는 정하지 않음 |
+
 이 원칙은 표적 경로에도 적용한다. Mission Executor는 Gazebo 토픽을 직접 구독하지 않고 `idsim_interfaces`의 `TargetState` 계약(`/targets/<id>/state`)만 구독한다. 시뮬레이션에서는 `idsim_sim`의 표적 어댑터 노드가 fleet 파일(`config/fleet.yaml` 등)의 궤적 정의를 시뮬레이션 시간에 평가해 이 계약으로 발행하고, Gazebo 월드의 Actor는 같은 정의로 생성해 화면에서 확인하는 용도다(Actor의 화면 위치는 참고용이다. Actor는 반복 재생으로만 만들고 `loop`가 false인 표적은 끝에 86400 s의 정지를 붙여 나타내므로, 그 뒤에는 화면의 Actor만 처음 위치로 돌아간다). 표적 어댑터는 Gazebo를 구독하지 않는다. 실기체에서는 같은 토픽을 추적기가 채운다.
 
-운용 서비스 레이어. 큰 그림의 "운용 서비스" 상자를 펼친 것이다. 큰 그림의 "시뮬레이션" 상자 안쪽(PX4, Agent, Gazebo, bridge)은 컨테이너 배치와 같은 모양이라 여기서 다시 그리지 않고 "Docker Compose 실행 환경 설계" 절의 상세 1에만 그린다.
+운용 서비스 레이어. 큰 그림의 "운용 서비스" 상자를 펼친 것이다. 큰 그림의 "시뮬레이션" 상자 안쪽(PX4, Agent, Gazebo, bridge)은 여기서 펼치지 않는다. 그 컨테이너와 프로토콜은 "Docker Compose 실행 환경 설계" 절의 상세 1에만 그리고, 위의 환경별 배치 그림은 장비 경계와 실행 주체의 자리만 보인다.
 
 ```mermaid
 flowchart TB
@@ -185,7 +255,8 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 - QoS: 계약은 reliability와 durability 둘뿐이고 history와 depth는 구현 값이다. 상태 토픽(`VehicleState`, `TargetState`)은 발행 RELIABLE, VOLATILE, 구독 BEST_EFFORT, VOLATILE이다. 구독이 BEST_EFFORT라 라이브와 rosbag2 재생의 어느 발행자와도 맞는다. 사건 토픽(`MissionEvent`)은 발행과 구독 모두 RELIABLE, VOLATILE이다. 그래서 늦게 붙은 구독자는 지난 사건을 받지 않으며, goal을 보내는 쪽은 사건 구독을 action client보다 먼저 같은 노드에서 만든다. DDS deadline과 liveliness로 신선도를 판정하지 않는다(벽시계 기준이다). 상태 토픽의 발행 주기는 계약이 아니다.
 - 변경 절차: 메시지 안에 버전 필드나 버전 상수를 두지 않고, 타입 식별은 type hash가 한다. 필드는 끝에 추가만 하고 기존 필드의 이름, 타입, 의미, 단위를 바꾸지 않는다. 상수 값은 재사용하지 않는다. 예약 필드를 미리 두지 않는다. golden이 다르면 계약 테스트가 실패하고 자동 갱신은 하지 않는다. 계약 변경 PR에는 golden 갱신, `docs/interface.md`, (Phase 3 뒤) proto와 왕복 테스트, 영향받는 replay fixture 갱신이 함께 들어간다.
 - PX4 토픽 이름과 QoS, 좌표 변환, 네임스페이스 검증과 sysid 대조는 `idsim_common`이 유일한 접근 경로이고, 네임스페이스와 sysid 값은 params로 받는다.
-- 시간의 정식 기준은 ROS 시각(`/clock`, 시뮬레이션 시간)이다. 판정, 집계, 기록물 timestamp는 모두 이 시각을 쓴다. PX4 메시지의 timestamp 필드는 PX4 hrt 시각이고, SITL에서 hrt는 Gazebo 시뮬레이션 시간(us)이라 `/clock`, ULog와 같은 축이다(실측한 차이가 +8-20 ms라 큰 상수 오프셋은 없고, `/clock`은 전달 경로만큼 늦다. 두 gz 시계 토픽의 관계는 `docs/interface.md` "시간 기준" 절). 공통 SITL 파라미터 `UXRCE_DDS_SYNCT=0`은 uXRCE-DDS 세션의 시간 보정을 꺼 노드가 넣은 timestamp가 그대로 쓰이게 한다. 노드가 /fmu/in에 넣는 timestamp도 노드 시계의 시뮬레이션 시간(us)이고, 0과 벽시계 값은 보내지 않는다(`idsim_common`의 timestamp 타입이 시계에서만 값을 만든다). 그래도 판정 기준은 여전히 ROS 시각이고, PX4 timestamp는 ULog와의 정렬과 PX4 쪽의 묵은 setpoint 판정에 쓰인다. 실기체에서는 이 파라미터를 되돌리며, 이것은 파라미터 한 줄이라 운용 노드는 그 차이를 모른다. `/clock`의 공급 주체는 `bridge` 서비스의 ros_gz_bridge이며 bridge가 넘기는 토픽은 `/clock` 하나다(표적 상태와 정답 pose는 bridge를 거치지 않는다). 벽시계를 쓰는 곳은 다음뿐이고 어느 것도 판정 기준이 아니다. (1) 환경 스모크 테스트의 timeout(`/clock` 공급 자체가 스모크의 판정 대상이다). (2) Executor의 activate에서 첫 `/clock` 수신 대기(2 s). (3) Executor가 자기 lifecycle 전이를 거는 일회 timer(`/clock`이 오기 전에도 전이를 시도하게 하는 trigger). (4) 통합 테스트 프로세스가 시작 직후 한 번 첫 `/clock` 수신을 기다리는 유예(15 s. 구독이 맺어지는 시간이다). (5) 통합 테스트 대기마다의 hang 방지 상한 `wall_cap`(ROS 시각 timeout x 3 + 10 s)과, 그때 `/clock`이 멈췄는지를 가르는 5 s. (6) CLI `send_mission`이 goal을 보내기 전에 action 서버를 기다리는 상한(`--server-timeout`, 기본 10 s). 넘으면 goal을 보내지 않고 끝나며, 이것은 미션의 결과가 아니다. (3)을 뺀 나머지는 hang 방지이고, (1), (2), (4), (5)는 넘으면 시간 판정이 아니라 시계 이상(`CLOCK_ABSENT`, `CLOCK_STALLED`, `CLOCK_SLOW`)으로 실패한다. 대기를 잘게 끊는 poll 간격(통합 테스트 지원 코드와 `send_mission`의 대기 반복)은 대기의 끝을 정하지 않으므로 이 목록에 넣지 않는다. 통합 테스트는 첫 수신 뒤 대기를 시작할 때 `/clock`이 없으면 즉시, 시각이 뒤로 가면 즉시(`CLOCK_BACKWARD`) 실패한다.
+- fleet 파일의 key는 쓰이는 곳으로 둘로 나뉜다. 운용 쪽에도 쓰이는 것은 `vehicles[].id`(기체 식별의 출처)와 `world.origin`이다. `world.origin`은 월드 SDF의 `<spherical_coordinates>`와 운용 노드(`ops-N`)의 params `world.origin` 양쪽에 들어간다. 나머지(`airframe`, `pose`, `px4_params`, `world.name`, `world.template`, `world.speed_factor`, `targets`, `px4.params_file`, `px4.start`)는 시뮬레이션 전용이다. `targets`는 시뮬레이션의 표적 생산자가 쓰는 궤적 정의이고, `px4_params`와 `px4.params_file`의 값 가운데 미션 계약이 요구하는 것은 `docs/interface.md` "SITL 파라미터" 절의 분류가 가른다. 최상위 `schema`는 파일 형식의 판이고 어느 쪽에도 속하지 않는다. 파일 형식은 이 구분을 key 구조로 드러내지 않는다(`world.origin`이 `world` 아래에 있다).
+- 시간의 정식 기준은 ROS 시각(`/clock`, 시뮬레이션 시간)이다. 판정, 집계, 기록물 timestamp는 모두 이 시각을 쓴다. PX4 메시지의 timestamp 필드는 PX4 hrt 시각이고, SITL에서 hrt는 Gazebo 시뮬레이션 시간(us)이라 `/clock`, ULog와 같은 축이다(실측한 차이가 +8-20 ms라 큰 상수 오프셋은 없고, `/clock`은 전달 경로만큼 늦다. 두 gz 시계 토픽의 관계는 `docs/interface.md` "시간 기준" 절). 공통 SITL 파라미터 `UXRCE_DDS_SYNCT=0`은 uXRCE-DDS 세션의 시간 보정을 꺼 노드가 넣은 timestamp가 그대로 쓰이게 한다. 노드가 /fmu/in에 넣는 timestamp도 노드 시계의 시뮬레이션 시간(us)이고, 0과 벽시계 값은 보내지 않는다(`idsim_common`의 timestamp 타입이 시계에서만 값을 만든다). 그래도 판정 기준은 여전히 ROS 시각이고, PX4 timestamp는 ULog와의 정렬과 PX4 쪽의 묵은 setpoint 판정에 쓰인다. 이 값은 SITL 전용이다. 1로 되돌리면 /fmu/in과 /fmu/out의 timestamp 축이 바뀌므로 노드가 넣는 timestamp의 기준과 노드, Agent의 시계 조건이 함께 바뀌어야 한다(`docs/interface.md` "시간 기준" 절). 이와 별개로 운용 노드는 `/clock` 없이 돌지 않는다(Executor는 `use_sim_time`이 true가 아니면 configure를 거부한다). `/clock`의 공급 주체는 `bridge` 서비스의 ros_gz_bridge이며 bridge가 넘기는 토픽은 `/clock` 하나다(표적 상태와 정답 pose는 bridge를 거치지 않는다). 벽시계를 쓰는 곳은 다음뿐이고 어느 것도 판정 기준이 아니다. (1) 환경 스모크 테스트의 timeout(`/clock` 공급 자체가 스모크의 판정 대상이다). (2) Executor의 activate에서 첫 `/clock` 수신 대기(2 s). (3) Executor가 자기 lifecycle 전이를 거는 일회 timer(`/clock`이 오기 전에도 전이를 시도하게 하는 trigger). (4) 통합 테스트 프로세스가 시작 직후 한 번 첫 `/clock` 수신을 기다리는 유예(15 s. 구독이 맺어지는 시간이다). (5) 통합 테스트 대기마다의 hang 방지 상한 `wall_cap`(ROS 시각 timeout x 3 + 10 s)과, 그때 `/clock`이 멈췄는지를 가르는 5 s. (6) CLI `send_mission`이 goal을 보내기 전에 action 서버를 기다리는 상한(`--server-timeout`, 기본 10 s). 넘으면 goal을 보내지 않고 끝나며, 이것은 미션의 결과가 아니다. (3)을 뺀 나머지는 hang 방지이고, (1), (2), (4), (5)는 넘으면 시간 판정이 아니라 시계 이상(`CLOCK_ABSENT`, `CLOCK_STALLED`, `CLOCK_SLOW`)으로 실패한다. 대기를 잘게 끊는 poll 간격(통합 테스트 지원 코드와 `send_mission`의 대기 반복)은 대기의 끝을 정하지 않으므로 이 목록에 넣지 않는다. 통합 테스트는 첫 수신 뒤 대기를 시작할 때 `/clock`이 없으면 즉시, 시각이 뒤로 가면 즉시(`CLOCK_BACKWARD`) 실패한다.
 - PX4 토픽의 측정 주기는 계약이 아니라 참고값이다. 수신 판정은 "T초 안에 1회 이상"으로 정의하고 주기에 묶지 않는다. 주기 하한 계약은 Fleet 레지스트리 timeout을 정하는 Phase 3에서 필요한 토픽에만 넣는다.
 
 ## Docker Compose 실행 환경 설계
