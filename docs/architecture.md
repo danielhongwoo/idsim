@@ -23,13 +23,13 @@ GPS 없는 비행도 다루지 않는다. GPS는 항상 수신된다고 가정�
 
 ## 전체 아키텍처
 
-세 레이어로 나눈다. 기준은 실기체의 구조다. 맨 아래가 기체 레이어(PX4가 비행제어를 맡는 기체 N대)이고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. ROS 2 버스는 기체마다 하나이고 그 기체 안에 있다. 운용 서비스는 놓이는 곳으로 둘로 나뉜다. 기체 운용 노드(Mission Executor, Telemetry Collector)는 기체 안에서 그 기체의 버스에 붙고, Fleet 서비스(Fleet Manager)는 지상에 있다. 둘 사이가 지상 링크이고, Fleet Manager와 기체 운용 노드는 이 구간에서 계약(`ExecuteMission`, `VehicleState`)만 주고받는다. 지상 링크를 무엇으로 잇는지와 그 밖에 무엇이 이 구간을 건너는지는 정하지 않았다.
+세 레이어로 나눈다. 기준은 실기체의 구조다. 맨 아래가 기체 레이어(PX4가 비행제어를 맡는 기체 N대)이고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. ROS 2 버스는 기체마다 하나이고 그 기체 안에 있다. 운용 서비스는 놓이는 곳으로 둘로 나뉜다. 기체 운용 노드(Mission Executor, Telemetry Collector)는 기체 안에서 그 기체의 버스에 붙고, Fleet 서비스(Fleet Manager)는 지상에 있다. 둘 사이가 지상 링크이고, Fleet Manager와 기체 운용 노드는 이 구간에서 계약(`ExecuteMission`, `VehicleState`)만 주고받는다. 지상 링크는 DDS가 아니라 Zenoh로 잇는다. Zenoh의 구성은 정하지 않았다. 그 밖에 무엇이 이 구간을 건너는지도 정하지 않았다.
 
 시뮬레이션은 이 구조에서 실물이 없는 부분을 대신한다. 이 저장소에서는 PX4 SITL x N과 Gazebo가 기체 레이어를 대신하고, 개발 호스트의 DDS 도메인 하나가 기체마다의 버스와 지상 링크를 함께 대신한다. 그래서 시뮬레이션에서는 Fleet Manager와 모든 기체의 운용 노드가 한 버스에서 만난다. 운용 서비스는 시뮬레이터의 토픽과 프로세스에 의존하지 않도록 설계해, 실기체에 올릴 때 고칠 곳이 아래에 적은 "시뮬레이션이 실기체와 달라지는 곳"으로 좁혀지게 한다.
 
-이 절의 그림 둘은 같은 구조를 실기체 환경과 시뮬레이션 환경으로 보인다. 실행 주체, 그것이 놓이는 장비, 서로 주고받는 것을 보인다. 실기체 환경 그림이 기준이고 이 문서의 큰 그림이다. 시뮬레이션 환경 그림은 큰 그림의 어느 부분을 무엇이 대신하는지로 읽는다. 같은 실행 주체는 두 그림에서 같은 이름과 같은 순서로 둔다. 상자 테두리(subgraph)는 장비 한 대다. 어느 컨테이너에서 어떤 프로세스가 도는지와 프로토콜, 포트는 "Docker Compose 실행 환경 설계" 절의 그림이 보이고 여기에 그리지 않는다.
+이 절의 그림 둘은 같은 구조를 실기체 환경과 시뮬레이션 환경으로 보인다. 실행 주체, 그것이 놓이는 장비, 서로 주고받는 것을 보인다. 실기체 환경 그림이 기준이고 이 문서의 큰 그림이다. 시뮬레이션 환경 그림은 큰 그림의 어느 부분을 무엇이 대신하는지로 읽는다. 같은 실행 주체는 두 그림에서 같은 이름과 같은 순서로 둔다. 상자 테두리(subgraph)는 장비 한 대다. 통신 방식은 이 그림의 화살표에 적고, 컨테이너와 포트, 전송 계층의 세부는 "Docker Compose 실행 환경 설계" 절의 그림이 보인다.
 
-큰 그림(실기체 환경). 아래 배치는 이 문서가 전제하는 기준 배치이고, 실기체 적용의 범위와 배치의 세부는 정해지지 않았다. 전제는 다음과 같다. PX4는 FMU에서 돌고, 기체마다 companion computer가 Agent와 그 기체의 운용 노드를 돌리며, 지상국이 Fleet Manager를 돌리고, 기체와 지상국은 지상 링크로 이어진다. companion computer의 사양과 지상 링크의 종류는 정하지 않았다.
+큰 그림(실기체 환경). 아래 배치는 이 문서가 전제하는 기준 배치이고, 실기체 적용의 범위와 배치의 세부는 정해지지 않았다. 전제는 다음과 같다. PX4는 FMU에서 돌고, 기체마다 companion computer가 Agent와 그 기체의 운용 노드를 돌리며, 지상국이 Fleet Manager를 돌리고, 기체와 지상국은 지상 링크로 이어진다. 지상 링크는 Zenoh로 잇는다. companion computer의 사양과 무선 장비의 종류, Zenoh의 구성은 정하지 않았다.
 
 ```mermaid
 flowchart TB
@@ -46,22 +46,23 @@ flowchart TB
   end
   HW["기체와 센서<br/>실물"]
   TP["표적 추적기<br/>위치 정하지 않음"]
-  EXT <--> FM
-  FM <-->|"지상 링크"| OPS
-  OPS <-->|"/fmu 토픽"| AG
-  AG <-->|"토픽 중계"| PX
+  EXT <-->|"gRPC, WebSocket"| FM
+  FM <-->|"지상 링크: Zenoh"| OPS
+  OPS <-->|"ROS 2 /fmu 토픽"| AG
+  AG <-->|"XRCE-DDS"| PX
   PX <-->|"센서, 구동"| HW
-  TP -->|"TargetState"| OPS
+  TP -->|"TargetState 토픽"| OPS
 ```
 
 - 기체 운용 노드는 그 기체의 ROS 2 버스만 보고, 버스 아래가 실물인지 시뮬레이션인지에 의존하지 않는다. Gazebo 토픽을 구독하거나 시뮬레이터 프로세스를 참조하지 않는다. 버스로 명령과 setpoint를 내리고 상태를 받는다.
 - ROS 2 버스는 기체마다 하나이고 companion computer 안에 있다. 그림에서 기체 운용 노드와 Agent 사이의 "/fmu 토픽"이 그 버스 위의 것이다.
-- Fleet Manager는 기체의 버스에 직접 붙지 않는다. Fleet Manager와 기체 운용 노드 사이에서 지상 링크를 건너는 것은 계약(`ExecuteMission`, `VehicleState`)이다. 기록기(Logger)와 표적 추적기가 놓이는 곳에 따라 다른 토픽(`MissionEvent`, `TargetState`, 기록 대상인 `/fmu` 토픽)도 건널 수 있고, 이것은 정해지지 않았다. 지상 링크의 방식(DDS를 그 구간으로 넓히는지, bridge를 두는지, ROS 2가 아닌 프로토콜인지)도 정하지 않았다.
+- Fleet Manager는 기체의 버스에 직접 붙지 않는다. Fleet Manager와 기체 운용 노드 사이에서 지상 링크를 건너는 것은 계약(`ExecuteMission`, `VehicleState`)이다. 기록기(Logger)와 표적 추적기가 놓이는 곳에 따라 다른 토픽(`MissionEvent`, `TargetState`, 기록 대상인 `/fmu` 토픽)도 건널 수 있고, 이것은 정해지지 않았다. 지상 링크는 Zenoh로 잇고, Zenoh의 구성은 정하지 않았다.
+- 통신 방식: 기체 안은 ROS 2(DDS), PX4와는 Agent를 거친 XRCE-DDS, 지상 링크는 Zenoh, 외부 클라이언트는 gRPC이고 웹 브라우저는 gateway를 거친 WebSocket이다.
 - 맨 아래는 기체 레이어다. 기체 하나가 PX4 하나다.
 - 외부 클라이언트는 ROS 2를 모르고 Fleet Manager의 API로만 기체들을 본다.
 - 기록과 재생(Logger, Replay)이 기체 안과 지상 가운데 어디에 놓이는지는 정하지 않아 그림에 넣지 않는다.
 
-시뮬레이션 환경. 큰 그림에서 실물이 필요한 부분을 대신한 것이다. FMU의 PX4는 PX4 SITL 프로세스가, 기체와 센서는 Gazebo가, 표적 추적기는 표적 어댑터가 대신하고, 장비 셋(지상국, companion computer, FMU)은 개발 호스트 한 대가 대신한다. 기체마다의 ROS 2 버스와 지상 링크는 그 호스트의 DDS 도메인 하나가 대신한다. Fleet Manager, 기체 운용 노드, Agent는 실기체 환경과 같은 것이 돈다.
+시뮬레이션 환경. 큰 그림에서 실물이 필요한 부분을 대신한 것이다. FMU의 PX4는 PX4 SITL 프로세스가, 기체와 센서는 Gazebo가, 표적 추적기는 표적 어댑터가 대신하고, 장비 셋(지상국, companion computer, FMU)은 개발 호스트 한 대가 대신한다. 기체마다의 ROS 2 버스와 지상 링크는 그 호스트의 DDS 도메인 하나가 대신한다. 시뮬레이션에서 Zenoh로 지상 링크를 잇는 구성을 재현하는 것은 아직 없다. Fleet Manager, 기체 운용 노드, Agent는 실기체 환경과 같은 것이 돈다.
 
 ```mermaid
 flowchart TB
@@ -74,20 +75,20 @@ flowchart TB
     GZ["Gazebo<br/>기체와 센서를 대신"]
     TP["표적 어댑터<br/>표적 추적기를 대신"]
   end
-  EXT <--> FM
-  FM <-->|"미션, 상태"| OPS
-  OPS <-->|"/fmu 토픽"| AG
-  AG <-->|"토픽 중계"| PX
+  EXT <-->|"gRPC, WebSocket"| FM
+  FM <-->|"ROS 2, 같은 도메인"| OPS
+  OPS <-->|"ROS 2 /fmu 토픽"| AG
+  AG <-->|"XRCE-DDS"| PX
   PX <-->|"센서, 구동"| GZ
-  GZ -->|"/clock"| OPS
-  TP -->|"TargetState"| OPS
+  GZ -->|"ROS 2 /clock"| OPS
+  TP -->|"TargetState 토픽"| OPS
 ```
 
 시뮬레이션이 실기체와 달라지는 곳으로 확인된 것은 다음 셋이다. 운용 쪽의 코드와 설정이 이 셋에서 시뮬레이션에 맞춰져 있어, 실기체에 올리려면 이 셋을 먼저 풀어야 한다. 이 밖에 없다는 것은 확인하지 않았다.
 
 - 시간 출처: 실기체 그림에는 없고 시뮬레이션 그림에만 있는 `/clock` 화살표다. 실기체에는 `/clock`을 공급하는 주체가 없는데, 운용 노드는 `/clock`(시뮬레이션 시간)이 있어야 돈다. Executor는 `use_sim_time`이 true가 아니면 configure를 거부하고, /fmu/in에 넣는 timestamp는 ROS 시간 override가 켜진 시계에서만 만들어진다. 생성기도 운용 노드 params에 `use_sim_time: true`를 고정해 넣는다. PX4 쪽의 `UXRCE_DDS_SYNCT=0`도 SITL 전용 값이다(`docs/interface.md` "시간 기준" 절).
 - 고도 기준: "센서, 구동"의 상대가 실제 GNSS가 아니라 Gazebo인 곳이다. PX4의 원점 고도는 AMSL이고, world ENU와 기체 로컬 NED 사이의 변환(`idsim_common`의 geo)은 `world.origin`의 고도를 타원체 고로 다룬다. 실제 GNSS에서는 두 값이 다르지만 SITL에서는 같은 수로 공급되어 차이가 드러나지 않는다(`docs/interface.md` "좌표계" 절). 이 변환은 Gazebo(gz-math)의 좌표 식을 그대로 옮긴 것이라 `idsim_common`에 Gazebo의 식과 이름이 있다. Gazebo 토픽과 include 의존은 없다.
-- 한 호스트 배치: 실기체 그림의 장비 테두리 셋이 시뮬레이션 그림에서 하나로 합쳐진 것이다. 실기체에서는 ROS 2 버스가 기체마다 따로 있고 지상 링크가 그것들과 지상국을 잇는데, 시뮬레이션에서는 DDS 도메인 하나가 그 전부를 겸한다. 실기체의 기준 배치에서 Fleet Manager와 기체 운용 노드 사이에 지상 링크를 건너는 것은 계약(`ExecuteMission`, `VehicleState`)이다. 그 밖에 무엇이 건너는지는 기록기와 표적 추적기가 놓이는 곳에 달려 있고, 그것과 지상 링크의 방식은 정하지 않았다. 지금의 DDS 설정(`config/cyclonedds.xml`)은 multicast를 끄고 peer를 127.0.0.1 하나로 두어, 운용 노드, Agent, PX4가 한 호스트에 있다고 가정한다.
+- 한 호스트 배치: 실기체 그림의 장비 테두리 셋이 시뮬레이션 그림에서 하나로 합쳐진 것이다. 실기체에서는 ROS 2 버스가 기체마다 따로 있고 지상 링크가 그것들과 지상국을 잇는데, 시뮬레이션에서는 DDS 도메인 하나가 그 전부를 겸한다. 실기체의 기준 배치에서 Fleet Manager와 기체 운용 노드 사이에 지상 링크를 건너는 것은 계약(`ExecuteMission`, `VehicleState`)이다. 그 밖에 무엇이 건너는지는 기록기와 표적 추적기가 놓이는 곳에 달려 있고, 그것은 정하지 않았다. 시뮬레이션에서 Zenoh 구성을 재현하는 것은 아직 없다. 지금의 DDS 설정(`config/cyclonedds.xml`)은 multicast를 끄고 peer를 127.0.0.1 하나로 두어, 운용 노드, Agent, PX4가 한 호스트에 있다고 가정한다.
 
 환경별 실체. 역할은 두 환경에서 같다. 실기체 환경 열은 위의 전제를 따르고, 시뮬레이션 환경 열은 그것을 무엇이 대신하는지다.
 
@@ -97,7 +98,7 @@ flowchart TB
 | 기체 물리와 센서 | 기체의 운동과 IMU, GNSS 등의 측정값 | 실제 기체와 센서 | Gazebo(모든 기체가 월드 하나를 공유) |
 | uXRCE-DDS Agent | PX4의 uORB 토픽과 ROS 2 토픽 사이의 중계 | companion computer마다 하나, FMU와 serial 또는 Ethernet | 같은 Agent. 인스턴스 하나가 모든 기체를 UDP로 받는다 |
 | ROS 2 버스 | 기체 운용 노드와 PX4 사이의 토픽 전달 | 기체마다 하나이고 companion computer 안에 있다 | 개발 호스트의 DDS 도메인 하나가 모든 기체의 버스를 겸한다(peer는 loopback, 기체는 네임스페이스로 나뉜다) |
-| 지상 링크 | Fleet Manager와 기체 운용 노드 사이의 계약 전달 | 지상국과 기체 사이의 무선 구간. 방식과, 계약 밖에 무엇이 건너는지는 정하지 않음 | 같은 DDS 도메인이 겸한다 |
+| 지상 링크 | Fleet Manager와 기체 운용 노드 사이의 계약 전달 | 지상국과 기체 사이의 무선 구간. Zenoh로 잇는다. Zenoh의 구성과, 계약 밖에 무엇이 건너는지는 정하지 않음 | 같은 DDS 도메인이 겸한다(Zenoh 구성은 재현하지 않음) |
 | Mission Executor | 미션을 Offboard setpoint와 명령으로 실행 | 그 기체의 companion computer | 같은 노드. 개발 호스트의 `ops-N` 컨테이너 |
 | Telemetry Collector(Phase 2) | PX4 상태를 `VehicleState`로 요약 | 그 기체의 companion computer | 같은 노드. Executor와 같은 컨테이너 |
 | Fleet Manager(Phase 3) | 기체 레지스트리, 미션 배분, 외부 API | 지상국 | 같은 서비스. 개발 호스트 |
@@ -109,7 +110,7 @@ flowchart TB
 
 이 원칙은 표적 경로에도 적용한다. Mission Executor는 Gazebo 토픽을 직접 구독하지 않고 `idsim_interfaces`의 `TargetState` 계약(`/targets/<id>/state`)만 구독한다. 실기체에서는 이 토픽을 표적 추적기가 채운다. 시뮬레이션에서는 표적 추적기를 대신해 `idsim_sim`의 표적 어댑터 노드가 fleet 파일(`config/fleet.yaml` 등)의 궤적 정의를 시뮬레이션 시간에 평가해 이 계약으로 발행하고, Gazebo 월드의 Actor는 같은 정의로 생성해 화면에서 확인하는 용도다(Actor의 화면 위치는 참고용이다. Actor는 반복 재생으로만 만들고 `loop`가 false인 표적은 끝에 86400 s의 정지를 붙여 나타내므로, 그 뒤에는 화면의 Actor만 처음 위치로 돌아간다). 표적 어댑터는 Gazebo를 구독하지 않는다.
 
-운용 서비스 레이어. 큰 그림의 "Fleet Manager"와 "기체 운용 노드" 상자를 펼쳐 운용 서비스끼리, 그리고 버스와 무엇을 주고받는지를 보인다. 장비 경계는 큰 그림에 있고 여기에는 그리지 않는다. Fleet Manager와 맺는 "미션 배분"과 "상태 집계"가 지상 링크를 건너는 계약이다. Logger와 Replay는 놓이는 곳을 정하지 않았다. 큰 그림의 기체 쪽 상자와 그것을 대신하는 시뮬레이션 구성(PX4 SITL, Agent, Gazebo, bridge)은 여기서 펼치지 않고, 그 컨테이너와 프로토콜은 "Docker Compose 실행 환경 설계" 절의 상세 1에만 그린다.
+운용 서비스 레이어. 큰 그림의 "Fleet Manager"와 "기체 운용 노드" 상자를 펼쳐 운용 서비스끼리, 그리고 버스와 무엇을 주고받는지를 보인다. 장비 경계는 큰 그림에 있고 여기에는 그리지 않는다. Fleet Manager와 맺는 "미션 배분"과 "상태 집계"가 지상 링크(Zenoh)를 건너는 계약이다. Logger와 Replay는 놓이는 곳을 정하지 않았다. 큰 그림의 기체 쪽 상자와 그것을 대신하는 시뮬레이션 구성(PX4 SITL, Agent, Gazebo, bridge)은 여기서 펼치지 않고, 그 컨테이너와 프로토콜은 "Docker Compose 실행 환경 설계" 절의 상세 1에만 그린다.
 
 ```mermaid
 flowchart TB

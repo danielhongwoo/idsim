@@ -20,6 +20,7 @@
    - `rules.cpp`의 `is_after_disarm_send`가 하는 PX4 timestamp와 노드 ROS 시각의 비교가 `UXRCE_DDS_SYNCT=1`에서 같은 축인지 확인한다(px4-engineer, ros2-engineer).
    - gz NavSat altitude의 datum을 확인한다(sim-engineer, px4-engineer).
    - 링크 단절 중 `MissionEvent`(RELIABLE KEEP_LAST 10) 유실 여부를 Phase 2 계약 고정 전에 확인한다(ros2-engineer).
+3. 지상 링크의 Zenoh 구성 실험과 설계 토론(architect, ros2-engineer, ops-service-engineer). 기체마다 DDS 도메인을 나누고 그 사이를 Zenoh로 이어 `ExecuteMission`과 `VehicleState`만 건네는 구성을 시뮬레이션에서 돌려 본다. Jazzy와 CycloneDDS에서의 bridge 버전 호환, 손실 링크 위의 action 동작(feedback 유실, 취소 지연)을 확인한다. 링크 단절 중 미션의 동작(계속 또는 중단, 재연결 뒤의 정합, 단절과 이탈의 구분)은 방식과 별개로 계약에서 정한다.
 
 ## 운영 규칙
 
@@ -43,12 +44,13 @@
 - 실기체 검증(실기체 기록물 리플레이, HITL, 지상 시험, 비행 시험, 실기체 조건 모사 시나리오)은 하드웨어 사양이 정해질 때까지 계획에 넣지 않는다.
 - arm64 이미지 빌드는 하지 않는다(하드웨어 사양이 정해질 때 다시 본다).
 - GPS는 항상 쓸 수 있다고 가정한다. GPS 없는 비행은 범위 밖이다. 비행 중 GPS 상실 시의 동작은 정하지 않았고 확인하지도 않았다.
+- 지상 링크(지상국과 기체 사이의 무선 구간)는 DDS가 아니라 Zenoh로 잇는다. 기체의 ROS 2 버스는 기체 안에 머문다. Zenoh의 구성(bridge 종류, 건네는 토픽의 제한, router 위치)은 실험 뒤에 정한다.
 
 ## 미해결 사항
 
 사용자가 미룬 것.
 
-- 실기체 적용 범위: 다음을 할지와 언제 할지를 사용자가 정한다. field 시간 모드(`/clock` 없는 실행과 `UXRCE_DDS_SYNCT=1`), 배치 경계(어느 토픽이 무선 링크를 넘는지, 기록기와 Collector의 위치), `stack.json` 기체 항목의 식별값과 SITL 배치값 분리, 현장용 DDS 설정, FMU(NuttX)의 식별 설정.
+- 실기체 적용 범위: 다음을 할지와 언제 할지를 사용자가 정한다. field 시간 모드(`/clock` 없는 실행과 `UXRCE_DDS_SYNCT=1`), 배치 경계(계약 밖에 무엇이 지상 링크를 넘는지, 기록기와 표적 추적기의 위치), `stack.json` 기체 항목의 식별값과 SITL 배치값 분리, 현장용 DDS 설정, FMU(NuttX)의 식별 설정.
 - `world.origin.alt`의 datum(AMSL 또는 타원체 고)을 정하지 않았다. 아래 고도 제한과 함께 정한다(상하한의 기준 높이가 datum에 달려 있다).
 - 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
 
