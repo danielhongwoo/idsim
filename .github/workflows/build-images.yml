@@ -1,35 +1,76 @@
-# build.yml이 부르는 재사용 워크플로. 권한은 부르는 job이 정한다(PR: packages read, main: packages write).
+# build.yml이 부르는 재사용 workflow. 권한은 부르는 job이 정한다(PR: packages read, main: packages write).
 #
-# 무료 러너(4 vCPU, 16 GB, 루트 디스크 여유 약 14 GB) 대응
-# - plan 단계에서 key를 확인해 빌드할 것이 없으면 정리와 빌드를 하지 않는다(대부분의 실행).
-# - 빌드할 것이 있으면 먼저 러너의 쓰지 않는 도구(dotnet, Android SDK, GHC, CodeQL 등)를 지워
-#   루트 디스크를 넓힌다. px4 builder 단계만 7.7 GB이고 sim-base 2.97 GB 위에 쌓이므로 14 GB로는 모자란다.
-# - --load를 쓰지 않는다. 결과는 레지스트리로 바로 푸시하거나(main) 빌더 캐시에만 둔다(PR).
-#   docker 이미지 저장소에 한 번 더 풀어 두면 같은 데이터가 두 벌이 된다.
-# - 레이어 캐시는 type=registry, mode=min. 최종 이미지 레이어만 내보내고 px4 builder 단계(7.7 GB)는
-#   내보내지 않는다. 근거는 tools/ci/build_images.py 와 보고서 참조.
+# 플랫폼: matrix 한 벌로 linux/amd64와 linux/arm64를 각자의 native runner에서 같은 단계로 빌드한다(QEMU 없음).
+#   matrix.include는 tools/ci/image_keys.py의 CI_MATRIX와 같아야 한다(tests/tools/test_image_keys.py가 검사).
+#   빌드 플랫폼은 build_images.py가 runner 아키텍처로 정한다.
+#
+# main(push: true)
+#   images  플랫폼마다 key가 없는 이미지만 빌드해 플랫폼 태그 <이미지>:<key>-<arch>로 푸시한다. 레이어 캐시는
+#           <이미지>:buildcache-<arch>(mode=min)로 플랫폼마다 따로 둔다. 자식 이미지는 자기 플랫폼의 베이스(플랫폼 태그 또는
+#           key 태그)를 context로 받으므로 병합 전에도 빌드된다.
+#   merge   두 플랫폼 job이 모두 성공한 뒤에만 돈다. key 태그 <이미지>:<key>를 두 플랫폼의 multi-arch index로 만든다.
+#           한 플랫폼이라도 실패하면 merge가 돌지 않아 key 태그는 이전 상태 그대로다(반쪽 index를 만들지 않는다).
+#           실패한 job을 다시 돌리면(re-run failed jobs) 그 플랫폼만 빌드하고 merge가 index를 완성한다.
+#           key 태그에 이미 있던 플랫폼(이 구조 이전에 올린 amd64)의 manifest digest는 바뀌지 않는다(merge가 확인).
+# PR과 main 이외 브랜치(push: false): 빌드만 한다(type=cacheonly, 푸시 없음). 포크 PR에는 쓰기 토큰이 없다.
+#
+# 스모크(push: false일 때만)
+#   이미지를 바꾸는 PR은 새 key가 GHCR에 없어 sitl workflow가 pull에서 실패한다. 그래서 이 job이 빌드한 이미지로
+#   두 runner에서 스택을 올려 본다. 명령은 로컬과 같다(tools/ros_ws.sh build 뒤 run_smoke.sh images, px4-out, px4-in, clock).
+#   - --load: 빌드한 스택 이미지(xrce-agent, sim-base, px4, ros-ws)는 docker 저장소에 올리고, 레지스트리에 있어
+#     건너뛴 스택 이미지는 받아서 같은 idsim/<이미지>:local 태그를 단다. 베이스(ros-base)는 올리지 않는다.
+#   - 그 플랫폼에서 빌드할 것이 없으면(need_build false) 스모크도 건너뛴다. 같은 key의 이미지를 sitl workflow가
+#     같은 runner에서 받아 스택을 검증한다.
+#   - main(push: true)에서는 돌리지 않는다. 같은 key를 PR에서 이미 스모크했고, 푸시 뒤의 실패는 되돌리지 못하며,
+#     main은 sitl workflow가 GHCR 이미지로 검증한다.
+#   - 실패하면 artifacts/runs/와 ros_ws/log/를 smoke-run-failure-<arch> artifact로 올린다.
+# sitl(선택): build.yml 수동 실행의 입력 sitl이 true이면 두 runner 모두 스모크 뒤에 tests/sitl/run_sitl.sh --stack 0을
+#   한 번 돌린다. 새 key가 GHCR에 없는 PR에서 SITL 시나리오의 판정(RTF, timeout 포함)을 머지 전에 보는 길이다.
+#   key가 GHCR에 있으면 빌드하지 않고 받아서 돈다.
+#
+# 무료 runner(4 vCPU, 16 GB, 루트 디스크 여유 약 14 GB) 대응
+# - plan 단계에서 플랫폼별로 key를 확인해 빌드할 것이 없으면 정리와 빌드를 하지 않는다(대부분의 실행).
+# - 빌드하면 먼저 runner의 쓰지 않는 도구(dotnet, Android SDK, GHC, CodeQL 등)를 지워 루트 디스크를 넓힌다.
+#   px4 builder 단계만 7.7 GB이고 sim-base 2.97 GB 위에 쌓이므로 14 GB로는 모자란다. 없는 경로는 건너뛴다.
+# - main은 --load를 쓰지 않는다(레지스트리로 바로 푸시). 스모크하는 실행만 스택 이미지 넷을 docker 저장소에
+#   한 벌 더 풀어 둔다. 단계마다 df를 로그에 남긴다.
+# - 레이어 캐시는 type=registry, mode=min. 최종 이미지 레이어만 내보내고 px4 builder 단계(7.7 GB)는 내보내지 않는다.
 name: build-images
 
 on:
   workflow_call:
     inputs:
       push:
-        description: true면 main 푸시 모드, false면 빌드만
+        description: true면 main 푸시 모드(플랫폼 태그 푸시 뒤 key 태그 병합), false면 빌드와 스모크
         type: boolean
         required: true
+      sitl:
+        description: true면 스모크 뒤에 tests/sitl/run_sitl.sh --stack 0 (push가 false일 때만)
+        type: boolean
+        default: false
 
 jobs:
   images:
-    name: images (${{ inputs.push && 'push' || 'no push' }})
-    runs-on: ubuntu-24.04
-    # 콜드 빌드 추정: ros-base 약 5분, sim-base 약 8분, px4 약 15-20분, ros-ws 약 8분, xrce-agent 약 10분
-    timeout-minutes: 150
+    # amd64의 이름은 그대로 둔다(필수 검사 이름). 다른 플랫폼만 뒤에 아키텍처를 붙인다.
+    name: images (${{ inputs.push && 'push' || 'no push' }}${{ matrix.arch != 'amd64' && format(', {0}', matrix.arch) || '' }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            apt_mirror: http://archive.ubuntu.com/ubuntu
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            apt_mirror: ""
+    # 콜드 빌드 추정(amd64): ros-base 약 5분, sim-base 약 8분, px4 약 15-20분, ros-ws 약 8분, xrce-agent 약 10분.
+    # 스모크 약 10-15분, 선택 sitl 약 15분. arm64는 미실측.
+    timeout-minutes: 180
     env:
       MODE: ${{ inputs.push && 'push' || 'pr' }}
-      # 러너(미국)에서는 kr 미러가 느리거나 불안정할 것으로 추정되므로(미실측) 우분투 기본 미러로 덮어쓴다.
-      # versions.env의 UBUNTU_APT_MIRROR(호스트 로컬 빌드용)보다 이 환경변수가 우선한다(build_images.py).
-      # 미러는 이미지 key에 들어가지 않으므로 GHCR key와 캐시에 영향이 없다.
-      UBUNTU_APT_MIRROR: http://archive.ubuntu.com/ubuntu
+      # 의미는 image_keys.py의 CI_MATRIX 주석. 비어 있으면 versions.env의 그 플랫폼 값을 쓴다.
+      UBUNTU_APT_MIRROR: ${{ matrix.apt_mirror }}
     steps:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -47,14 +88,32 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: image keys
-        run: tools/ci/image_keys.py
+        run: |
+          uname -m
+          tools/ci/image_keys.py --print-platform
+          tools/ci/image_keys.py
 
-      - name: plan (registry key check)
+      - name: plan (registry check for this platform)
         id: plan
         run: tools/ci/build_images.py --mode "$MODE" --plan
 
+      - name: decide
+        id: decide
+        env:
+          NEED_BUILD: ${{ steps.plan.outputs.need_build }}
+          PUSH: ${{ inputs.push }}
+          SITL: ${{ inputs.sitl && !inputs.push }}
+        run: |
+          smoke=false
+          if [ "$PUSH" != "true" ] && { [ "$NEED_BUILD" = "true" ] || [ "$SITL" = "true" ]; }; then smoke=true; fi
+          {
+            echo "build=$NEED_BUILD"
+            echo "smoke=$smoke"
+            echo "sitl=$SITL"
+          } | tee -a "$GITHUB_OUTPUT"
+
       - name: free runner disk
-        if: steps.plan.outputs.need_build == 'true'
+        if: steps.decide.outputs.build == 'true' || steps.decide.outputs.smoke == 'true'
         run: |
           df -h /
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
@@ -63,11 +122,84 @@ jobs:
           df -h /
 
       - name: build
-        if: steps.plan.outputs.need_build == 'true'
-        run: tools/ci/build_images.py --mode "$MODE"
+        if: steps.decide.outputs.build == 'true' || steps.decide.outputs.smoke == 'true'
+        env:
+          LOAD: ${{ steps.decide.outputs.smoke == 'true' && '--load' || '' }}
+        run: |
+          # shellcheck disable=SC2086  # LOAD는 비어 있거나 플래그 하나다
+          tools/ci/build_images.py --mode "$MODE" $LOAD
 
       - name: disk after build
-        if: always() && steps.plan.outputs.need_build == 'true'
+        if: always() && (steps.decide.outputs.build == 'true' || steps.decide.outputs.smoke == 'true')
         run: |
           df -h /
           docker buildx du || true
+          docker image ls
+
+      - name: build ros_ws
+        if: steps.decide.outputs.smoke == 'true'
+        run: tools/ros_ws.sh build
+
+      - name: smoke
+        if: steps.decide.outputs.smoke == 'true'
+        run: |
+          for stage in images px4-out px4-in clock; do
+            echo "::group::run_smoke.sh $stage"
+            tests/smoke/run_smoke.sh "$stage"
+            echo "::endgroup::"
+          done
+          df -h /
+
+      - name: sitl (manual)
+        if: steps.decide.outputs.sitl == 'true'
+        run: tests/sitl/run_sitl.sh --stack 0
+
+      - name: upload run records (failure)
+        if: (failure() || cancelled()) && steps.decide.outputs.smoke == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: smoke-run-failure-${{ matrix.arch }}
+          path: |
+            artifacts/runs/
+            ros_ws/log/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: upload sitl summary (manual)
+        if: success() && steps.decide.outputs.sitl == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: sitl-run-${{ matrix.arch }}
+          path: |
+            artifacts/runs/*/sitl/junit.xml
+            artifacts/runs/*/sitl/trace.jsonl
+            artifacts/runs/*/sitl/trace_ulog.json
+            artifacts/runs/*/sitl/summary.md
+          if-no-files-found: warn
+          retention-days: 7
+
+  merge:
+    # 두 플랫폼의 images job이 모두 성공해야 돈다(needs). 하나라도 실패하면 key 태그를 바꾸지 않는다.
+    name: merge (push)
+    if: inputs.push
+    needs: images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: set up buildx (docker-container driver)
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+
+      - name: log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: merge key tags into multi-arch index
+        run: tools/ci/build_images.py --mode merge

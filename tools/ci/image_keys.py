@@ -24,18 +24,17 @@ bake 정규화 규칙. 근거: key는 "같은 key면 같은 이미지"를 뜻해
   - args에서 KEY_EXCLUDED_ARGS의 이름은 뺀다.
   - args의 식은 변수 이름 그대로 해시한다. 변수의 값은 6번(versions.env)이 따로 넣는다.
 
-플랫폼. key는 플랫폼과 무관하게 이미지마다 하나다. 같은 commit이면 amd64 Linux와 arm64 Mac에서 같은 key가 나온다.
-key 하나가 그 이미지의 플랫폼별 빌드(SUPPORTED_PLATFORMS) 전체를 가리킨다. key와 태그 체계는 플랫폼별 이미지를
-한 태그(<이미지>:<key>) 아래 둘 수 있게 되어 있으나, push 경로(build_images.py)에는 index 병합(imagetools create)과
-플랫폼별 존재 판정이 아직 없다(push는 태그 존재만 보고 건너뛰고, bake --push는 태그를 그 플랫폼 이미지로 통째로 바꾼다).
-arm64를 레지스트리에 올리려면 그 둘을 먼저 더한다. 그래서
+플랫폼. key는 플랫폼과 무관하게 이미지마다 하나다. 같은 commit이면 amd64와 arm64 호스트에서 같은 key가 나온다.
+key 하나가 그 이미지의 플랫폼별 빌드(SUPPORTED_PLATFORMS) 전체를 가리키고, 레지스트리의 <이미지>:<key> 태그는
+모든 플랫폼의 manifest를 묶은 multi-arch index다(build_images.py의 push와 merge 모드). 그래서
   - bake 파일에는 platforms를 두지 않는다. 빌드 플랫폼은 build_images.py가 호스트에서 정해 --set *.platform으로 준다.
     빌드 호스트는 key 재료가 아니다.
   - 플랫폼에 따라 값이 갈리는 versions.env 줄은 PLATFORM_DEPENDENT_NAMES에 등록하고 플랫폼마다
     <이름><접미사>(PLATFORM_SUFFIX) 줄을 둔다. 그 이름을 Dockerfile이 ARG로 쓰면 6번에 모든 플랫폼의 줄이 들어간다
     (arm64 값만 바꿔도 key가 바뀐다). 한 플랫폼의 줄이라도 없으면 key 계산이 멈춘다.
   - 외부 이미지(UBUNTU_IMAGE 등)는 multi-arch index digest로 고정해 한 줄이 모든 플랫폼을 고정한다.
-key가 같아도 모든 플랫폼의 이미지가 레지스트리에 있다는 뜻은 아니다(지금 GHCR에는 amd64만 올린다).
+key 태그가 있어도 모든 플랫폼의 이미지가 있다는 뜻은 아니다(이 구조 이전에 올린 amd64 단일 태그). 그래서
+레지스트리 판정은 언제나 플랫폼별로 한다(build_images.py).
 
 key에 들어가지 않는 것: UBUNTU_APT_MIRROR(KEY_EXCLUDED_ARGS).
 key에 들어가지 않는 것(빌드 시점 외부 상태): apt 저장소의 패키지 버전, pip 인덱스, 태그가 가리키는
@@ -68,12 +67,24 @@ KEY_LEN = 16
 # Dockerfile이 ARG로 선언해도 key에 넣지 않는 versions.env 이름. apt 미러다. ubuntu.sources가 이미지에 남아 바이트가 달라지나 런타임이 apt를 쓰지 않아 같은 이미지로 본다.
 KEY_EXCLUDED_ARGS = {"UBUNTU_APT_MIRROR"}
 
-# 지원 플랫폼과 versions.env 접미사. CI와 GHCR는 linux/amd64(CI_PLATFORM)만 빌드한다. 플랫폼을 더하면 여기에 더한다.
+# 지원 플랫폼과 versions.env 접미사. CI는 모든 지원 플랫폼을 각자의 native runner(CI_MATRIX)에서 빌드하고 시험한다.
+# 플랫폼을 더하면 여기와 CI_MATRIX에 더한다.
 PLATFORM_SUFFIX = {
     "linux/amd64": "",
     "linux/arm64": "_ARM64",
 }
-CI_PLATFORM = "linux/amd64"
+# CI matrix의 유일한 정의. lint를 뺀 workflow(build-images, unit, sitl)의 matrix.include가 이 값과 같아야 한다
+# (tests/tools/test_image_keys.py가 검사한다. GitHub Actions는 workflow 사이에 matrix를 공유할 수단이 없다).
+#   runner      GitHub 제공 표준 runner(공개 저장소 무료). QEMU 에뮬레이션은 쓰지 않는다.
+#   apt_mirror  CI가 주는 UBUNTU_APT_MIRROR 환경변수. runner(미국)에서는 kr 미러가 느리거나 불안정할 것으로 추정되므로(미실측)
+#               amd64는 우분투 기본 미러로 덮어쓴다. arm64는 비워 versions.env의 ports 값을 쓴다(MIRROR_OVERRIDE_PLATFORMS).
+CI_MATRIX = (
+    {"arch": "amd64", "runner": "ubuntu-24.04", "apt_mirror": "http://archive.ubuntu.com/ubuntu"},
+    {"arch": "arm64", "runner": "ubuntu-24.04-arm", "apt_mirror": ""},
+)
+# UBUNTU_APT_MIRROR 환경변수 덮어쓰기를 받는 플랫폼. Dockerfile의 미러 치환식이 archive/security 주소만 바꾸므로
+# ports 저장소를 쓰는 arm64는 versions.env의 값만 쓸 수 있다.
+MIRROR_OVERRIDE_PLATFORMS = ("linux/amd64",)
 SUPPORTED_PLATFORMS = tuple(PLATFORM_SUFFIX)
 # 플랫폼에 따라 값이 갈리는 versions.env 이름의 유일한 목록. 모든 플랫폼의 <이름><접미사> 줄이 있어야 한다.
 # 빌드 인자(build_images.py), key(이 파일), tools/check_host.sh(--print-value)가 이 목록을 읽는다.

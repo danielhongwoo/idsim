@@ -294,17 +294,222 @@ def test_build_images_platform_and_mode():
     v = _versions()
     amd = image_keys.effective_versions(v, AMD64)
     arm = image_keys.effective_versions(v, ARM64)
-    for mode in ("load", "pr", "push", "pull"):
+    # CI는 두 플랫폼 모두 빌드하고 푸시한다(각자 native runner). 모드로 막는 조합은 없다
+    for mode in ("load", "pr", "push", "pull", "merge"):
         assert build_images.check_platform(mode, AMD64, amd, {}) is None
-    for mode in ("load", "pull"):
         assert build_images.check_platform(mode, ARM64, arm, {}) is None
-    for mode in ("pr", "push"):
-        assert "쓸 수 없다" in build_images.check_platform(mode, ARM64, arm, {})
-    # arm64는 미러 환경변수 덮어쓰기를 받지 않는다(같은 값은 받는다)
-    assert "UBUNTU_APT_MIRROR" in build_images.check_platform(
-        "load", ARM64, arm, {"UBUNTU_APT_MIRROR": "http://archive.ubuntu.com/ubuntu"})
-    assert build_images.check_platform(
-        "load", ARM64, arm, {"UBUNTU_APT_MIRROR": arm["UBUNTU_APT_MIRROR"]}) is None
+    # arm64는 미러 환경변수 덮어쓰기를 받지 않는다(같은 값과 빈 값은 받는다). CI의 pr, push 모드도 같다
+    for mode in ("load", "pr", "push"):
+        assert "UBUNTU_APT_MIRROR" in build_images.check_platform(
+            mode, ARM64, arm, {"UBUNTU_APT_MIRROR": "http://archive.ubuntu.com/ubuntu"})
+        assert build_images.check_platform(
+            mode, ARM64, arm, {"UBUNTU_APT_MIRROR": arm["UBUNTU_APT_MIRROR"]}) is None
+        assert build_images.check_platform(mode, ARM64, arm, {"UBUNTU_APT_MIRROR": ""}) is None
+
+
+# 레지스트리 흉내. tags: 참조 -> 플랫폼 집합. registry_has와 registry_platforms를 이것으로 바꾼다.
+def _fake_registry(monkeypatch, tags):
+    monkeypatch.setattr(build_images, "registry_has",
+                        lambda ref, strict=False: (ref in tags, "manifest 있음" if ref in tags else "not found"))
+    monkeypatch.setattr(build_images, "registry_platforms", lambda ref: set(tags[ref]))
+
+
+def _outputs(tmp_path, monkeypatch):
+    out = tmp_path / "github_output"
+    out.write_text("")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.delenv("UBUNTU_APT_MIRROR", raising=False)
+
+    def read():
+        d = dict(line.split("=", 1) for line in out.read_text().splitlines())
+        out.write_text("")
+        return d
+    return read
+
+
+def _refs():
+    keys = _keys(_versions())
+    reg = _versions()["REGISTRY"]
+    return keys, reg, (lambda n: f"{reg}/{n}:{keys[n]}"), (lambda n, arch: f"{reg}/{n}:{keys[n]}-{arch}")
+
+
+def test_locate_prefers_key_tag_then_platform_tag(monkeypatch):
+    tags = {"r/a:k": {AMD64}, "r/a:k-arm64": {ARM64}, "r/b:k": {AMD64, ARM64}, "r/c:k-arm64": {AMD64}}
+    _fake_registry(monkeypatch, tags)
+    assert build_images.locate("r/a:k", "r/a:k-amd64", AMD64, False)[0] == "r/a:k"
+    # key 태그에 arm64가 없으면(이 구조 이전의 amd64 단일 태그) 플랫폼 태그를 쓴다
+    assert build_images.locate("r/a:k", "r/a:k-arm64", ARM64, False)[0] == "r/a:k-arm64"
+    assert build_images.locate("r/b:k", "r/b:k-arm64", ARM64, False)[0] == "r/b:k"
+    found, why = build_images.locate("r/x:k", "r/x:k-arm64", ARM64, False)
+    assert found is None and "플랫폼 태그 없음" in why
+    # 플랫폼 태그에 다른 플랫폼이 올라가 있으면 멈춘다
+    with pytest.raises(SystemExit, match="다른 플랫폼"):
+        build_images.locate("r/c:k", "r/c:k-arm64", ARM64, False)
+
+
+def test_build_images_plan_is_per_platform(tmp_path, monkeypatch, capsys):
+    # GHCR의 key 태그가 amd64 단일 태그뿐이면: amd64는 전부 건너뛰고 arm64는 전부 빌드한다
+    read = _outputs(tmp_path, monkeypatch)
+    keys, reg, ref, pref = _refs()
+    _fake_registry(monkeypatch, {ref(n): {AMD64} for n in keys})
+    assert build_images.main(["--mode", "pr", "--plan", "--platform", AMD64]) == 0
+    assert read()["need_build"] == "false"
+    assert build_images.main(["--mode", "pr", "--plan", "--platform", ARM64]) == 0
+    o = read()
+    assert o["need_build"] == "true"
+    assert o["build_list"].split() == list(image_keys.compute(image_keys.load_images(), _versions()))
+    # arm64 플랫폼 태그가 올라간 뒤(merge 전)에는 arm64도 건너뛴다
+    _fake_registry(monkeypatch, {**{ref(n): {AMD64} for n in keys}, **{pref(n, "arm64"): {ARM64} for n in keys}})
+    assert build_images.main(["--mode", "push", "--plan", "--platform", ARM64]) == 0
+    assert read()["need_build"] == "false"
+    capsys.readouterr()
+
+
+def _bake_lines(out):
+    return [line for line in out.splitlines() if line.startswith("$ docker buildx bake")]
+
+
+def test_build_images_push_uses_platform_tags_and_caches(tmp_path, monkeypatch, capsys):
+    # 새 key: 플랫폼마다 플랫폼 태그로 푸시하고, 자식은 같은 실행에서 푸시한 자기 플랫폼의 베이스를 context로 쓴다
+    _outputs(tmp_path, monkeypatch)
+    keys, reg, ref, pref = _refs()
+    _fake_registry(monkeypatch, {})
+    for platform in (AMD64, ARM64):
+        arch = platform.split("/")[1]
+        assert build_images.main(["--mode", "push", "--dry-run", "--platform", platform]) == 0
+        bake = _bake_lines(capsys.readouterr().out)
+        assert len(bake) == len(keys)
+        for line in bake:
+            n = line.split()[7]
+            assert f"--set {n}.tags={pref(n, arch)} " in line and "--push" in line
+            assert f"{n}.cache-to=type=registry,ref={reg}/{n}:buildcache-{arch}," in line
+            assert f"cache-from=type=registry,ref={reg}/{n}:buildcache-{arch}" in line
+            # key 태그와 다른 플랫폼의 태그, 캐시는 쓰지 않는다
+            assert f"{ref(n)} " not in line and not line.endswith(ref(n))
+            other = "arm64" if arch == "amd64" else "amd64"
+            assert other not in line.replace(f"*.platform=linux/{arch}", "")
+        px4 = next(line for line in bake if line.split()[7] == "px4")
+        assert f"=docker-image://{pref('sim-base', arch)} " in px4
+
+
+def test_build_images_push_context_uses_key_tag_when_it_has_platform(tmp_path, monkeypatch, capsys):
+    _outputs(tmp_path, monkeypatch)
+    keys, reg, ref, pref = _refs()
+    _fake_registry(monkeypatch, {ref("ros-base"): {AMD64, ARM64}})
+    assert build_images.main(["--mode", "push", "--dry-run", "--platform", ARM64, "ros-ws"]) == 0
+    (line,) = _bake_lines(capsys.readouterr().out)
+    assert f"=docker-image://{ref('ros-base')} " in line
+
+
+def test_build_images_pr_never_pushes(tmp_path, monkeypatch, capsys):
+    _outputs(tmp_path, monkeypatch)
+    _fake_registry(monkeypatch, {})
+    for platform in (AMD64, ARM64):
+        assert build_images.main(["--mode", "pr", "--dry-run", "--platform", platform]) == 0
+        out = capsys.readouterr().out
+        assert "cache-to" not in out and "--push" not in out and "output=type=cacheonly" in out
+
+
+def test_build_images_pr_load_loads_built_and_pulls_skipped(tmp_path, monkeypatch, capsys):
+    # ros-ws만 없으면: ros-ws는 docker 저장소에 올리고, 나머지 스택 이미지는 찾은 참조에서 받아 태그한다
+    _outputs(tmp_path, monkeypatch)
+    keys, reg, ref, pref = _refs()
+    tags = {ref(n): {AMD64} for n in keys if n != "ros-ws"}
+    tags[pref("px4", "arm64")] = {ARM64}
+    _fake_registry(monkeypatch, tags)
+    pulled = []
+    monkeypatch.setattr(build_images, "pull_images",
+                        lambda targets, images, r, platform, dry_run:
+                        pulled.append(([r(n) for n in targets], platform)) or 0)
+    assert build_images.main(["--mode", "pr", "--load", "--dry-run", "--platform", AMD64]) == 0
+    (line,) = _bake_lines(capsys.readouterr().out)
+    assert " ros-ws " in line and "ros-ws.output=type=docker" in line and "ros-ws.tags=" not in line
+    assert pulled == [([ref("xrce-agent"), ref("sim-base"), ref("px4")], AMD64)]
+    # arm64: px4만 플랫폼 태그에 있다. 베이스(ros-base)는 docker 저장소에 올리지 않는다
+    pulled.clear()
+    assert build_images.main(["--mode", "pr", "--load", "--dry-run", "--platform", ARM64]) == 0
+    bake = _bake_lines(capsys.readouterr().out)
+    assert [(line.split()[7], "output=type=docker" in line) for line in bake] == [
+        ("ros-base", False), ("xrce-agent", True), ("ros-ws", True), ("sim-base", True)]
+    assert pulled == [([pref("px4", "arm64")], ARM64)]
+    with pytest.raises(SystemExit):
+        build_images.main(["--mode", "load", "--load"])
+
+
+def test_plan_merge_never_makes_half_index():
+    tags = {
+        # 이 구조 이전의 amd64 단일 태그 + arm64 플랫폼 태그 -> 기존 key 태그를 원본에 넣어 병합
+        "r/a:k": {AMD64}, "r/a:k-arm64": {ARM64},
+        # 새 key, 두 플랫폼 태그 -> 플랫폼 태그 둘로 병합
+        "r/b:k-amd64": {AMD64}, "r/b:k-arm64": {ARM64},
+        # 이미 완성
+        "r/c:k": {AMD64, ARM64},
+    }
+    has = lambda r: r in tags  # noqa: E731
+    plats = lambda r: tags[r]  # noqa: E731
+    ref = lambda n: f"r/{n}:k"  # noqa: E731
+    pref = lambda n, p: f"r/{n}:k-{p.split('/')[1]}"  # noqa: E731
+    plans, missing = build_images.plan_merge(["a", "b", "c"], ref, pref, platforms_of=plats, has=has)
+    assert missing == []
+    assert plans == [("a", {AMD64}, ["r/a:k", "r/a:k-arm64"]),
+                     ("b", set(), ["r/b:k-amd64", "r/b:k-arm64"]),
+                     ("c", {AMD64, ARM64}, [])]
+    # arm64 job이 실패해 플랫폼 태그가 없으면 빠진 것으로 잡힌다
+    del tags["r/b:k-arm64"]
+    _, missing = build_images.plan_merge(["a", "b", "c"], ref, pref, platforms_of=plats, has=has)
+    assert missing == ["b: linux/arm64 이미지 없음 (r/b:k-arm64)"]
+
+
+def test_merge_images_creates_nothing_when_any_platform_is_missing(monkeypatch, capsys):
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    monkeypatch.setattr(build_images, "plan_merge", lambda *a: ([("a", set(), ["r/a:k-amd64"])], ["b: x"]))
+    ran = []
+    monkeypatch.setattr(build_images.subprocess, "run", lambda *a, **k: ran.append(a))
+    assert build_images.merge_images(["a", "b"], None, None, dry_run=False) == 1
+    assert ran == [] and "하나도 바꾸지 않는다" in capsys.readouterr().out
+
+
+def test_merge_images_checks_digests_kept(monkeypatch, capsys):
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    monkeypatch.setattr(build_images, "plan_merge",
+                        lambda *a: ([("a", {AMD64}, ["r/a:k", "r/a:k-arm64"])], []))
+    ran = []
+
+    class P:
+        returncode = 0
+    monkeypatch.setattr(build_images.subprocess, "run", lambda cmd, **k: ran.append(cmd) or P())
+    digests = iter([{AMD64: "sha256:1"}, {AMD64: "sha256:1", ARM64: "sha256:2"}])
+    monkeypatch.setattr(build_images, "platform_digests", lambda ref: next(digests))
+    assert build_images.merge_images(["a"], lambda n: "r/a:k", None, dry_run=False) == 0
+    assert ran == [["docker", "buildx", "imagetools", "create", "-t", "r/a:k", "r/a:k", "r/a:k-arm64"]]
+    # 이미 있던 amd64의 digest가 바뀌면 멈춘다
+    digests = iter([{AMD64: "sha256:1"}, {AMD64: "sha256:9", ARM64: "sha256:2"}])
+    with pytest.raises(SystemExit, match="digest가 바뀐 플랫폼"):
+        build_images.merge_images(["a"], lambda n: "r/a:k", None, dry_run=False)
+
+
+def test_ci_matrix_matches_workflows():
+    # lint를 뺀 workflow의 runner matrix가 image_keys.CI_MATRIX와 같아야 한다(runner 목록의 유일한 정의)
+    import yaml
+    assert {m["arch"] for m in image_keys.CI_MATRIX} == {p.split("/")[1] for p in image_keys.SUPPORTED_PLATFORMS}
+    wf_dir = os.path.join(REPO, ".github", "workflows")
+    want = [(m["arch"], m["runner"]) for m in image_keys.CI_MATRIX]
+    seen = {}
+    for name in ("build-images.yml", "unit.yml", "sitl.yml"):
+        with open(os.path.join(wf_dir, name), encoding="utf-8") as f:
+            wf = yaml.safe_load(f)
+        for job_id, job in wf["jobs"].items():
+            if job.get("runs-on") != "${{ matrix.runner }}":
+                continue
+            include = job["strategy"]["matrix"]["include"]
+            assert [(m["arch"], m["runner"]) for m in include] == want, (name, job_id)
+            for m, c in zip(include, image_keys.CI_MATRIX):
+                if "apt_mirror" in m:
+                    assert m["apt_mirror"] == c["apt_mirror"], (name, job_id)
+            seen[name] = job_id
+    assert set(seen) == {"build-images.yml", "unit.yml", "sitl.yml"}
 
 
 def test_build_images_dry_run_sets_platform_and_same_key(capsys, monkeypatch):

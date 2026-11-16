@@ -4,29 +4,42 @@
 모드
   load  로컬. 레지스트리를 보지 않고 bake --load로 docker에 올린다. 태그는 bake 파일 기본값
         (idsim/<이미지>:local 과 <REGISTRY>/<이미지>:<key>).
-  pr    빌드만. key가 레지스트리에 있으면 건너뛰고, 없으면 레지스트리 캐시를 읽기만 하며 빌드한다.
-        결과는 빌더 캐시에만 남는다(type=cacheonly). 포크 PR에는 쓰기 토큰이 없으므로 푸시하지 않는다.
+  pr    빌드만. 이 플랫폼의 이미지가 레지스트리에 있으면 건너뛰고, 없으면 이 플랫폼의 레지스트리 캐시를 읽기만 하며
+        빌드한다. 결과는 빌더 캐시에만 남는다(type=cacheonly). 포크 PR에는 쓰기 토큰이 없으므로 푸시하지 않는다.
+        --load를 주면 스택 이미지(PULL_IMAGES)는 빌더 캐시 대신 docker 저장소에 올리고(bake 기본 태그
+        idsim/<이미지>:local), 레지스트리에 있어 건너뛴 스택 이미지는 pull 모드와 같이 받아 태그한다.
+        끝나면 스택 이미지 넷이 모두 idsim/<이미지>:local로 있다(build job의 스모크가 쓴다).
   pull  빌드하지 않는다. 레지스트리의 <REGISTRY>/<이미지>:<key>를 받아 idsim/<이미지>:local로 태그한다.
         로그인 없이 익명으로 받는다(공개 패키지). 기본 대상은 스택이 쓰는 네 이미지(xrce-agent, sim-base,
         px4, ros-ws)이고 베이스(ros-base)는 받지 않는다. key가 레지스트리에 없으면 빌드하지 않고 실패한다.
         sitl job과 새 개발 PC가 쓴다. 이미지 PR이 main에 먼저 들어가 build job이 key를 올려야 받을 수 있다.
-  push  main 전용. key가 있으면 건너뛰고, 없으면 빌드해 <REGISTRY>/<이미지>:<key>로 푸시하고
-        <REGISTRY>/<이미지>:buildcache 에 레이어 캐시(mode=min)를 내보낸다.
+  push  main 전용, 플랫폼마다 그 native runner에서 돈다. 이 플랫폼의 이미지가 레지스트리에 있으면 건너뛰고,
+        없으면 빌드해 플랫폼 태그 <REGISTRY>/<이미지>:<key>-<arch>로 푸시하고 <REGISTRY>/<이미지>:buildcache-<arch>에
+        레이어 캐시(mode=min)를 내보낸다. key 태그(<이미지>:<key>)는 건드리지 않는다.
+  merge main 전용, 모든 플랫폼의 push가 성공한 뒤 한 번 돈다. 빌드하지 않는다. 이미지마다 key 태그에 없는 플랫폼을
+        플랫폼 태그에서 가져와 key 태그를 모든 플랫폼의 multi-arch index로 만든다(docker buildx imagetools create).
+        한 이미지라도 어느 플랫폼의 이미지가 없으면 아무 태그도 바꾸지 않고 실패한다.
 
 플랫폼
   빌드 플랫폼은 호스트 아키텍처(platform.machine())로 정하고 --platform으로 바꿀 수 있다. 모든 모드에서 bake에
   --set *.platform=<플랫폼>을 주고 versions.env의 그 플랫폼 값(image_keys.PLATFORM_DEPENDENT_NAMES)을 넘긴다.
-  key는 플랫폼과 무관하게 하나다(image_keys.py의 플랫폼 절). 한 태그 아래 플랫폼별 manifest가 묶일 수 있으므로
-  key가 레지스트리에 있어도 그 플랫폼 이미지가 있다는 뜻은 아니다.
-  - pull: 태그에 이 플랫폼의 manifest가 있는지 보고 없으면 받지 않고 실패한다(다른 플랫폼 이미지를 받아
+  key는 플랫폼과 무관하게 하나다(image_keys.py의 플랫폼 절). 레지스트리 판정은 언제나 플랫폼별로 한다.
+  - "이 플랫폼의 이미지가 있다": key 태그에 이 플랫폼 manifest가 있거나, 플랫폼 태그 <key>-<arch>가 있다
+    (push가 성공했으나 merge 전인 상태). 그 참조를 베이스 context로도 쓴다.
+  - pull은 key 태그만 본다. 태그에 이 플랫폼의 manifest가 없으면 받지 않고 실패한다(다른 플랫폼 이미지를 받아
     에뮬레이션으로 돌리지 않는다). docker pull에도 --platform을 준다.
-  - pr, push: CI 플랫폼(linux/amd64)에서만 받는다. GHCR에는 amd64 이미지만 올린다.
+  - key 태그는 merge만 쓴다. 그래서 한 플랫폼의 빌드가 실패하면 key 태그는 이전 상태(없음, 또는 이 구조 이전의 amd64
+    단일 태그) 그대로이고 반쪽 index는 생기지 않는다. 실패한 job을 다시 돌리거나 다음 main push가 남은 플랫폼만
+    빌드하고(이미 올라간 플랫폼 태그는 건너뛴다) merge가 index를 완성한다. merge는 key 태그에 이미 있던 플랫폼의
+    manifest digest가 바뀌지 않았는지 확인한다.
+  - 레이어 캐시 태그(buildcache-<arch>)도 플랫폼별이다. 한 태그에 두 플랫폼의 캐시를 섞지 않는다.
 
 베이스 해석
-  베이스 key가 레지스트리에 있으면(원래 있었거나 이번 실행에서 푸시함) named context를
-  docker-image://<REGISTRY>/<베이스>:<key> 로 바꿔 베이스를 다시 빌드하지 않는다. 없으면 bake 파일의
+  베이스의 이 플랫폼 이미지가 레지스트리에 있으면(원래 있었거나 이번 실행에서 푸시함) named context를
+  docker-image://<그 참조>(key 태그 또는 플랫폼 태그)로 바꿔 베이스를 다시 빌드하지 않는다. 없으면 bake 파일의
   target: context가 그대로 쓰여 같은 bake 호출 안에서 베이스도 빌드된다(pr, load 모드).
-  push 모드에서는 베이스가 항상 먼저 푸시되므로 베이스를 다시 빌드하는 일이 없다.
+  push 모드에서는 베이스가 항상 먼저 플랫폼 태그로 푸시되므로 베이스를 다시 빌드하는 일이 없다. merge 전이어도
+  자식은 자기 플랫폼의 베이스를 받는다.
 
 사용법
   tools/ci/build_images.py --mode load                 # 로컬 전체
@@ -34,7 +47,9 @@
   tools/ci/build_images.py --mode pull                 # GHCR에서 네 이미지를 받아 idsim/<이미지>:local로 태그
   tools/ci/build_images.py --mode pull --dry-run       # 받을 참조만 확인(레지스트리 조회는 한다)
   tools/ci/build_images.py --mode pr --plan            # 무엇을 빌드할지만 판단 (GITHUB_OUTPUT에 need_build)
+  tools/ci/build_images.py --mode pr --load            # 빌드하고 스택 이미지 넷을 idsim/<이미지>:local로 둔다
   tools/ci/build_images.py --mode push --dry-run       # 명령만 출력
+  tools/ci/build_images.py --mode merge --dry-run      # 병합할 index와 그 원본만 출력
 """
 
 from __future__ import annotations
@@ -231,12 +246,7 @@ def pull_images(targets: list[str], images, ref, platform: str, dry_run: bool, p
 
 def check_platform(mode: str, platform: str, versions: dict, environ) -> str | None:
     """플랫폼과 모드의 조합이 안 되면 사유를, 되면 None을 돌려준다. versions는 그 플랫폼의 값(effective_versions)."""
-    if platform == image_keys.CI_PLATFORM:
-        return None
-    if mode in ("pr", "push"):
-        return (f"{platform} 호스트는 {mode} 모드를 쓸 수 없다(CI와 GHCR는 {image_keys.CI_PLATFORM} 전용). "
-                f"--mode load로 빌드하라")
-    if mode == "pull":
+    if platform in image_keys.MIRROR_OVERRIDE_PLATFORMS or mode in ("pull", "merge"):
         return None
     mirror = environ.get("UBUNTU_APT_MIRROR")
     if mirror and mirror != versions["UBUNTU_APT_MIRROR"]:
@@ -257,10 +267,109 @@ def make_env(environ, versions: dict, keys: dict) -> dict:
     return env
 
 
+def arch_of(platform: str) -> str:
+    """linux/arm64 -> arm64. 플랫폼 태그와 캐시 태그의 접미사."""
+    return platform.split("/", 1)[1]
+
+
+def locate(key_ref: str, platform_ref: str, platform: str, strict: bool,
+           platforms_of=None) -> tuple[str | None, str]:
+    """(이 플랫폼 이미지의 참조 또는 None, 사유). key 태그에 이 플랫폼 manifest가 있으면 key 태그, 아니면 플랫폼 태그."""
+    platforms_of = platforms_of or registry_platforms
+    has, why = registry_has(key_ref, strict=strict)
+    if has:
+        have = platforms_of(key_ref)
+        if platform in have:
+            return key_ref, f"key 태그에 있음 ({key_ref})"
+        why = f"key 태그에 {platform} 없음 (태그의 플랫폼: {', '.join(sorted(have)) or '없음'})"
+    has_p, why_p = registry_has(platform_ref, strict=strict)
+    if has_p:
+        if platform in platforms_of(platform_ref):
+            return platform_ref, f"플랫폼 태그에 있음 ({platform_ref})"
+        raise SystemExit(f"플랫폼 태그 {platform_ref}에 {platform} 이미지가 없다(다른 플랫폼을 올린 태그)")
+    return None, f"{why}; 플랫폼 태그 없음 ({why_p})"
+
+
+def platform_digests(ref: str) -> dict[str, str]:
+    """태그의 플랫폼별 manifest digest. 단일 manifest 태그는 그 manifest의 digest다."""
+    info = json.loads(_imagetools("--format", "{{json .Manifest}}", ref))
+    if info.get("manifests"):
+        out = {}
+        for m in info["manifests"]:
+            p = m.get("platform") or {}
+            if p.get("os") and p.get("os") != "unknown":
+                out[f"{p['os']}/{p.get('architecture')}"] = m["digest"]
+        return out
+    return {plat: info["digest"] for plat in registry_platforms(ref)}
+
+
+def plan_merge(names, ref, platform_ref, platforms_of=None, has=None):
+    """merge 모드의 계획. [(이미지, key 태그에 이미 있던 플랫폼, 원본 참조 목록)]과 빠진 것의 목록.
+
+    원본 목록이 비면 그 이미지는 이미 모든 플랫폼을 가진다. 빠진 것이 하나라도 있으면 아무것도 만들지 않는다.
+    """
+    platforms_of = platforms_of or registry_platforms
+    has = has or (lambda r: registry_has(r, strict=True)[0])
+    plans, missing = [], []
+    for n in names:
+        present = platforms_of(ref(n)) if has(ref(n)) else set()
+        need = [p for p in image_keys.SUPPORTED_PLATFORMS if p not in present]
+        sources = []
+        for plat in need:
+            src = platform_ref(n, plat)
+            if has(src) and plat in platforms_of(src):
+                sources.append(src)
+            else:
+                missing.append(f"{n}: {plat} 이미지 없음 ({src})")
+        if sources and present:
+            # 이미 있는 플랫폼의 manifest를 그대로 넣는다(digest가 바뀌지 않는다)
+            sources.insert(0, ref(n))
+        plans.append((n, present, sources))
+    return plans, missing
+
+
+def merge_images(names, ref, platform_ref, dry_run: bool) -> int:
+    plans, missing = plan_merge(names, ref, platform_ref)
+    if missing:
+        log("플랫폼 이미지가 모자라 key 태그를 하나도 바꾸지 않는다(반쪽 index를 만들지 않는다). "
+            "실패한 플랫폼의 push job을 다시 돌려라:")
+        for m in missing:
+            log(f"  {m}")
+        return 1
+    results = []
+    for n, present, sources in plans:
+        if not sources:
+            results.append((n, "SKIP (모든 플랫폼 있음)"))
+            continue
+        before = platform_digests(ref(n)) if present and not dry_run else {}
+        cmd = ["docker", "buildx", "imagetools", "create", "-t", ref(n), *sources]
+        log("$ " + " ".join(cmd))
+        if not dry_run:
+            proc = subprocess.run(cmd, check=False)
+            if proc.returncode != 0:
+                log(f"::error::{n}: imagetools create 실패 (exit {proc.returncode})" if in_github()
+                    else f"{n}: imagetools create 실패 (exit {proc.returncode})")
+                return proc.returncode
+            after = platform_digests(ref(n))
+            lack = set(image_keys.SUPPORTED_PLATFORMS) - set(after)
+            changed = [p for p in before if after.get(p) != before[p]]
+            if lack or changed:
+                raise SystemExit(f"{n}: 병합 결과가 이상하다. 빠진 플랫폼 {sorted(lack)}, digest가 바뀐 플랫폼 {changed}")
+        results.append((n, "MERGED " + ",".join(arch_of(p) for p in image_keys.SUPPORTED_PLATFORMS)))
+    log("결과")
+    for n, r in results:
+        log(f"  {n:<11} {r}")
+    write_summary(["mode `merge`", "", "| 이미지 | 결과 |", "| --- | --- |"]
+                  + [f"| {n} | {r} |" for n, r in results])
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="이미지 key 순서대로 bake 빌드")
-    p.add_argument("--mode", choices=["load", "pr", "push", "pull"], required=True)
+    p.add_argument("--mode", choices=["load", "pr", "push", "pull", "merge"], required=True)
     p.add_argument("--plan", action="store_true", help="레지스트리 확인까지만 하고 빌드하지 않는다")
+    p.add_argument("--load", action="store_true",
+                   help="pr 모드 전용. 스택 이미지를 docker 저장소에 올리고 건너뛴 스택 이미지는 레지스트리에서 받는다")
     p.add_argument("--dry-run", action="store_true", help="bake 명령(pull 모드는 docker pull과 tag)을 출력만 한다")
     p.add_argument("--platform", choices=image_keys.SUPPORTED_PLATFORMS, default=None,
                    help="빌드 플랫폼 (기본: 호스트 아키텍처)")
@@ -274,15 +383,19 @@ def main(argv: list[str] | None = None) -> int:
     order = image_keys.compute(images, raw_versions)
     registry = versions["REGISTRY"]
     mode = args.mode
+    if args.load and mode != "pr":
+        p.error("--load는 --mode pr에서만 쓴다")
     why_not = check_platform(mode, platform, versions, os.environ)
     if why_not:
         log(f"::error::{why_not}" if in_github() else why_not)
         return 2
 
-    if mode == "push" and in_github():
+    if mode in ("push", "merge") and in_github():
         repo = os.environ.get("GITHUB_REPOSITORY", "").lower()
         if registry.lower() != f"ghcr.io/{repo}":
             log(f"::warning::REGISTRY({registry})가 이 저장소(ghcr.io/{repo})가 아니다. 포크로 보고 푸시 없이 빌드만 한다.")
+            if mode == "merge":
+                return 0
             mode = "pr"
 
     if mode == "pull":
@@ -304,6 +417,12 @@ def main(argv: list[str] | None = None) -> int:
     def ref(n: str) -> str:
         return f"{registry}/{n}:{images[n].key}"
 
+    def platform_ref(n: str, plat: str = platform) -> str:
+        return f"{registry}/{n}:{images[n].key}-{arch_of(plat)}"
+
+    def cache_ref(n: str) -> str:
+        return f"{registry}/{n}:buildcache-{arch_of(platform)}"
+
     env = make_env(os.environ, versions, {images[n].env_name: images[n].key for n in order})
 
     log(f"mode={mode} platform={platform} registry={registry}")
@@ -312,29 +431,31 @@ def main(argv: list[str] | None = None) -> int:
 
     if mode == "pull":
         return pull_images(targets, images, ref, platform, args.dry_run)
+    if mode == "merge":
+        return merge_images(targets, ref, platform_ref, args.dry_run)
 
-    # 1. 레지스트리 확인
-    available: set[str] = set()
+    # 1. 레지스트리 확인 (이 플랫폼 기준). source[n]은 이 플랫폼 이미지가 있는 참조
+    source: dict[str, str] = {}
     status: dict[str, str] = {}
     if mode == "load":
         for n in targets:
             status[n] = "BUILD (load 모드는 레지스트리를 보지 않음)"
     else:
         for n in targets:
-            has, why = registry_has(ref(n), strict=(mode == "push"))
-            if has:
-                available.add(n)
-                status[n] = f"SKIP key가 레지스트리에 있음 ({ref(n)})"
+            found, why = locate(ref(n), platform_ref(n), platform, strict=(mode == "push"))
+            if found:
+                source[n] = found
+                status[n] = f"SKIP {why}"
             else:
-                status[n] = f"BUILD key 없음 ({why})"
+                status[n] = f"BUILD {why}"
     for n in targets:
         log(f"[plan] {n}: {status[n]}")
-    to_build = [n for n in targets if n not in available]
+    to_build = [n for n in targets if n not in source]
     write_output("need_build", "true" if to_build else "false")
     write_output("build_list", " ".join(to_build))
     if args.plan:
         write_summary(
-            ["| 이미지 | key | 판단 |", "| --- | --- | --- |"]
+            [f"platform `{platform}`", "", "| 이미지 | key | 판단 |", "| --- | --- | --- |"]
             + [f"| {n} | `{images[n].key}` | {status[n].split(' ')[0]} |" for n in targets])
         return 0
 
@@ -342,7 +463,7 @@ def main(argv: list[str] | None = None) -> int:
     results: list[tuple[str, str, str]] = []
     labels = oci_labels() if mode != "load" else {}
     for n in targets:
-        if n in available:
+        if n in source:
             results.append((n, "SKIP", "-"))
             continue
         if mode == "push" and free_gib() < MIN_FREE_GIB:
@@ -352,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # 베이스 사슬: 베이스가 레지스트리에 없으면 같은 bake 호출에서 함께 빌드된다
         chain = [n]
-        while images[chain[-1]].base and images[chain[-1]].base not in available:
+        while images[chain[-1]].base and images[chain[-1]].base not in source:
             if mode == "push":
                 raise SystemExit(f"{n}: 베이스 {images[chain[-1]].base}가 레지스트리에 없다 (push 순서 오류)")
             chain.append(images[chain[-1]].base)
@@ -361,21 +482,27 @@ def main(argv: list[str] | None = None) -> int:
         cmd += ["--set", f"*.platform={platform}"]
         for t in chain:
             base = images[t].base
-            if base and base in available:
+            if base and base in source:
                 for ctx in images[t].base_contexts:
-                    cmd += ["--set", f"{t}.contexts.{ctx}=docker-image://{ref(base)}"]
+                    cmd += ["--set", f"{t}.contexts.{ctx}=docker-image://{source[base]}"]
             if mode != "load":
-                cmd += ["--set", f"{t}.cache-from=type=registry,ref={registry}/{t}:buildcache"]
+                cmd += ["--set", f"{t}.cache-from=type=registry,ref={cache_ref(t)}"]
         if mode == "load":
             cmd.append("--load")
+        elif args.load and n in PULL_IMAGES:
+            # bake 기본 태그(idsim/<이미지>:local, <REGISTRY>/<이미지>:<key>)를 그대로 둔다
+            for k, v in labels.items():
+                cmd += ["--set", f"{n}.labels.{k}={v}"]
+            cmd += ["--set", f"{n}.output=type=docker"]
         else:
-            cmd += ["--set", f"{n}.tags={ref(n)}"]
+            # push는 플랫폼 태그로만 올린다. key 태그는 merge가 만든다
+            cmd += ["--set", f"{n}.tags={platform_ref(n) if mode == 'push' else ref(n)}"]
             for k, v in labels.items():
                 cmd += ["--set", f"{n}.labels.{k}={v}"]
             if mode == "push":
                 cmd += [
                     "--set",
-                    f"{n}.cache-to=type=registry,ref={registry}/{n}:buildcache,mode=min,ignore-error=true",
+                    f"{n}.cache-to=type=registry,ref={cache_ref(n)},mode=min,ignore-error=true",
                     "--push",
                 ]
             else:
@@ -395,16 +522,26 @@ def main(argv: list[str] | None = None) -> int:
         dt = time.monotonic() - t0
         log(f"{n}: {dt:.0f}초, 디스크 여유 {free_gib():.1f} GiB")
         endgroup()
-        action = {"load": "BUILT+LOAD", "pr": "BUILT (푸시 없음)", "push": "BUILT+PUSH"}[mode]
+        action = {"load": "BUILT+LOAD", "pr": "BUILT (푸시 없음)", "push": "BUILT+PUSH " + platform_ref(n)}[mode]
+        if mode == "pr" and args.load and n in PULL_IMAGES:
+            action = "BUILT+LOAD (푸시 없음)"
         results.append((n, action, f"{dt:.0f}s"))
         if mode == "push":
-            available.add(n)
+            source[n] = platform_ref(n)
+
+    if args.load:
+        # 레지스트리에 있어 건너뛴 스택 이미지는 찾은 참조(key 태그 또는 플랫폼 태그)에서 받아 같은 로컬 태그를 단다
+        skipped = [n for n in targets if n in source and n in PULL_IMAGES]
+        if skipped:
+            rc = pull_images(skipped, images, lambda n: source[n], platform, args.dry_run)
+            if rc != 0:
+                return rc
 
     log("결과")
     for n, action, dt in results:
         log(f"  {n:<11} {images[n].key} {action} {dt}")
     write_summary(
-        [f"mode `{mode}`", "", "| 이미지 | key | 결과 | 시간 |", "| --- | --- | --- | --- |"]
+        [f"mode `{mode}`, platform `{platform}`", "", "| 이미지 | key | 결과 | 시간 |", "| --- | --- | --- | --- |"]
         + [f"| {n} | `{images[n].key}` | {a} | {dt} |" for n, a, dt in results])
     return 0
 
