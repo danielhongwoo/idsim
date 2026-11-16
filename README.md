@@ -68,18 +68,18 @@ tests/sitl/run_sitl.sh --stack 0 -- -k test_b          # `--` 뒤는 pytest 인�
 ```
 
 - `--stack k`는 스택 번호(0-9, 없으면 `IDSIM_STACK_INDEX`, 없으면 0). 로컬과 CI(`sitl.yml`)가 같은 명령을 쓴다.
-- 사용자가 QGC와 Gazebo GUI로 눈으로 확인할 때는 `tools/sim_stack.sh up --viz`로 스택을 올리고 출력된 실행 디렉터리를 `--attach`로 넘겨 시나리오 A 등을 돌린다. `--attach`는 스택을 올리지도 내리지도 않고, 산출물은 `<실행 디렉터리>/sitl-attach-<시각>/`에 쓴다.
+- 사용자가 Gazebo GUI로 눈으로 확인할 때는 `tools/sim_stack.sh up --viz`로 스택을 올리고 출력된 실행 디렉터리를 `--attach`로 넘겨 시나리오 A 등을 돌린다. `--attach`는 스택을 올리지도 내리지도 않고, 산출물은 `<실행 디렉터리>/sitl-attach-<시각>/`에 쓴다.
 - `ros_ws/install/idsim_mission/`이 없으면 빌드하지 않고 안내와 함께 실패한다(`tools/ros_ws.sh build`).
 - 종료 코드는 0 전체 통과, 1 시나리오 실패, 정지 검사 실패, ULog 교차 확인 실패, 2 사용법, 선행 조건, 스택 올리기 실패, ULog 교차 확인 입력 없음과 판정 불가. 마지막 stdout 줄이 실행 디렉터리다.
 - 시나리오와 판정, 산출물은 `tests/sitl/README.md`를 본다.
 
 ## 화면으로 보기
 
-스택을 `tools/sim_stack.sh up --viz`로 올리면 Gazebo GUI(compose `viz` 프로필의 `gz-gui`)가 함께 뜬다. QGroundControl은 `tools/qgc.sh --stack k`로 호스트에서 띄운다. 월드 원점은 `config/fleet.yaml`의 `world.origin`(기본 서울시청)이고 생성기가 월드 SDF에 넣는다. 기체 출발 위치는 `vehicles[].pose`다(기체 1은 원점에서 동쪽 6 m, 남쪽 3 m). 자세한 것은 `docker/README.md`의 "시각 도구" 절을 따른다.
+스택을 `tools/sim_stack.sh up --viz`로 올리면 Gazebo GUI(compose `viz` 프로필의 `gz-gui`)가 함께 뜬다. 월드 원점은 `config/fleet.yaml`의 `world.origin`(기본 서울시청)이고 생성기가 월드 SDF에 넣는다. 기체 출발 위치는 `vehicles[].pose`다(기체 1은 원점에서 동쪽 6 m, 남쪽 3 m). 자세한 것은 `docker/README.md`의 "시각 도구" 절을 따른다.
 
 ## 스택과 스택 번호
 
-스택은 서로 격리된 시뮬레이션 한 벌이다. 에이전트, Gazebo 서버, 기체 px4-N, `/clock` 브리지가 compose 프로젝트 하나로 함께 뜬다. Gazebo GUI와 QGroundControl은 스택이 아니라 떠 있는 스택에 붙는 화면 도구다.
+스택은 서로 격리된 시뮬레이션 한 벌이다. 에이전트, Gazebo 서버, 기체 px4-N, `/clock` 브리지가 compose 프로젝트 하나로 함께 뜬다. Gazebo GUI는 스택이 아니라 떠 있는 스택에 붙는 화면 도구다.
 
 같은 호스트에 스택이 둘 있거나 다른 ROS 2, Gazebo가 함께 떠 있으면 여러 계층에서 통신이 섞이거나 이름이 충돌한다. 스택 번호 k(0-9, 기본 0. `--stack k` 또는 환경 변수 `IDSIM_STACK_INDEX`)에서 계층마다 하나씩 격리 값을 파생해 이를 막는다.
 
@@ -89,9 +89,9 @@ tests/sitl/run_sitl.sh --stack 0 -- -k test_b          # `--` 뒤는 pytest 인�
 | ROS 2 도메인 20 + k | ROS 토픽(DDS)이 다른 스택이나 다른 ROS 2와 섞이는 것 |
 | 에이전트 포트 8888 + k | PX4의 uXRCE-DDS 클라이언트가 다른 스택의 에이전트에 붙는 것(UDP) |
 | Gazebo 파티션 `idsim-k` | gz-transport 토픽과 모델이 다른 Gazebo와 섞이는 것 |
-| QGC GCS 포트 14550 + 1000k | MAVLink UDP 포트 |
+| GCS 포트 14550 + 1000k | MAVLink UDP 포트 |
 
-다른 프로그램과 겹치면 k를 바꾼다(`tools/sim_stack.sh up --stack 1`, `tools/qgc.sh --stack 1`). k가 다르면 idsim 스택 둘을 동시에 띄울 수 있다. 자세한 것은 `docker/README.md`의 "격리 규칙" 절을 본다.
+다른 프로그램과 겹치면 k를 바꾼다(`tools/sim_stack.sh up --stack 1`). k가 다르면 idsim 스택 둘을 동시에 띄울 수 있다. 자세한 것은 `docker/README.md`의 "격리 규칙" 절을 본다.
 
 ## 알려진 제약
 

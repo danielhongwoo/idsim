@@ -100,7 +100,7 @@ core::FlagsSample to_flags_sample(
   const px4_msgs::msg::FailsafeFlags & msg, std::uint64_t received_tick);
 
 // ack의 target_system, target_component가 source와 같을 때만 값이 있다. 아니면 nullopt(다른
-// 송신자, 예를 들면 테스트의 px4_raw나 QGC, 또는 Navigator가 내부에서 낸 명령에 대한 ack. 버린다).
+// 송신자, 예를 들면 테스트의 px4_raw나 GCS, 또는 Navigator가 내부에서 낸 명령에 대한 ack. 버린다).
 // 필터는 명령 종류와 무관하다(NAV_RETURN_TO_LAUNCH도 같다).
 std::optional<core::AckSample> to_ack_sample(
   const px4_msgs::msg::VehicleCommandAck & msg, const idsim_common::CommandSource & source,

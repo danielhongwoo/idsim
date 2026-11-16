@@ -6,7 +6,7 @@
 
 | Phase | 목표 | 산출물 |
 | --- | --- | --- |
-| 1 | 단일 기체 환경과 미션 실행 | `docker/` 이미지 5종, 스모크 golden 파일, `config/fleet.yaml`과 생성 스크립트, CI lint/build/unit job, `idsim_common`, `idsim_interfaces`, `idsim_mission`, `idsim_sim`(월드 템플릿, 표적 어댑터, 정답 pose 노드), `/clock` bridge, 단일 기체 미션 통합 테스트, `docs/interface.md`, `tools/qgc.sh`와 compose `viz` 프로필(Gazebo GUI, foxglove_bridge, Lichtblick) |
+| 1 | 단일 기체 환경과 미션 실행 | `docker/` 이미지 5종, 스모크 golden 파일, `config/fleet.yaml`과 생성 스크립트, CI lint/build/unit job, `idsim_common`, `idsim_interfaces`, `idsim_mission`, `idsim_sim`(월드 템플릿, 표적 어댑터, 정답 pose 노드), `/clock` bridge, 단일 기체 미션 통합 테스트, `docs/interface.md`, compose `viz` 프로필(Gazebo GUI, foxglove_bridge, Lichtblick) |
 | 2 | 텔레메트리 수집 + 로그/리플레이 | `idsim_telemetry`, `idsim_logger`, WebSocket 페이지, `replay` 프로필, 기록물 인덱스 CLI, replay CI job |
 | 3 | 멀티 기체 Fleet + Mission Planning | 3대 compose 생성, `idsim_fleet`, gRPC API, Rust 게이트웨이, 시나리오 runner, 3대 배분과 재배분 nightly 테스트 |
 
@@ -25,10 +25,10 @@
 - `idsim_interfaces`와 계약 테스트: interface.md "변경 절차와 계약 테스트"
 - `idsim_mission`(상태기, `ExecuteMission` action 서버, YAML 로더): interface.md "ExecuteMission", `ros_ws/src/idsim_mission/README.md`
 - `idsim_sim`(월드 템플릿과 생성, 표적 어댑터, 정답 pose 노드): `ros_ws/src/idsim_sim/README.md`
-- 시각 도구(`tools/qgc.sh`, `viz` 프로필의 Gazebo GUI, foxglove_bridge, Lichtblick): `docker/README.md`
+- 시각 도구(`viz` 프로필의 Gazebo GUI, foxglove_bridge, Lichtblick): `docker/README.md`
 - 단일 기체 미션 통합 테스트(시나리오 A, B, C, D, T와 비행 시나리오 F1-F4): `tests/sitl/README.md`
 
-완료 기준: 통합 테스트가 headless로 로컬에서 3회 연속 통과하고 CI의 `sitl` job에서도 통과, QGroundControl과 Gazebo GUI로 같은 비행을 눈으로 확인, 상태기 단위 테스트가 전이 전부를 덮음, `docs/interface.md` 완성과 Phase 1 범위의 계약 고정.
+완료 기준: 통합 테스트가 headless로 로컬에서 3회 연속 통과하고 CI의 `sitl` job에서도 통과, Gazebo GUI로 비행을 눈으로 확인, 상태기 단위 테스트가 전이 전부를 덮음, `docs/interface.md` 완성과 Phase 1 범위의 계약 고정.
 
 ## Phase 2: 텔레메트리 수집 + 로그/리플레이
 
@@ -55,7 +55,7 @@
 4. gRPC API (`proto/fleet.proto`). `ListVehicles`, `StreamVehicleStates`(server streaming), `StreamMissionEvents`(server streaming), `SubmitMission`, `AbortMission`, `GetMissionStatus`. Protobuf `VehicleState`와 ROS msg의 변환은 `idsim_fleet` 변환 모듈 한 곳에서만 하고 왕복 단위 테스트를 둔다. Python 클라이언트 CLI로 호출.
 5. 브라우저 게이트웨이 (`gateway/`, Rust). tonic으로 Fleet Manager의 두 스트림을 구독해 WebSocket으로 중계하고, 미션 제출과 중단을 HTTP JSON으로 받아 gRPC로 넘기며, Phase 2 페이지를 정적으로 서빙한다. ROS 2 비의존이므로 cargo만으로 빌드하고 단위 테스트는 gRPC 서버 목으로 한다. Phase 2에서 고정한 WebSocket JSON 스키마를 그대로 지킨다.
 6. 시나리오 정의. `missions/scenario_*.yaml`에 기체 수, 초기 배치, 표적 Actor 경로, 미션 목록을 한 파일로. 시나리오 runner(Python)가 `config/fleet.yaml` 생성 -> compose 생성 -> `up --wait` -> 미션 제출 -> 기록 -> 판정까지 한 번에.
-7. 검증. 시나리오 "3대, 표적 2개, 동시 배분"에서 두 미션이 서로 다른 기체에 배분되고 모두 완료되는지, 한 기체의 px4 컨테이너를 강제 종료했을 때 Fleet Manager가 이탈을 감지하고 미션을 다른 기체에 재배분하는지를 pytest로. 배분 규칙은 단위 테스트로 먼저 덮고, SITL 테스트는 nightly 전용. QGroundControl에 3대가 `MAV_SYS_ID`로 구분되어 모두 표시되는지는 확인 항목이며 판정에는 넣지 않는다.
+7. 검증. 시나리오 "3대, 표적 2개, 동시 배분"에서 두 미션이 서로 다른 기체에 배분되고 모두 완료되는지, 한 기체의 px4 컨테이너를 강제 종료했을 때 Fleet Manager가 이탈을 감지하고 미션을 다른 기체에 재배분하는지를 pytest로. 배분 규칙은 단위 테스트로 먼저 덮고, SITL 테스트는 nightly 전용.
 
 완료 기준: 3대 시나리오가 headless로 nightly에서 통과하고, 재배분 테스트가 통과하며, 기록물 하나에 3대 모두의 토픽이 네임스페이스로 구분되어 들어 있다.
 
@@ -73,13 +73,13 @@ PC 한 대에서 Gazebo + PX4 3대 + 노드들을 돌리면 CPU가 부족할 수
 | Jazzy + 24.04 + PX4 조합의 문서 부족 | 공식 예제가 Humble 기준이라 초기 시행착오 증가 | Phase 1 첫머리에 스모크 테스트를 두고, 막히면 `ros-ws`만 Humble 컨테이너로 내려 비교(DDS 도메인은 배포판 간에도 통함) |
 | 컨테이너 간 DDS 데이터 미수신 | 토픽은 보이나 데이터가 안 오거나 간헐적으로 끊김 | rmw를 CycloneDDS로 고정해 공유 메모리 전송 경로를 없애고, `network_mode: host`, `config/cyclonedds.xml`에 유니캐스트 피어 명시(인터페이스는 고정하지 않음. Agent가 호스트 인터페이스 주소만 광고한다) |
 | 같은 호스트의 스택 충돌 | 개발자 둘 또는 병렬 CI job이 서로의 토픽과 포트를 봄 | 생성 인자 k로 `ROS_DOMAIN_ID`, Agent 포트, MAVLink 포트 분리 |
-| 스택 둘의 MAVLink 포트 충돌 | 오프셋이 없으면 스택 k가 달라도 같은 N의 PX4가 같은 로컬 포트(18570+N, 14580+N)에 bind해 두 번째 스택이 `bind failed` 경고를 내고(실측) GCS 14550도 공유된다 | PATH 앞의 idsim용 `px4-rc.mavlink`가 스택 오프셋 1000k를 적용하고, 스모크가 px4 로그에 `bind failed`가 없음을 판정한다. `MAV_SYS_ID`는 스택 간에 같아 QGC 하나는 한 번에 한 스택만 본다는 제약을 `docs/interface.md`에 적는다 |
+| 스택 둘의 MAVLink 포트 충돌 | 오프셋이 없으면 스택 k가 달라도 같은 N의 PX4가 같은 로컬 포트(18570+N, 14580+N)에 bind해 두 번째 스택이 `bind failed` 경고를 내고(실측) GCS 14550도 공유된다 | PATH 앞의 idsim용 `px4-rc.mavlink`가 스택 오프셋 1000k를 적용하고, 스모크가 px4 로그에 `bind failed`가 없음을 판정한다. `MAV_SYS_ID`는 스택 간에 같아 외부 GCS 하나는 한 번에 한 스택만 본다는 제약을 `docs/interface.md`에 적는다 |
 | 시작 순서 | gazebo 전에 px4가 스폰을 시도해 실패, 테스트 flaky | healthcheck + `depends_on` 조건 + `compose up --wait` |
 | 시간 기준 불일치 | 라이브와 리플레이의 판정이 다름 | 정식 기준은 `/clock`, 기록은 `--use-sim-time`, `/clock` 미기록 |
 | PC 성능 | 3대 시나리오에서 Gazebo 물리 스텝 드롭, PX4 타이밍 경고 | headless 기본, `PX4_SIM_SPEED_FACTOR` 조절, 카메라와 라이다 없는 기본 x500 모델 사용, 표적은 Actor |
 | Offboard 모드 진입 실패 | 기체가 arm되지 않거나 바로 페일세이프 | setpoint를 20 Hz로, 모드 전환 전 최소 10회 발행, EKF 준비(`failsafe_flags`의 위치, 고도, home 무효 flag 넷이 모두 false) 뒤 Offboard, 그다음 arm, `COM_OBL_RC_ACT` 명시 |
 | Offboard가 아닌 모드에서의 setpoint 발행 | 착륙 판정이 늦어지고 Hold가 끌린다. failsafe 뒤 발행을 재개하면 기체가 Offboard로 돌아간다 | Executor는 Offboard가 아닌 모드를 관측하면 setpoint 발행을 멈춘다(architecture.md의 발행 규칙) |
-| MAVLink 포트 혼동 | QGC가 14540에 붙어 연결 안 됨, MAVSDK가 14550에 붙어 GCS 링크 점유 | GCS는 스택 안 공통 14550 + 1000k, 온보드 API는 14540 + 1000k + N으로 `docs/interface.md`에 고정하고 compose 환경변수로만 노출 |
+| MAVLink 포트 혼동 | GCS가 14540에 붙어 연결 안 됨, MAVSDK가 14550에 붙어 GCS 링크 점유 | GCS는 스택 안 공통 14550 + 1000k, 온보드 API는 14540 + 1000k + N으로 `docs/interface.md`에 고정하고 compose 환경변수로만 노출 |
 | 스크립트 궤적 Actor의 pose가 서버 토픽에 없다 | gz-sim 8.15.0 실측. Actor 엔티티는 `/world/<월드>/pose/info` 목록에 없고 그 link pose는 0으로 고정되며 `PosePublisher`는 Actor에 붙지 않는다. Gazebo에서 표적 위치를 받아 변환할 수 없다 | 표적 어댑터가 fleet 파일의 궤적 정의에서 직접 계산한다. 궤적 정의의 유일한 출처는 fleet 파일의 `targets`이고 월드 SDF의 Actor는 같은 정의로 생성하는 화면 확인용이다. 소비자는 `TargetState`만 보므로 원천이 Gazebo가 아니어도 바뀌는 것이 없다 |
 | Actor 월드에서 `dynamic_pose/info` 구독이 서버를 죽인다 | 실측. bridge 설정이나 `gz topic -e` 한 번으로 gazebo 서비스가 내려가고 lockstep 때문에 PX4가 멈춘다 | bridge는 `/clock` 하나만 bridge하고 정답 pose는 `pose/info`를 쓴다. 생성기 단위 테스트가 bridge 인자, compose, 생성된 월드 SDF, `gui.config`에 `dynamic_pose`가 없음을 검사하고, `idsim_sim` 단위 테스트가 정답 pose 노드의 구독 토픽을 같은 기준으로 검사한다. 운영 문서에 적는다 |
 | Actor 월드에 `gz-gui`를 붙였을 때의 서버 생존은 확인한 조건에서만 성립한다 | `gui.config`에 plugin을 더하거나 Gazebo 버전이 바뀌면 `viz` 프로필이 서버를 죽일 수 있다 | gz-sim 8.15.0, gz-gui 8.4.0에서 고정한 `gui.config`로 GUI 연결, 재접속, Actor 렌더링(ogre2, ogre) 동안 서버가 살아 있었다(실측, 표적 4개까지). GUI 플러그인 .so에 `dynamic_pose` 문자열이 없다. `gui.config`의 plugin 목록을 고정하고 목록 밖의 plugin을 더하지 않는다. Gazebo 버전, plugin 목록, 표적 수를 이 조건 밖으로 바꾸면 수동 확인을 다시 한다 |

@@ -159,7 +159,7 @@ fi
 if [ -n "${DISPLAY:-}" ]; then
   ok "DISPLAY=$DISPLAY"
 else
-  warn "DISPLAY가 비어 있다. 화면 확인 도구(QGC, Gazebo GUI)를 쓰지 않으면 무시해도 된다"
+  warn "DISPLAY가 비어 있다. 화면 확인 도구(Gazebo GUI)를 쓰지 않으면 무시해도 된다"
 fi
 if [ -n "${XAUTHORITY:-}" ] && [ -s "${XAUTHORITY}" ] && [ -r "${XAUTHORITY}" ]; then
   ok "XAUTHORITY=$XAUTHORITY"
@@ -191,7 +191,7 @@ if command -v ss > /dev/null 2>&1; then
   for port in $agent_port $gcs_port; do
     # ss -ulnp 출력에서 Local Address:Port는 4번째 열이다(5번째는 Peer)
     if printf '%s\n' "$ss_out" | awk -v p=":$port" '$4 ~ p"$" {f=1} END {exit !f}'; then
-      warn "UDP 포트 $port 가 이미 쓰이고 있다. 스택 번호를 바꿔 실행하라(예: tools/sim_stack.sh up --stack 1). GCS 포트는 QGC가 듣는 중이면 정상이다"
+      warn "UDP 포트 $port 가 이미 쓰이고 있다. 스택 번호를 바꿔 실행하라(예: tools/sim_stack.sh up --stack 1). GCS 포트는 외부 GCS가 듣는 중이면 정상이다"
       conflict=1
     fi
   done

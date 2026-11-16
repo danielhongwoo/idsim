@@ -10,7 +10,7 @@ ros-ws 컨테이너 안에서 실행한다(PyYAML 6.0.1). 호스트 진입점은
     render_files(compose, stack) -> {상대 경로: 본문}(만드는 파일의 유일한 목록), render_dirs(...) -> 빈 디렉터리 목록.
     파일을 읽거나 쓰지 않으며 단위 테스트(tests/tools/test_gen_compose.py)가 이 함수를 직접 부른다.
   - PyYAML은 읽기(load_yaml)와 쓰기(dump_compose)에만 쓴다. 모듈을 불러올 때는 yaml을 import하지 않으므로
-    --print-gcs-port와 --print-agent-port는 호스트의 표준 라이브러리 python3로도 돈다(tools/qgc.sh가 쓴다).
+    --print-gcs-port와 --print-agent-port는 호스트의 표준 라이브러리 python3로도 돈다(tools/check_host.sh가 쓴다).
   - 사용자 이름을 조회하지 않는다(getpass, pwd 금지). uid, gid는 숫자 인자로만 받는다.
 
 기준값(스택 번호 k, 기체 번호 N)은 이 파일의 상수가 유일한 출처다. fleet.yaml에는 적을 수 없다.
@@ -20,7 +20,7 @@ ros-ws 컨테이너 안에서 실행한다(PyYAML 6.0.1). 호스트 진입점은
                  [--variant standalone|embedded] [--run-id ID] [--run-dir 호스트경로] [--out-dir 쓰기경로]
                  [--uid U --gid G] [--image-tag local | --registry R] [--image 이름=참조]...
                  [--generated-at 2026-11-09T09:00:00Z] [--git-commit SHA] [--git-dirty true|false]
-  gen_compose.py --print-gcs-port k     # QGC가 들을 GCS 포트(14550 + 1000k)만 출력
+  gen_compose.py --print-gcs-port k     # 외부 GCS가 들을 GCS 포트(14550 + 1000k)만 출력
   gen_compose.py --print-agent-port k   # 에이전트 UDP 포트(8888 + k)만 출력
   gen_compose.py --print-airframes          # 센서 높이가 등록된 airframe 목록(스모크 images 단계가 돈다)
   gen_compose.py --print-sensor-z AIRFRAME  # airframe의 GNSS 센서 높이(m)만 출력(스모크 images 단계가 모델 SDF와 대조한다)
