@@ -421,7 +421,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 
 - 한 스택의 모든 기체가 같은 GCS 포트로 보내므로 GCS 하나가 그 스택의 N대를 `MAV_SYS_ID`로 구분해 본다.
 - `MAV_SYS_ID`는 스택 간에 같다(스택 k와 무관하게 N + 1). 그래서 GCS 하나는 한 번에 한 스택만 본다.
-- GCS 포트는 양방향이라 PX4가 GCS의 arm, 모드 전환, 파라미터 쓰기를 받는다. 막힌 것은 수동 조종뿐이다(`COM_RC_IN_MODE=4`).
+- GCS 포트는 양방향이라 PX4가 GCS의 arm, 모드 전환, 파라미터 쓰기를 받는다. 수동 조종 입력(가상 조이스틱 등)은 `COM_RC_IN_MODE=4`로 받지 않는다. 수동 계열 모드 진입은 위 `COM_RC_IN_MODE` 항목을 본다.
 - GCS는 판정과 CI에 쓰지 않는다. GCS에서 보낸 모드 전환이나 disarm은 Executor에게 외부 명령으로 보인다.
 
 ## 미션 정의: Mission, MissionItem, YawSetpoint, TakeoffItem, LoiterItem
