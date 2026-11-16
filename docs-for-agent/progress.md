@@ -31,6 +31,7 @@
 - CI `sitl` 목표 15분. 비행 시나리오(F1-F4)를 모두 PR CI에 두고, 넘으면 겹치는 비행 구간 -> waypoint 수 -> Hold 시간 순으로 줄인다. F2의 공중 종료와 F3의 공중 시작은 빼지 않는다.
 - Gazebo 정답 pose(`/sim/`)를 SITL MCAP 기록물에 넣는다(Phase 2부터 효과).
 - `docs-for-agent/file-ownership.md`의 소유자는 architect.
+- 수동 비행을 하지 않으므로 QGroundControl을 지원하지 않는다(실행 도구, 버전 고정, 완료 기준에 없다). 화면 확인은 Gazebo GUI와 Lichtblick이다.
 
 ## 미해결 사항
 

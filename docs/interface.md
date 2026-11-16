@@ -347,7 +347,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 | SITL 통합 테스트 비상 정리(`tests/support/px4_raw.py`) | 254 | 25 |
 | 스모크 `tests/smoke/check_px4.py` | 254 | 1 |
 
-- 254는 어떤 기체 sysid(2-10)와도 같지 않다. 255와 component 190은 GCS 프로그램의 관례 기본값이라 쓰지 않는다.
+- 254는 어떤 기체 sysid(2-10)와도 같지 않다. 255와 component 190은 흔한 GCS 프로그램(QGroundControl 등)의 기본값이라 쓰지 않는다.
 
 ## Offboard setpoint
 
@@ -404,7 +404,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 | DDS 포트 구간 | RTPS UDP | 7400 + 250 x (20 + k) 부터 250개. 실사용 끝은 참가자 인덱스 상한 50에서 + 11 + 2 x 50 | 12400-12649(실사용 12511까지) | `tools/gen_compose.py`, `config/cyclonedds.xml` |
 | uXRCE-DDS Agent | UDP | 8888 + k(`PX4_UXRCE_DDS_PORT`와 같다) | 8888 | `tools/gen_compose.py` |
 | gz-transport | - | `GZ_PARTITION` = `idsim-k`, `GZ_IP` = 127.0.0.1 | `idsim-0` | `tools/gen_compose.py` |
-| MAVLink GCS(원격, GCS가 듣는다) | UDP | 14550 + 1000k(스택 안 모든 기체 공통) | 14550 | `docker/px4/px4-rc.mavlink` |
+| MAVLink GCS(원격, 외부 GCS가 듣는다) | UDP | 14550 + 1000k(스택 안 모든 기체 공통) | 14550 | `docker/px4/px4-rc.mavlink` |
 | MAVLink GCS(PX4 로컬) | UDP | 18570 + 1000k + N | 18571 | `docker/px4/px4-rc.mavlink` |
 | MAVLink 온보드 API(원격) | UDP | 14540 + 1000k + N | 14541 | `docker/px4/px4-rc.mavlink` |
 | MAVLink 온보드 API(PX4 로컬) | UDP | 14580 + 1000k + N | 14581 | `docker/px4/px4-rc.mavlink` |
@@ -421,6 +421,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 
 - 한 스택의 모든 기체가 같은 GCS 포트로 보내므로 GCS 하나가 그 스택의 N대를 `MAV_SYS_ID`로 구분해 본다.
 - `MAV_SYS_ID`는 스택 간에 같다(스택 k와 무관하게 N + 1). 그래서 GCS 하나는 한 번에 한 스택만 본다.
+- GCS 포트는 양방향이라 PX4가 GCS의 arm, 모드 전환, 파라미터 쓰기를 받는다. 막힌 것은 수동 조종뿐이다(`COM_RC_IN_MODE=4`).
 - GCS는 판정과 CI에 쓰지 않는다. GCS에서 보낸 모드 전환이나 disarm은 Executor에게 외부 명령으로 보인다.
 
 ## 미션 정의: Mission, MissionItem, YawSetpoint, TakeoffItem, LoiterItem

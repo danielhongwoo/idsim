@@ -203,7 +203,7 @@ flowchart TB
   DDS(["DDS 도메인"])
   ROS["운용과 판정<br/>ops-N, runner"]
   VIZ["viz 프로필<br/>gz-gui, foxglove, lichtblick"]
-  HOST["호스트 도구<br/>브라우저"]
+  HOST["호스트 도구<br/>브라우저, 외부 GCS"]
   EXT["Fleet Manager, gateway<br/>Phase 3"]
 
   SIM <--> LINK
