@@ -62,14 +62,14 @@ else
   fail "PATH의 bash($(command -v bash || echo 없음))가 ${env_bash_major:-?}이다. ${MIN_BASH_MAJOR} 이상이 필요하다. macOS는 brew install bash 뒤 그 bash가 PATH 앞에 오게 한다"
 fi
 
-# (a3) 기본 도구. timeout은 아래 (b)의 docker 데몬 검사가 쓰므로 그보다 먼저 본다. perl은 lint.sh의 문자 검사가 쓴다
+# (a3) 기본 도구. timeout은 아래 (b)의 docker 데몬 검사가 쓰므로 그보다 먼저 본다. rg(ripgrep)는 lint.sh의 문자 검사가 쓴다
 has_timeout=0
-for cmd in git curl sha256sum perl timeout; do
+for cmd in git curl sha256sum rg timeout; do
   if command -v "$cmd" > /dev/null 2>&1; then
     ok "$cmd 있음"
     [ "$cmd" = timeout ] && has_timeout=1
   else
-    fail "$cmd 가 없다"
+    fail "$cmd 가 없다$([ "$cmd" = rg ] && echo ' (Mac은 brew install ripgrep, Ubuntu는 sudo apt-get install ripgrep)')"
   fi
 done
 

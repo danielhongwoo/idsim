@@ -6,7 +6,7 @@
 #         clang-format px4-api sim-topic cargo
 #   clang-tidy와 ament_lint는 compile_commands.json과 ROS 헤더가 필요해서 여기에 없다. unit job의 tools/ros_ws.sh ci 안에서 돈다.
 #
-# 대상 파일은 git이 추적하거나 무시 목록에 없는 새 파일이다(git ls-files -co --exclude-standard).
+# 대상 파일은 git이 추적하거나 무시 목록에 없는 새 파일이다(git ls-files -co --exclude-standard). charset은 같은 범위를 rg로 본다.
 # 그래서 로컬의 artifacts/, __pycache__/ 같은 무시 대상은 보지 않고 CI 체크아웃과 같은 파일을 본다.
 # 도구는 docker/versions.env의 LINT_* 이미지로 실행한다(호스트에 린터 설치가 필요 없다).
 #
@@ -58,21 +58,30 @@ drun() {
   docker run --rm -v "${repo_root}:/src:ro" -w /src "${extra[@]}" "$image" "$@"
 }
 
+# 문자 집합 검사의 한 줄 명령(사람이 손으로 돌려도 같다). 아래 check_charset이 이 배열을 그대로 실행한다.
+#   rg -n -a --hidden --no-ignore-dot --no-ignore-parent -g '!.git' '[^\x00-\x7F\x{AC00}-\x{D7A3}]' .
+# 일치가 없으면 exit 1(통과), 있으면 exit 0(위반), 파일을 열지 못하는 등 오류면 exit 2(실패)다.
+# 패턴은 Rust regex가 -P(PCRE2) 없이 받으므로 PCRE2 없이 빌드된 rg도 쓸 수 있다.
+# --hidden은 .github, .claude 같은 숨김 경로를 보게 한다. .gitignore는 따르되 .ignore와 .rgignore, 상위 디렉터리의
+# 무시 파일은 따르지 않는다(git ls-files -co --exclude-standard 의 범위와 맞춘다). -a는 NUL이 든 파일도 건너뛰지 않고 본다.
+# 한계: 잘못된 UTF-8 바이트는 rg가 일치로 세지 않는다. 한글 완성형 범위 밖 문자와 ASCII 밖 문자는 잡는다.
+# 도구는 LINT_* 이미지가 아니라 호스트의 rg를 쓴다. 한 줄 명령을 사람이 그대로 돌릴 수 있게 하려는 것이다.
+# ubuntu-24.04 runner 이미지에 rg가 없어서 lint.yml의 charset 검사에서 apt로 설치한다(버전은 배포판 패키지를 따른다).
+charset_rg=(rg -n -a --hidden --no-ignore-dot --no-ignore-parent -g '!.git')
+charset_pattern='[^\x00-\x7F\x{AC00}-\x{D7A3}]'
+
 check_charset() {
-  local files
-  mapfile -t files < <(list_files .)
-  if [ "${#files[@]}" -eq 0 ]; then result charset PASS-NO-TARGETS "(0 files)"; return 0; fi
-  local out rc=0
-  # CLAUDE.md의 검사 명령과 같은 패턴. grep -P는 macOS의 grep에 없으므로 Linux와 macOS에 모두 있는 perl로 돈다.
-  # 파일을 UTF-8로 읽고(-CSD) 잘못된 UTF-8은 오류로 멈춘다. 파일마다 줄 번호를 다시 센다(close ARGV).
-  # perl은 파일을 열지 못하면 경고만 내고 0으로 끝나므로, 경고가 하나라도 있으면 exit 2로 끝나게 한다(grep의 exit 2와 같다)
-  out="$(perl -CSD -Mwarnings=FATAL,utf8 -ne \
-    'BEGIN { $SIG{__WARN__} = sub { print STDERR @_; $w = 1 } }
-     print "$ARGV:$.:$_" if /[^\x00-\x7F\x{AC00}-\x{D7A3}]/; close ARGV if eof;
-     END { $? = 2 if $w && !$? }' -- "${files[@]}")" || rc=$?
-  if [ "$rc" -eq 0 ] && [ -z "$out" ]; then result charset PASS "(${#files[@]} files)"; return 0; fi
+  if ! command -v rg > /dev/null 2>&1; then
+    result charset FAIL "rg(ripgrep)가 없다. Mac은 brew install ripgrep, Ubuntu는 sudo apt-get install ripgrep"
+    return 1
+  fi
+  local n out rc=0
+  n="$("${charset_rg[@]}" --files . | wc -l | tr -d ' ')"
+  if [ "$n" -eq 0 ]; then result charset PASS-NO-TARGETS "(0 files)"; return 0; fi
+  out="$("${charset_rg[@]}" "$charset_pattern" .)" || rc=$?
+  if [ "$rc" -eq 1 ]; then result charset PASS "(${n} files)"; return 0; fi
   [ -n "$out" ] && printf '%s\n' "$out"
-  result charset FAIL "완성형 한글과 아스키 밖의 문자 (perl exit ${rc})"
+  result charset FAIL "완성형 한글과 아스키 밖의 문자 (rg exit ${rc})"
   return 1
 }
 

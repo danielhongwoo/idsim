@@ -11,7 +11,7 @@ idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy �
 | OS와 CPU | x86_64 Linux (Ubuntu 24.04에서 확인). Apple Silicon Mac(macOS, arm64)은 아래 "Apple Silicon Mac"의 조건으로 개발 호스트가 된다 |
 | Docker | Docker Engine 25.0 이상(healthcheck `start_interval`), compose v2 플러그인, buildx. 사용자가 docker 그룹에 속해야 한다(`sudo usermod -aG docker $USER` 뒤 다시 로그인). Ubuntu 24.04 패키지는 `docker.io`, `docker-compose-v2`, `docker-buildx`이고, Docker 공식 저장소는 `docker-ce`, `docker-compose-plugin`, `docker-buildx-plugin`이다 |
 | 저장소 경로 | 공백과 아스키 밖 문자가 없어야 한다(생성기 `PATH_SAFE_RE`가 거부한다) |
-| 도구 | bash 4 이상(PATH의 `bash`), git, python3 (표준 라이브러리만 사용. 3.12에서 확인, 하한 3.10), curl, sha256sum, perl, timeout |
+| 도구 | bash 4 이상(PATH의 `bash`), git, python3 (표준 라이브러리만 사용. 3.12에서 확인, 하한 3.10), curl, sha256sum, rg(ripgrep), timeout. rg는 Ubuntu에서 `sudo apt-get install ripgrep`, Mac에서 `brew install ripgrep` |
 | 디스크 | 30GB 이상 권장. 근거: 이미지 5종 합 약 8.6GB(공유 레이어 중복 포함이라 실제 점유는 더 작다) + px4 builder 단계 7.7GB + buildkit 캐시 |
 | 메모리 | 16GB 이상. 개발 VM 31GB와 CI runner 16GB에서 확인했고 그 아래는 미실측 |
 | 선택 | gh (PR을 올리거나 합칠 때), 화면 확인용 X11 또는 XWayland 데스크톱 |
@@ -24,8 +24,8 @@ idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy �
 
 | 항목 | 조건과 제약 |
 | --- | --- |
-| 컨테이너 런타임 | OrbStack 2.2.5(Docker Engine 29.8.2, compose 5.5.0)에서 확인했다. CPU 10, 메모리 16GB를 주었다. Docker Desktop은 확인하지 않았다(host network 기능을 켜야 하며 동작이 다를 수 있다) |
-| bash | macOS 기본 `/bin/bash`는 3.2라 쓸 수 없다. `brew install bash`로 4 이상을 PATH 앞에 둔다. 그 밖의 도구(`sha256sum`, `timeout`, `perl`)는 macOS 27 기본 설치에 있다 |
+| 컨테이너 런타임 | OrbStack 2.2.5(Docker Engine 29.8.2, compose 5.5.0)에서 확인했다. CPU 10, 메모리 16GB를 주었다. Mac에서는 OrbStack을 기준으로 한다 |
+| bash | macOS 기본 `/bin/bash`는 3.2라 쓸 수 없다. `brew install bash`로 4 이상을 PATH 앞에 둔다. `rg`는 `brew install ripgrep`으로 설치한다(문자 집합 검사가 쓴다). 그 밖의 도구(`sha256sum`, `timeout`)는 macOS 27 기본 설치에 있다 |
 | 이미지 | linux/arm64로 로컬에서 빌드한다(`python3 tools/ci/build_images.py --mode load`. cache 없는 첫 빌드가 이 조건에서 1회 실측 약 14분). GHCR에는 amd64 이미지만 있어 `--mode pull`은 받지 않고 실패한다. apt 미러는 `ports.ubuntu.com`으로 고정이다 |
 | 네트워크 | 컨테이너는 Linux VM 안에서 돈다. `network_mode: host`는 그 VM의 네트워크이고 스택 안의 통신은 Linux와 같다. Mac 쪽 127.0.0.1에서 Lichtblick의 HTTP 응답(200)과 foxglove 포트의 TCP 연결은 OrbStack에서 확인했다. 브라우저 화면에서 토픽이 보이는지까지는 확인하지 않았다 |
 | Gazebo GUI | `tools/sim_stack.sh up --viz`의 `gz-gui`는 그대로는 뜨지 않는다(`XAUTHORITY`가 없어 `gz_gui.sh`가 끝난다. compose가 넘기는 X11 소켓 `/tmp/.X11-unix`도 macOS에는 없다). XQuartz를 거치는 방법은 확인하지 않았다. 화면은 Lichtblick으로 본다 |
