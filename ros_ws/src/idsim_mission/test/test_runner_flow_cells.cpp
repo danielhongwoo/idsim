@@ -14,7 +14,7 @@
 
 // PREPARING과 항목 단계의 칸(idsim_mission README "테스트").
 // 테스트 하나가 칸 하나를 덮고, 그 칸의 to와 reason을 이 runner의 전이 기록(expect_cell)과 종료
-// 결과로 단정한다. 정리 단계의 칸은 test_runner_cleanup_cells.cpp의 파라미터화 하네스가 덮는다.
+// 결과로 단정한다. 정리 단계의 칸은 test_runner_cleanup_cells.cpp의 파라미터화 harness가 덮는다.
 //
 // - 무시된 취소의 대표 칸(그 tick에 goal을 바로 끝내는 사건과 CANCEL)은 취소가 이겼다면 나갔을
 //   명령(Hold, disarm)이 그 tick과 그 뒤에 나가지 않음을 함께 단정한다(expect_no_cancel_commands).

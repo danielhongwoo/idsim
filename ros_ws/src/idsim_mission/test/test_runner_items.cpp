@@ -99,8 +99,8 @@ TEST(Loiter, KeepsSetpointAndEndsAfterDuration)
   EXPECT_TRUE(end.setpoint.has_value());
 }
 
-// feedback stamp는 core가 경과 시간을 잰 tick 입력 시각이다. 노드에서 Px4ClockPort(와 예전의
-// 발행 때 다시 읽은 시각)가 입력 시각보다 앞서는 정도는 tick마다 0 또는 /clock 한 양자(SITL
+// feedback stamp는 core가 경과 시간을 잰 tick 입력 시각이다. 노드에서 Px4ClockPort(와 발행 때
+// 다시 읽은 시각)가 입력 시각보다 앞서는 정도는 tick마다 0 또는 /clock 한 양자(SITL
 // 4 ms)로 달라진다. LOITER 시작 tick은 4 ms 앞서고 LAND 시작 tick은 0으로 두면, stamp를 port
 // 쪽 시각으로 찍는 구현은 차가 4.996 s가 되고(SITL 증상), 입력 시각으로 찍으면 정확히 5 s다.
 TEST(Loiter, FeedbackStampsSpanExactDurationWhenPortSkewVaries)

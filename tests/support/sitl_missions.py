@@ -46,7 +46,7 @@ FLIGHT_TERMINAL = {"F1": sj.TERMINAL_LANDED_DISARMED, "F2": sj.TERMINAL_HOLD_AIR
 AIR_START = {"F3": "F2"}
 
 # 시간 규칙(README "시나리오와 판정"): 비행마다 항목 timeout 합 + FLIGHT_MARGIN_S가 FLIGHT_LIMIT_S(ROS 시각 3분)를 넘지 않는다.
-# FLIGHT_MARGIN_S는 새로 정한 값이다. 항목 timeout에 들지 않는 구간, 곧 준비 단계(식별, Offboard 진입, arm.
+# FLIGHT_MARGIN_S는 항목 timeout에 들지 않는 구간, 곧 준비 단계(식별, Offboard 진입, arm.
 # 시나리오 A에서 goal 전송부터 TAKEOFF 시작까지 약 5 s)와 종료 단계(공중 종료의 Hold 확인, 착륙 뒤 disarm 확인과
 # 대비책 지연 5 s)에 여유를 더한 [추정]이다. 판정은 이 합을 goal 결과 대기의 ROS 시각 상한으로 쓴다.
 FLIGHT_LIMIT_S = 180.0

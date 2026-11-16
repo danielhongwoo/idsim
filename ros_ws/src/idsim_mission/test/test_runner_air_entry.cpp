@@ -852,7 +852,7 @@ TEST(AirEntry, A18_ExemptionEndsAtFirstOffboardSample)
 {
   {
     Harness h(air_loiter_mission());
-    h.drive_to_air_seen();         // S+1: O3
+    h.drive_to_air_seen();         // S+1: 첫 OFFBOARD 표본
     h.world.nav = NavMode::kHold;  // 운용자 Hold
     h.world.intention = NavMode::kHold;
     const std::size_t before = h.edges().size();
@@ -1127,7 +1127,7 @@ TEST(AirEntry, A16b_RejectionAckAfterFirstOffboardSampleIsIgnored)
 {
   Harness h(air_loiter_mission());
   h.auto_offboard_ack = false;
-  const std::uint64_t s = h.drive_to_air_seen();  // S+1: O3
+  const std::uint64_t s = h.drive_to_air_seen();  // S+1: 첫 OFFBOARD 표본
   EXPECT_FALSE(h.view().pending_active);
   h.push_ack(AckCommand::kSetMode, AckResult::kTemporarilyRejected);
   EXPECT_TRUE(h.tick().commands.empty());  // S+2
@@ -1553,7 +1553,7 @@ TEST(AirEntry, A25c_ItemTimeoutLandPathThenDisarmedOnGround)
 
 // ---- A26 실패 tick에 지상 ARMED ----
 
-// kIgnore. S+1에 OFFBOARD 표본(O3), S+2..S+59는 S+1과 같은 timestamp의 표본, S+60에 새 OFFBOARD
+// kIgnore. S+1에 첫 OFFBOARD 표본, S+2..S+59는 S+1과 같은 timestamp의 표본, S+60에 새 OFFBOARD
 // 표본이고 landed true(ARMED). S를 돌려준다.
 std::uint64_t drive_seen_then_landed_on_timeout(Harness & h)
 {

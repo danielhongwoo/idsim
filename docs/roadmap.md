@@ -6,7 +6,7 @@
 
 | Phase | 목표 | 산출물 |
 | --- | --- | --- |
-| 1 | 단일 기체 환경과 미션 실행 | `docker/` 이미지 5종, 스모크 golden 파일, `config/fleet.yaml`과 생성 스크립트, CI lint/build/unit job, `idsim_common`, `idsim_interfaces`, `idsim_mission`, `idsim_sim`(월드 템플릿, 표적 어댑터, 정답 pose 노드), `/clock` 브리지, 단일 기체 미션 통합 테스트, `docs/interface.md`, `tools/qgc.sh`와 compose `viz` 프로필(Gazebo GUI, foxglove_bridge, Lichtblick) |
+| 1 | 단일 기체 환경과 미션 실행 | `docker/` 이미지 5종, 스모크 golden 파일, `config/fleet.yaml`과 생성 스크립트, CI lint/build/unit job, `idsim_common`, `idsim_interfaces`, `idsim_mission`, `idsim_sim`(월드 템플릿, 표적 어댑터, 정답 pose 노드), `/clock` bridge, 단일 기체 미션 통합 테스트, `docs/interface.md`, `tools/qgc.sh`와 compose `viz` 프로필(Gazebo GUI, foxglove_bridge, Lichtblick) |
 | 2 | 텔레메트리 수집 + 로그/리플레이 | `idsim_telemetry`, `idsim_logger`, WebSocket 페이지, `replay` 프로필, 기록물 인덱스 CLI, replay CI job |
 | 3 | 멀티 기체 Fleet + Mission Planning | 3대 compose 생성, `idsim_fleet`, gRPC API, Rust 게이트웨이, 시나리오 runner, 3대 배분과 재배분 nightly 테스트 |
 
@@ -14,7 +14,7 @@
 
 ## Phase 1: 단일 기체 환경과 미션 실행
 
-목표: `tools/sim_stack.sh up` 한 번으로 Gazebo 안의 x500 한 대(`/px4_1`)가 YAML 미션 하나로 이륙, 웨이포인트 순회, 이동 표적의 현재 위치로 접근, 복귀, 착륙을 수행하고, `runner`(ros-ws) 컨테이너 안의 pytest가 판정한다.
+목표: `tools/sim_stack.sh up` 한 번으로 Gazebo 안의 x500 한 대(`/px4_1`)가 YAML 미션 하나로 이륙, waypoint 순회, 이동 표적의 현재 위치로 접근, 복귀, 착륙을 수행하고, `runner`(ros-ws) 컨테이너 안의 pytest가 판정한다.
 
 갖춘 것. 설계의 정본은 각 문서와 README에 있다.
 
@@ -51,7 +51,7 @@
 
 1. 멀티 인스턴스 스폰. [PX4 멀티 기체 문서](https://docs.px4.io/main/en/ros2/multi_vehicle.html) 규칙대로 `px4 -d -i N`, `PX4_GZ_MODEL_POSE`로 간격 배치(기체 간격 4 m 이상. 생성 스크립트가 2 m 미만을 거부한다). 기체 번호, 네임스페이스, `UXRCE_DDS_KEY`, `MAV_SYS_ID`, 포트는 Phase 1의 파생 규칙을 그대로 따르므로 새 결정은 없다. `tools/gen_compose.py`가 3대 compose를 만든다.
 2. 기체별 서비스 인스턴스. 기체당 컴포넌트 컨테이너 하나에 `idsim_mission`과 `idsim_telemetry`를 올려 3개 launch. 노드는 기체별 params(`stack.json`에서 생성)로 sysid를 받고 `idsim_common`의 대조 함수로 확인한다.
-3. `idsim_fleet` Fleet Manager (C++). 기체 레지스트리(`VehicleState` 수신으로 등록, `/clock` 기준 미수신 타임아웃으로 이탈 감지. 구독 대상을 params의 기체 목록으로 정할지 그래프에서 찾을지는 Phase 3 착수 때 정한다. 어느 쪽이든 그래프 항목의 생성과 소멸로 등록이나 이탈을 판정하지 않는다), 전체 기체 상태 집계, 미션 큐와 배분(가용 기체 중 표적에 가장 가까운 기체 선택 정도의 단순 규칙), 미션 상태 추적(대기 -> 배분 -> 실행 -> 완료/실패). gRPC 서버 스레드와 rclcpp executor라는 두 이벤트 루프가 공유하는 상태는 단일 뮤텍스로 보호하고, 설계 문서에 어떤 스레드가 어떤 상태를 쓰는지 표로 적는다.
+3. `idsim_fleet` Fleet Manager (C++). 기체 레지스트리(`VehicleState` 수신으로 등록, `/clock` 기준 미수신 timeout으로 이탈 감지. 구독 대상을 params의 기체 목록으로 정할지 그래프에서 찾을지는 Phase 3 착수 때 정한다. 어느 쪽이든 그래프 항목의 생성과 소멸로 등록이나 이탈을 판정하지 않는다), 전체 기체 상태 집계, 미션 큐와 배분(가용 기체 중 표적에 가장 가까운 기체 선택 정도의 단순 규칙), 미션 상태 추적(대기 -> 배분 -> 실행 -> 완료/실패). gRPC 서버 스레드와 rclcpp executor라는 두 이벤트 루프가 공유하는 상태는 단일 뮤텍스로 보호하고, 설계 문서에 어떤 스레드가 어떤 상태를 쓰는지 표로 적는다.
 4. gRPC API (`proto/fleet.proto`). `ListVehicles`, `StreamVehicleStates`(server streaming), `StreamMissionEvents`(server streaming), `SubmitMission`, `AbortMission`, `GetMissionStatus`. Protobuf `VehicleState`와 ROS msg의 변환은 `idsim_fleet` 변환 모듈 한 곳에서만 하고 왕복 단위 테스트를 둔다. Python 클라이언트 CLI로 호출.
 5. 브라우저 게이트웨이 (`gateway/`, Rust). tonic으로 Fleet Manager의 두 스트림을 구독해 WebSocket으로 중계하고, 미션 제출과 중단을 HTTP JSON으로 받아 gRPC로 넘기며, Phase 2 페이지를 정적으로 서빙한다. ROS 2 비의존이므로 cargo만으로 빌드하고 단위 테스트는 gRPC 서버 목으로 한다. Phase 2에서 고정한 WebSocket JSON 스키마를 그대로 지킨다.
 6. 시나리오 정의. `missions/scenario_*.yaml`에 기체 수, 초기 배치, 표적 Actor 경로, 미션 목록을 한 파일로. 시나리오 runner(Python)가 `config/fleet.yaml` 생성 -> compose 생성 -> `up --wait` -> 미션 제출 -> 기록 -> 판정까지 한 번에.
@@ -81,7 +81,7 @@ PC 한 대에서 Gazebo + PX4 3대 + 노드들을 돌리면 CPU가 부족할 수
 | Offboard가 아닌 모드에서의 setpoint 발행 | 착륙 판정이 늦어지고 Hold가 끌린다. failsafe 뒤 발행을 재개하면 기체가 Offboard로 돌아간다 | Executor는 Offboard가 아닌 모드를 관측하면 setpoint 발행을 멈춘다(architecture.md의 발행 규칙) |
 | MAVLink 포트 혼동 | QGC가 14540에 붙어 연결 안 됨, MAVSDK가 14550에 붙어 GCS 링크 점유 | GCS는 스택 안 공통 14550 + 1000k, 온보드 API는 14540 + 1000k + N으로 `docs/interface.md`에 고정하고 compose 환경변수로만 노출 |
 | 스크립트 궤적 Actor의 pose가 서버 토픽에 없다 | gz-sim 8.15.0 실측. Actor 엔티티는 `/world/<월드>/pose/info` 목록에 없고 그 link pose는 0으로 고정되며 `PosePublisher`는 Actor에 붙지 않는다. Gazebo에서 표적 위치를 받아 변환할 수 없다 | 표적 어댑터가 fleet 파일의 궤적 정의에서 직접 계산한다. 궤적 정의의 유일한 출처는 fleet 파일의 `targets`이고 월드 SDF의 Actor는 같은 정의로 생성하는 화면 확인용이다. 소비자는 `TargetState`만 보므로 원천이 Gazebo가 아니어도 바뀌는 것이 없다 |
-| Actor 월드에서 `dynamic_pose/info` 구독이 서버를 죽인다 | 실측. bridge 설정이나 `gz topic -e` 한 번으로 gazebo 서비스가 내려가고 lockstep 때문에 PX4가 멈춘다 | bridge는 `/clock` 하나만 브리지하고 정답 pose는 `pose/info`를 쓴다. 생성기 단위 테스트가 bridge 인자, compose, 생성된 월드 SDF, `gui.config`에 `dynamic_pose`가 없음을 검사하고, `idsim_sim` 단위 테스트가 정답 pose 노드의 구독 토픽을 같은 기준으로 검사한다. 운영 문서에 적는다 |
+| Actor 월드에서 `dynamic_pose/info` 구독이 서버를 죽인다 | 실측. bridge 설정이나 `gz topic -e` 한 번으로 gazebo 서비스가 내려가고 lockstep 때문에 PX4가 멈춘다 | bridge는 `/clock` 하나만 bridge하고 정답 pose는 `pose/info`를 쓴다. 생성기 단위 테스트가 bridge 인자, compose, 생성된 월드 SDF, `gui.config`에 `dynamic_pose`가 없음을 검사하고, `idsim_sim` 단위 테스트가 정답 pose 노드의 구독 토픽을 같은 기준으로 검사한다. 운영 문서에 적는다 |
 | Actor 월드에 `gz-gui`를 붙였을 때의 서버 생존은 확인한 조건에서만 성립한다 | `gui.config`에 plugin을 더하거나 Gazebo 버전이 바뀌면 `viz` 프로필이 서버를 죽일 수 있다 | gz-sim 8.15.0, gz-gui 8.4.0에서 고정한 `gui.config`로 GUI 연결, 재접속, Actor 렌더링(ogre2, ogre) 동안 서버가 살아 있었다(실측, 표적 4개까지). GUI 플러그인 .so에 `dynamic_pose` 문자열이 없다. `gui.config`의 plugin 목록을 고정하고 목록 밖의 plugin을 더하지 않는다. Gazebo 버전, plugin 목록, 표적 수를 이 조건 밖으로 바꾸면 수동 확인을 다시 한다 |
 | 범위 문구와 표적 생산 경로의 어긋남 | 범위 문구가 "Gazebo 안의 엔티티"를 말하면 궤적 정의에서 계산하는 생산 경로와 어긋나고, 반대로 생산 경로가 Gazebo에 묶이면 실기체 추적기로 바꿀 자리가 흐려진다 | architecture.md의 "다루지 않는 것"이 표적을 fleet 파일의 스크립트 궤적을 따르는 점 표적으로 정하고, Gazebo 물리 상태를 따르는 생산자를 확장 항목으로 둔다. 생산자를 바꿔도 `TargetState`와 토픽은 그대로다 |
 | 범위 확장 유혹 | 표적 추종 알고리즘, 예쁜 UI로 샘이 나감 | 표적은 스크립트 궤적을 따르는 점 표적으로, UI는 지도 위 점으로 고정. architecture.md의 "다루지 않는 것"을 기준으로 |

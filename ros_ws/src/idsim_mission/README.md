@@ -42,7 +42,7 @@ tick 순서: `begin_tick` -> `select_ack` -> `step`(FramePort는 params `world.o
 
 CLI: `ros2 run idsim_mission send_mission <file> --vehicle <vehicle_id>`. 미션 YAML을 `idsim_mission.mission_yaml`로 읽어 goal을 보내고 feedback과 result를 출력한다(형식은 모듈 docstring). 로더는 구조 검사(중복 key와 merge key 거부 포함. YAML 문법 오류도 로더 오류, 종료 코드 2), 단위 변환, 기본값(yaw는 `yaw_rad`가 없으면 MODE_KEEP. 허용 오차는 필수), `mission_id`(없으면 파일 이름)만 하고 계약 검증은 Executor가 한다.
 
-구독 QoS와 ack: PX4 토픽의 QoS는 `idsim_common::px4::px4_out_qos()`(BEST_EFFORT, VOLATILE, KEEP_LAST 5)로 고정이고 바꾸지 않는다(idsim_common이 qos_overrides도 끈다. PX4 writer가 BEST_EFFORT라 RELIABLE로는 붙지 않는다). ack는 PX4 쪽 큐가 4라 한 tick에 여럿 올 수 있으므로, 노드는 command 묶음(DO_SET_MODE, ARM_DISARM, NAV_LAND, NAV_RTL, 그 밖)별로 최신 ack 하나를 두고 tick마다 대기 중인 명령의 묶음 것만 Snapshot에 넣는다. 다른 묶음의 ack가 대기 중인 명령의 거부를 덮지 않는다. 같은 묶음 안에서 한 tick에 둘이 오면 나중 것이 남는다(거부가 ACCEPTED에 덮이면 타임아웃이 잡는다. 안전 방향).
+구독 QoS와 ack: PX4 토픽의 QoS는 `idsim_common::px4::px4_out_qos()`(BEST_EFFORT, VOLATILE, KEEP_LAST 5)로 고정이고 바꾸지 않는다(idsim_common이 qos_overrides도 끈다. PX4 writer가 BEST_EFFORT라 RELIABLE로는 붙지 않는다). ack는 PX4 쪽 큐가 4라 한 tick에 여럿 올 수 있으므로, 노드는 command 묶음(DO_SET_MODE, ARM_DISARM, NAV_LAND, NAV_RTL, 그 밖)별로 최신 ack 하나를 두고 tick마다 대기 중인 명령의 묶음 것만 Snapshot에 넣는다. 다른 묶음의 ack가 대기 중인 명령의 거부를 덮지 않는다. 같은 묶음 안에서 한 tick에 둘이 오면 나중 것이 남는다(거부가 ACCEPTED에 덮이면 timeout이 잡는다. 안전 방향).
 
 feedback: phase나 항목이 바뀐 tick과 항목이 완료된 tick(`items_completed`가 바뀐 tick. 마지막 setpoint 항목이 완료되어 공중 종료 단계로 들어가는 tick 포함)에는 바로, 그 밖에는 10 tick(0.5 s, 2 Hz)마다 낸다(`kFeedbackEveryTicks`). stamp는 `Feedback.stamp_ns`, 곧 그 tick의 `TickInput.now_ns`다. 노드는 tick 시각을 tick 머리에서 한 번만 읽고, core가 경과 시간을 재는 시각과 stamp가 같은 값이 된다(발행 때 다시 읽으면 `/clock` 한 양자만큼 어긋날 수 있다). `Px4ClockPort`의 `Px4Timestamp`는 따로 읽는 값이라 이 시각과 다를 수 있다.
 
@@ -57,7 +57,7 @@ action 서버
 
 상태기(core)
 - 20 Hz tick마다 `step()` 한 번. goal 실행용 thread를 두지 않는다.
-- 한 tick 안의 판정 순서: (1) 그 단계의 실패(감시 표, 상태 끊김, 거부 ack, 타임아웃 만료) (2) 확인과 완료(N회 연속, 도달, 경과) (3) 취소 (4) 출력 마무리. 같은 tick에 실패와 확인이 함께 정해지면 실패가 이긴다(docs/interface.md "종료의 충돌 규칙"을 전이에도 같게 쓴다). P6에서 첫 ARMED 표본을 본 뒤에는 감시 표 -> 확인 기한 -> 확인 -> 취소다.
+- 한 tick 안의 판정 순서: (1) 그 단계의 실패(감시 표, 상태 끊김, 거부 ack, timeout 만료) (2) 확인과 완료(N회 연속, 도달, 경과) (3) 취소 (4) 출력 마무리. 같은 tick에 실패와 확인이 함께 정해지면 실패가 이긴다(docs/interface.md "종료의 충돌 규칙"을 전이에도 같게 쓴다). P6에서 첫 ARMED 표본을 본 뒤에는 감시 표 -> 확인 기한 -> 확인 -> 취소다.
 - 정리 중 한 tick의 순서(docs/interface.md "정리의 상한"): (1) 상태 끊김 (2) 공중 DISARMED (3) 정리할 것 없음 (4) 정리의 상한(정리 시작 tick부터 `max(hold_confirm_timeout + 3 x mode_confirm_timeout, hold_confirm_timeout + land_disarm_fallback_delay + mode_confirm_timeout)`, 기본 12 s. 뒤 항은 종료 단계의 지상 대기에 대비책 지연이 붙는 경로다) (5) 그 분기의 실행. 상한 tick에는 발행을 멈추고 대기 명령을 지운 뒤 지상이면 disarm, 공중이면 NAV_LAND를 한 번 보내고 끝낸다. 식별이 어긋난 표본의 tick이면 직전 분기로 정한다.
 - 공중 종료 단계(docs/interface.md "공중에서 끝나는 미션". 마지막 항목이 setpoint 항목인 미션): 마지막 항목의 완료 tick에 `items_completed`를 N으로 올리고 정리 원인 `kMissionEnd`로 들어간다. 첫 tick은 늘 Hold(AIR)이고, Hold가 실패하면 그 tick의 최신 landed로 Land 경로(AIR_LAND)나 지상 대기(GROUND_WAIT)로 간다. 한 tick의 순서: (1) 표본 없음(방어) (2) 식별 불일치(분기가 있으면 표본 없이 이어 가고 상태 끊김을 보지 않는다) (3) 표본 반영(발행 규칙, disarm 분류, Hold 관측, 두 계수, 지상 대기의 대비책 이어짐) (4) 상태 끊김 (5) 공중 DISARMED (6) 정리의 상한 (6a) disarm 분류가 지상이면 지상 DISARMED 3회만 보고 끝(분류 지상 규칙. 첫 지상 DISARMED tick에 대기 명령을 지우고 그 동안의 ack는 버린다) (7) 분기의 거부 ack, 기한, 이동, AUTO_LAND 관측 (8) Hold 3회 (9) 지상 대기의 대비책 disarm (10) 재전송. 표본은 감시 표와 같은 신뢰 표본 규칙(`monitored_status`)이다. 지상 DISARMED 계수는 단계 전체에 하나이고(대비책 전 `SampleCounter`, 뒤 `DisarmConfirm`) 3회면 SUCCEEDED(`ended on ground`)다. 같은 tick의 `hold_confirm_timeout`과 Hold 3회째, 정리의 상한과 모든 확인은 만료가 이긴다. 취소는 결과를 바꾸지 않는다.
 - 비행 중 감시 표로 끝낼 때는 정리 분기에 들어가지 않는다. 순위 2는 arm을 보냈으면, 순위 3, 6, 7, 8은 arm을 보냈고 첫 ARMED 표본 뒤 landed false를 본 적이 없고 그 tick의 landed가 true이면 강제가 아닌 disarm을 한 번 보낸다(`monitor_sends_disarm`). P6과 setpoint 항목이 같은 종료 함수(`end_by_monitor`)를 쓴다.
@@ -108,7 +108,7 @@ P0-P6은 `docs/interface.md` "준비 단계"의 지상 arm 진입 순서 표의 
 | 정리의 상한 | `cleanup_cap_ns`(`core/config.hpp`), `cleanup_cap_reached`, `end_at_cleanup_cap` |
 | disarm 분류의 고정 규칙 | `disarm_class_`(모드 명령 항목, 정리, 공중 종료 단계), `DisarmClass` |
 | 명령 재전송 규칙 | `send`, `resend_due`, `take_ack` |
-| 타임아웃 기본값("참고: 노드 파라미터"), 정리의 상한 | `core/config.hpp`의 `Timeouts`, `cleanup_cap_ns` |
+| timeout 기본값("참고: 노드 파라미터"), 정리의 상한 | `core/config.hpp`의 `Timeouts`, `cleanup_cap_ns` |
 
 ## SITL 시나리오 trace가 다르면 고칠 곳
 
@@ -120,7 +120,7 @@ P0-P6은 `docs/interface.md` "준비 단계"의 지상 arm 진입 순서 표의 
 | 이륙 직후 landed가 true인 구간의 지상 setpoint와 disarm | `MissionRunner::enter_ground`, `ground_setpoint` |
 | 감시 표의 행 순위 | `core/rules.hpp`의 `kMonitorRankOrder` |
 | "disarm 전송 뒤 받은 표본"의 기준 | `core/rules.cpp`의 `is_after_disarm_send` |
-| 타임아웃 기본값과 재전송 주기 | `core/config.hpp`의 `Timeouts` |
+| timeout 기본값과 재전송 주기 | `core/config.hpp`의 `Timeouts` |
 
 ## 표에 없어 구현에서 정한 것
 
@@ -181,7 +181,7 @@ P0-P6은 `docs/interface.md` "준비 단계"의 지상 arm 진입 순서 표의 
 | `test_runner_track.cpp` | TRACK_ENTITY 항목(docs/interface.md "GoToItem과 TrackEntityItem"): 지상 진입 정상(시작 tick의 setpoint, 속도, feedback 거리, tick당 점과 벡터 호출 1회와 입력), 신선도와 feedforward(나이 0.1 s는 신선, 0.15 s는 아님, `velocity_valid` false, 벡터 변환 값 없음, 미래 stamp), 신선하지 않은 tick이 연속을 끊음, 표본 없이 시작(진입 전 setpoint 유지, 호출 0), TARGET_LOST(획득 전 K+21, 획득 뒤 마지막 표본 + 21 tick, 앞 항목의 표본, ITEM_TIMEOUT과 같은 tick, timeout 1 s의 ITEM_TIMEOUT이 먼저), ITEM_TIMEOUT과 정리 중 속도 없음, 만료와 3개째의 같은 tick, 움직이는 표적, 점 변환 값 없음, TRACK_ENTITY -> TRACK_ENTITY 완료 tick의 호출 2회, yaw(MODE_FIXED, 표본 전 유지, MODE_KEEP), 다음 항목(LOITER, RTL, GOTO, 종료 단계, GOTO -> TRACK_ENTITY, LOITER -> TRACK_ENTITY), 공중 진입(정상, LAND, LOITER 뒤, 시작 조건 detail, 표본 없음의 TARGET_LOST), 취소와 겹침(TARGET_LOST, ITEM_TIMEOUT, 완료, 바로 끝내는 사건, 다음 항목의 취소), 감시 표 단일 행과 대표 쌍, TARGET_LOST, ITEM_TIMEOUT, 완료의 대표 행 넷씩. 끝나는 사례마다 완료 수, index, port 호출 규율을 단정한다 |
 | `test_runner_resend_after_ack.cpp` | 지상 arm 진입 밖의 재전송 경로 여섯 곳(P6 arm, 모드 명령 항목(NAV_LAND, NAV_RTL, 대비책 disarm), 정리의 지상 disarm, 공중 Hold, Land 경로, 공중 Offboard 진입의 P5)이 비거부 ack(ACCEPTED, IN_PROGRESS) 뒤에도 확인 표본 전까지 주기 재전송을 이어 감 |
 | `test_runner_flow_cells.cpp` | PREPARING과 항목 단계의 칸을 하나씩 덮는다(칸마다 `expect_cell`과 종료 결과). 무시된 취소의 대표 칸은 Hold와 disarm이 그 tick과 그 뒤에 나가지 않음을 함께 단정한다(READY_TIMEOUT과 취소는 NOT_READY이고 명령 없음, ARM의 MONITOR_MODE_FAILSAFE와 취소는 disarm 1회). setpoint 항목의 tick 순서는 대표 행 넷 x {TAKEOFF, LOITER} x {ITEM_TIMEOUT, 완료}의 파라미터화 테스트(`SetpointOrderCells`) |
-| `test_runner_cleanup_cells.cpp` | 정리 단계 칸의 파라미터화 harness(`CleanupCellTest`). 파라미터 하나가 칸 하나(정리 원인, 분기, 사건)이고, `CleanupRig`가 원인의 입구(P5 취소, TAKEOFF의 ITEM_TIMEOUT, P5 거부 ack, P6 거부 ack, `[RTL]`의 NAV_RTL 거부 ack, `[TAKEOFF, TRACK_ENTITY]`와 공중 Offboard 진입 `[TRACK_ENTITY]`의 TARGET_LOST)로 정리를 시작해 분기(NONE, AIR, AIR_LAND, GROUND, Hold 실패 뒤 GROUND)까지 몰고 간 뒤 사건을 일으킨다. 칸마다 그 칸의 기록이 난 tick의 명령(없음, disarm 1회, NAV_LAND 1회, Hold 1회)을 표대로 단정하고, Hold 거부와 Hold 만료는 NAV_LAND의 첫 발행과 그 시점도 본다. 정리의 상한 칸은 분기를 나갔다 바로 돌아와 분기 타이머를 다시 시작하며 목표 분기에서 상한 tick을 맞는다(머무는 tick 수는 분기 타임아웃에서 파생, 상한 tick 표본의 landed는 칸의 입력 열) |
+| `test_runner_cleanup_cells.cpp` | 정리 단계 칸의 파라미터화 harness(`CleanupCellTest`). 파라미터 하나가 칸 하나(정리 원인, 분기, 사건)이고, `CleanupRig`가 원인의 입구(P5 취소, TAKEOFF의 ITEM_TIMEOUT, P5 거부 ack, P6 거부 ack, `[RTL]`의 NAV_RTL 거부 ack, `[TAKEOFF, TRACK_ENTITY]`와 공중 Offboard 진입 `[TRACK_ENTITY]`의 TARGET_LOST)로 정리를 시작해 분기(NONE, AIR, AIR_LAND, GROUND, Hold 실패 뒤 GROUND)까지 몰고 간 뒤 사건을 일으킨다. 칸마다 그 칸의 기록이 난 tick의 명령(없음, disarm 1회, NAV_LAND 1회, Hold 1회)을 표대로 단정하고, Hold 거부와 Hold 만료는 NAV_LAND의 첫 발행과 그 시점도 본다. 정리의 상한 칸은 분기를 나갔다 바로 돌아와 분기 타이머를 다시 시작하며 목표 분기에서 상한 tick을 맞는다(머무는 tick 수는 분기 timeout에서 파생, 상한 tick 표본의 landed는 칸의 입력 열) |
 | `node/test_contract_constants.cpp` | core 값과 메시지 상수(REASON_* 13, 14 포함, TYPE_*, MODE_*, PHASE_*, STATUS_*), yaw 식과 idsim_common/frames, 변환의 result == 사건, `is_valid_target_id`와 `TargetId::parse`의 사례 표 대조, `to_target_sample`의 유효 표본 규칙(경계 1e5, 비유한 위치와 유효 속도, 무효 속도 필드 무시, stamp 0과 비증가, 다른 target_id와 frame_id), 비행 중 원점 변경 WARN 판정 `reference_changed_in_flight`(landed false에서 바뀜만 참, 지상의 첫 원점 설정은 거짓) |
 | `python/test_send_mission_wait.py` | `send_mission._wait`: 끝나지 않는 future를 `POLL_S` timeout으로 반복 spin, 끝난 future는 spin하지 않음, spin의 KeyboardInterrupt 전파(가짜 rclpy) |
 | `python/test_mission_yaml.py` | 미션 YAML 로더: YAML 파일 -> `Mission`(type 여섯, 기본값, ns 반올림, 메시지 상수 대조), `mission_id` 기본값과 정규식, 구조 오류(모르는 key, 중복 key, merge key, 필수 key, 타입), YAML 문법 오류, float과 Duration 범위를 넘는 정수, UTF-8이 아닌 파일, CLI의 로더 오류 종료 코드 2, timeout 변환 오류(음수, 비유한, int32 초과), 계약 위반 미션은 로더 오류가 아님 |

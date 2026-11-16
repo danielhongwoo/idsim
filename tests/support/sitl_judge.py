@@ -29,9 +29,9 @@ sitl_wait.raise_if). 판정 기준을 느슨하게 바꾸려면 근거와 함께
     실행에서 없으면 ORACLE_ABSENT로 실패하고 조용히 건너뛰지 않는다. 테스트는 원점 변환을 다시 구현하지 않는다.
 
 판정 상수(근거는 tests/sitl/README.md "b와 R_home 보정 확인")
-  R_JUDGE_M 1.0 m: waypoint와 TRACK_ENTITY 완료의 판정 반경). t_f(Executor가 항목을 완료로 넘긴 tick의 stamp)에서
+  R_JUDGE_M 1.0 m: waypoint와 TRACK_ENTITY 완료의 판정 반경. t_f(Executor가 항목을 완료로 넘긴 tick의 stamp)에서
     정답 pose와 목표의 3차원 거리가 이 안이어야 한다(아니면 REACH_MISMATCH).
-  B_M 0.5 m: 사용자 결정로 고정한 값이다. 정규 허용한계(mean + k x std)는 쓰지 않는다. 확인 조건은
+  B_M 0.5 m: 사용자가 정한 고정값이다. 정규 허용한계(mean + k x std)는 쓰지 않는다. 확인 조건은
     "보정 실측의 GOTO s와 TRACK_ENTITY s_track 표본 전부가 B_M 이하"다(tests/support/calibration.py).
     시험 미션의 acceptance_radius_m은 R_JUDGE_M - B_M = 0.5 m이고 ACCEPTANCE_MIN_M(0.5 m) 이상이다. B_M은 상한
     B_MAX_M(0.5 m)과 같다.

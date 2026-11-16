@@ -50,9 +50,9 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 `artifacts/runs/<실행 id>/` 아래. 실패하면 이 디렉터리 전체를, 성공하면 `sitl/junit.xml`, `sitl/trace.jsonl`, `sitl/summary.md`, `sitl/trace_ulog.json`을 CI가 올린다.
 
 - `compose.yaml`, `stack.json`, `params/`, `px4-N/log/*.ulg`, `ros_log/`
-- `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표. 비행 시나리오는 `reach`, `track`(R2, 추종 오차, 신선하지 않은 tick), `landing`(R4, RTL 소요), `r1`, `hold_end`(F2), `air_start`(F3), `flight_window`), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록, `recorded_only`), `trace_ulog.json`(ULog의 TRACK_ENTITY 구간 속도 feedforward와 z, F3 공중 시작의 DO_SET_MODE와 D. 기록 전용), `summary.md`, `steps.tsv`(단계별 벽시계 초, 서비스 종료 상태 `stop_exit_*`, ULog 끝 경계 `ulog`, 회차별 종료 코드 `rc_*` 줄), `raw_status_A.jsonl`, `raw_status_D.jsonl`, `armed_a.json`, `ps_before_stop.jsonl`(stop 전 서비스 상태), `logs/<서비스>.log`, `health_<서비스>.txt`(실패한 회나 unhealthy 서비스만), `crosscheck_a.json`
+- `sitl/`: `junit.xml`, `trace.jsonl`(gate, goal, 사건 판정, 이정표. 비행 시나리오는 `reach`, `track`(TRACK_ENTITY 완료의 도달 기록, 추종 오차, 신선하지 않은 tick), `landing`(R4, RTL 소요), `r1`, `hold_end`(F2), `air_start`(F3), `flight_window`), `verdict.json`(gate와 시나리오별 결과, RTF, 시나리오 A의 ARMED 기록, `recorded_only`), `trace_ulog.json`(ULog의 TRACK_ENTITY 구간 속도 feedforward와 z, F3 공중 시작의 DO_SET_MODE와 D. 기록 전용), `summary.md`, `steps.tsv`(단계별 벽시계 초, 서비스 종료 상태 `stop_exit_*`, ULog 끝 경계 `ulog`, 회차별 종료 코드 `rc_*` 줄), `raw_status_A.jsonl`, `raw_status_D.jsonl`, `armed_a.json`, `ps_before_stop.jsonl`(stop 전 서비스 상태), `logs/<서비스>.log`, `health_<서비스>.txt`(실패한 회나 unhealthy 서비스만), `crosscheck_a.json`
 
-`recorded_only`의 이름: R1 EKF 원점과 기대 스폰 GPS의 차, R2 TRACK_ENTITY 추종 오차와 신선하지 않은 tick, R3 표적 age와 간격, `/clock` 간격과 상태 지연, R4 RTL 착륙 수평 위치와 기준점의 거리. 판정에 쓰지 않는다.
+`recorded_only`의 이름: R1 EKF 원점과 기대 스폰 GPS의 차, R2 도달 사건(GOTO, TRACK_ENTITY 완료)의 정답 거리와 초과량(`d3`, `s`, `s_track` 등), R3 표적 age와 간격, `/clock` 간격, 상태 지연, 신선하지 않은 tick, 추종 오차, R4 RTL 착륙 수평 위치와 기준점의 거리. 판정에 쓰지 않는다.
 
 ## b와 R_home 보정 확인
 

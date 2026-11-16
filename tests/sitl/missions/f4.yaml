@@ -1,4 +1,4 @@
-# F4(tests/sitl/README.md "시나리오와 판정"): 합친 미션 [TAKEOFF 5 m, GOTO x 2, TRACK_ENTITY, RTL]. 비행 시나리오를 한 미션으로 합친 것.
+# F4(tests/sitl/README.md "시나리오와 판정"): 합친 미션 [TAKEOFF 5 m, GOTO x 2, TRACK_ENTITY, RTL]. Phase 1 목표의 미션 하나를 그대로 쓴다.
 # 보는 것: waypoint 도달(정답 판정, b의 표본), 표적 접근, RTL 착륙 위치(R4), 착륙 후 disarm. 끝 상태 지상 DISARMED.
 # 기체는 F3이 내려앉은 (6, 7, 0) 근처에서 이륙한다. 표적은 F2와 같은 car_1이고(loop true) 시작 위상은 앞 비행의 시간에
 # 따라 달라진다. TRACK_ENTITY timeout 30 s의 근거는 f2.yaml과 같다(항목 시작점이 같은 (29, 15, 5)다).

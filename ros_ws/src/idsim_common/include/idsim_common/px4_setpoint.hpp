@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Offboard position setpoint 헬퍼. offboard_control_mode와 trajectory_setpoint는
+// Offboard position setpoint helper. offboard_control_mode와 trajectory_setpoint는
 // 이 두 함수로만 만든다.
 //
 // position 제어만 쓴다(docs/interface.md "Offboard setpoint"). 고정하는 필드:

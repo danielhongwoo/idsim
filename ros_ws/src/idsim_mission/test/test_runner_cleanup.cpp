@@ -297,7 +297,7 @@ TEST(CancelGround, LinkLostDuringGroundDisarmWithTimestampFailureDropsDisarm)
 TEST(CancelGround, DeniedDisarmAckKeepsRetrying)
 {
   // 방어 경로(합성 ack): v1.17.0의 ARM_DISARM은 DENIED를 돌려주지 않는다. 거부 ack는 종류와
-  // 무관하게 그 자리에서 끝내지 않고 landed인 동안 재전송하며, 타임아웃에 끝나며 detail에 적는다.
+  // 무관하게 그 자리에서 끝내지 않고 landed인 동안 재전송하며, timeout에 끝나며 detail에 적는다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
   h.auto_px4 = false;
@@ -584,7 +584,7 @@ TEST(CancelAir, HoldInProgressAckIsNotRejection)
 TEST(UntrustedSample, NotCountedForGroundDisarm)
 {
   // 정리 중 식별이 어긋난 표본은 분기 고르기와 확인 계수에 쓰지 않는다. 남의 기체의
-  // DISARMED로 CANCELED가 되지 않고, 분기의 타임아웃이 끝낸다.
+  // DISARMED로 CANCELED가 되지 않고, 분기의 timeout이 끝낸다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
   h.auto_px4 = false;
@@ -905,7 +905,7 @@ TEST(HoldFailedReentry, AirAgainAfterHoldTimeoutSendsNavLand)
 // land_disarm_fallback_delay + mode_confirm_timeout) = 12 s = 240 tick이다.
 
 constexpr int kCapTicks = static_cast<int>(cleanup_cap_ns(Timeouts{}) / kTickNs);
-constexpr int kToggleTicks = 50;  // landed가 2.5 s마다 바뀐다(분기 타임아웃 3 s보다 짧다)
+constexpr int kToggleTicks = 50;  // landed가 2.5 s마다 바뀐다(분기 timeout 3 s보다 짧다)
 
 TEST(CleanupCap, DerivedValue)
 {

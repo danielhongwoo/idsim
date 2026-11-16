@@ -226,7 +226,7 @@ def test_golden_stack_loads_with_support_loader(case):
     else:
         px4 = [v.service for v in s.vehicles]
         assert s.startup_stages == [["xrce-agent", "gazebo"], px4, ["bridge"]]
-    # 새 key: 기존 로더는 모르는 필드를 무시하고, 새 key는 원본 dict로 읽힌다
+    # 로더가 모르는 key는 무시하고 원본 dict로 읽힌다
     for v in s.vehicles:
         assert v.raw["vehicle_id"] == v.ns[1:]
         if variant == "embedded":

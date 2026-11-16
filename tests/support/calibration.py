@@ -17,7 +17,7 @@
 
 입력은 run_sitl.sh --repeat의 회차마다 남는 trace.jsonl(reach, track, landing 사건)과 verdict.json이다. 통과한 실행만
 부팅으로 센다.
-- b): 상수로 받는다(기본 sitl_judge.B_M). 확인 조건은 "GOTO 도달 사건의 s = d_oracle(t_f) - acceptance_radius_m와
+- b: 상수로 받는다(기본 sitl_judge.B_M). 확인 조건은 "GOTO 도달 사건의 s = d_oracle(t_f) - acceptance_radius_m와
   TRACK_ENTITY 완료의 s_track = d_oracle(t_f) - acceptance_radius_m - v x L의 표본 전부가 b 이하"다. 정규
   허용한계(비중심 t의 k, mean + k x std)와 Shapiro-Wilk는 쓰지 않고 기록용으로만 낸다(분포를 다시 볼 때의 자료).
 - 도달 확인: GOTO d3 전부가 R_JUDGE 안이고 TRACK_ENTITY d3 전부가 그 사건의 임계값(R_JUDGE + v x L) 안인가(판정과

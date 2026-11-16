@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 상태기 단위 테스트의 tick 열 헬퍼. PX4 없이 core만 쓴다.
+// 상태기 단위 테스트의 tick 열 helper. PX4 없이 core만 쓴다.
 //
 // - Harness는 20 Hz tick(50 ms)을 흉내 낸다. tick()은 (1) 이번 tick에 새로 들어온 표본을 Snapshot에
 //   넣고(received_tick = 이번 tick 번호) (2) step을 한 번 부르고 (3) 번호와 시각을 올린다.
@@ -880,7 +880,7 @@ inline void expect_terminated_once(Harness & h, Status status, Reason reason)
   EXPECT_EQ(term.reason, reason) << reason_name(term.reason) << " " << term.detail;
   EXPECT_TRUE(is_consistent(term.status, term.reason));
   EXPECT_TRUE(h.runner().done());
-  // 하네스 불변식: 모든 시나리오에서 종료 결과 == 종료 사건.
+  // harness 불변식: 모든 시나리오에서 종료 결과 == 종료 사건.
   expect_result_equals_event(term, static_cast<std::uint32_t>(h.runner().mission().items.size()));
   // 종료 뒤의 step은 명령, setpoint, feedback, 종료를 내지 않는다(취소가 와도).
   for (int i = 0; i < 3; ++i) {

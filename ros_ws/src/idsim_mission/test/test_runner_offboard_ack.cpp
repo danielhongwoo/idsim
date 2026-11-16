@@ -364,7 +364,7 @@ TEST(OffboardAck, CancelOnConfirmTickWithoutAckSendsNothing)
 TEST(OffboardAck, CancelOnConfirmTickWithValidAckGoesToGroundDisarm)
 {
   // arm 판정이 취소보다 먼저라 arm_sent가 true인 지상 arm 분기로 간다. 그 tick의 arm은 정리
-  // 진입이 지워 나가지 않고 disarm 하나가 나간다(확인 tick 취소와 같은 출력).
+  // 진입이 지워 나가지 않고 disarm 하나가 나간다.
   Harness h(standard_mission());
   reach_offboard_without_ack(h);
   h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
