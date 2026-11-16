@@ -25,7 +25,7 @@ GPS 없는 비행도 다루지 않는다. GPS는 항상 수신된다고 가정�
 
 세 레이어로 나눈다. 기준은 실기체의 구조다. 맨 아래가 기체 레이어(PX4가 비행제어를 맡는 기체 N대)이고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. ROS 2 버스는 기체마다 하나이고 그 기체 안에 있다. 운용 서비스는 놓이는 곳으로 둘로 나뉜다. 기체 운용 노드(Mission Executor, Telemetry Collector)는 기체 안에서 그 기체의 버스에 붙고, Fleet 서비스(Fleet Manager)는 지상에 있다. 둘 사이가 지상 링크이고, 지상 링크를 건너는 계약은 `ExecuteMission`, `VehicleState`, `MissionEvent` 셋이고 `MissionEvent`는 지상에서 구독한다. 지상의 어느 컴포넌트가 구독하는지는 기록기의 위치와 함께 정하지 않았다. 지상 링크는 DDS가 아니라 Zenoh로 잇는다. Zenoh의 구성은 정하지 않았다.
 
-시뮬레이션은 이 구조에서 실물이 필요한 부분만 대신하고, 그 밖의 구조(실행 주체, 버스의 범위, 통신 방식)는 실기체 환경과 같게 둔다. 그래서 두 환경의 차이는 실물을 대신하는 것으로만 남아야 한다. 이 저장소에서는 PX4 SITL x N과 Gazebo가 기체 레이어를 대신하고, 개발 호스트 한 대가 지상국과 기체의 장비를 대신한다. 대신하는 것은 장비의 수이지 통신 구조가 아니다. 시뮬레이션에서도 ROS 2 버스는 기체마다 DDS 도메인으로 나누고, Fleet Manager와 기체 운용 노드 사이의 지상 링크는 Zenoh로 잇는다. 기체가 한 대인 스택에서는 스택의 DDS 도메인이 곧 그 기체의 버스이고 지상 쪽 서비스가 없으므로 이 구조와 이미 같다. 기체마다의 도메인과 Zenoh 지상 링크는 기체가 여러 대가 되고 Fleet Manager가 생기는 Phase 3에서 더한다. 그 전에 계약을 쓰는 것은 통합 테스트와 CLI `send_mission`이고, 이들은 지상 링크를 거치지 않고 기체의 버스에서 계약을 직접 쓴다. 무선 구간의 지연과 손실은 시뮬레이션에 넣지 않는다. 운용 서비스는 시뮬레이터의 토픽과 프로세스에 의존하지 않도록 설계해, 실기체에 올릴 때 고칠 곳이 아래에 적은 "시뮬레이션이 실기체와 달라지는 곳"으로 좁혀지게 한다.
+시뮬레이션은 이 구조에서 실물이 필요한 부분만 대신하고, 그 밖의 구조(실행 주체, 버스의 범위, 통신 방식)는 실기체 환경과 같게 둔다. 그래서 두 환경의 차이는 실물을 대신하는 것으로만 남아야 한다. 이 저장소에서는 PX4 SITL x N과 Gazebo가 기체 레이어를 대신하고, 개발 호스트 한 대가 지상국과 기체의 장비를 대신한다. 대신하는 것은 장비의 수이지 통신 구조가 아니다. 시뮬레이션에서도 ROS 2 버스는 기체마다 DDS 도메인으로 나누고, Fleet Manager와 기체 운용 노드 사이의 지상 링크는 Zenoh로 잇는다. 기체가 한 대인 스택에서는 스택의 DDS 도메인이 곧 그 기체의 버스이고 지상 쪽 서비스가 없으므로 이 구조와 이미 같다. 기체마다의 도메인과 Zenoh 지상 링크는 기체가 여러 대가 되고 Fleet Manager가 생기는 Phase 3에서 더한다. 그 전에 계약을 쓰는 것은 통합 테스트와 CLI `send_mission`(`ExecuteMission`을 보낸다), Phase 2의 임시 WebSocket 어댑터(`VehicleState`를 읽는다)이고, 이들은 지상 링크를 거치지 않고 기체의 버스에서 계약을 직접 쓰고 읽는다. 무선 구간의 지연과 손실은 시뮬레이션에 넣지 않는다. 운용 서비스는 시뮬레이터의 토픽과 프로세스에 의존하지 않도록 설계해, 실기체에 올릴 때 고칠 곳이 아래에 적은 "시뮬레이션이 실기체와 달라지는 곳"으로 좁혀지게 한다.
 
 이 절의 그림 둘은 같은 구조를 실기체 환경과 시뮬레이션 환경으로 보인다. 실행 주체, 그것이 놓이는 장비, 서로 주고받는 것을 보인다. 실기체 환경 그림이 기준이고 이 문서의 큰 그림이다. 시뮬레이션 환경 그림은 큰 그림의 어느 부분을 무엇이 대신하는지로 읽는다. 같은 실행 주체는 두 그림에서 같은 이름과 같은 순서로 둔다. 상자 테두리(subgraph)는 장비 한 대다. 통신 방식은 이 그림의 화살표에 적고, 컨테이너와 포트, 전송 계층의 세부는 "Docker Compose 실행 환경 설계" 절의 그림이 보인다.
 
@@ -117,7 +117,7 @@ flowchart TB
 
 이 원칙은 표적 경로에도 적용한다. Mission Executor는 Gazebo 토픽을 직접 구독하지 않고 `idsim_interfaces`의 `TargetState` 계약(`/targets/<id>/state`)만 구독한다. 실기체에서는 이 토픽을 표적 추적기가 채운다. 시뮬레이션에서는 표적 추적기를 대신해 `idsim_sim`의 표적 어댑터 노드가 fleet 파일(`config/fleet.yaml` 등)의 궤적 정의를 시뮬레이션 시간에 평가해 이 계약으로 발행하고, Gazebo 월드의 Actor는 같은 정의로 생성해 화면에서 확인하는 용도다(Actor의 화면 위치는 참고용이다. Actor는 반복 재생으로만 만들고 `loop`가 false인 표적은 끝에 86400 s의 정지를 붙여 나타내므로, 그 뒤에는 화면의 Actor만 처음 위치로 돌아간다). 표적 어댑터는 Gazebo를 구독하지 않는다.
 
-운용 서비스 레이어. 큰 그림의 "Fleet Manager"와 "기체 운용 노드" 상자를 펼쳐 운용 서비스끼리, 그리고 버스와 무엇을 주고받는지를 보인다. 장비 경계는 큰 그림에 있고 여기에는 그리지 않는다. Fleet Manager와 맺는 "미션 배분"과 "상태 집계"가 지상 링크(Zenoh)를 건너는 계약이다. Logger와 Replay는 놓이는 곳을 정하지 않았다. 그림의 "기록" 화살표는 Logger가 그 기체의 버스에 있는 토픽을 기록한다는 뜻이고 Logger가 기체 안에 놓인다는 뜻이 아니다. 큰 그림의 기체 쪽 상자(Agent, PX4, 기체와 센서)와 그 일부를 대신하는 시뮬레이션 구성(PX4 SITL, Gazebo, bridge)은 여기서 펼치지 않고, 그 컨테이너와 프로토콜은 "Docker Compose 실행 환경 설계" 절의 상세 1에만 그린다.
+운용 서비스 레이어. 큰 그림의 "Fleet Manager"와 "기체 운용 노드" 상자를 펼쳐 운용 서비스끼리, 그리고 버스와 무엇을 주고받는지를 보인다. 장비 경계는 큰 그림에 있고 여기에는 그리지 않는다. Fleet Manager와 맺는 "미션 배분"과 "상태 집계"가 지상 링크(Zenoh)를 건너는 계약이다. 이 밖에 `MissionEvent`(미션 기록)도 지상에서 구독하며, 어느 컴포넌트가 구독하는지는 정하지 않아 그림에 넣지 않았다. Logger와 Replay는 놓이는 곳을 정하지 않았다. 그림의 "기록" 화살표는 Logger가 그 기체의 버스에 있는 토픽을 기록한다는 뜻이고 Logger가 기체 안에 놓인다는 뜻이 아니다. 큰 그림의 기체 쪽 상자(Agent, PX4, 기체와 센서)와 그 일부를 대신하는 시뮬레이션 구성(PX4 SITL, Gazebo, bridge)은 여기서 펼치지 않고, 그 컨테이너와 프로토콜은 "Docker Compose 실행 환경 설계" 절의 상세 1에만 그린다.
 
 ```mermaid
 flowchart TB
@@ -161,8 +161,8 @@ flowchart TB
 | `/targets/*/state` | 표적 어댑터 (시뮬레이션), 표적 추적기 (실기체) | Mission Executor, 판정 노드 |
 | `/sim/<vehicle_id>/pose` | 정답 pose 노드 (SITL 전용) | 판정 노드, Logger (Phase 2, SITL 실행의 기록만). 운용 패키지(테스트 절의 목록)는 읽지 않는다 |
 | `/px4_N/execute_mission` (action) | 판정 노드와 CLI `send_mission`(기체의 버스에서 직접), Fleet Manager (Phase 3, 지상 링크를 거쳐) | Mission Executor |
-| `/px4_N/vehicle_state` | Telemetry Collector (Phase 2) | Fleet Manager (Phase 3, 지상 링크를 거쳐), 판정 노드 |
-| `/px4_N/mission_event` | Mission Executor | Logger, 판정 노드 |
+| `/px4_N/vehicle_state` | Telemetry Collector (Phase 2) | 임시 WebSocket 어댑터 (Phase 2, 기체의 버스에서 직접), Fleet Manager (Phase 3, 지상 링크를 거쳐), 판정 노드 |
+| `/px4_N/mission_event` | Mission Executor | Logger, 판정 노드, 지상 (Phase 3, 지상 링크를 거쳐 구독. 컴포넌트는 정하지 않음) |
 
 기체 운용 노드는 그 기체의 ROS 2 토픽만 보고 동작하고, PX4는 uXRCE-DDS Agent를 통해 그 기체의 버스에 올라온다. 실기체의 기준 배치에서는 Agent와 버스가 기체마다 하나다. 시뮬레이션에서도 버스가 기체마다 DDS 도메인 하나이고 Agent가 기체마다 하나이다(Phase 3). 지금의 compose에서는 Agent 하나가 모든 PX4 SITL 인스턴스를 같은 DDS 도메인에 올리며 기체는 네임스페이스로 나뉜다. 기체를 실제로 움직이는 setpoint는 운용 노드 가운데서는 기체별 Mission Executor만 발행하고(통합 테스트와 스모크가 `px4_raw.py`로 `/fmu/in`에 직접 쓰는 것은 테스트 전용 예외다), Fleet Manager는 지상 링크를 건너는 계약으로 미션을 배분하고 상태를 집계할 뿐 `/fmu/in/*`에 직접 쓰지 않는다. MAVLink는 외부 GCS용 곁가지이며 운용 서비스는 사용하지 않는다. PX4와 기체(모터, 센서) 사이의 교환은 ROS 2를 거치지 않는다. 시뮬레이션에서는 이것이 PX4 SITL <-> Gazebo의 직접 연결이다.
 
@@ -186,7 +186,7 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 | --- | --- | --- |
 | 호스트 / OS / ROS 2 | x86_64 Linux 호스트, Ubuntu 24.04, ROS 2 Jazzy | [PX4 ROS 2 가이드](https://docs.px4.io/main/en/ros2/user_guide) 예제는 Humble 기준이라 명령어를 따를 때 humble -> jazzy 치환. Jazzy는 LTS 2029년까지(Humble은 2027). px4_msgs는 Humble, Jazzy 모두 CI 빌드. 컨테이너 안에서 돌리므로 호스트 배포판은 무관하나 아키텍처는 x86_64로 고정 |
 | ROS 2 미들웨어 | CycloneDDS (`rmw_cyclonedds_cpp`), 모든 ROS 2 컨테이너에 `RMW_IMPLEMENTATION`으로 고정 | 기체 안의 ROS 2 버스에 쓰는 미들웨어다. 지상 링크에는 쓰지 않는다(아래 행). Jazzy 기본 FastDDS는 같은 호스트로 판단되는 참가자끼리 공유 메모리 전송을 시도해, 컨테이너마다 `/dev/shm`이 다르면 "토픽은 보이는데 데이터가 안 온다"가 된다. CycloneDDS는 기본이 UDP 전용이라 이 함정이 없고, 설정 파일 하나로 peer와 multicast를 제어하기 쉽다. uXRCE-DDS Agent는 내부적으로 FastDDS를 쓰지만 표준 RTPS로 CycloneDDS 노드와 통신한다. 단 Agent는 호스트 인터페이스 주소만 광고하므로 Cyclone 쪽에서 인터페이스를 lo로 고정하면 Agent를 찾지 못한다(실측). `config/cyclonedds.xml`은 인터페이스를 고정하지 않고 unicast peer 127.0.0.1과 multicast 끔만 둔다 |
-| 지상 링크(지상국 <-> 기체) | Zenoh. 구성(bridge의 종류, router의 위치, 건네는 토픽을 제한하는 방법)과 버전은 정하지 않음 | 지상국과 모든 기체를 한 DDS 도메인에 두면 참가자마다 나머지 전부의 endpoint 정보를 교환하므로 discovery의 통신량과 메모리가 기체 수에 따라 가파르게 늘고, multicast가 약하고 링크가 흔들리는 무선 구간에서는 더 나빠진다. 그래서 기체의 ROS 2 버스(DDS)는 기체 안에 두고 무선 구간에는 DDS를 쓰지 않는다. 이것은 DDS의 일반적인 동작에 근거한 판단이고 이 저장소에서 측정하지 않았다. Zenoh에는 ROS 2의 토픽과 action을 중계하는 bridge가 있다. 그래서 고정된 계약(`ExecuteMission`)을 다른 형식으로 다시 정의하지 않고 건네고, 건네는 토픽을 계약으로 제한하고, 같은 구성을 시뮬레이션에서 재현하는 것을 기대한다. 이 계약과 QoS가 bridge를 그대로 건너는지는 확인하지 않았다. 대안 MQTT는 action에 해당하는 것이 없어 goal, feedback, result, cancel을 따로 설계해야 하고 TCP 기반이라 고르지 않는다. MQTT는 외부 telemetry 연동용 확장 후보로 남는다 |
+| 지상 링크(지상국 <-> 기체) | Zenoh. 구성(bridge의 종류, router의 위치, 건네는 토픽을 제한하는 방법)과 버전은 정하지 않음 | 지상국과 모든 기체를 한 DDS 도메인에 두면 참가자마다 나머지 전부의 endpoint 정보를 교환하므로 discovery의 통신량과 메모리가 기체 수에 따라 가파르게 늘고, multicast가 약하고 링크가 흔들리는 무선 구간에서는 더 나빠진다. 그래서 기체의 ROS 2 버스(DDS)는 기체 안에 두고 무선 구간에는 DDS를 쓰지 않는다. 이것은 DDS의 일반적인 동작에 근거한 판단이고 이 저장소에서 측정하지 않았다. Zenoh에는 ROS 2의 토픽, service, action을 중계하는 bridge([zenoh-plugin-ros2dds](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds))가 있다. 그래서 고정된 계약(`ExecuteMission`)을 다른 형식으로 다시 정의하지 않고 건네고, 건네는 토픽을 계약으로 제한하고, 같은 구성을 시뮬레이션에서 재현하는 것을 기대한다. 이 계약과 QoS가 bridge를 그대로 건너는지는 확인하지 않았다. 대안 MQTT는 action에 해당하는 것이 없어 goal, feedback, result, cancel을 따로 설계해야 하고 TCP 기반이라 고르지 않는다. MQTT는 외부 telemetry 연동용 확장 후보로 남는다 |
 | 비행제어 | PX4 SITL, 정식 릴리스 태그 고정 (v1.17.0) | uXRCE-DDS는 v1.14부터 지원. px4_msgs는 펌웨어와 같은 release/1.17 브랜치의 커밋 SHA로 고정. v1.17.0은 메시지 버저닝 범위가 가장 넓어 토픽 매핑 설계를 가장 세게 시험한다. 태그를 올릴 때는 스모크 golden 단계 통과가 조건이다 |
 | 시뮬레이터 | Gazebo Harmonic (gz sim), x500 모델 | [PX4 Gazebo 문서](https://docs.px4.io/main/en/sim_gazebo_gz/) 기본값. `gz sim -s`(서버 전용)로 GUI 없이 실행 가능해 CI에 적합. 센서 변형(x500_depth, x500_gimbal 등)으로 확장 |
 | PX4 <-> ROS 2 bridge | uXRCE-DDS (Micro XRCE-DDS Agent v2.4.3) | PX4 uORB 토픽이 `/fmu/out/*`, `/fmu/in/*`로 직접 노출. v2.4.3은 PX4 문서의 Jazzy 권장 버전이며 v3.x는 PX4 재빌드가 필요해 쓰지 않는다. 대안 MAVROS는 MAVLink 경유라 지연과 변환이 한 겹 더 있고 PX4 쪽 기본 경로가 아님 |
@@ -211,7 +211,7 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 | [uORB](https://docs.px4.io/main/en/middleware/uorb.html) | PX4 내부의 경량 pub/sub 메시징. 토픽당 고정 구조체(`.msg`), 공유 메모리 기반 | 직접 만지지 않지만, ROS 2에서 보이는 `/fmu/out/*` 토픽이 결국 uORB 메시지다 |
 | [uXRCE-DDS](https://docs.px4.io/main/en/middleware/uxrce_dds) | eProsima의 Micro XRCE-DDS(DDS for eXtremely Resource Constrained Environments) 위에 만든 PX4 <-> ROS 2 bridge. PX4 쪽 "client"가 uORB 토픽을 직렬화해 UDP/시리얼로 "agent"에 보내고, agent가 이를 진짜 DDS 토픽으로 발행한다. ROS 2 쪽에서는 일반 토픽처럼 보인다. px4_msgs 패키지가 메시지 타입을 제공 | PX4와 운용 서비스를 잇는 유일한 데이터 경로. 지금의 compose는 agent 하나가 모든 SITL 인스턴스를 수용하고, 기체가 여러 대가 될 때 기체마다 하나로 바꾼다(Phase 3) |
 | [CycloneDDS](https://cyclonedds.io/) | Eclipse의 DDS 구현. ROS 2에서는 `rmw_cyclonedds_cpp`로 쓴다. 기본 전송이 UDP이고 XML 설정으로 인터페이스, peer, multicast를 제어 | 모든 ROS 2 노드의 rmw. 컨테이너 간 통신을 UDP로 단순화 |
-| [Zenoh](https://zenoh.io/) | Eclipse의 pub/sub, query 프로토콜과 그 구현. 무선과 WAN처럼 끊기고 느린 구간을 염두에 두고 만들어졌다. discovery의 부담이 DDS보다 작다고 알려져 있으나 이 저장소에서 측정하지 않았다. ROS 2(DDS)의 토픽과 action을 Zenoh로 중계하는 bridge가 있다 | 지상 링크. 지상국의 Fleet Manager와 기체 운용 노드 사이에서 계약(`ExecuteMission`, `VehicleState`)을 건넨다. 기체 안의 버스는 DDS 그대로다. 구성은 정하지 않음 |
+| [Zenoh](https://zenoh.io/) | Eclipse의 pub/sub, query 프로토콜과 그 구현. discovery의 부담이 DDS보다 작다고 알려져 있으나 이 저장소에서 측정하지 않았다. ROS 2(DDS)의 토픽, service, action을 Zenoh로 중계하는 bridge([zenoh-plugin-ros2dds](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds))가 있다 | 지상 링크. 지상국의 Fleet Manager와 기체 운용 노드 사이에서 계약(`ExecuteMission`, `VehicleState`, `MissionEvent`)을 건넨다. 기체 안의 버스는 DDS 그대로다. 구성은 정하지 않음 |
 | [MAVLink](https://mavlink.io/en/) | 드론 <-> GCS 통신용 경량 메시지 프로토콜(바이너리, 최대 280바이트 패킷, XML로 메시지 정의). telemetry, 명령, 미션 업로드, 파라미터 등 업계 표준. PX4, ArduPilot이 모두 사용 | 외부 GCS 연동(GCS 포트 UDP 14550 + 1000k, 스택 안 전 인스턴스 공통) 전용. 필요하면 MAVSDK로 온보드 API 포트(14540 + 1000k + N)에 보조 경로를 만들 수 있지만 주 경로는 uXRCE-DDS |
 | Offboard 모드 | PX4 비행 모드 중 하나. 외부 컴퓨터가 위치/속도/자세 setpoint를 주기적으로 보내면 PX4가 그걸 따른다. setpoint가 `COM_OF_LOSS_T`(기본 1 s) 이상 끊기면 `COM_OBL_RC_ACT`가 정한 failsafe 동작으로 넘어간다 | 미션 노드가 기체를 움직이는 방식. `OffboardControlMode` + `TrajectorySetpoint`를 계속 발행. `COM_OBL_RC_ACT`는 SITL 시작 파라미터로 명시해 failsafe 동작을 결정적으로 만든다 |
 | [ros_gz_bridge](https://github.com/gazebosim/ros_gz) | Gazebo의 gz-transport 토픽과 ROS 2 토픽을 양방향 변환하는 bridge | `/clock`을 ROS 2로 노출. 확장 단계에서 카메라 영상도 같은 경로 |
@@ -578,12 +578,12 @@ idsim/
     idsim_mission/    # 미션 실행 노드 Executor (Offboard 제어, lifecycle 컴포넌트)와 ops-N의 launch. 상태기(core)는 ROS와
                       # px4_msgs에 비의존인 순수 C++ 클래스이고 PX4 enum의 해석은 px4/ 디렉터리에만 둔다
     idsim_telemetry/  # 수집기, 임시 WebSocket 어댑터(Phase 2)
-    idsim_logger/     # rosbag2 기록/리플레이 제어
+    idsim_logger/     # rosbag2 기록/replay 제어
     idsim_fleet/      # Fleet Manager + gRPC 서버 + msg/proto 변환
     idsim_sim/        # ament_python 패키지. 월드 템플릿(worlds/idsim_base.sdf. 원점과 Actor는 생성 스크립트가 넣는다), 표적 어댑터 노드,
                       # 정답 pose 스크립트(sim_oracle.py), gui.config (GUI 설정), gazebo와 gz-gui wrapper 스크립트
   proto/             # gRPC/Protobuf 정의 (C++, Python, Rust가 같은 파일에서 생성)
-  gateway/           # Rust 크레이트: gRPC -> WebSocket/HTTP 게이트웨이, Fleet 페이지
+  gateway/           # Rust 크레이트: gRPC -> WebSocket/HTTP gateway, Fleet 페이지
   missions/          # YAML 미션, 시나리오 정의
   tests/
     support/         # 정규화, 토픽 수신 확인, stack.json 로더, SITL 대기와 판정 함수(rclpy 없는 순수 코드), 통합 테스트의
@@ -628,3 +628,4 @@ idsim/
 - [PX4 #24159](https://github.com/PX4/PX4-Autopilot/issues/24159) - Jazzy + 24.04 초기 이슈 보고
 - [ROS 2 DDS 구현 선택](https://docs.ros.org/en/jazzy/Installation/DDS-Implementations.html) - rmw 전환 방법
 - [Zenoh](https://zenoh.io/) - 지상 링크의 통신 방식
+- [zenoh-plugin-ros2dds](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds) - ROS 2의 토픽, service, action을 Zenoh로 중계하는 bridge

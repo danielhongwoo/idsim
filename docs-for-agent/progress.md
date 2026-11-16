@@ -20,7 +20,7 @@
    - `rules.cpp`의 `is_after_disarm_send`가 하는 PX4 timestamp와 노드 ROS 시각의 비교가 `UXRCE_DDS_SYNCT=1`에서 같은 축인지 확인한다(px4-engineer, ros2-engineer).
    - gz NavSat altitude의 datum을 확인한다(sim-engineer, px4-engineer).
    - 지상에서 구독하므로 링크 단절 중 `MissionEvent`(RELIABLE KEEP_LAST 10) 유실 여부를 Phase 2 계약 고정 전에 확인한다(ros2-engineer).
-3. 지상 링크의 Zenoh 구성 실험과 설계 토론(architect, ros2-engineer, ops-service-engineer). 기체마다 DDS 도메인을 나누고 그 사이를 Zenoh로 이어 `ExecuteMission`과 `VehicleState`만 건네는 구성을 시뮬레이션에 넣는다(`docs/roadmap.md` Phase 3의 선행 항목. 설계는 `docs/architecture.md`에 있고 compose는 아직 스택에 도메인 하나다). `/clock`, 표적 상태, 정답 pose의 공급 도메인, 도메인 ID와 기체별 Agent 포트의 파생 규칙을 함께 정한다. Agent를 기체마다 하나씩 두는 변경도 이 항목에 넣는다. Jazzy와 CycloneDDS에서의 bridge 버전 호환, 손실 링크 위의 action 동작(feedback 유실, 취소 지연)을 확인한다. 링크 단절 중 미션의 동작(계속 또는 중단, 재연결 뒤의 정합, 단절과 이탈의 구분)은 방식과 별개로 계약에서 정한다.
+3. 지상 링크의 Zenoh 구성 실험과 설계 토론(architect, ros2-engineer, ops-service-engineer). 기체마다 DDS 도메인을 나누고 그 사이를 Zenoh로 이어 `ExecuteMission`, `VehicleState`, `MissionEvent`만 건네는 구성을 시뮬레이션에 넣는다(`docs/roadmap.md` Phase 3의 선행 항목. 설계는 `docs/architecture.md`에 있고 compose는 아직 스택에 도메인 하나다). `/clock`, 표적 상태, 정답 pose의 공급 도메인, 도메인 ID와 기체별 Agent 포트의 파생 규칙을 함께 정한다. Agent를 기체마다 하나씩 두는 변경도 이 항목에 넣는다. Jazzy와 CycloneDDS에서의 bridge 버전 호환, 손실 링크 위의 action 동작(feedback 유실, 취소 지연)을 확인한다. 링크 단절 중 미션의 동작(계속 또는 중단, 재연결 뒤의 정합, 단절과 이탈의 구분)은 방식과 별개로 계약에서 정한다.
 
 ## 운영 규칙
 

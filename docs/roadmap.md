@@ -42,7 +42,7 @@
 6. 검증. Phase 1 통합 테스트를 "라이브로 1회 실행 -> 기록 -> replay로 같은 판정 통과"로 확장. SITL 기록물에 정답 pose가 있으므로 replay 판정은 waypoint 도달과 표적 접근의 정답 판정까지 덮고, 정답 pose가 없는 기록물에서는 계약 판정만 돈다. 이것은 시스템이 아니라 수집기와 판정 코드의 회귀 테스트이며, 시뮬레이터가 필요 없어 CI에서 수 초에 돈다. replay CI job을 이 단계에서 추가. CI `sitl` job의 실패 산출물에 MCAP 기록물을 더한다(Phase 1에는 recorder가 없어 ULog, compose logs, ros_log, 판정 trace만 올린다).
 7. 계약 고정 전 확인. `VehicleState`와 `MissionEvent`를 고정하기 전에, Zenoh의 ROS 2 bridge가 고정된 `ExecuteMission` action과 이 두 토픽을 타입과 QoS 그대로 건네는지를 개발 호스트에서 한 번 확인한다. 스택의 구성은 바꾸지 않는다(기체가 한 대인 스택은 DDS 도메인 하나가 곧 그 기체의 버스다). 건너지 못하는 것이 있으면 계약을 고정하기 전에 다룬다. Zenoh의 구성을 정하는 것은 Phase 3이다.
 
-완료 기준: 기록물 하나를 Lichtblick(Foxglove 호환 오픈소스 뷰어)에서 열어 궤적과 상태 변화를 확인할 수 있고, `replay` 프로필로 올린 WebSocket 페이지에 같은 움직임이 다시 나오며, replay CI job이 모든 push에서 돈다. `VehicleState`(WebSocket JSON 스키마와 함께)와 `MissionEvent`의 계약을 고정한다.
+완료 기준: 기록물 하나를 Lichtblick(Foxglove 호환 오픈소스 뷰어)에서 열어 궤적과 상태 변화를 확인할 수 있고, `replay` 프로필로 올린 WebSocket 페이지에 같은 움직임이 다시 나오며, replay CI job이 모든 push에서 돈다. `VehicleState`(WebSocket JSON 스키마와 함께)와 `MissionEvent`의 계약을 고정하며, 고정 전에 Zenoh의 ROS 2 bridge가 `ExecuteMission`, `VehicleState`, `MissionEvent`를 타입과 QoS 그대로 건네는지 개발 호스트에서 확인한다.
 
 함정은 QoS와 데이터량이다. PX4 토픽은 best-effort로 발행되므로 rosbag2가 기록할 때는 퍼블리셔 QoS를 자동으로 따라가지만, 재생 시 구독자가 reliable을 요구하면 받지 못하므로 수집기와 테스트는 라이브와 같은 sensor_data QoS를 써야 하고 필요하면 `--qos-profile-overrides-path`로 맞춘다. 또 PX4 토픽이 수백 Hz로 나와 기록 대상을 골라야 한다.
 
@@ -58,6 +58,9 @@
 - 기체별 Agent의 포트 파생 규칙. 지금은 Agent 하나가 8888 + k이다.
 - Logger, 개발용 WebSocket 어댑터, `viz` 프로필의 foxglove_bridge, `runner`가 기체마다의 도메인에 붙는 방법.
 - 기록기의 위치와 지상에서 `MissionEvent`를 구독하는 컴포넌트.
+- 기체마다의 도메인에서 3대의 토픽을 기록물 하나로 모으는 방법.
+- 지상 쪽(Fleet Manager)의 시간 출처(`/clock`을 지상에 주는 방법).
+- replay 프로필에서 Fleet Manager가 붙는 방법.
 
 1. 멀티 인스턴스 스폰. [PX4 멀티 기체 문서](https://docs.px4.io/main/en/ros2/multi_vehicle.html) 규칙대로 `px4 -d -i N`, `PX4_GZ_MODEL_POSE`로 간격 배치(기체 간격 4 m 이상. 생성 스크립트가 2 m 미만을 거부한다). 기체 번호, 네임스페이스, `UXRCE_DDS_KEY`, `MAV_SYS_ID`, MAVLink 포트는 Phase 1의 파생 규칙을 그대로 따르므로 이 식별자들에 새 결정은 없다. 기체마다의 DDS 도메인과 Agent(포트 포함)는 위 선행 항목이 정한다. `tools/gen_compose.py`가 3대 compose를 만든다.
 2. 기체별 서비스 인스턴스. 기체당 컴포넌트 컨테이너 하나에 `idsim_mission`과 `idsim_telemetry`를 올려 3개 launch. 노드는 기체별 params(`stack.json`에서 생성)로 sysid를 받고 `idsim_common`의 대조 함수로 확인한다.
@@ -65,9 +68,9 @@
 4. gRPC API (`proto/fleet.proto`). `ListVehicles`, `StreamVehicleStates`(server streaming), `StreamMissionEvents`(server streaming), `SubmitMission`, `AbortMission`, `GetMissionStatus`. Protobuf `VehicleState`와 ROS msg의 변환은 `idsim_fleet` 변환 모듈 한 곳에서만 하고 왕복 단위 테스트를 둔다. Python 클라이언트 CLI로 호출.
 5. 브라우저 gateway (`gateway/`, Rust). tonic으로 Fleet Manager의 두 스트림을 구독해 WebSocket으로 중계하고, 미션 제출과 중단을 HTTP JSON으로 받아 gRPC로 넘기며, Phase 2 페이지를 정적으로 서빙한다. ROS 2 비의존이므로 cargo만으로 빌드하고 단위 테스트는 gRPC 서버 목으로 한다. Phase 2에서 고정한 WebSocket JSON 스키마를 그대로 지킨다.
 6. 시나리오 정의. `missions/scenario_*.yaml`에 기체 수, 초기 배치, 표적 Actor 경로, 미션 목록을 한 파일로. 시나리오 runner(Python)가 `config/fleet.yaml` 생성 -> compose 생성 -> `up --wait` -> 미션 제출 -> 기록 -> 판정까지 한 번에.
-7. 검증. 시나리오 "3대, 표적 2개, 동시 배분"에서 두 미션이 서로 다른 기체에 배분되고 모두 완료되는지, 한 기체의 px4 컨테이너를 강제 종료했을 때 Fleet Manager가 이탈을 감지하고 미션을 다른 기체에 재배분하는지를 pytest로. 배분 규칙은 단위 테스트로 먼저 덮고, SITL 테스트는 nightly 전용. 지상 링크의 시험은 따로 둔다. Fleet Manager가 Zenoh를 거쳐 `ExecuteMission`을 부르고 `VehicleState`를 받는지, 한 기체의 도메인에 있는 `/fmu` 토픽이 다른 기체의 도메인과 지상 쪽에 보이지 않는지를 본다.
+7. 검증. 시나리오 "3대, 표적 2개, 동시 배분"에서 두 미션이 서로 다른 기체에 배분되고 모두 완료되는지, 한 기체의 px4 컨테이너를 강제 종료했을 때 Fleet Manager가 이탈을 감지하고 미션을 다른 기체에 재배분하는지를 pytest로. 배분 규칙은 단위 테스트로 먼저 덮고, SITL 테스트는 nightly 전용. 지상 링크의 시험은 따로 둔다. Fleet Manager가 Zenoh를 거쳐 `ExecuteMission`을 부르고 `VehicleState`와 `MissionEvent`를 받는지, 한 기체의 도메인에 있는 `/fmu` 토픽이 다른 기체의 도메인과 지상 쪽에 보이지 않는지를 본다.
 
-완료 기준: 3대 시나리오가 headless로 nightly에서 통과하고, 재배분 테스트가 통과하며, 기록물 하나에 3대 모두의 토픽이 네임스페이스로 구분되어 들어 있다.
+완료 기준: 3대 시나리오가 headless로 nightly에서 통과하고, 재배분 테스트가 통과하고, 지상 링크 시험(Fleet Manager가 Zenoh를 거쳐 `ExecuteMission`, `VehicleState`, `MissionEvent`를 주고받고 다른 기체의 `/fmu` 토픽은 보이지 않음)이 통과하며, 3대의 토픽이 네임스페이스로 구분되어 기록물에 들어 있다(기록물 하나인지는 위 선행 항목의 기록 방법 결정에 따른다).
 
 PC 한 대에서 Gazebo + PX4 3대 + 노드들을 돌리면 CPU가 부족할 수 있어 `PX4_SIM_SPEED_FACTOR`를 1 이하로 내리는 옵션을 처음부터 두는 게 좋다. 3대 시나리오의 CPU 측정은 `viz` 프로필 없이 한다.
 
