@@ -14,7 +14,7 @@
 
 // PX4 어댑터의 출력 쪽: core::StepOutput -> px4_msgs 메시지. 소유 px4-engineer.
 //
-// 노드(P3d)의 tick 처리 순서:
+// 노드의 tick 처리 순서:
 //   clock_port.begin_tick();
 //   const auto out = runner.step(input, snapshot, clock_port, frame);
 //   const auto msgs = to_px4_messages(out, builder, clock_port.stamp());
