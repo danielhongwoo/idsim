@@ -813,6 +813,7 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 | TAKEOFF `height_m`이 float32 범위 안이지만 매우 큰 값(예 1e30)일 때 PX4의 수직 제어 | 상한을 두지 않는다. float32 범위 밖이면 지상에서 setpoint가 나가지 않아 준비 단계의 MODE_SWITCH_FAILED로 끝난다 |
 | 좌표 상한(world 성분 1e5 m) 근처의 실제 비행 | 상한 안의 값은 float32 술어와 PX4의 수평 속도 정규화에 닿지 않는 것으로 계산했다. 비행은 재지 않았다 |
 | Executor 컨테이너를 goal 실행 중에 멈췄을 때 종료 사건이 구독자에게 오는지 | Executor는 종료 처리에서 goal을 ABORTED, REASON_INTERNAL로 끝내고 종료 사건을 낸다. 오지 않으면 읽는 쪽은 결과 미상으로 다룬다 |
+| 비행 중 GPS 상실(전역 기준이 유효하지 않게 되는 경우) | 정하지 않았다. GPS가 항상 수신된다고 가정한다. Executor와 PX4가 이때 어떻게 끝나는지는 확인하지 않았다 |
 
 ### 참고: 노드 파라미터
 
@@ -891,7 +892,7 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 - TRACK_ENTITY 계약 문장: setpoint는 표적 위치에 `offset`을 더한 점이다. 표적 표본이 신선하고 속도가 유효하면 표적 속도를 같은 setpoint에 feedforward로 싣는다. 그래서 일정 속도 표적에 대한 정상 추종 지연은 표본과 tick 지연 정도다(`target_fresh_age`에 tick 하나를 더한 것). 위치만 보내면 PX4 위치 제어는 순수 P 제어라([소스] `PositionControl.cpp` 124-138행, `MPC_XY_P` 0.95) 일정 속도 v의 목표를 약 1.05 s 뒤처져 따른다([추정] 선형 근사). `offboard_control_mode`는 position만 true인 채 그대로다. 표적 속도의 크기를 Executor가 자르지 않는다(수평과 수직 한계는 PX4 위치 제어가 적용한다).
 - 속도는 그 tick의 끝 상태가 TRACK_ENTITY 항목인 tick에만 나간다. 정리로 들어가는 tick, 종료 단계, 다음 항목으로 넘어가는 tick의 setpoint에는 속도가 없다(고정점을 유지하는 단계에 feedforward가 남지 않게). 속도 변환이 값 없음인 tick은 속도만 싣지 않고 위치는 보낸다.
 - 변환 값 없음: 기준이 무효이거나 결과가 `trajectory_setpoint`에 실을 수 없는 값(비유한 또는 float32 범위 밖)이면 점 변환은 값 없음이다("좌표계" 절). 값 없음인 tick은 직전 setpoint를 유지하고 완료의 연속을 끊는다(완료 계수가 0으로 돌아가고, 값을 다시 얻은 뒤 서로 다른 위치 표본 3개 연속을 처음부터 요구한다). 그래서 점 변환이 계속 값 없음인 항목은 발행을 끊지 않고 ITEM_TIMEOUT과 그 정리로 끝나며, 항목 시작부터 한 번도 값을 얻지 못했으면 `detail`에 그 사실을 적는다. 연속을 끊는 것은 도달을 늦출 뿐 거짓 완료를 만들지 않는다.
-- GOTO와 TRACK_ENTITY는 PX4 위치 추정의 전역 기준(`xy_global`, `z_global`)이 유효해지기 전에는 시작하지 않는다(변환이 값 없음이다). 기다리는 동안에도 항목 `timeout`이 흐르고, 넘기면 ITEM_TIMEOUT이며 `detail`에 사유를 적는다.
+- GOTO와 TRACK_ENTITY는 PX4 위치 추정의 전역 기준(`xy_global`, `z_global`)이 유효해지기 전에는 시작하지 않는다(변환이 값 없음이다). 기다리는 동안에도 항목 `timeout`이 흐르고, 넘기면 ITEM_TIMEOUT이며 `detail`에 사유를 적는다. 이 규칙은 GPS가 항상 수신된다는 가정 위에 있고, GPS 없는 비행은 범위 밖이다("미확인 목록" 절).
 - 같은 tick의 순서는 감시 표, TARGET_LOST, ITEM_TIMEOUT, 완료다("종료의 충돌 규칙"). 그 tick의 점 변환과 완료 계수 갱신은 이 순서보다 앞에서 한 번 하므로 감시 표나 ITEM_TIMEOUT이나 취소로 끝나는 tick에도 변환은 불리고, 값을 얻었으면 그 tick의 setpoint는 변환한 점이다.
 - 유효 표본(Executor가 거른다): `target_id`가 토픽 토큰과 같고, `frame_id`가 `world`이고, 위치(그리고 `velocity_valid`가 true이면 속도)가 유한하고, 위치 성분의 절댓값이 1e5 m 이하이고, `stamp`가 0보다 크고 직전 유효 표본보다 크다. 유효로 표시된 속도가 비유한이면 표본 전체가 무효다(속도만 떼어 위치를 쓰지 않는다). 거른 표본은 소실 판정을 앞당기지 않고, 유효 표본 없이 `target_timeout`이 지나면 TARGET_LOST다. 표본의 나이 `now - header.stamp`는 음수이면 0으로 본다.
 - 신선한 표본: 최신 유효 표본의 나이가 `target_fresh_age`(기본 0.1 s) 이하다. 표적 발행 간격 0.05 s의 두 배라 표본 하나 손실까지 신선하다고 본다. 이보다 작으면 정상 지터에도 feedforward가 깜박인다.
