@@ -39,12 +39,16 @@
 - Gazebo 정답 pose(`/sim/`)를 SITL MCAP 기록물에 넣는다(Phase 2부터 효과).
 - `docs-for-agent/file-ownership.md`의 소유자는 architect.
 - 수동 비행을 하지 않으므로 QGroundControl을 지원하지 않는다(실행 도구, 버전 고정, 완료 기준에 없다). 화면 확인은 Gazebo GUI와 Lichtblick이다.
+- 프로젝트의 목적은 실기체 개발을 돕는 것이고 기준은 실기체의 구조다. 문서와 그림은 실기체를 먼저 쓰고 시뮬레이션은 그것을 대신하는 것으로 쓴다.
+- 실기체 검증(실기체 기록물 리플레이, HITL, 지상 시험, 비행 시험, 실기체 조건 모사 시나리오)은 하드웨어 사양이 정해질 때까지 계획에 넣지 않는다.
+- arm64 이미지 빌드는 하지 않는다(하드웨어 사양이 정해질 때 다시 본다).
+- GPS는 항상 쓸 수 있다고 가정한다. GPS 없는 비행은 범위 밖이다. 비행 중 GPS 상실은 PX4 failsafe와 미션의 실패 경로로 처리한다.
 
 ## 미해결 사항
 
 사용자가 미룬 것.
 
-- 실기체 적용 범위: 다음을 할지와 언제 할지를 사용자가 정한다. field 시간 모드(`/clock` 없는 실행과 `UXRCE_DDS_SYNCT=1`), 배치 경계(어느 토픽이 무선 링크를 넘는지, 기록기와 Collector의 위치), `stack.json` 기체 항목의 식별값과 SITL 배치값 분리, 현장용 DDS 설정, arm64 이미지 빌드, FMU(NuttX)의 식별 설정.
+- 실기체 적용 범위: 다음을 할지와 언제 할지를 사용자가 정한다. field 시간 모드(`/clock` 없는 실행과 `UXRCE_DDS_SYNCT=1`), 배치 경계(어느 토픽이 무선 링크를 넘는지, 기록기와 Collector의 위치), `stack.json` 기체 항목의 식별값과 SITL 배치값 분리, 현장용 DDS 설정, FMU(NuttX)의 식별 설정.
 - `world.origin.alt`의 datum(AMSL 또는 타원체 고)을 정하지 않았다. 아래 고도 제한과 함께 정한다(상하한의 기준 높이가 datum에 달려 있다).
 - 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
 
