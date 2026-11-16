@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// PREPARING(docs/interface.md "준비 단계"와 idsim_mission README의 P0-P6 정의, 첫 항목이 LAND인 분기)와 PREPARING 실패의
+// PREPARING(docs/interface.md "준비 단계"와 idsim_mission README의 P0-P6 정의, 첫 항목이 LAND인
+// 분기)와 PREPARING 실패의
 // 정리(docs/interface.md "정리"). P6에서 ARMED를 처음 관측한 뒤의 감시 표, arm 재전송 중단, 확인
 // 기한, 같은 tick의 순서, failsafe 이력의 구간(docs/interface.md "준비 단계").
 
@@ -307,7 +308,7 @@ TEST(Preparing, IdentityMismatchAfterPublishingStartsStops)
   expect_terminated_once(h, Status::kAborted, Reason::kInternal);
 }
 
-// ---- 검토 보완 ----
+// ---- 준비 단계의 경계 사례: 시작 조건, 비유한 표본, IN_PROGRESS ack, arm 뒤 식별 ----
 
 TEST(Preparing, StartConditionIsRecheckedWhileWaitingForEkf)
 {

@@ -530,7 +530,7 @@ TEST(TakeoffTimeout, ReasonStaysItemTimeoutInEveryBranch)
   EXPECT_NE(details[2].find("disarm not confirmed"), std::string::npos);
 }
 
-// ---- 검토 보완 ----
+// ---- 정리의 경계 사례: 비유한 위치, 링크 끊김, IN_PROGRESS ack, 신뢰하지 않는 표본 ----
 
 TEST(CancelGround, GroundSetpointFallsBackWhenPositionNotFinite)
 {

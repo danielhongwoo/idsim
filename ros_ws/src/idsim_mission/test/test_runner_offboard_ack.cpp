@@ -262,7 +262,8 @@ TEST(OffboardAck, RejectedAckAfterConfirmFailsWithoutArm)
 
 TEST(OffboardAck, RejectedAckBeforeConfirmKeepsPreparingDetail)
 {
-  // 대조: 확인 전 거부의 detail은 "DO_SET_MODE(OFFBOARD) rejected: "로 시작하고 "after OFFBOARD confirmed"가 없다.
+  // 대조: 확인 전 거부의 detail은 "DO_SET_MODE(OFFBOARD) rejected: "로 시작하고
+  // "after OFFBOARD confirmed"가 없다.
   Harness h(standard_mission());
   reach_offboard_without_ack(h);
   h.push_ack(AckCommand::kSetMode, AckResult::kTemporarilyRejected);

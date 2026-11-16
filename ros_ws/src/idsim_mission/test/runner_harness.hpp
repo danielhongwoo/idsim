@@ -34,9 +34,9 @@
 //   있으면 Harness는 자기 runner의 기록을 edges()에도 모은다(expect_cell이 한 시나리오의 칸을
 //   단정할 때 쓴다). 꺼져 있으면 runner에 observer를 넘기지 않는다.
 // - FramePort는 HarnessFramePort(frame)다. 기본 모드 kFail은 부르면(점, 벡터 모두) 테스트를
-//   실패시킨다. 그래서 GOTO가 없는 미션의 모든 사례가 "GOTO와 TRACK_ENTITY가 없는 미션은 FramePort를 부르지 않는다"를
-//   함께 단정한다. GOTO 사례는 kAxis(축 치환)나 kNone(점 값 없음)으로 바꾸거나 tick마다 값을
-//   고르는 hook(점)과 vector_hook(벡터)을 둔다.
+//   실패시킨다. 그래서 GOTO가 없는 미션의 모든 사례가 "GOTO와 TRACK_ENTITY가 없는 미션은
+//   FramePort를 부르지 않는다"를 함께 단정한다. GOTO 사례는 kAxis(축 치환)나 kNone(점 값
+//   없음)으로 바꾸거나 tick마다 값을 고르는 hook(점)과 vector_hook(벡터)을 둔다.
 // - 표적: world.targets에 등록한 표적마다 tick마다 stamp_ns = 그 tick의 now_ns인 새 표본을
 //   Snapshot.targets에 넣는다(위치와 flags와 함께). target_hook이 있으면 표본을 바꾸거나 그 tick에
 //   주지 않는다(nullopt). 표본은 한 번 넣으면 지우지 않는다(노드와 같다). 표적을 등록하지 않은

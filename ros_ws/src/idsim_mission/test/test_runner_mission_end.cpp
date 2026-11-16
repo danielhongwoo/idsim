@@ -1062,7 +1062,8 @@ TEST(MissionEnd, LastLoiterAutoDisarmBeforeCompletion)
 
 TEST(MissionEnd, DisarmedAutoLandSamplesAreNotLandObserved)
 {
-  // ARMED AUTO_LAND 표본이면 LAND_PATH_MODE_OBSERVED가 되는 대조는 AirRejectedThenLandObserved가 덮는다.
+  // ARMED AUTO_LAND 표본이면 LAND_PATH_MODE_OBSERVED가 되는 대조는
+  // AirRejectedThenLandObserved가 덮는다.
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
   h.land_response = CommandResponse::kIgnore;
@@ -1268,8 +1269,8 @@ TEST(MissionEnd, GroundDisarmedCountRestartsAfterArmed)
 TEST(MissionEnd, FallbackDisarmConfirmKeptOnLandPath)
 {
   // 대비책 disarm을 보낸 뒤 Land 경로로 옮겨도 확인 함수(DisarmConfirm)로 센다.
-  // S+160 대비책 disarm(무시), S+162 확인 시작, S+165-S+167 지상 DISARMED. 세는 표본은 모두 전송 tick보다
-  // 뒤 tick의 것이다.
+  // S+160 대비책 disarm(무시), S+162 확인 시작, S+165-S+167 지상 DISARMED. 세는 표본은 모두
+  // 전송 tick보다 뒤 tick의 것이다.
   Harness h(takeoff_only_mission(0.2));
   h.land_response = CommandResponse::kIgnore;
   const EndStart st = drive_ground_wait(h, 160);
