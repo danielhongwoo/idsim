@@ -20,7 +20,7 @@
 #   --stack k      스택 번호 0-9. 없으면 IDSIM_STACK_INDEX, 없으면 0
 #   --repeat N     회마다 down 뒤 콜드 up으로 N번 돈다(회마다 실행 id가 다르다). 첫 실패에서 멈춘다(자동 재시도 없음)
 #   --attach DIR   올리지도 내리지도 않고 이미 떠 있는 스택(DIR/compose.yaml)에 붙어 pytest와 수집만 한다
-#                  (QGC와 Gazebo GUI 육안 확인, 디버깅). 산출물은 DIR/sitl-attach-<시각>/ 에 쓴다
+#                  (Gazebo GUI 육안 확인, 디버깅). 산출물은 DIR/sitl-attach-<시각>/ 에 쓴다
 #   --             이 뒤는 pytest에 그대로 넘긴다(예: -- -k test_b)
 # 기체와 표적은 sitl 전용 fleet 파일 tests/sitl/fleet.yaml이다(sim_stack.sh up --fleet).
 # 환경변수: SITL_PYTEST_TIMEOUT (pytest 전체의 벽시계 상한 초, 기본 900. CI timeout-minutes보다 짧게 둔다),

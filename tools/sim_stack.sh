@@ -297,7 +297,7 @@ do_up() {
     fi
   fi
   say "준비됨: ${project} (stack.json: ${sf})"
-  say "QGC: tools/qgc.sh --stack ${stack}   내리기: tools/sim_stack.sh down --stack ${stack}"
+  say "내리기: tools/sim_stack.sh down --stack ${stack}"
   printf '%s\n' "$run_dir"
 }
 

@@ -13,7 +13,7 @@ tests/sitl/run_sitl.sh [--stack k] [--repeat N] [--attach <실행 디렉터리>]
 - `ros_ws/install/idsim_mission/`이 없으면 빌드하지 않고 안내와 함께 실패한다(`tools/ros_ws.sh build`).
 - `--repeat N`은 회마다 down 뒤 콜드 up이다. 첫 실패에서 멈추고 재시도하지 않는다. "로컬 3회 연속 통과"는 같은 commit, 같은 이미지 key에서 `--repeat 3`이 세 회 모두 통과하는 것이다. 실패하면 0부터 다시 센다. `artifacts/sitl_repeat/<시각>-k<k>/`에 `repeat_summary.tsv`(실행 id, commit과 dirty, 이미지 key, 시나리오별 verdict, 시나리오 A 이정표별 ROS 시각 소요, RTF, 벽시계 소요, ARMED 표본 수, 유지 구간 편차 `hold_dev_*_m`, 단계별 종료 코드 `rc_*`)와 `armed_criterion.json`이 남는다.
 - `-- -k test_b`처럼 일부 시나리오만 고르면 나머지가 빠지므로 `verdict.json`의 통과 조건(실행 목록의 시나리오 모두 passed)에 걸려 종료 코드 1로 끝난다. 디버깅 용도로만 쓴다. F3은 F2가 남긴 공중 Hold에서 시작하므로 따로 돌릴 수 없다(F2가 바로 앞에 통과하지 않았으면 `PRECONDITION`).
-- `--attach DIR`은 올리지도 내리지도 않고 pytest와 수집만 한다(QGC와 Gazebo GUI 육안 확인, 디버깅). 산출물은 `DIR/sitl-attach-<시각>/`에 쓴다.
+- `--attach DIR`은 올리지도 내리지도 않고 pytest와 수집만 한다(Gazebo GUI 육안 확인, 디버깅). 산출물은 `DIR/sitl-attach-<시각>/`에 쓴다.
 - 종료 코드: 0 전체 통과, 1 시나리오나 정지 검사 실패(ULog 교차 확인 실패 포함), 2 사용법, 선행 조건, 스택 올리기(`INFRA_UP`) 실패, ULog 교차 확인의 입력 없음과 판정 불가. ULog 교차 확인 실패는 1, 입력 없음과 판정 불가(파싱 중 예외 포함)는 2다. stdout 마지막 줄은 실행 디렉터리다. 환경변수 `SITL_PYTEST_TIMEOUT`(기본 900 s)이 pytest 전체의 벽시계 상한이다.
 - 이 디렉터리의 테스트는 lint job의 pytest(`tests/support`, `tests/tools`)가 수집하지 않는다. 시험 미션 YAML(`tests/sitl/missions/`)의 시간 합산과 판정 상수 대조(`tests/support/test_sitl_flight_missions.py`)는 lint job에서 돈다. 로더(`ros_ws/src/idsim_mission/idsim_mission/mission_yaml.py`)를 저장소 소스 경로에서 읽기 때문이다(`tests/support/sitl_missions.py`).
 - `tests/support/test_sitl_constants.py`와 `test_px4_topic_names.py`는 `idsim_interfaces`와 `px4_msgs`가 있어야 돌아서 lint job에서는 건너뛴다. `run_sitl.sh`가 runner 안에서 `tests/sitl`과 함께 돌린다.

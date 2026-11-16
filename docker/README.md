@@ -92,7 +92,7 @@ xrce-agent --> gazebo --> px4-1..N --> bridge --> ops-1..N, targets, sim-oracle 
 | 에이전트 포트 (UDP) | 8888 + k | 8888 |
 | Gazebo 파티션 (`GZ_PARTITION`) | idsim-k | idsim-0 |
 | MAVLink 오프셋 (`IDSIM_MAVLINK_OFFSET`) | 1000k | 0 |
-| QGC가 듣는 GCS 포트 (UDP) | 14550 + 1000k | 14550 |
+| GCS 포트 (UDP) | 14550 + 1000k | 14550 |
 | MAVLink API 포트 (UDP, 기체 N) | 14540 + 1000k + N | 14541 |
 
 도메인 0은 다른 ROS 2 프로젝트가 흔히 쓰므로 피한다. compose 프로젝트 이름을 명시하지 않으면 디렉터리 이름이 프로젝트 이름이 되어 같은 이름을 쓰는 다른 프로젝트의 컨테이너까지 함께 내릴 수 있다. k가 다르면 스택 둘을 동시에 띄울 수 있다(스모크 포함). 포트 비충돌은 생성기 단위 테스트가 k 0-9, N 1-9 전 범위에서 검사한다.
@@ -188,7 +188,7 @@ tests/sitl/run_sitl.sh --stack 0 --repeat 3      # 회마다 down 뒤 cold up. �
 tests/sitl/run_sitl.sh --attach <실행 디렉터리>   # 떠 있는 스택에 붙어 pytest와 수집만 한다
 ```
 
-`--attach`는 사용자가 `tools/sim_stack.sh up --viz`로 스택을 올리고 QGC와 Gazebo GUI로 눈으로 확인할 때 쓴다(스택을 올리지도 내리지도 않는다). 산출물은 `<실행 디렉터리>/sitl/`(attach는 `sitl-attach-<시각>/`)에 남고 실패한 CI 실행은 이 디렉터리 전체를 아티팩트로 올린다. 옵션과 판정은 `tests/sitl/README.md`를 본다.
+`--attach`는 사용자가 `tools/sim_stack.sh up --viz`로 스택을 올리고 Gazebo GUI로 눈으로 확인할 때 쓴다(스택을 올리지도 내리지도 않는다). 산출물은 `<실행 디렉터리>/sitl/`(attach는 `sitl-attach-<시각>/`)에 남고 실패한 CI 실행은 이 디렉터리 전체를 아티팩트로 올린다. 옵션과 판정은 `tests/sitl/README.md`를 본다.
 
 ### 개발 반복 (ops-N만 다시 띄우기)
 
@@ -218,22 +218,6 @@ tools/sim_stack.sh down --stack 8                     # 끝나면
 ## 시각 도구
 
 이 절의 도구는 개발자가 눈으로 보기 위한 화면이다. 판정, 스모크, CI와 무관하며 어떤 테스트도 이 도구에 의존하지 않는다(본 스택 서비스는 `viz` 프로필 서비스에 의존하지 않고, 스모크와 CI는 이 프로필을 켜지 않는다). `tools/sim_stack.sh up`으로 올린 standalone 스택 위에서 쓴다.
-
-### QGroundControl
-
-호스트에서 직접 실행하며 compose 서비스가 아니다. 저장소 루트에서 `tools/qgc.sh`를 실행한다.
-
-```
-tools/qgc.sh                  # 필요하면 내려받아 검증하고 실행(스택 0)
-tools/qgc.sh --stack 1        # 스택 1의 기체에 붙는다
-tools/qgc.sh --download-only  # 내려받기와 검증만
-tools/qgc.sh --print-path     # 캐시된 AppImage 경로 출력
-```
-
-- 버전과 sha256은 `versions.env`의 `QGC_VERSION`, `QGC_APPIMAGE_SHA256`이 정한다. 캐시는 `${XDG_CACHE_HOME:-$HOME/.cache}/idsim/qgc/<버전>/`에 두고, 파일이 없거나 sha256이 다르면 다시 받는다. 검증에 실패하면 파일을 지우고 종료 코드 1로 끝난다.
-- 스택 k의 PX4는 GCS 포트 14550 + 1000k(UDP)로 MAVLink를 보내며 이 포트는 스택 안 모든 기체가 같다. `qgc.sh --stack k`는 실행 전에 QGC 설정 파일(`~/.config/QGroundControl/QGroundControl.ini`)의 `[AutoConnect] udpListenPort`를 그 포트로 고친다. `--stack`이 없으면 k = 0(또는 `IDSIM_STACK_INDEX`)의 포트로 되돌린다. `MAV_SYS_ID`가 스택 간에 같으므로 QGC 하나는 한 번에 스택 하나만 본다.
-- `COM_RC_IN_MODE`가 4라 QGC의 수동 모드와 가상 조이스틱은 쓸 수 없다. 모니터링과 ARM, TAKEOFF, LAND 명령용이다.
-- 스크립트가 QGC를 자식으로 띄우고, Ctrl-C나 TERM을 받으면 QGC에 TERM을 보내 정상 종료를 5초 기다린 뒤 끝나지 않으면 SIGKILL로 끝낸다. 기체가 연결된 상태에서는 QGC가 종료 확인 대화상자를 띄울 수 있어서다.
 
 ### Gazebo GUI (viz 프로필)
 

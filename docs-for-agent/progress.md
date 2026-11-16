@@ -22,7 +22,7 @@
 - 그림은 계층으로 나눈다. 개요 그림은 묶음과 주요 경로만, 상세 그림은 개요의 상자 하나를 펼치고 도입 문장에 어느 상자인지 적는다. 같은 내용을 두 그림에 그리지 않는다. 그림 하나는 node 8개, edge 10개 이하, subgraph 중첩 1단, node label 두 줄, edge label 15자 이하이고 넘으면 나눈다. 포트, 환경변수, 경로, 명령줄은 label에 넣지 않고 그림 아래에 둔다(사용자 결정).
 - 대표 시나리오의 통과를 기준으로 개발한다. 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮고, 새 실측은 관찰된 문제의 재현용으로만 하며, 산출물은 최소로 둔다.
 - 저장소 라이선스는 Apache-2.0. 새 소스와 CMake 파일에 머리말을 넣고 `ament_copyright`와 cpplint `legal/copyright` 검사를 켠 채로 둔다.
-- 이미지 빌드의 apt 미러 기본값은 kr 미러(`docker/versions.env`의 `UBUNTU_APT_MIRROR`), CI는 우분투 기본 미러. ros-ws 이미지에 clang-tidy와 clang-format을 둔다. `tools/qgc.sh`에 설정을 되돌리는 옵션을 두지 않는다(`--stack 0`을 쓴다).
+- 이미지 빌드의 apt 미러 기본값은 kr 미러(`docker/versions.env`의 `UBUNTU_APT_MIRROR`), CI는 우분투 기본 미러. ros-ws 이미지에 clang-tidy와 clang-format을 둔다.
 
 지금 유효한 사용자 결정.
 
@@ -31,6 +31,7 @@
 - CI `sitl` 목표 15분. 비행 시나리오(F1-F4)를 모두 PR CI에 두고, 넘으면 겹치는 비행 구간 -> waypoint 수 -> Hold 시간 순으로 줄인다. F2의 공중 종료와 F3의 공중 시작은 빼지 않는다.
 - Gazebo 정답 pose(`/sim/`)를 SITL MCAP 기록물에 넣는다(Phase 2부터 효과).
 - `docs-for-agent/file-ownership.md`의 소유자는 architect.
+- 수동 비행을 하지 않으므로 QGroundControl을 지원하지 않는다(실행 도구, 버전 고정, 완료 기준에 없다). 화면 확인은 Gazebo GUI와 Lichtblick이다.
 
 ## 미해결 사항
 
@@ -66,7 +67,7 @@
 - `fleet.yaml` spawn 좌표에 미션과 같은 상한(1e5 m)을 둘지(devops-engineer, 급하지 않음).
 - 이 호스트의 포트 5900과 8090은 다른 프로젝트가 쓴다. VNC를 도입하면 피한다.
 - PX4 버전을 올리면 "ULog `vehicle_command` `timestamp`가 보낸 쪽(Executor)의 stamp와 같다"와 "ack 기록 순서가 처리 순서와 같다"를 다시 확인한다(px4-engineer).
-- [미확인]으로 둔 것(관찰된 문제가 있을 때만 잰다): QGC 연결 중 `qgc.sh` TERM 종료와 sha256 불일치 경로, `GZ_IP` 없는 디스커버리, `ops-N` goal 실행 중 stop의 종료 사건, `vehicle.id` 누락에서 unhealthy까지의 시간, 에이전트 Fast DDS 멀티캐스트의 LAN 섞임, MAVLink bind 실패 시 PX4 동작, compose `start_interval`의 Docker 하한.
+- [미확인]으로 둔 것(관찰된 문제가 있을 때만 잰다): `GZ_IP` 없는 디스커버리, `ops-N` goal 실행 중 stop의 종료 사건, `vehicle.id` 누락에서 unhealthy까지의 시간, 에이전트 Fast DDS 멀티캐스트의 LAN 섞임, MAVLink bind 실패 시 PX4 동작, compose `start_interval`의 Docker 하한.
 
 Phase 2와 3 전에 정할 것.
 

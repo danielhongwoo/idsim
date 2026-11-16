@@ -347,7 +347,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 | SITL 통합 테스트 비상 정리(`tests/support/px4_raw.py`) | 254 | 25 |
 | 스모크 `tests/smoke/check_px4.py` | 254 | 1 |
 
-- 254는 어떤 기체 sysid(2-10)와도 같지 않다. 255와 component 190은 QGroundControl의 기본값이라 쓰지 않는다.
+- 254는 어떤 기체 sysid(2-10)와도 같지 않다. 255와 component 190은 흔한 GCS 프로그램(QGroundControl 등)의 기본값이라 쓰지 않는다.
 
 ## Offboard setpoint
 
@@ -370,7 +370,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 | --- | --- | --- | --- |
 | `COM_OBL_RC_ACT` | 4 | Offboard 손실 시 Land | 그 자리에서 내려와 착지 뒤 자동 disarm으로 끝난다. Return은 다대에서 경로가 겹칠 수 있고, Hold는 손실이 길어지면 제자리에 남아 미션이 끝나지 않는다. 상태기의 실패 폴백은 이 값과 일치시킨다 |
 | `COM_OF_LOSS_T` | 1.0 s | Offboard 손실 판정 시간 | 기본값과 같지만 명시한다. 20 Hz 발행에서 연속 20개 손실이다 |
-| `NAV_DLL_ACT` | 0 | GCS 연결 손실 동작 끔 | airframe 기본은 Return이다. QGC를 붙였다 떼는 것만으로 RTL이 걸리지 않게 한다 |
+| `NAV_DLL_ACT` | 0 | GCS 연결 손실 동작 끔 | airframe 기본은 Return이다. GCS를 붙였다 떼는 것만으로 RTL이 걸리지 않게 한다 |
 | `COM_RC_IN_MODE` | 4 | 수동 조종 입력 끔 | 수동 조종 손실 failsafe(`NAV_RCL_ACT`)를 검사하지 않게 해 외부 입력이 붙었다 끊겨도 Offboard 중 failsafe가 걸리지 않는다 |
 | `COM_DISARM_PRFLT` | -1 | 이륙 전 자동 disarm 끔 | 시동과 이륙 사이 간격이 부하로 길어져도 PX4가 스스로 disarm하지 않는다. 착지 뒤 자동 disarm(`COM_DISARM_LAND`, 기본 2 s)은 그대로다 |
 | `SDLOG_MODE` | 2 | ULog를 부팅부터 종료까지 | 컨테이너 한 번 실행에 ULog 한 파일. 첫 disarm 뒤 기록도 남는다 |
@@ -384,11 +384,11 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 | `EKF2_HGT_REF` | 1 | 높이 기준 GNSS | 기본값과 같다. 높이 기준이 GNSS여야 EKF 원점의 초기 고도 잡음이 도착점에서 상쇄된다. 0(기압계)이면 초기 GNSS 고도 오차가 bias로 남는다 |
 | `IMU_GYRO_CAL_EN` | 0 | 정지 상태 gyro bias 온라인 보정 모듈을 시작하지 않음 | SITL에서 이 모듈이 있으면 arm과 disarm을 반복할 때 `battery_status` 등의 발행이 멈춰 이후 arm이 거부된 일이 있다(실측. 원인은 추정). SITL 센서는 Gazebo에서 오므로 보정이 없어도 EKF가 bias를 추정한다. SITL 전용이고 실기체에서는 1 |
 
-- `NAV_DLL_ACT` 값 0은 `Disabled`다. [소스] PX4 v1.17.0 `src/modules/commander/commander_params.c` 581-598행의 파라미터 정의가 값 0을 `Disabled`로 적는다. `src/modules/commander/failsafe/failsafe.h` 113-120행의 enum `gcs_connection_loss_failsafe_mode`는 `Disabled = 0`이다. `failsafe.cpp` 515행은 파라미터 값이 이 `Disabled`와 다르고 `COM_DLL_EXCEPT` 예외가 없을 때(`!dll_loss_ignored`)만 GCS 연결 손실 failsafe를 건다. 그래서 0이면 515행 failsafe는 걸리지 않는다. 같은 파일 532-538행에는 다른 경로가 있다. `COM_RC_IN_MODE`가 4이거나 AUTO_MISSION에서 RC 손실을 무시하는 예외(`rc_loss_ignored_mission`)가 있고, `NAV_DLL_ACT`가 `Disabled`이면서 사용자 의도 모드가 AUTO_MISSION이고 `mission_finished`이면 GCS 연결 손실에 RTL을 건다. idsim은 `COM_RC_IN_MODE` 4와 `NAV_DLL_ACT` 0을 두어 앞의 두 조건을 채우지만 이 경로는 AUTO_MISSION 전용이고 idsim은 AUTO_MISSION을 요청하지 않으므로 걸리지 않는다. 외부 GCS가 AUTO_MISSION으로 바꾼 경우는 확인하지 않았다(미확인). 보수적 동작: 판정과 CI에 QGC를 쓰지 않는다. AUTO_MISSION을 쓰는 경로를 더하면 이 항목을 다시 본다.
+- `NAV_DLL_ACT` 값 0은 `Disabled`다. [소스] PX4 v1.17.0 `src/modules/commander/commander_params.c` 581-598행의 파라미터 정의가 값 0을 `Disabled`로 적는다. `src/modules/commander/failsafe/failsafe.h` 113-120행의 enum `gcs_connection_loss_failsafe_mode`는 `Disabled = 0`이다. `failsafe.cpp` 515행은 파라미터 값이 이 `Disabled`와 다르고 `COM_DLL_EXCEPT` 예외가 없을 때(`!dll_loss_ignored`)만 GCS 연결 손실 failsafe를 건다. 그래서 0이면 515행 failsafe는 걸리지 않는다. 같은 파일 532-538행에는 다른 경로가 있다. `COM_RC_IN_MODE`가 4이거나 AUTO_MISSION에서 RC 손실을 무시하는 예외(`rc_loss_ignored_mission`)가 있고, `NAV_DLL_ACT`가 `Disabled`이면서 사용자 의도 모드가 AUTO_MISSION이고 `mission_finished`이면 GCS 연결 손실에 RTL을 건다. idsim은 `COM_RC_IN_MODE` 4와 `NAV_DLL_ACT` 0을 두어 앞의 두 조건을 채우지만 이 경로는 AUTO_MISSION 전용이고 idsim은 AUTO_MISSION을 요청하지 않으므로 걸리지 않는다. 외부 GCS가 AUTO_MISSION으로 바꾼 경우는 확인하지 않았다(미확인). 보수적 동작: 판정과 CI에 외부 GCS를 쓰지 않는다. AUTO_MISSION을 쓰는 경로를 더하면 이 항목을 다시 본다.
 - `COM_FAIL_ACT_T`는 계약 표에 넣지 않고 PX4 기본값(v1.17.0에서 5 s)을 둔다. Offboard 손실은 이 지연을 거치지 않고 바로 Land다. 지연이 끼는 것은 Auto 조치(저전압 Land 등)이고 그 동안 기체는 failsafe Hold(`failsafe` true, AUTO_LOITER)다. Executor는 그 표본을 비행 중 감시 순위 6으로 끝낸다.
 - 기체별 `px4_params`는 공통 파일 값을 덮을 수 있고 생성기는 경고만 낸다. 위 표의 파라미터를 기체별로 덮으면 그 기체는 이 계약 밖이다.
 - `PX4_SIM_SPEED_FACTOR`는 주지 않는다(주면 rcS 197-210행이 `COM_OF_LOSS_T` 등 손실 timeout을 덮어쓴다). 배속은 Phase 3에서 정한다.
-- `COM_RC_IN_MODE=4`의 영향: QGroundControl의 수동 모드 비행과 가상 조이스틱을 쓸 수 없다. QGC는 모니터링과 ARM, TAKEOFF, LAND 같은 명령에만 쓴다. 수동 계열 모드(Position, Altitude, Manual) 진입이 가능한지와 부팅 직후의 기본 모드는 확인하지 않았다(미확인). 보수적 동작: idsim은 수동 계열 모드를 요청하지 않고, Executor는 부팅 모드에 기대지 않고 arm 전에 Offboard를 요청한다.
+- `COM_RC_IN_MODE=4`의 영향: GCS의 수동 모드 비행과 가상 조이스틱을 쓸 수 없다. 수동 계열 모드(Position, Altitude, Manual) 진입이 가능한지와 부팅 직후의 기본 모드는 확인하지 않았다(미확인). 보수적 동작: idsim은 수동 계열 모드를 요청하지 않고, Executor는 부팅 모드에 기대지 않고 arm 전에 Offboard를 요청한다.
 - 생성기가 px4 서비스 환경에 넣는 값(파라미터 파일 밖): `PX4_SYS_AUTOSTART`, `PX4_SIM_MODEL`, `PX4_GZ_WORLD`, `PX4_GZ_MODELS`, `PX4_GZ_MODEL_POSE`, `PX4_UXRCE_DDS_NS`, `PX4_UXRCE_DDS_PORT`, `ROS_DOMAIN_ID`, `IDSIM_MAVLINK_OFFSET`, `GZ_PARTITION`, `GZ_IP`, `HOME=/tmp`, 기체별 `px4_params`의 `PX4_PARAM_<이름>`, 그리고 변형에 따라 하나: standalone 변형(Gazebo가 `gazebo` 서비스에 있다)은 `PX4_GZ_STANDALONE=1`, embedded 변형(PX4가 Gazebo를 직접 띄운다. 진단용)은 `HEADLESS=1`(`tools/gen_compose.py`).
 - px4 서비스에는 `PX4_HOME_*`를 주지 않는다. 월드 원점은 생성 스크립트가 `world.origin`으로 만든 월드 SDF의 `<spherical_coordinates>`로만 들어간다. gz 경로에서 `PX4_HOME_*`의 소비자는 `px4-rc.gzsim`의 원점 호출뿐이지만 SIH 경로 `px4-rc.sihsim`도 이 변수를 읽는다. SIH 변형을 더할 때는 원점의 출처가 둘이 되지 않도록 `PX4_HOME_*`와 `world.origin`의 관계를 다시 정한다. 지금 SIH 변형은 없다(생성기 단위 테스트 `tests/tools/test_gen_compose.py`가 `PX4_HOME_*`의 부재를 단정한다).
 
@@ -404,7 +404,7 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 | DDS 포트 구간 | RTPS UDP | 7400 + 250 x (20 + k) 부터 250개. 실사용 끝은 참가자 인덱스 상한 50에서 + 11 + 2 x 50 | 12400-12649(실사용 12511까지) | `tools/gen_compose.py`, `config/cyclonedds.xml` |
 | uXRCE-DDS Agent | UDP | 8888 + k(`PX4_UXRCE_DDS_PORT`와 같다) | 8888 | `tools/gen_compose.py` |
 | gz-transport | - | `GZ_PARTITION` = `idsim-k`, `GZ_IP` = 127.0.0.1 | `idsim-0` | `tools/gen_compose.py` |
-| MAVLink GCS(원격, QGC가 듣는다) | UDP | 14550 + 1000k(스택 안 모든 기체 공통) | 14550 | `docker/px4/px4-rc.mavlink` |
+| MAVLink GCS(원격, 외부 GCS가 듣는다) | UDP | 14550 + 1000k(스택 안 모든 기체 공통) | 14550 | `docker/px4/px4-rc.mavlink` |
 | MAVLink GCS(PX4 로컬) | UDP | 18570 + 1000k + N | 18571 | `docker/px4/px4-rc.mavlink` |
 | MAVLink 온보드 API(원격) | UDP | 14540 + 1000k + N | 14541 | `docker/px4/px4-rc.mavlink` |
 | MAVLink 온보드 API(PX4 로컬) | UDP | 14580 + 1000k + N | 14581 | `docker/px4/px4-rc.mavlink` |
@@ -417,12 +417,12 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 - SIH 표시용 MAVLink 링크(`PX4_SIMULATOR=sihsim`일 때 19450 + N, 19410 + N)에는 오프셋이 없다. 지금 SIH 변형이 없어 열리지 않는다.
 - 환경 스모크는 px4 로그에 MAVLink `bind failed`가 없음을 판정한다. bind에 실패한 PX4의 동작은 미확인이다. 보수적 동작: 스모크 실패로 본다.
 
-QGroundControl.
+외부 GCS.
 
-- QGC는 compose 밖의 호스트 앱이고 `tools/qgc.sh --stack k`로 띄운다. 스크립트가 QGC 설정의 자동 연결 UDP 포트를 14550 + 1000k로 고친다.
-- 한 스택의 모든 기체가 같은 GCS 포트로 보내므로 QGC 하나가 그 스택의 N대를 `MAV_SYS_ID`로 구분해 보인다.
-- `MAV_SYS_ID`는 스택 간에 같다(스택 k와 무관하게 N + 1). 그래서 QGC 하나는 한 번에 한 스택만 본다. 다른 스택을 보려면 QGC를 `--stack`을 바꿔 다시 띄운다.
-- QGC는 판정과 CI에 쓰지 않는다. QGC에서 보낸 모드 전환이나 disarm은 Executor에게 외부 명령으로 보인다.
+- 한 스택의 모든 기체가 같은 GCS 포트로 보내므로 GCS 하나가 그 스택의 N대를 `MAV_SYS_ID`로 구분해 본다.
+- `MAV_SYS_ID`는 스택 간에 같다(스택 k와 무관하게 N + 1). 그래서 GCS 하나는 한 번에 한 스택만 본다.
+- GCS 포트는 양방향이라 PX4가 GCS의 arm, 모드 전환, 파라미터 쓰기를 받는다. 수동 조종 입력(가상 조이스틱 등)은 `COM_RC_IN_MODE=4`로 받지 않는다. 수동 계열 모드 진입은 위 `COM_RC_IN_MODE` 항목을 본다.
+- GCS는 판정과 CI에 쓰지 않는다. GCS에서 보낸 모드 전환이나 disarm은 Executor에게 외부 명령으로 보인다.
 
 ## 미션 정의: Mission, MissionItem, YawSetpoint, TakeoffItem, LoiterItem
 
