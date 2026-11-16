@@ -152,7 +152,7 @@ check_yamllint() {
 
 check_pytest() {
   # rclpy 없이 도는 단위 테스트만(tests/support, tests/tools). rclpy가 필요한 테스트는 ros-ws 이미지 안의
-  # unit job(이후 단계) 몫이다. 생성기 테스트를 위해 ros-ws와 같은 PyYAML(LINT_PYYAML_VERSION, S0이 대조)을 설치한다.
+  # unit job(이후 단계) 몫이다. 생성기 테스트를 위해 ros-ws와 같은 PyYAML(LINT_PYYAML_VERSION, 스모크 images 단계가 대조)을 설치한다.
   local files
   mapfile -t files < <(list_files 'tests/support/test_*.py' 'tests/tools/test_*.py')
   if [ "${#files[@]}" -eq 0 ]; then result pytest PASS-NO-TARGETS "(0 files)"; return 0; fi
@@ -168,8 +168,8 @@ check_pytest() {
 }
 
 check_compose_config() {
-  # 생성기 골든 compose를 docker compose config -q로 검사한다(viz, tools 프로필 포함, DISPLAY와 XAUTHORITY 미설정).
-  # 꺼진 프로필도 보간되므로 viz 서비스의 ${X:?} 같은 실수가 여기서 잡힌다. 골든의 호스트 저장소 경로
+  # 생성기 golden compose를 docker compose config -q로 검사한다(viz, tools 프로필 포함, DISPLAY와 XAUTHORITY 미설정).
+  # 꺼진 프로필도 보간되므로 viz 서비스의 ${X:?} 같은 실수가 여기서 잡힌다. golden의 호스트 저장소 경로
   # /work/idsim을 이 체크아웃 경로로 바꿔 env_file이 실제로 있게 한다(바인드 원본 존재는 config가 보지 않는다).
   local files
   mapfile -t files < <(list_files 'tests/fixtures/gen_compose/*/compose.yaml')

@@ -21,7 +21,7 @@
 //   ref_lat, ref_lon, ref_alt가 유한, ref_alt가 정확히 0.0이 아니다. PX4는 고도 원점이 없을 때
 //   ref_alt에 NaN이 아니라 0을 내고 z_global은 위경도 원점만 본다(EKF2.cpp,
 //   estimator_interface.h). 그래서 z_global이 true여도 ref_alt 0은 무효로 본다.
-// - 기준은 그 tick의 Snapshot.position과 같은 표본에서 읽는다. 노드(P3d)는 vehicle_local_position
+// - 기준은 그 tick의 Snapshot.position과 같은 표본에서 읽는다. 노드는 vehicle_local_position
 //   callback에서 to_local_position_input으로 둘을 한 번에 만들어 함께 보관하고, tick마다 그
 //   기준으로 Px4FramePort를 만들어 step에 넘긴다. 예:
 //

@@ -14,7 +14,6 @@
 
 // VehicleCommand 빌더의 필드 표와 ack 매칭 술어.
 // 결정: docs/interface.md "VehicleCommand".
-// 필드 값은 px4-engineer 의견서(git 이력) P3 표.
 // make의 source == target 거부: docs/interface.md "VehicleCommand".
 
 #include <gtest/gtest.h>

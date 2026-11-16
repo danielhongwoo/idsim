@@ -41,7 +41,7 @@ namespace idsim_mission::core
 enum class MonitorRow : std::uint8_t
 {
   kTimestampFailure,  // Px4Timestamp::now 실패 -> INTERNAL
-  kIdentityMismatch,  // 식별 대조 불일치 -> INTERNAL(M2)
+  kIdentityMismatch,  // 식별 대조 불일치 -> INTERNAL
   kLinkLost,          // vehicle_status가 link_timeout 동안 없음 -> LINK_LOST
   kDisarmedInAir,     // DISARMED이고 landed false -> FAILSAFE
   kDisarmedOnGround,  // DISARMED이고 landed true -> FAILSAFE 또는 EXTERNAL_DISARM
@@ -260,7 +260,7 @@ private:
 
 // world ENU yaw -> 로컬 NED yaw, [-pi, pi). idsim_common/frames의 enu_to_ned_yaw와 같은 식이다.
 // core는 idsim_common(rclcpp 의존)을 링크하지 않으므로 식을 다시 쓴다. 같은 값인지는 노드 쪽
-// gtest(P3d)가 교차 검사한다.
+// gtest가 교차 검사한다.
 double enu_to_ned_yaw(double yaw_enu);
 double wrap_pi(double angle);
 

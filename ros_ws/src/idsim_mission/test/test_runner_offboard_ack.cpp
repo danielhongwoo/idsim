@@ -192,8 +192,8 @@ TEST(OffboardAck, AckOnResendDueTickSuppressesResend)
 
 TEST(OffboardAck, ValidAckBeforeConfirmArmsOnConfirmTick)
 {
-  // 1a 실측의 보통 경우: ack가 확인보다 먼저 와 있다. 확인 tick에 기록이 둘(CONFIRMED,
-  // ACK_ACCEPTED)이고 그 tick에 arm 하나가 나간다(1a와 같은 tick).
+  // 실측의 보통 경우: ack가 확인보다 먼저 와 있다. 확인 tick에 기록이 둘(CONFIRMED,
+  // ACK_ACCEPTED)이고 그 tick에 arm 하나가 나간다.
   Harness h(standard_mission());
   const std::uint64_t s = reach_offboard_without_ack(h);
   h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);
@@ -262,7 +262,8 @@ TEST(OffboardAck, RejectedAckAfterConfirmFailsWithoutArm)
 
 TEST(OffboardAck, RejectedAckBeforeConfirmKeepsPreparingDetail)
 {
-  // 대조: 확인 전 거부는 1a 문자열 그대로다.
+  // 대조: 확인 전 거부의 detail은 "DO_SET_MODE(OFFBOARD) rejected: "로 시작하고
+  // "after OFFBOARD confirmed"가 없다.
   Harness h(standard_mission());
   reach_offboard_without_ack(h);
   h.push_ack(AckCommand::kSetMode, AckResult::kTemporarilyRejected);
@@ -344,7 +345,7 @@ TEST(OffboardAck, CancelWhileWaitingEndsCanceledWithoutDisarm)
 
 TEST(OffboardAck, CancelOnConfirmTickWithoutAckSendsNothing)
 {
-  // 1a에서는 확인 tick에 arm을 보내 지상 arm 분기의 disarm을 거쳤다. 지금은 arm 전이라 아무것도
+  // 확인 tick의 취소는 arm 전이라 아무것도
   // 보내지 않고 CANCELED.
   Harness h(standard_mission());
   reach_offboard_without_ack(h);
@@ -363,7 +364,7 @@ TEST(OffboardAck, CancelOnConfirmTickWithoutAckSendsNothing)
 TEST(OffboardAck, CancelOnConfirmTickWithValidAckGoesToGroundDisarm)
 {
   // arm 판정이 취소보다 먼저라 arm_sent가 true인 지상 arm 분기로 간다. 그 tick의 arm은 정리
-  // 진입이 지워 나가지 않고 disarm 하나가 나간다(1a의 확인 tick 취소와 같은 출력).
+  // 진입이 지워 나가지 않고 disarm 하나가 나간다.
   Harness h(standard_mission());
   reach_offboard_without_ack(h);
   h.push_ack(AckCommand::kSetMode, AckResult::kAccepted);

@@ -17,7 +17,7 @@
 // 대응표의 정본은 core/snapshot.hpp 머리 주석이다. 이 파일은 그 표를 함수로 옮긴 것이다. PX4 enum
 // 값은 숫자가 아니라 px4_msgs의 상수 이름으로 비교한다.
 //
-// 모두 순수 함수다(노드, 시계, DDS 없음). 노드(P3d)의 구독 callback이 표본을 받으면 그 callback이
+// 모두 순수 함수다(노드, 시계, DDS 없음). 노드의 구독 callback이 표본을 받으면 그 callback이
 // 지금의 "다음 step tick 번호"와 노드 시계 ROS 시각을 Received로 넘겨 이 함수를 부르고, 결과를
 // Snapshot의 해당 optional에 덮어쓴다(토픽마다 최신 하나). 예:
 //

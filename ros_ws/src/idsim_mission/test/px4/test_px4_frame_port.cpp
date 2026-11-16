@@ -135,7 +135,7 @@ TEST(Px4FramePort, NonFiniteReferenceIsInvalid)
 
 TEST(Px4FramePort, ZeroRefAltWithZGlobalIsInvalid)
 {
-  // K3 창: 위경도 원점은 잡혔고(z_global true) 고도 원점이 아직 없어 PX4가 ref_alt를 0으로 둔 표본.
+  // 위경도 원점은 잡혔고(z_global true) 고도 원점이 아직 없어 PX4가 ref_alt를 0으로 둔 표본.
   VehicleLocalPosition msg = valid_msg();
   msg.ref_alt = 0.0F;
   ASSERT_TRUE(msg.xy_global && msg.z_global);

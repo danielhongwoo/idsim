@@ -254,7 +254,7 @@ TEST(CancelGround, StaleDisarmedSamplesDoNotConfirm)
 
 TEST(CancelGround, LinkLostDuringGroundDisarm)
 {
-  // M5: 지상 disarm 분기에서 vehicle_status가 link_timeout(2 s) 동안 없으면 발행을 멈추고 disarm을
+  // 지상 disarm 분기에서 vehicle_status가 link_timeout(2 s) 동안 없으면 발행을 멈추고 disarm을
   // 한 번 더 보낸 뒤 ABORTED, LINK_LOST. mode_confirm_timeout(3 s)보다 먼저다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
@@ -296,8 +296,8 @@ TEST(CancelGround, LinkLostDuringGroundDisarmWithTimestampFailureDropsDisarm)
 
 TEST(CancelGround, DeniedDisarmAckKeepsRetrying)
 {
-  // M5. 방어 경로(합성 ack): v1.17.0의 ARM_DISARM은 DENIED를 돌려주지 않는다. 거부 ack는 종류와
-  // 무관하게 그 자리에서 끝내지 않고 landed인 동안 재전송하며, 타임아웃에 끝나며 detail에 적는다.
+  // 방어 경로(합성 ack): v1.17.0의 ARM_DISARM은 DENIED를 돌려주지 않는다. 거부 ack는 종류와
+  // 무관하게 그 자리에서 끝내지 않고 landed인 동안 재전송하며, timeout에 끝나며 detail에 적는다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
   h.auto_px4 = false;
@@ -484,7 +484,7 @@ TEST(TakeoffTimeout, CancelDuringCleanupIsIgnored)
 
 TEST(TakeoffTimeout, GroundDisarmLinkLostKeepsReason)
 {
-  // M5: 정리 중의 LINK_LOST는 원래 reason(ITEM_TIMEOUT)을 유지하고 detail에 적는다.
+  // 정리 중의 LINK_LOST는 원래 reason(ITEM_TIMEOUT)을 유지하고 detail에 적는다.
   Harness h(standard_mission());
   to_takeoff_timeout(h, true);
   h.auto_px4 = false;
@@ -530,7 +530,7 @@ TEST(TakeoffTimeout, ReasonStaysItemTimeoutInEveryBranch)
   EXPECT_NE(details[2].find("disarm not confirmed"), std::string::npos);
 }
 
-// ---- 검토 보완 ----
+// ---- 정리의 경계 사례: 비유한 위치, 링크 끊김, IN_PROGRESS ack, 신뢰하지 않는 표본 ----
 
 TEST(CancelGround, GroundSetpointFallsBackWhenPositionNotFinite)
 {
@@ -583,8 +583,8 @@ TEST(CancelAir, HoldInProgressAckIsNotRejection)
 
 TEST(UntrustedSample, NotCountedForGroundDisarm)
 {
-  // M2: 정리 중 식별이 어긋난 표본은 분기 고르기와 확인 계수에 쓰지 않는다. 남의 기체의
-  // DISARMED로 CANCELED가 되지 않고, 분기의 타임아웃이 끝낸다.
+  // 정리 중 식별이 어긋난 표본은 분기 고르기와 확인 계수에 쓰지 않는다. 남의 기체의
+  // DISARMED로 CANCELED가 되지 않고, 분기의 timeout이 끝낸다.
   Harness h(standard_mission());
   ASSERT_TRUE(h.run_until([&h] { return h.view().prep == PrepStep::kArm; }));
   h.auto_px4 = false;
@@ -905,7 +905,7 @@ TEST(HoldFailedReentry, AirAgainAfterHoldTimeoutSendsNavLand)
 // land_disarm_fallback_delay + mode_confirm_timeout) = 12 s = 240 tick이다.
 
 constexpr int kCapTicks = static_cast<int>(cleanup_cap_ns(Timeouts{}) / kTickNs);
-constexpr int kToggleTicks = 50;  // landed가 2.5 s마다 바뀐다(분기 타임아웃 3 s보다 짧다)
+constexpr int kToggleTicks = 50;  // landed가 2.5 s마다 바뀐다(분기 timeout 3 s보다 짧다)
 
 TEST(CleanupCap, DerivedValue)
 {

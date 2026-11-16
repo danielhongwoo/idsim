@@ -162,7 +162,7 @@ TEST(EntryPlan, RtlWaitsForEkfGate)
 
 TEST(Rtl, RtlOnlySucceeds)
 {
-  // T1. 공중 ARMED Hold에서 [RTL]. S+3에 AUTO_RTL 확인, 착지 뒤 DISARMED 3회로 성공.
+  // 공중 ARMED Hold에서 [RTL]. S+3에 AUTO_RTL 확인, 착지 뒤 DISARMED 3회로 성공.
   Harness h(rtl_only_mission());
   const std::uint64_t s = start_rtl(h);
   expect_cell(h, "PREPARING.WAIT_READY", Event::kReadyModeItem, "ITEM.RTL", "-");
@@ -197,7 +197,7 @@ TEST(Rtl, RtlOnlySucceeds)
 
 TEST(Rtl, TakeoffLoiterRtlStopsPublishingAtFirstAutoRtl)
 {
-  // T2. LOITER 뒤 RTL. S에는 setpoint가 있고 S+1(첫 AUTO_RTL 표본)부터 없다.
+  // LOITER 뒤 RTL. S에는 setpoint가 있고 S+1(첫 AUTO_RTL 표본)부터 없다.
   Harness h(takeoff_loiter_rtl_mission());
   const std::uint64_t s = drive_to_rtl(h);
   expect_cell(h, "ITEM.LOITER", Event::kLoiterElapsed, "ITEM.RTL", "-");
@@ -221,7 +221,7 @@ TEST(Rtl, TakeoffLoiterRtlStopsPublishingAtFirstAutoRtl)
 
 TEST(Rtl, TakeoffThenRtl)
 {
-  // T3. TAKEOFF 도달 tick에 RTL을 시작한다.
+  // TAKEOFF 도달 tick에 RTL을 시작한다.
   MissionSpec m;
   m.mission_id = "rtl2";
   m.items = {takeoff_item(), rtl_item()};
@@ -242,7 +242,7 @@ TEST(Rtl, TakeoffThenRtl)
 
 TEST(Rtl, RejectedInAirFallsBackToLand)
 {
-  // T4. RTL이 거부되면 기체는 OFFBOARD로 남는다. Hold 없이 Land 경로, 발행은 AUTO_LAND 관측까지.
+  // RTL이 거부되면 기체는 OFFBOARD로 남는다. Hold 없이 Land 경로, 발행은 AUTO_LAND 관측까지.
   Harness h(takeoff_loiter_rtl_mission());
   h.rtl_response = RtlResponse::kReject;
   const std::uint64_t s = drive_to_rtl(h);
@@ -278,7 +278,7 @@ TEST(Rtl, RejectedInAirFallsBackToLand)
 
 TEST(Rtl, RejectionRangeIsEveryRejectingResult)
 {
-  // T4 보조. is_rejection 전부가 Land fallback이고 IN_PROGRESS는 정리로 가지 않는다(합성 ack).
+  // is_rejection 전부가 Land fallback이고 IN_PROGRESS는 정리로 가지 않는다(합성 ack).
   for (const AckResult result :
        {AckResult::kTemporarilyRejected, AckResult::kDenied, AckResult::kUnsupported,
         AckResult::kFailed, AckResult::kCancelled, AckResult::kOther}) {
@@ -306,7 +306,7 @@ TEST(Rtl, RejectionRangeIsEveryRejectingResult)
 
 TEST(Rtl, ModeConfirmTimeoutFallsBackToLand)
 {
-  // T5. 기체가 NAV_RTL에 반응하지 않는다. S+59까지 10 tick마다 재전송, S+60에 Land fallback.
+  // 기체가 NAV_RTL에 반응하지 않는다. S+59까지 10 tick마다 재전송, S+60에 Land fallback.
   Harness h(rtl_only_mission());
   h.auto_px4 = false;
   const std::uint64_t s = start_rtl(h);
@@ -374,7 +374,7 @@ TEST(Rtl, GroundBranchThenAirReentryIsLandPath)
 
 TEST(Rtl, LeavingAutoRtlAfterConfirm)
 {
-  // T6. 확인 뒤 ARMED인 채 AUTO_RTL 이탈. 명령 없이 끝낸다.
+  // 확인 뒤 ARMED인 채 AUTO_RTL 이탈. 명령 없이 끝낸다.
   for (const bool failsafe : {false, true}) {
     Harness h(rtl_only_mission());
     const std::uint64_t s = start_rtl(h);
@@ -395,7 +395,7 @@ TEST(Rtl, LeavingAutoRtlAfterConfirm)
 
 TEST(Rtl, FlappingBeforeConfirmIsNotDeparture)
 {
-  // T7. 확인 전의 흔들림은 계수만 0으로 되돌린다.
+  // 확인 전의 흔들림은 계수만 0으로 되돌린다.
   Harness h(rtl_only_mission());
   h.auto_px4 = false;
   start_rtl(h);
@@ -413,7 +413,7 @@ TEST(Rtl, FlappingBeforeConfirmIsNotDeparture)
 
 TEST(Rtl, CompletionIgnoresNav)
 {
-  // T8. RTL 착지 뒤 disarm 때 nav_state가 사용자 의도로 돌아가도 이탈이 아니라 완료다.
+  // RTL 착지 뒤 disarm 때 nav_state가 사용자 의도로 돌아가도 이탈이 아니라 완료다.
   Harness h(rtl_only_mission());
   const std::uint64_t s = start_rtl(h);
   run_to_tick(h, s + 4);
@@ -427,7 +427,7 @@ TEST(Rtl, CompletionIgnoresNav)
 
 TEST(Rtl, ImmediateEndings)
 {
-  // T9. 공중 DISARMED, 식별 불일치, 상태 끊김, Px4Timestamp 실패.
+  // 공중 DISARMED, 식별 불일치, 상태 끊김, Px4Timestamp 실패.
   {
     Harness h(rtl_only_mission());
     start_rtl(h);
@@ -483,7 +483,7 @@ TEST(Rtl, ImmediateEndings)
 
 TEST(Rtl, ItemTimeoutWordingWithoutFallback)
 {
-  // T10. 항목 timeout(2 s = 40 tick)은 명령 없이 ITEM_TIMEOUT. Land fallback을 거치지 않는다.
+  // 항목 timeout(2 s = 40 tick)은 명령 없이 ITEM_TIMEOUT. Land fallback을 거치지 않는다.
   struct Case
   {
     const char * name;
@@ -536,7 +536,7 @@ TEST(Rtl, ItemTimeoutWordingWithoutFallback)
 
 TEST(Rtl, FallbackDisarmAfterLandedArmed)
 {
-  // T11. 확인 뒤 landed이고 ARMED인 채 5 s면 강제가 아닌 disarm 1회, 그 뒤 재전송. 그 단계의 거부
+  // 확인 뒤 landed이고 ARMED인 채 5 s면 강제가 아닌 disarm 1회, 그 뒤 재전송. 그 단계의 거부
   // ack(DISARM, NAV_RTL)는 정리로 가지 않는다.
   Harness h(rtl_only_mission());
   const std::uint64_t s = start_rtl(h);
@@ -562,7 +562,7 @@ TEST(Rtl, FallbackDisarmAfterLandedArmed)
 
 TEST(Rtl, SameTickOrder)
 {
-  // T12 (b)-(e). 같은 tick의 순서는 거부 ack -> mode_confirm_timeout -> 3회 확인이다.
+  // 같은 tick의 순서는 거부 ack -> mode_confirm_timeout -> 3회 확인이다.
   {
     // (b) 거부 ack와 mode_confirm_timeout이 같은 tick: 거부가 이긴다(detail은 거부 문구).
     Harness h(rtl_only_mission());
@@ -667,7 +667,7 @@ TEST(Rtl, ThirdAutoRtlSampleOnModeConfirmTimeoutTick)
 
 TEST(Rtl, CancelSendsHold)
 {
-  // T15. [RTL] 확인 뒤 취소는 1a 취소 그대로 Hold를 보낸다.
+  // [RTL] 확인 뒤 취소는 Hold를 보낸다.
   Harness h(rtl_only_mission());
   const std::uint64_t s = start_rtl(h);
   run_to_tick(h, s + 4);
@@ -683,8 +683,8 @@ TEST(Rtl, CancelSendsHold)
 
 TEST(Rtl, CancelOverlaps)
 {
-  // T16. 정리로 들어가는 사건과 같은 tick의 취소는 무시한다(R12, R13). 바로 끝내는 사건의 대표
-  // (R14 실패, R15 성공)는 Hold와 disarm을 그 tick과 그 뒤에 보내지 않는다.
+  // 정리로 들어가는 사건과 같은 tick의 취소는 무시한다. 바로 끝내는 사건의 대표
+  // (ABORTED/EXTERNAL_MODE_CHANGE, SUCCEEDED)는 Hold와 disarm을 그 tick과 그 뒤에 보내지 않는다.
   {
     Harness h(rtl_only_mission());
     h.rtl_response = RtlResponse::kReject;
@@ -743,11 +743,11 @@ TEST(Rtl, CancelOverlaps)
   }
 }
 
-// ---- LAND는 1a 그대로 ----
+// ---- LAND 항목 ----
 
 TEST(LandUnchanged, RejectedAckDoesNotEndLand)
 {
-  // T13. [LAND]의 NAV_LAND 거부 ack는 보지 않는다. 재전송을 이어 가고 S+60에 MODE_SWITCH_FAILED.
+  // [LAND]의 NAV_LAND 거부 ack는 보지 않는다. 재전송을 이어 가고 S+60에 MODE_SWITCH_FAILED.
   Harness h(land_only_mission());
   h.start_in_air();
   h.auto_px4 = false;
@@ -771,7 +771,7 @@ TEST(LandUnchanged, RejectedAckDoesNotEndLand)
 
 TEST(LandUnchanged, WordingIsByteIdenticalTo1a)
 {
-  // T14. LAND의 문구는 1a 문자열 그대로다.
+  // LAND의 실패 문구는 고정 문자열이다.
   {
     Harness h(land_only_mission());
     h.tick();

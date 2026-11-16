@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""b와 R_home의 보정 확인과 계산(tests/sitl/README.md "b와 R_home 보정 확인", 사용자 결정 U18). 순수 코드다(표준 라이브러리만. lint job에서
+"""b와 R_home의 보정 확인과 계산(tests/sitl/README.md "b와 R_home 보정 확인", 사용자 결정). 순수 코드다(표준 라이브러리만. lint job에서
 단위 테스트가 돈다).
 
 입력은 run_sitl.sh --repeat의 회차마다 남는 trace.jsonl(reach, track, landing 사건)과 verdict.json이다. 통과한 실행만
 부팅으로 센다.
-- b(U18): 상수로 받는다(기본 sitl_judge.B_M). 확인 조건은 "GOTO 도달 사건의 s = d_oracle(t_f) - acceptance_radius_m와
+- b: 상수로 받는다(기본 sitl_judge.B_M). 확인 조건은 "GOTO 도달 사건의 s = d_oracle(t_f) - acceptance_radius_m와
   TRACK_ENTITY 완료의 s_track = d_oracle(t_f) - acceptance_radius_m - v x L의 표본 전부가 b 이하"다. 정규
   허용한계(비중심 t의 k, mean + k x std)와 Shapiro-Wilk는 쓰지 않고 기록용으로만 낸다(분포를 다시 볼 때의 자료).
 - 도달 확인: GOTO d3 전부가 R_JUDGE 안이고 TRACK_ENTITY d3 전부가 그 사건의 임계값(R_JUDGE + v x L) 안인가(판정과
@@ -270,7 +270,7 @@ def calibrate(runs, b=sj.B_M, min_boots=MIN_BOOTS, r_home_const=sj.R_HOME_M):
            "reach_outside": len(out_reach), "goto_speed": speed_relation(acc["speed"]),
            "events_per_boot": [{"run_id": r, "goto": a, "track": c, "rtl": d} for r, a, c, d in shape
                                if (a, c, d) != (7, 2, 2)]}
-    # 기록 전용: 정규 허용한계와 Shapiro-Wilk(U18로 판정에 쓰지 않는다)
+    # 기록 전용: 정규 허용한계와 Shapiro-Wilk(판정에 쓰지 않는다)
     k = tolerance_k(n)
     w, p = shapiro_wilk(acc["s"])
     wt, pt = shapiro_wilk(acc["s_track"])

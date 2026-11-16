@@ -24,17 +24,17 @@ world:
     lat: 37.5665
     lon: 126.9780
     alt: 38
-  # 시뮬레이션 배속. 1a, 1b에서는 null만 허용한다(Phase 3에서 정한다).
+  # 시뮬레이션 배속. null만 허용한다(Phase 3에서 정한다).
   speed_factor: null
 
 # 기체 목록. 기체 한 대가 px4 컨테이너 하나(compose 서비스 px4-<id>)다.
 vehicles:
   # id: 기체 번호 N(1-9, 중복 금지). 인스턴스 -i N, 네임스페이스 /px4_N, MAV_SYS_ID N+1이 여기서 나온다.
-  # airframe: PX4 airframe 이름. 1a 허용 목록은 4001_gz_x500 하나. SYS_AUTOSTART(4001), PX4_SIM_MODEL(gz_x500),
+  # airframe: PX4 airframe 이름. 허용 목록은 4001_gz_x500 하나. SYS_AUTOSTART(4001), PX4_SIM_MODEL(gz_x500),
   #   Gazebo 모델 이름(x500_N)이 여기서 나온다.
   # pose: 초기 위치. Gazebo 월드 좌표 ENU, x, y, z는 m, yaw는 rad(x축에서 반시계).
   #   기체 간 수평 간격 2 m 미만은 거부, 4 m 미만은 경고. 여러 대면 예: y 0, 4, 8.
-  #   기체 1은 원점에서 떨어진 (6, -3, 0)에 둔다. 스모크 S2가 NavSat 위경도 변환의 수평 반전(약 13.4 m)을 가려낸다.
+  #   기체 1은 원점에서 떨어진 (6, -3, 0)에 둔다. 스모크 px4-out 단계가 NavSat 위경도 변환의 수평 반전(약 13.4 m)을 가려낸다.
   #   생성기가 이 pose에서 기체별 기대 GPS(stack.json vehicles[].expect_gps)를 계산한다.
   # px4_params: 이 기체에만 주는 SITL 파라미터 {이름: 값}. 공통 파일 값을 덮는다(경고).
   #   이름은 ^[A-Z0-9_]{1,16}$, 값은 숫자 또는 공백 없는 문자열(bool 불가).

@@ -20,11 +20,11 @@
     },
     "fleet": {
       "path": "tests/fixtures/gen_compose/1\ub300-k0/fleet.yaml",
-      "sha256": "6ccc4dba08782a6e91189ccb695ab013ea21570030fe19f9cd34dff1556972fb"
+      "sha256": "b57f1460f8b50ec9ebf087d7f5c1902713d46396b95f2068327fe8232dae4a7c"
     },
     "px4_params_file": {
       "path": "config/px4/sitl_params.env",
-      "sha256": "3bba39e875cbe9bebc70d045eae25a6971040619c287faae354276619b2b36f6"
+      "sha256": "321c7993315cde8b07f41cc46ee58043ace9759fa43b0dd7c5b966334b051ab0"
     },
     "versions_env": {
       "path": "docker/versions.env",

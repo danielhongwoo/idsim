@@ -55,7 +55,7 @@ ItemSpec track_item()
 
 TEST(ItemClassification, EveryTypeIsInExactlyOneKind)
 {
-  // 모든 TYPE_*가 정확히 한 분류에 속한다(5단계 넘김).
+  // 모든 TYPE_*가 정확히 한 분류에 속한다.
   std::set<std::uint8_t> seen;
   int setpoint = 0;
   int mode_command = 0;
@@ -70,7 +70,7 @@ TEST(ItemClassification, EveryTypeIsInExactlyOneKind)
     }
   }
   EXPECT_EQ(setpoint + mode_command, static_cast<int>(kAllItemTypes.size()));
-  // 값은 1부터 6까지 빈칸 없이(메시지 상수와의 교차 검사는 노드 쪽 gtest, P3d).
+  // 값은 1부터 6까지 빈칸 없이(메시지 상수와의 교차 검사는 노드 쪽 gtest).
   for (std::uint8_t v = 1; v <= 6; ++v) {
     EXPECT_EQ(seen.count(v), 1U) << int{v};
   }
@@ -357,7 +357,7 @@ TEST(ValidateMissionContract, CoordinateBound)
 
 TEST(ScreenGoal, AcceptsGotoTrackEntityAndRtl)
 {
-  // goal 접수는 계약 검증만 한다(docs/interface.md "준비 단계". B10에서 1a 제한을 지웠다).
+  // goal 접수는 계약 검증만 한다(docs/interface.md "준비 단계").
   MissionSpec m;
   m.mission_id = "other";
   m.items = {takeoff_item(), goto_item(), track_item(), rtl_item()};

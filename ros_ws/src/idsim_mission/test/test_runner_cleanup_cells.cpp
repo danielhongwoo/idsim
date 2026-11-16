@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// 정리 단계 칸의 파라미터화 하네스(idsim_mission README "테스트",
-// B8b). 파라미터 하나가 칸 하나(정리 원인, 분기, 사건)이고, 본문은 그 칸의 to와 reason을 이
-// runner의 전이 기록(expect_cell)과 종료 결과로 단정하고, 그 칸의 기록이 난 tick의 명령을 1a 표대로
-// 단정한다(CleanupCell::sent).
+// 정리 단계 칸의 파라미터화 harness(idsim_mission README "테스트").
+// 파라미터 하나가 칸 하나(정리 원인, 분기, 사건)이고, 본문은 그 칸의 to와 reason을 이
+// runner의 전이 기록(expect_cell)과 종료 결과로 단정하고, 그 칸의 기록이 난 tick의 명령을
+// docs/interface.md "취소"의 분기 표와 "정리의 상한"대로 단정한다(CleanupCell::sent).
 //
 // 구조
 // - CleanupRig는 세 단계로 칸에 닿는다. enter는 정리 원인마다 정해진 입구로 정리를 시작하고,
@@ -228,7 +228,7 @@ struct StartSample
 // 시간 값을 tick 수로. 정리의 tick 열은 시각을 건너뛰지 않으므로 tick 수가 곧 경과다.
 int ticks_of(std::int64_t ns) { return static_cast<int>(ns / kTickNs); }
 
-// 분기에 머무는 tick 수(hold_branch_until_cap). 분기 타임아웃 중 짧은 것(Hold 확인과 Land 경로,
+// 분기에 머무는 tick 수(hold_branch_until_cap). 분기 timeout 중 짧은 것(Hold 확인과 Land 경로,
 // 지상 disarm 확인)보다 짧게 머물러야 분기 사건이 나지 않는다. 다시 들어온 뒤 stay만큼 머물고,
 // 상한까지 남은 tick이 tail 이하이면 그대로 상한 tick까지 간다(가장 긴 머묾은 stay + tail).
 struct BranchTicks
@@ -328,7 +328,7 @@ public:
     const BranchTicks b = branch_ticks(h_.config().timeouts);
     switch (cell.event) {
       case Event::kCleanupLinkLost:
-        // 분기 안의 상태 끊김: status 없이 link_timeout을 보낸다(분기 타임아웃보다 짧다).
+        // 분기 안의 상태 끊김: status 없이 link_timeout을 보낸다(분기 timeout보다 짧다).
         h_.auto_samples = false;
         for (int i = 0; i < link_ticks() && !h_.runner().done(); ++i) {
           h_.step_only();
@@ -623,7 +623,7 @@ private:
     h_.tick();
   }
 
-  // 지금 분기에 있는 채 정리의 상한 직전 tick까지 간다. 분기 타임아웃 전에 다른 분기로 나갔다 바로
+  // 지금 분기에 있는 채 정리의 상한 직전 tick까지 간다. 분기 timeout 전에 다른 분기로 나갔다 바로
   // 돌아와 분기 타이머를 다시 시작한다. 다음 tick이 상한 tick이다.
   void hold_branch_until_cap()
   {
@@ -687,7 +687,7 @@ TEST_P(CleanupCellTest, ObservesCell)
   ASSERT_NE(edge, nullptr);
   const StepOutput * const out = output_of_tick(h, edge->tick);
   ASSERT_NE(out, nullptr);
-  // 그 tick의 명령은 1a 표대로 정확히 이것이다.
+  // 그 tick의 명령은 칸의 sent 열대로 정확히 이것이다.
   EXPECT_EQ(out->commands, commands_of(cell.sent)) << "tick " << edge->tick;
   const bool done = std::string(cell.to) == "DONE";
   if (done) {

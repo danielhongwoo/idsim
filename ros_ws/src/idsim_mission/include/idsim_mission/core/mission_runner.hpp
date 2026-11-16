@@ -16,11 +16,11 @@
 // "ExecuteMission" 절이다. 전이 표와 이 상태기의 단위 테스트를 바꾸려면 px4-engineer가 필수
 // 승인자다(docs-for-agent/file-ownership.md).
 //
-// 쓰는 법(노드, P3d)
+// 쓰는 법(노드)
 // - screen_goal(mission_validation.hpp)을 통과한 goal마다 MissionRunner를 하나 만든다.
 // - 20 Hz timer tick마다 step(TickInput, Snapshot, Px4ClockPort, FramePort)를 한 번 부른다. 입력과
-//   출력의 뜻은 snapshot.hpp 머리 주석에 있다. FramePort는 GOTO와 TRACK_ENTITY 항목만 부른다(1a
-//   type 미션은 부르지 않는다). Snapshot.targets는 TRACK_ENTITY 항목만 본다.
+//   출력의 뜻은 snapshot.hpp 머리 주석에 있다. FramePort는 GOTO와 TRACK_ENTITY 항목만 부른다(GOTO와
+//   TRACK_ENTITY가 아닌 type 미션은 부르지 않는다). Snapshot.targets는 TRACK_ENTITY 항목만 본다.
 // - 출력의 setpoint가 있으면 그 tick에 offboard_control_mode와 trajectory_setpoint를 발행하고,
 //   commands를 순서대로 보내고, feedback이 있으면 publish_feedback, termination이 있으면 그 값으로
 //   goal을 끝내고 종료 사건을 낸다(termination.hpp). termination은 정확히 한 번 나온다. 그 뒤의
@@ -318,7 +318,7 @@ private:
   std::uint64_t offboard_confirm_timestamp_us_{0};
   std::uint64_t last_ack_tick_{0};
   std::int64_t branch_first_ns_{0};  // 정리 분기의 첫 명령 시각
-  std::int64_t cleanup_start_ns_{0};  // 정리를 시작한 tick의 ROS 시각(정리의 상한 M6의 기준)
+  std::int64_t cleanup_start_ns_{0};  // 정리를 시작한 tick의 ROS 시각(정리의 상한의 기준)
   std::uint64_t arm_first_tick_{0};  // P6에서 arm을 처음 보낸 tick
   std::int64_t first_armed_ns_{0};  // 첫 ARMED 표본을 본 tick의 ROS 시각(P6 확인 기한의 기준)
   std::uint64_t first_armed_tick_{0};

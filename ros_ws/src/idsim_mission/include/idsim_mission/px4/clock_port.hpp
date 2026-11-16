@@ -18,7 +18,7 @@
 // microseconds()를 돌려준다. 실패하면(sim 시간이 아닌 시계, /clock 수신 전) nullopt이고 보관한 값도
 // 비운다. core는 tick마다 많아야 한 번 부른다.
 //
-// 노드(P3d)는 tick마다 step 전에 begin_tick()으로 보관값을 비우고, step 뒤에 stamp()를
+// 노드는 tick마다 step 전에 begin_tick()으로 보관값을 비우고, step 뒤에 stamp()를
 // to_px4_messages에 넘긴다(outputs.hpp). 그러면 앞 tick의 timestamp가 이번 tick의 메시지에 실리는
 // 일이 없다. clock은 노드 시계(*node.get_clock())이고 노드보다 오래 살지 않게 노드가 소유한다.
 

@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""1b 비행 시나리오의 ULog 기록을 sitl/trace_1b.json으로 남긴다(호스트에서, compose stop 뒤. 기록 전용).
+"""비행 시나리오의 ULog 기록을 sitl/trace_ulog.json으로 남긴다(호스트에서, compose stop 뒤. 기록 전용).
 
-사용법: tests/sitl/trace_1b.py <실행 디렉터리> [--sitl-dir sitl]
-요약 로직은 tests/support/ulog_1b.py에 있다. 종료 코드: 0 기록함, 2 입력 없음이나 예외(run_sitl.sh는 종료 코드를
+사용법: tests/sitl/trace_ulog.py <실행 디렉터리> [--sitl-dir sitl]
+요약 로직은 tests/support/ulog_flight.py에 있다. 종료 코드: 0 기록함, 2 입력 없음이나 예외(run_sitl.sh는 종료 코드를
 판정에 넣지 않는다). F1-F4가 돌지 않은 실행에서는 빈 목록을 쓴다.
 """
 import argparse
@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from tests.support import ulog_1b  # noqa: E402
+from tests.support import ulog_flight  # noqa: E402
 from tests.support import ulog_min  # noqa: E402
 
 
@@ -45,16 +45,16 @@ def main(argv=None):
             ulog_dir = json.loads((run / "stack.json").read_text(encoding="utf-8"))["vehicles"][0]["ulog_dir"]
             ulogs = sorted(run.glob(ulog_dir + "/**/*.ulg"), key=lambda p: p.stat().st_mtime)
             if not ulogs:
-                print("trace_1b: ULog가 없다", file=sys.stderr)
+                print("trace_ulog: ULog가 없다", file=sys.stderr)
                 return 2
-            topics = ulog_min.read_topics(str(ulogs[-1]), ulog_1b.TOPICS)
-            res = dict(ulog_1b.build(wanted, topics), ulog=str(ulogs[-1].relative_to(run)))
-        (out / "trace_1b.json").write_text(json.dumps(res, indent=1, sort_keys=True) + "\n", encoding="utf-8")
-        print("trace_1b: TRACK_ENTITY 구간 %d, 공중 시작 구간 %d" % (len(res["track"]), len(res["air_start"])),
+            topics = ulog_min.read_topics(str(ulogs[-1]), ulog_flight.TOPICS)
+            res = dict(ulog_flight.build(wanted, topics), ulog=str(ulogs[-1].relative_to(run)))
+        (out / "trace_ulog.json").write_text(json.dumps(res, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        print("trace_ulog: TRACK_ENTITY 구간 %d, 공중 시작 구간 %d" % (len(res["track"]), len(res["air_start"])),
               file=sys.stderr)
         return 0
     except Exception as e:  # noqa: BLE001 기록 전용이라 어떤 예외든 2로 접는다
-        print("trace_1b: 예외 %s: %s" % (type(e).__name__, e), file=sys.stderr)
+        print("trace_ulog: 예외 %s: %s" % (type(e).__name__, e), file=sys.stderr)
         return 2
 
 

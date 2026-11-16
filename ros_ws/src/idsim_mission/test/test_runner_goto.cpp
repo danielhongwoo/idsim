@@ -14,7 +14,7 @@
 
 // step()의 FramePort와 GOTO 항목(docs/interface.md "GoToItem과 TrackEntityItem", "준비 단계").
 //
-// - FramePort 호출 규율: 1a type 미션(TAKEOFF, LOITER, LAND, RTL)은 FramePort를 부르지 않는다
+// - FramePort 호출 규율: TAKEOFF, LOITER, LAND, RTL 미션은 FramePort를 부르지 않는다
 //   (README "구현 규칙"). harness의 기본 port(kFail)가 모든 runner 사례에서 이를 함께 단정하고,
 //   여기서는 진입 방식과 끝나는 길마다 한 번씩 끝까지 돌려 호출 수 0을 직접 단정한다.
 // - GOTO 항목: 칸은 transition_cells.tsv의 ITEM.GOTO 행과 GOTO로 들어오는 세 행이다. 기호: K는 GOTO
@@ -67,7 +67,7 @@ MissionSpec mission_of(const std::string & id, std::vector<ItemSpec> items)
   return m;
 }
 
-// ---- FramePort 호출 규율(1a type 미션) ----
+// ---- FramePort 호출 규율(GOTO와 TRACK_ENTITY가 없는 미션) ----
 
 TEST(FramePortCalls, OneATypeMissionsNeverCallFramePort)
 {

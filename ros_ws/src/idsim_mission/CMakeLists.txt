@@ -24,7 +24,7 @@ find_package(ament_cmake REQUIRED)
 
 # ---- core: 검증, 분류, 상태기, 종료 결과. ROS와 PX4에 의존하지 않는다 ----
 # 이 대상에는 어떤 패키지도 링크하지 않는다(px4_msgs, rclcpp, idsim_common 금지. README "core와 어댑터의 경계").
-# 어댑터(idsim_mission_px4, P3c)와 노드 껍질(P3d)은 별도 대상으로 이 위에 얹는다.
+# 어댑터(idsim_mission_px4)와 노드 껍질은 별도 대상으로 이 위에 얹는다.
 add_library(idsim_mission_core SHARED
   src/core/mission_runner.cpp
   src/core/mission_validation.cpp
@@ -36,7 +36,7 @@ target_include_directories(idsim_mission_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
 
-# ---- px4 어댑터(P3c, 소유 px4-engineer): px4_msgs <-> core 타입 변환과 Px4ClockPort 구현 ----
+# ---- px4 어댑터(소유 px4-engineer): px4_msgs <-> core 타입 변환과 Px4ClockPort 구현 ----
 # core 위에 얹는다. core는 이 대상에 의존하지 않는다.
 find_package(idsim_common REQUIRED)
 find_package(px4_msgs REQUIRED)
@@ -56,7 +56,7 @@ target_link_libraries(idsim_mission_px4 PUBLIC
   rclcpp::rclcpp)
 # ---- px4 어댑터 끝 ----
 
-# ---- 노드 껍질(P3d): lifecycle 컴포넌트 idsim_mission::MissionExecutorNode ----
+# ---- 노드 껍질: lifecycle 컴포넌트 idsim_mission::MissionExecutorNode ----
 find_package(idsim_interfaces REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(rclcpp_action REQUIRED)
@@ -185,7 +185,7 @@ if(BUILD_TESTING)
     target_link_libraries(${_test} idsim_mission_px4)
   endforeach()
 
-  # ---- 노드 껍질 테스트(P3d) ----
+  # ---- 노드 껍질 테스트 ----
   # 메시지 상수와 idsim_common 식의 교차 검사(노드 없음).
   ament_add_gtest(test_contract_constants test/node/test_contract_constants.cpp)
   target_link_libraries(test_contract_constants mission_executor_component)

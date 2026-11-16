@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""b와 R_home 보정 확인(tests/sitl/README.md "b와 R_home 보정 확인", U18). 계산은 tests/support/calibration.py에 있다.
+"""b와 R_home 보정 확인(tests/sitl/README.md "b와 R_home 보정 확인"). 계산은 tests/support/calibration.py에 있다.
 
 사용법: tests/sitl/calibrate.py <회차 디렉터리 또는 실행 디렉터리>... [--b 0.5] [--min-boots 30] [--out 파일]
   회차 디렉터리: run_sitl.sh --repeat이 만드는 artifacts/sitl_repeat/<시각>-k<k>/(repeat_summary.tsv의 run_id로

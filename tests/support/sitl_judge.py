@@ -22,16 +22,16 @@ sitl_wait.raise_if). 판정 기준을 느슨하게 바꾸려면 근거와 함께
   HOVER_HOLD_TOL_M(0.5 m), HOVER_HOLD_S(5 s), DISARMED_HOLD_S(5 s). 값의 근거: HOVER_HOLD_S는 Land로 내려가면 약 1.1 s에 0.5 m를 넘고 5 s 안에 3 m 넘게 내려간다는 ULog 실측이다.
   유지 구간의 최대 편차는 통과한 회에도 기록되고 note 임계값(sitl_summary.HOLD_DEV_NOTE_M)을 넘으면 note가 붙는다.
 
-1b 판정(tests/sitl/README.md "시나리오와 판정")은 두 부분으로 나눈다. 함수 수준에서 섞지 않는다.
+판정(tests/sitl/README.md "시나리오와 판정")은 두 부분으로 나눈다. 함수 수준에서 섞지 않는다.
   계약 판정: 계약 토픽과 PX4 토픽(mission_event, feedback, result, vehicle_status, vehicle_land_detected,
     vehicle_local_position, TargetState)만 쓴다. 이 파일의 "계약 판정" 절.
   정답 판정: SITL 전용 정답 pose(/sim/<vehicle_id>/pose)를 쓴다. 이 파일의 "정답 판정" 절. 정답 pose가 있어야 하는
     실행에서 없으면 ORACLE_ABSENT로 실패하고 조용히 건너뛰지 않는다. 테스트는 원점 변환을 다시 구현하지 않는다.
 
-1b 판정 상수(근거는 tests/sitl/README.md "b와 R_home 보정 확인")
-  R_JUDGE_M 1.0 m: waypoint와 TRACK_ENTITY 완료의 판정 반경(U14). t_f(Executor가 항목을 완료로 넘긴 tick의 stamp)에서
+판정 상수(근거는 tests/sitl/README.md "b와 R_home 보정 확인")
+  R_JUDGE_M 1.0 m: waypoint와 TRACK_ENTITY 완료의 판정 반경. t_f(Executor가 항목을 완료로 넘긴 tick의 stamp)에서
     정답 pose와 목표의 3차원 거리가 이 안이어야 한다(아니면 REACH_MISMATCH).
-  B_M 0.5 m: 사용자 결정 U18로 고정한 값이다. 정규 허용한계(mean + k x std)는 쓰지 않는다. 확인 조건은
+  B_M 0.5 m: 사용자가 정한 고정값이다. 정규 허용한계(mean + k x std)는 쓰지 않는다. 확인 조건은
     "보정 실측의 GOTO s와 TRACK_ENTITY s_track 표본 전부가 B_M 이하"다(tests/support/calibration.py).
     시험 미션의 acceptance_radius_m은 R_JUDGE_M - B_M = 0.5 m이고 ACCEPTANCE_MIN_M(0.5 m) 이상이다. B_M은 상한
     B_MAX_M(0.5 m)과 같다.
@@ -100,9 +100,9 @@ DISARMED_HOLD_S = 5.0            # 새로 정한 값. B와 C의 "일정 ROS 시�
 # vehicle_status.nav_state(px4_msgs). measure_judge에 없는 것만. 생성 코드 상수와 같은지는 test_px4_topic_names.py가 고정한다
 NAV_STATE_AUTO_RTL = 5
 
-# 1b 판정 상수(머리말 참고)
+# 판정 상수(머리말 참고)
 R_JUDGE_M = 1.0
-B_M = 0.5                        # U18(머리말)
+B_M = 0.5                        # 머리말 참고
 R_HOME_M = 0.20                  # Rayleigh 허용한계(머리말)
 ACCEPTANCE_MIN_M = 0.5           # 시험 미션 acceptance_radius_m의 하한(b의 상한과 짝)
 B_MAX_M = 0.5                    # b의 상한(넘으면 올린다)
@@ -509,7 +509,7 @@ def cancel_hover_findings(status, after_recv_us):
 
 
 # ---------------------------------------------------------------------------
-# 1b 계약 판정(계약 토픽과 PX4 토픽만. 정답 pose를 쓰지 않는다)
+# 계약 판정(계약 토픽과 PX4 토픽만. 정답 pose를 쓰지 않는다)
 
 
 def item_completion_times(feedbacks, item_count):
@@ -613,7 +613,7 @@ def status_intervals_s(status, from_us, to_us):
 
 
 # ---------------------------------------------------------------------------
-# 1b 정답 판정(SITL 전용 정답 pose /sim/<vehicle_id>/pose)
+# 정답 판정(SITL 전용 정답 pose /sim/<vehicle_id>/pose)
 
 
 @dataclass(frozen=True)
@@ -775,7 +775,7 @@ def track_judge(oracle, targets, start_us, t_f_us, offset, acceptance_m, v_max, 
 
 
 def tracking_errors(oracle, targets, offset, from_us, to_us):
-    """[from_us, to_us]의 정답 표본 시각마다 표적을 보간한 setpoint 점까지의 거리(R3의 추종 오차, R5의 수직 성분). 기록 전용.
+    """[from_us, to_us]의 정답 표본 시각마다 표적을 보간한 setpoint 점까지의 거리(R3의 추종 오차와 그 수직 성분). 기록 전용.
     표적 표본이 감싸지 않는 시각은 건너뛴다(외삽하지 않는다)."""
     xs = sorted(targets, key=lambda x: x.stamp_us)
     keys = [x.stamp_us for x in xs]

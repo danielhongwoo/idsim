@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""1b 판정 함수(sitl_judge의 1b 계약 판정과 정답 판정 절) 단위 테스트. 순수 코드."""
+"""판정 함수(sitl_judge의 계약 판정과 정답 판정 절) 단위 테스트. 순수 코드."""
 import pytest
 
 from tests.support import sitl_judge as sj

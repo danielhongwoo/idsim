@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""1b 비행 시나리오의 ULog 기록(기록 전용. 판정에 쓰지 않는다). 순수 코드다(표준 라이브러리만).
+"""비행 시나리오의 ULog 기록(기록 전용. 판정에 쓰지 않는다). 순수 코드다(표준 라이브러리만).
 
 trace.jsonl의 구간(flight_window, air_start 사건. ROS 시각 us)으로 ULog 표본을 잘라 요약한다. SITL lockstep에서
 PX4 hrt는 노드 ROS 시각보다 8-20 ms 크다(docs/interface.md "시간 기준")라 구간 경계는 그만큼 흐리다.
   - TRACK_ENTITY 구간: trajectory_setpoint의 velocity(Executor가 실은 속도 feedforward)와
     vehicle_local_position_setpoint의 vx, vy(PX4 속도 setpoint로 전달되었는가),
-    setpoint z와 vehicle_local_position z(R5의 수직).
+    setpoint z와 vehicle_local_position z(추종 오차의 수직 성분).
   - 공중 시작 구간(F3): DO_SET_MODE 전송 수와 시각, 첫 DO_SET_MODE에서 첫 OFFBOARD 표본까지(D), 그 사이 표본의
     nav_state, 첫 OFFBOARD 표본 뒤 OFFBOARD가 아닌 표본, vehicle_status 표본 간격(docs/interface.md "준비 단계"의 공중 Offboard 진입 항목).
 """
@@ -88,7 +88,7 @@ def air_start_window(topics, lo, hi):
 
 
 def build(trace_events, topics):
-    """trace.jsonl 사건 목록과 ULog 표본으로 trace_1b.json 본문을 만든다."""
+    """trace.jsonl 사건 목록과 ULog 표본으로 trace_ulog.json 본문을 만든다."""
     out = {"track": [], "air_start": []}
     for ev in trace_events:
         if ev.get("kind") == "flight_window":

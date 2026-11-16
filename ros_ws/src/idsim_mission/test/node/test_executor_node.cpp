@@ -20,7 +20,7 @@
 // - goal 실행 중 deactivate 거부, on_shutdown이 실행 중 goal을 ABORTED, REASON_INTERNAL로 끝내고
 //   종료 사건을 낸다.
 // - 배선: 가짜 PX4 발행자로 정상 한 경로(TAKEOFF, LOITER, LAND -> SUCCEEDED)와 무효 한 경로
-//   (1b 무효 사례인 TRACK_ENTITY의 0 offset -> INVALID_MISSION. tests/sitl/README.md "시나리오와
+//   (무효 사례인 TRACK_ENTITY의 0 offset -> INVALID_MISSION. tests/sitl/README.md "시나리오와
 //   판정"). 사건은 ACCEPTED가 앞이고 종료 사건은 1건이며 result와 같은 값.
 // - 좌표: world.origin과 같은 기준을 내는 가짜 PX4에서 GOTO의 world ENU 점이 로컬 NED setpoint로
 //   나간다(진짜 Px4FramePort 배선).
@@ -692,7 +692,7 @@ TEST_F(ExecutorNodeTest, WiringInvalidMissionAbortsWithoutFeedback)
              test_node->count_publishers("/px4_1/mission_event") >= 1;
     },
     std::chrono::seconds(10), nullptr));
-  // 1b 무효 사례: TRACK_ENTITY의 0 offset(tests/sitl/README.md "시나리오와 판정" 시나리오 B).
+  // 무효 사례: TRACK_ENTITY의 0 offset(tests/sitl/README.md "시나리오와 판정" 시나리오 B).
   ExecuteMission::Goal goal = standard_goal();
   MissionItem track = item(MissionItem::TYPE_TRACK_ENTITY, 10);
   track.track_entity.target_id = "car_1";
@@ -1082,7 +1082,7 @@ TEST_F(CanceledGoalEndTest, SucceedIsAllowed)
   EXPECT_EQ(end_canceled_goal(true), rclcpp_action::ResultCode::SUCCEEDED);
 }
 
-// ---- P3d 검토 보완 ----
+// ---- 준비 중 취소, 두 번째 goal, 종료 때 disarm ----
 
 TEST_F(ExecutorNodeTest, CancelInPreparingIsCanceled)
 {

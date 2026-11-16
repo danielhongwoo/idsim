@@ -15,7 +15,7 @@
 // 상태기 구현. 표의 행과 이 파일의 대응은 README.md "전이 표와 구현의 대응"에 있다.
 //
 // 한 tick 안의 판정 순서(docs/interface.md "종료의 충돌 규칙"을 전이에도 같게 쓴다)
-// 1. 그 단계의 실패(감시 표, 상태 끊김, 거부 ack, 타임아웃 만료)
+// 1. 그 단계의 실패(감시 표, 상태 끊김, 거부 ack, timeout 만료)
 // 2. 확인과 완료(N회 연속, 도달, 경과)
 // 3. 취소(실패나 완료로 끝나지 않았고 정리 중이 아닐 때만)
 // 4. 출력 마무리(timestamp, setpoint, feedback)
@@ -1310,7 +1310,7 @@ void MissionRunner::step_cleanup(Tick & t)
 {
   // 한 tick의 순서(docs/interface.md "정리의 상한"): (1) 상태 끊김 (2) 공중 DISARMED (3) 정리할 것
   // 없음
-  // (4) 정리의 상한 (5) 그 분기의 실행(분기 타임아웃, 확인). (1)-(3)은 표본 하나로 정해지는
+  // (4) 정리의 상한 (5) 그 분기의 실행(분기 timeout, 확인). (1)-(3)은 표본 하나로 정해지는
   // 관측이라 상한보다 앞이고, (4)가 (5)보다 앞이라 상한 tick의 확인 표본은 세지 않는다.
   // 공중 종료 단계는 순서와 분기 고르기가 따로 있다(step_mission_end).
   if (cause_ == CleanupCause::kMissionEnd) {
@@ -1408,7 +1408,7 @@ bool MissionRunner::cleanup_cap_reached(const Tick & t) const
 
 void MissionRunner::end_at_cleanup_cap(Tick & t, bool on_ground)
 {
-  // 정리의 상한 tick(M6): 발행을 멈추고 대기 중인 명령을 지운 뒤 명령 하나를 보내고 끝낸다.
+  // 정리의 상한 tick: 발행을 멈추고 대기 중인 명령을 지운 뒤 명령 하나를 보내고 끝낸다.
   // 지상이면 강제가 아닌 disarm, 공중이면 NAV_LAND. NAV_LAND의 force는 모드 가용성 검사를
   // 우회하지만 TEMPORARILY_REJECTED 경로가 남아 있고 그 조건은 미확인이다. LAND 항목과 Land 경로의
   // NAV_LAND는 거부 ack로 끝내지 않고 mode_confirm_timeout으로 끝낸다. 상한 tick의 NAV_LAND는
@@ -1458,7 +1458,7 @@ void MissionRunner::cleanup_with_untrusted_sample(Tick & t)
 {
   // 정리 중의 식별 불일치(docs/interface.md "준비 단계"). 이 표본은 발행 규칙, 분기 고르기, 확인
   // 계수에 쓰지 않는다. 남의 기체의 DISARMED나 Hold로 정리를 끝내지 않기 위해서다. 이미 정해진
-  // 분기는 유지하고 그 분기의 타임아웃이나 정리의 상한이 끝낸다. 분기가 정해지기 전(정리의 첫
+  // 분기는 유지하고 그 분기의 timeout이나 정리의 상한이 끝낸다. 분기가 정해지기 전(정리의 첫
   // tick)이면 고를 수 없으므로 끝낸다.
   const std::string what = "vehicle_status identity mismatch during cleanup: " +
                            (t.status != nullptr ? t.status->identity_detail : std::string());

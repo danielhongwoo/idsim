@@ -5,20 +5,20 @@
 #   capture.sh [--ns NS] [--hz-seconds N] [--spin-time S] OUT_DIR
 #
 #   --ns NS          PX4 네임스페이스(빗금 없음, stack.json vehicles[].px4_ns, 예: px4_1).
-#                    없으면 접두사 없음(인스턴스 0. 3단계부터 스모크는 쓰지 않는다).
+#                    없으면 접두사 없음(인스턴스 0. 스모크는 쓰지 않는다).
 #   --hz-seconds N   ros2 topic hz 측정 시간(초, 벽시계). 기본 30.
 #   --spin-time S    --no-daemon 디스커버리 대기 시간(초). 기본 5.
 #   OUT_DIR          원문을 쓸 디렉터리. run_smoke.sh golden은 artifacts/runs/<run_id>/smoke/ros
 #                    (저장소 상대, 컨테이너 cwd /opt/idsim 기준).
 #
-# 하는 일은 원문 수집뿐이다. 골든 형식(topics.txt, qos/, env.txt) 생성은
+# 하는 일은 원문 수집뿐이다. golden 형식(topics.txt, qos/, env.txt) 생성은
 # test-engineer 의 tests/support/normalize.py 가 맡고, run_smoke.sh 가 이 스크립트 뒤에 부른다.
 #
 # 출력(OUT_DIR 아래):
 #   topic_list.txt            ros2 topic list -t --no-daemon 원문(전체 토픽)
 #   topic_info/<rel>.txt      fmu/ 아래 토픽마다 ros2 topic info -v --no-daemon 원문
 #   hz/<rel>.txt              주요 토픽의 ros2 topic hz --wall-time 원문
-#   env_raw.txt               KEY=VALUE. 골든 env.txt 의 네 키와 측정 조건
+#   env_raw.txt               KEY=VALUE. golden env.txt 의 네 키와 측정 조건
 #   capture.log               이 스크립트의 진행 기록
 #   <rel> 은 네임스페이스를 뗀 상대 토픽, 예: fmu/out/vehicle_status_v1
 #
@@ -124,7 +124,7 @@ px4_tag="$(image_version PX4_TAG)"
 px4_msgs_ref="$(image_version PX4_MSGS_REF)"
 xrce_agent_tag="$(image_version XRCE_AGENT_TAG)"
 
-# 1. env_raw.txt. 앞 네 줄은 골든 env.txt 의 키, 나머지는 측정 조건(골든 아님).
+# 1. env_raw.txt. 앞 네 줄은 golden env.txt 의 키, 나머지는 측정 조건(golden 아님).
 {
   echo "PX4_TAG=$px4_tag"
   echo "PX4_MSGS_REF=$px4_msgs_ref"
@@ -197,10 +197,10 @@ for pid in "${pids[@]}"; do
 done
 log "hz 측정 끝"
 
-# 5. 정규화(골든 형식 생성)는 여기서 하지 않는다. run_smoke.sh golden이 이 스크립트 다음에
+# 5. 정규화(golden 형식 생성)는 여기서 하지 않는다. run_smoke.sh golden이 이 스크립트 다음에
 #      python3 -m tests.support.normalize --raw <OUT_DIR> --ns <ns> --check|--update
 #    를 부른다(입력: topic_list.txt, topic_info/<rel>.txt, env_raw.txt.
 #    출력: tests/fixtures/px4/<PX4_TAG>/ 의 topics.txt, qos/<rel>.txt, env.txt).
-#    골든 갱신은 run_smoke.sh --update-golden 일 때만 한다.
+#    golden 갱신은 run_smoke.sh --update-golden 일 때만 한다.
 
 log "완료: $out_dir"

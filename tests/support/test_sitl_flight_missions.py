@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""1b 비행 시나리오(F1-F4)의 시험 미션 YAML과 판정 상수의 대조(tests/sitl/README.md "시나리오와 판정").
+"""비행 시나리오(F1-F4)의 시험 미션 YAML과 판정 상수의 대조(tests/sitl/README.md "시나리오와 판정").
 
 미션은 로더(idsim_mission/mission_yaml.py)가 만든 MissionSpec(기본값이 채워진 뒤)으로 본다. 로더는 저장소 소스
 경로에서 읽으므로 lint job의 pytest에서 돈다(sitl_missions 모듈 설명).
