@@ -40,6 +40,7 @@
 
 문서 정리(정형, 다음 문서 정리 때).
 
+- Dockerfile 주석에 남은 계획 표지: `Dockerfile.px4` 36, 226행 "(S1)"은 "(스모크 embedded 단계)", `Dockerfile.ros-ws` 56행과 `Dockerfile.xrce-agent` 39행 "스모크 S0가"는 "스모크 images 단계가", `Dockerfile.sim-base` 4행 "(지금은 README의 수동 docker run, 3단계부터 gz-gui 서비스)"는 "(viz 프로필의 gz-gui 서비스)"로 바꾼다. Dockerfile을 바꾸면 이미지 key가 바뀌어 PR의 sitl이 실패하므로 주석만 따로 고치지 않고, 그 Dockerfile을 실제로 바꾸는 이미지 PR에 함께 넣는다(각 owner).
 - `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
 
 테스트 보강.

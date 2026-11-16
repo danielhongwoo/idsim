@@ -33,7 +33,7 @@
 #   server.config도 링크로 살린다(대상은 sim-base의 server.idsim.config).
 #   gz_plugins(OpticalFlowSystem, GstCameraSystem 등)는 OpenCV, GStreamer 런타임을 끌어오고 x500에는 쓰이지 않으므로 복사하지 않는다.
 #   그 디렉터리는 없고, GZ_SIM_SYSTEM_PLUGIN_PATH에 없는 경로가 하나 붙을 뿐이다.
-#   gz_env.sh는 px4-rc.gzsim의 embedded 분기(스모크 embedded 단계)에서만 읽힌다. standalone 분기는
+#   gz_env.sh는 px4-rc.gzsim의 embedded 분기(S1)에서만 읽힌다. standalone 분기는
 #   읽지 않으므로 compose가 PX4_GZ_MODELS를 직접 준다.
 #
 # 실행
@@ -223,7 +223,7 @@ COPY --from=builder /opt/PX4-Autopilot/build/px4_sitl_default/rootfs /opt/PX4-Au
 # gz_env.sh에 박힌 소스 경로를 sim-base의 한 벌로 살린다(모델 복사 없음).
 # server.config 링크는 sim-base의 파생 파일 server.idsim.config(PX4 전용 플러그인
 # OpticalFlowSystem, GstCameraSystem 두 줄을 뺀 것)를 가리킨다. gz_env.sh가
-# GZ_SIM_SERVER_CONFIG_PATH를 이 경로로 다시 설정하므로 embedded(스모크 embedded 단계)도
+# GZ_SIM_SERVER_CONFIG_PATH를 이 경로로 다시 설정하므로 embedded(S1)도
 # standalone gazebo 서비스와 같은 파일을 쓴다.
 # 공유 라이브러리가 모두 풀리는지(gz-transport 등은 sim-base에 있다) 확인한다.
 RUN mkdir -p /opt/PX4-Autopilot/Tools/simulation /opt/PX4-Autopilot/src/modules/simulation/gz_bridge \

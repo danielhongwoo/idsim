@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #
 # sim-base: ros-base 위에 OSRF apt의 Gazebo와 PX4-gazebo-models를 올린 이미지.
-# 담당: sim-engineer. 뜨는 컨테이너는 gazebo 서비스와 GUI client(viz 프로필의 gz-gui 서비스)이며,
+# 담당: sim-engineer. 뜨는 컨테이너는 gazebo 서비스와 GUI client(지금은 README의 수동 docker run, 3단계부터 gz-gui 서비스)이며,
 # px4 이미지의 베이스가 된다.
 #
 # 가정 (devops-engineer와 맞출 것)
