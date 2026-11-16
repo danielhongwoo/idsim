@@ -62,7 +62,7 @@ flowchart TB
 - 외부 클라이언트는 ROS 2를 모르고 Fleet Manager의 API로만 기체들을 본다. Fleet Manager가 생기기 전의 임시 WebSocket 어댑터(Phase 2)는 기체의 버스에서 `VehicleState`를 직접 읽는 개발용이고 그림에 넣지 않았다.
 - 기록과 재생(Logger, Replay)이 기체 안과 지상 가운데 어디에 놓이는지는 정하지 않아 큰 그림에 넣지 않는다.
 
-시뮬레이션 환경. 큰 그림에서 실물이 필요한 부분만 대신한 것이다. FMU의 PX4는 PX4 SITL 프로세스가, 기체와 센서는 Gazebo가, 표적 추적기는 표적 어댑터가 대신하고, 장비 셋(지상국, companion computer, FMU)은 개발 호스트 한 대가 대신한다. 통신 구조는 큰 그림과 같다. ROS 2 버스는 기체마다 DDS 도메인 하나이고, Fleet Manager와 기체 운용 노드 사이의 지상 링크는 Zenoh로 잇는다(Phase 3). Zenoh의 구성과, `/clock`, 표적 상태, 정답 pose를 기체마다의 도메인에 공급하는 방법은 정하지 않았다. Fleet Manager, 기체 운용 노드, Agent는 실기체 환경과 같은 것이 돈다. Agent는 지금의 compose에서 스택에 하나이고, 기체마다의 도메인 구성에서 기체마다 둘지는 정하지 않았다.
+시뮬레이션 환경. 큰 그림에서 실물이 필요한 부분만 대신한 것이다. FMU의 PX4는 PX4 SITL 프로세스가, 기체와 센서는 Gazebo가, 표적 추적기는 표적 어댑터가 대신하고, 장비 셋(지상국, companion computer, FMU)은 개발 호스트 한 대가 대신한다. 통신 구조는 큰 그림과 같다. ROS 2 버스는 기체마다 DDS 도메인 하나이고, Fleet Manager와 기체 운용 노드 사이의 지상 링크는 Zenoh로 잇는다(Phase 3). Zenoh의 구성과, `/clock`, 표적 상태, 정답 pose를 기체마다의 도메인에 공급하는 방법은 정하지 않았다. Fleet Manager, 기체 운용 노드, Agent는 실기체 환경과 같은 것이 돈다. Agent는 시뮬레이션에서도 기체마다 하나이다. 지금의 compose는 Agent 하나가 스택의 모든 PX4 SITL 인스턴스를 받고, 기체가 한 대이면 그 Agent가 곧 그 기체의 Agent라 이미 같은 구조이다. 기체가 여러 대가 될 때(Phase 3) 기체마다 하나로 만든다.
 
 ```mermaid
 flowchart TB
@@ -70,7 +70,7 @@ flowchart TB
   subgraph HOST["개발 호스트 한 대"]
     FM["Fleet Manager<br/>기체 등록, 미션 배분"]
     OPS["기체 운용 노드 x N<br/>Executor, Collector"]
-    AG["uXRCE-DDS Agent<br/>지금은 스택에 하나"]
+    AG["uXRCE-DDS Agent<br/>기체마다 하나"]
     PX["PX4 SITL x N<br/>FMU의 PX4를 대신"]
     GZ["Gazebo<br/>기체와 센서를 대신"]
     TP["표적 어댑터<br/>표적 추적기를 대신"]
@@ -92,10 +92,10 @@ flowchart TB
 - 고도 기준: "센서, 구동"의 상대가 실제 GNSS가 아니라 Gazebo인 곳이다. PX4의 원점 고도는 AMSL이고, world ENU와 기체 로컬 NED 사이의 변환(`idsim_common`의 geo)은 `world.origin`의 고도를 타원체 고로 다룬다. 실제 GNSS에서는 두 값이 다르지만 SITL에서는 같은 수로 공급되어 차이가 드러나지 않는다(`docs/interface.md` "좌표계" 절). 이 변환은 Gazebo(gz-math)의 좌표 식을 그대로 옮긴 것이라 `idsim_common`에 Gazebo의 식과 이름이 있다. Gazebo 토픽과 include 의존은 없다.
 - 한 호스트 배치: 실기체 그림의 장비 테두리 셋이 시뮬레이션 그림에서 하나로 합쳐진 것이다. 합쳐지는 것은 장비뿐이고, 기체마다의 버스와 지상 링크는 시뮬레이션에서도 따로 둔다. 시뮬레이션이 같게 두는 것은 통신 구조이고, 무선 구간의 지연과 손실은 시뮬레이션에 넣지 않는다. 지금의 DDS 설정(`config/cyclonedds.xml`)은 multicast를 끄고 peer를 127.0.0.1 하나로 두어, DDS 참가자(운용 노드와 Agent)가 모두 한 호스트에 있다고 가정한다.
 
-실물과 무관한데 실기체와 다른 것은 다음이다. 실물을 대신해서 생긴 차이가 아니므로 위의 원칙에서 벗어난 곳이다. 둘 다 기체가 여러 대일 때에만 차이가 되고, 기체가 한 대인 스택에서는 실기체 구조와 같다.
+실물과 무관한데 실기체와 다른 것은 설계로는 없다. 지금의 compose에만 남은 차이가 있고, 이는 기체가 여러 대일 때에만 차이가 되며 기체가 한 대인 스택에서는 실기체 구조와 같다. 기체가 여러 대가 될 때(Phase 3) 아래 둘을 모두 실기체 구조로 맞춘다.
 
-- Agent의 수: 실기체의 기준 배치에서는 기체마다 하나인데, 지금의 compose에서는 스택에 하나가 모든 PX4 SITL 인스턴스를 받는다. 기체마다의 도메인 구성에서 Agent를 기체마다 둘지는 정하지 않았다.
 - 버스의 범위와 지상 링크: 지금의 compose는 스택에 DDS 도메인 하나를 쓰고 Zenoh 구성이 없어, 기체가 여러 대이면 모든 기체의 운용 노드가 한 버스에서 만난다. 기체마다의 도메인과 Zenoh 지상 링크는 Phase 3에서 더한다.
+- Agent의 수: 설계는 실기체와 같이 기체마다 하나이다. 지금의 compose는 스택에 하나가 모든 PX4 SITL 인스턴스를 받는다.
 
 환경별 실체. 역할은 두 환경에서 같다. 실기체 환경 열은 위의 전제를 따르고, 시뮬레이션 환경 열은 그것을 무엇이 대신하는지다.
 
@@ -103,7 +103,7 @@ flowchart TB
 | --- | --- | --- | --- |
 | 비행제어(PX4) | 자세와 위치 제어, 모드와 failsafe, arm과 disarm | FMU의 PX4 펌웨어 | PX4 SITL 프로세스(기체마다 컨테이너 하나) |
 | 기체 물리와 센서 | 기체의 운동과 IMU, GNSS 등의 측정값 | 실제 기체와 센서 | Gazebo(모든 기체가 월드 하나를 공유) |
-| uXRCE-DDS Agent | PX4의 uORB 토픽과 ROS 2 토픽 사이의 중계 | companion computer마다 하나, FMU와 serial 또는 Ethernet | 같은 Agent. 지금의 compose는 인스턴스 하나가 모든 기체를 UDP로 받는다(수가 다른 것은 실물과 무관한 차이다). 기체마다의 도메인 구성에서 기체마다 둘지는 정하지 않음 |
+| uXRCE-DDS Agent | PX4의 uORB 토픽과 ROS 2 토픽 사이의 중계 | companion computer마다 하나, FMU와 serial 또는 Ethernet | 같은 Agent. 기체마다 하나이다. 지금의 compose는 인스턴스 하나가 모든 기체를 UDP로 받고(기체가 한 대이면 이미 같은 구조), 기체가 여러 대가 될 때(Phase 3) 기체마다 하나로 바꾼다 |
 | ROS 2 버스 | 기체 운용 노드와 PX4 사이의 토픽 전달 | 기체마다 하나이고 companion computer 안에 있다 | 기체마다 DDS 도메인 하나. 모두 개발 호스트 한 대에 있고 peer는 loopback이다. 지금의 compose는 스택에 도메인 하나라 기체가 한 대이면 이와 같고, 여러 대의 도메인 분리는 Phase 3에서 더한다 |
 | 지상 링크 | Fleet Manager와 기체 운용 노드 사이의 계약 전달 | 지상국과 기체 사이의 무선 구간. Zenoh로 잇는다. Zenoh의 구성과, `ExecuteMission`과 `VehicleState` 밖에 무엇이 건너는지(`MissionEvent` 포함)는 정하지 않음 | 개발 호스트 안에서 Zenoh로 잇는다(Phase 3). 무선 장비는 없고 무선의 지연과 손실은 넣지 않는다. Zenoh의 구성은 정하지 않음. 지금의 compose에는 지상 쪽 서비스와 Zenoh 구성이 없다 |
 | Mission Executor | 미션을 Offboard setpoint와 명령으로 실행 | 그 기체의 companion computer | 같은 노드. 개발 호스트의 `ops-N` 컨테이너 |
@@ -144,7 +144,7 @@ flowchart TB
 | Telemetry Collector x N | 운용 서비스 | `/fmu/out` 구독 -> `VehicleState` 요약. Phase 2의 임시 WebSocket 어댑터가 이것을 읽어 브라우저로 낸다 | 2 |
 | Logger / Replay | 운용 서비스 | rosbag2 (MCAP), ULog 동기화 | 2 |
 | ROS 2 (DDS) 토픽 버스 | 버스 | `/px4_N/fmu/out/*`, `/px4_N/fmu/in/*`, `/targets/*/state`. 기체별 네임스페이스로 분리, px4_msgs 타입, sensor_data QoS, rmw는 CycloneDDS | 1 |
-| Micro XRCE-DDS Agent v2.4.3 | 버스와 기체 사이 | PX4의 uXRCE-DDS client와 ROS 2 버스 사이의 중계. 시뮬레이션 구성: udp4, 기준 포트 8888 + 스택 번호 k, 지금의 compose는 인스턴스 하나로 모든 기체 수용 | 1 |
+| Micro XRCE-DDS Agent v2.4.3 | 버스와 기체 사이 | PX4의 uXRCE-DDS client와 ROS 2 버스 사이의 중계. 시뮬레이션 구성: udp4, 기준 포트 8888 + 스택 번호 k, 지금의 compose는 인스턴스 하나로 모든 기체 수용(기체가 여러 대가 될 때 기체마다 하나로 바꾼다. Phase 3) | 1 |
 | `idsim_sim` 표적 어댑터 + ros_gz_bridge | 버스와 시뮬레이션 사이 | 표적 어댑터는 궤적 정의 -> `TargetState`, ros_gz_bridge는 `/clock`만 | 1 |
 | `idsim_sim` 정답 pose 노드 (`sim-oracle`) | 버스와 시뮬레이션 사이 | Gazebo의 기체 pose -> `/sim/<vehicle_id>/pose`(base_link 기준). SITL 판정 전용이고 계약이 아니다 | 1 |
 | PX4 SITL `-i 1` | 기체(시뮬레이션이 대신) | uXRCE-DDS client, 네임스페이스 `/px4_1`, MAVLink 14550 + 1000k (GCS) / 14541 + 1000k (API), ULog 기록 | 1 |
@@ -164,7 +164,7 @@ flowchart TB
 | `/px4_N/vehicle_state` | Telemetry Collector (Phase 2) | Fleet Manager (Phase 3, 지상 링크를 거쳐), 판정 노드 |
 | `/px4_N/mission_event` | Mission Executor | Logger, 판정 노드 |
 
-기체 운용 노드는 그 기체의 ROS 2 토픽만 보고 동작하고, PX4는 uXRCE-DDS Agent를 통해 그 기체의 버스에 올라온다. 실기체의 기준 배치에서는 Agent와 버스가 기체마다 하나다. 시뮬레이션에서는 버스가 기체마다 DDS 도메인 하나이고(Phase 3), 그 구성에서 Agent를 기체마다 둘지는 정하지 않았다. 지금의 compose에서는 Agent 하나가 모든 PX4 SITL 인스턴스를 같은 DDS 도메인에 올리며 기체는 네임스페이스로 나뉜다. 기체를 실제로 움직이는 setpoint는 운용 노드 가운데서는 기체별 Mission Executor만 발행하고(통합 테스트와 스모크가 `px4_raw.py`로 `/fmu/in`에 직접 쓰는 것은 테스트 전용 예외다), Fleet Manager는 지상 링크를 건너는 계약으로 미션을 배분하고 상태를 집계할 뿐 `/fmu/in/*`에 직접 쓰지 않는다. MAVLink는 외부 GCS용 곁가지이며 운용 서비스는 사용하지 않는다. PX4와 기체(모터, 센서) 사이의 교환은 ROS 2를 거치지 않는다. 시뮬레이션에서는 이것이 PX4 SITL <-> Gazebo의 직접 연결이다.
+기체 운용 노드는 그 기체의 ROS 2 토픽만 보고 동작하고, PX4는 uXRCE-DDS Agent를 통해 그 기체의 버스에 올라온다. 실기체의 기준 배치에서는 Agent와 버스가 기체마다 하나다. 시뮬레이션에서도 버스가 기체마다 DDS 도메인 하나이고 Agent가 기체마다 하나이다(Phase 3). 지금의 compose에서는 Agent 하나가 모든 PX4 SITL 인스턴스를 같은 DDS 도메인에 올리며 기체는 네임스페이스로 나뉜다. 기체를 실제로 움직이는 setpoint는 운용 노드 가운데서는 기체별 Mission Executor만 발행하고(통합 테스트와 스모크가 `px4_raw.py`로 `/fmu/in`에 직접 쓰는 것은 테스트 전용 예외다), Fleet Manager는 지상 링크를 건너는 계약으로 미션을 배분하고 상태를 집계할 뿐 `/fmu/in/*`에 직접 쓰지 않는다. MAVLink는 외부 GCS용 곁가지이며 운용 서비스는 사용하지 않는다. PX4와 기체(모터, 센서) 사이의 교환은 ROS 2를 거치지 않는다. 시뮬레이션에서는 이것이 PX4 SITL <-> Gazebo의 직접 연결이다.
 
 ## 기체 식별과 설정의 단일 출처
 
@@ -209,7 +209,7 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 | PX4 SITL | Software-In-The-Loop. PX4 펌웨어를 하드웨어 없이 Linux 프로세스로 빌드해 실행하고, 센서 입력, 모터 출력을 시뮬레이터와 주고받는 모드. 실기체와 같은 코드 경로가 돌아간다. `-i N`으로 인스턴스를 여러 개 띄울 수 있다 | FMU의 PX4를 대신하는 프로세스(기체마다 컨테이너 하나). 기체 한 대 = SITL 프로세스 하나 |
 | [Gazebo (gz sim)](https://gazebosim.org/) | OSRF의 로봇 물리 시뮬레이터. 강체 물리, 센서(카메라, IMU, GPS, 라이다) plugin, SDF 모델 형식. "Gazebo Classic"(구버전, 11.x)과 새 세대 "gz"(Fortress/Garden/Harmonic)는 다른 코드베이스다 | x500 기체 모델의 물리와 센서, 이동 표적 Actor, 월드. PX4와는 gz-transport로 직접 연결 |
 | [uORB](https://docs.px4.io/main/en/middleware/uorb.html) | PX4 내부의 경량 pub/sub 메시징. 토픽당 고정 구조체(`.msg`), 공유 메모리 기반 | 직접 만지지 않지만, ROS 2에서 보이는 `/fmu/out/*` 토픽이 결국 uORB 메시지다 |
-| [uXRCE-DDS](https://docs.px4.io/main/en/middleware/uxrce_dds) | eProsima의 Micro XRCE-DDS(DDS for eXtremely Resource Constrained Environments) 위에 만든 PX4 <-> ROS 2 bridge. PX4 쪽 "client"가 uORB 토픽을 직렬화해 UDP/시리얼로 "agent"에 보내고, agent가 이를 진짜 DDS 토픽으로 발행한다. ROS 2 쪽에서는 일반 토픽처럼 보인다. px4_msgs 패키지가 메시지 타입을 제공 | PX4와 운용 서비스를 잇는 유일한 데이터 경로. 지금의 compose는 agent 하나가 모든 SITL 인스턴스를 수용 |
+| [uXRCE-DDS](https://docs.px4.io/main/en/middleware/uxrce_dds) | eProsima의 Micro XRCE-DDS(DDS for eXtremely Resource Constrained Environments) 위에 만든 PX4 <-> ROS 2 bridge. PX4 쪽 "client"가 uORB 토픽을 직렬화해 UDP/시리얼로 "agent"에 보내고, agent가 이를 진짜 DDS 토픽으로 발행한다. ROS 2 쪽에서는 일반 토픽처럼 보인다. px4_msgs 패키지가 메시지 타입을 제공 | PX4와 운용 서비스를 잇는 유일한 데이터 경로. 지금의 compose는 agent 하나가 모든 SITL 인스턴스를 수용하고, 기체가 여러 대가 될 때 기체마다 하나로 바꾼다(Phase 3) |
 | [CycloneDDS](https://cyclonedds.io/) | Eclipse의 DDS 구현. ROS 2에서는 `rmw_cyclonedds_cpp`로 쓴다. 기본 전송이 UDP이고 XML 설정으로 인터페이스, peer, multicast를 제어 | 모든 ROS 2 노드의 rmw. 컨테이너 간 통신을 UDP로 단순화 |
 | [Zenoh](https://zenoh.io/) | Eclipse의 pub/sub, query 프로토콜과 그 구현. 무선과 WAN처럼 끊기고 느린 구간을 염두에 두고 만들어졌다. discovery의 부담이 DDS보다 작다고 알려져 있으나 이 저장소에서 측정하지 않았다. ROS 2(DDS)의 토픽과 action을 Zenoh로 중계하는 bridge가 있다 | 지상 링크. 지상국의 Fleet Manager와 기체 운용 노드 사이에서 계약(`ExecuteMission`, `VehicleState`)을 건넨다. 기체 안의 버스는 DDS 그대로다. 구성은 정하지 않음 |
 | [MAVLink](https://mavlink.io/en/) | 드론 <-> GCS 통신용 경량 메시지 프로토콜(바이너리, 최대 280바이트 패킷, XML로 메시지 정의). telemetry, 명령, 미션 업로드, 파라미터 등 업계 표준. PX4, ArduPilot이 모두 사용 | 외부 GCS 연동(GCS 포트 UDP 14550 + 1000k, 스택 안 전 인스턴스 공통) 전용. 필요하면 MAVSDK로 온보드 API 포트(14540 + 1000k + N)에 보조 경로를 만들 수 있지만 주 경로는 uXRCE-DDS |
@@ -268,7 +268,7 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 
 ## Docker Compose 실행 환경 설계
 
-컨테이너는 "기체 한 대 = PX4 컨테이너 한 개" 단위로 나누고, Gazebo와 Agent는 각각 하나씩만 띄운다. 모든 컨테이너는 `network_mode: host`로 돌려 DDS discovery와 UDP 포트 문제를 피한다. bridge 네트워크에서는 DDS discovery가 자주 깨진다. 같은 호스트에서 스택 두 개가 동시에 돌 수 있도록(개발자 둘, 병렬 CI job) `ROS_DOMAIN_ID`, `GZ_PARTITION`, Agent 포트, MAVLink 포트는 생성 인자인 스택 번호 k에서 파생해 compose 환경변수로 넘긴다. 스택 번호 k에 대해 `ROS_DOMAIN_ID` = 20 + k, Agent 포트 = 8888 + k, `GZ_PARTITION` = `idsim-<k>`, MAVLink 오프셋 = 1000k, foxglove 포트 = 8765 + k, lichtblick 포트 = 18080 + k. 지금의 compose는 스택 하나에 DDS 도메인 하나를 쓴다. 기체가 한 대이면 그 도메인이 곧 그 기체의 버스다. "전체 아키텍처" 절의 기체마다의 도메인과 Zenoh 지상 링크 구성은 들어 있지 않고 Phase 3에서 더한다. 기준값은 `fleet.yaml`이 아니라 생성 스크립트의 상수이며 `docs/interface.md`에 적는다. k는 0-9이고(MAVLink 로컬 포트 18579 + 1000k가 임시 포트 범위 아래에 있어야 한다) 생성 스크립트의 단위 테스트가 k 0-9, N 1-9 전 범위에서 포트 비충돌을 검사한다. DDS 포트 범위(7400 + 250 x 도메인부터 참가자 인덱스 50까지)와 MAVLink 포트는 이 범위에서 겹치지 않는다. DDS 설정이 인터페이스를 제한하지 않으므로 같은 호스트의 다른 ROS 2 스택과의 격리는 도메인 ID가 유일한 수단이며, 그래서 기본 도메인을 다른 프로젝트가 흔히 쓰는 0이 아닌 20으로 둔다. CI도 같은 규칙이다. `GZ_PARTITION`은 gz-transport 기본값에 기대지 않고 항상 명시한다. Agent에는 `ROS_DOMAIN_ID`를 주지 않는다. DDS 도메인은 PX4 client가 세션 생성 때 Agent에 넘기므로 px4 컨테이너에 ROS 컨테이너와 같은 `ROS_DOMAIN_ID`가 들어가야 한다. 모든 compose 파일은 `name:`으로 프로젝트 이름(`idsim-<k>`. 스모크도 생성된 파일을 쓰므로 같은 규칙)을 명시한다. 명시하지 않으면 디렉터리명이 프로젝트 이름이 되어 호스트의 다른 compose 프로젝트와 충돌한다. 이미지는 빌드에 쓴 버전을 `IDSIM_BUILD_<이름>` ENV(`<이름>`은 `versions.env` 항목 이름)로 남기고, 스모크와 테스트는 실행 전에 이 값을 `versions.env`와 대조한다.
+컨테이너는 "기체 한 대 = PX4 컨테이너 한 개" 단위로 나누고, 지금의 compose는 Gazebo와 Agent를 각각 하나씩만 띄우고, Agent는 기체가 여러 대가 될 때 기체마다 하나로 바꾼다(Phase 3). 모든 컨테이너는 `network_mode: host`로 돌려 DDS discovery와 UDP 포트 문제를 피한다. bridge 네트워크에서는 DDS discovery가 자주 깨진다. 같은 호스트에서 스택 두 개가 동시에 돌 수 있도록(개발자 둘, 병렬 CI job) `ROS_DOMAIN_ID`, `GZ_PARTITION`, Agent 포트, MAVLink 포트는 생성 인자인 스택 번호 k에서 파생해 compose 환경변수로 넘긴다. 스택 번호 k에 대해 `ROS_DOMAIN_ID` = 20 + k, Agent 포트 = 8888 + k, `GZ_PARTITION` = `idsim-<k>`, MAVLink 오프셋 = 1000k, foxglove 포트 = 8765 + k, lichtblick 포트 = 18080 + k. 지금의 compose는 스택 하나에 DDS 도메인 하나를 쓴다. 기체가 한 대이면 그 도메인이 곧 그 기체의 버스다. "전체 아키텍처" 절의 기체마다의 도메인, 기체마다의 Agent, Zenoh 지상 링크 구성은 들어 있지 않고 Phase 3에서 더한다. 기준값은 `fleet.yaml`이 아니라 생성 스크립트의 상수이며 `docs/interface.md`에 적는다. k는 0-9이고(MAVLink 로컬 포트 18579 + 1000k가 임시 포트 범위 아래에 있어야 한다) 생성 스크립트의 단위 테스트가 k 0-9, N 1-9 전 범위에서 포트 비충돌을 검사한다. DDS 포트 범위(7400 + 250 x 도메인부터 참가자 인덱스 50까지)와 MAVLink 포트는 이 범위에서 겹치지 않는다. DDS 설정이 인터페이스를 제한하지 않으므로 같은 호스트의 다른 ROS 2 스택과의 격리는 도메인 ID가 유일한 수단이며, 그래서 기본 도메인을 다른 프로젝트가 흔히 쓰는 0이 아닌 20으로 둔다. CI도 같은 규칙이다. `GZ_PARTITION`은 gz-transport 기본값에 기대지 않고 항상 명시한다. Agent에는 `ROS_DOMAIN_ID`를 주지 않는다. DDS 도메인은 PX4 client가 세션 생성 때 Agent에 넘기므로 px4 컨테이너에 ROS 컨테이너와 같은 `ROS_DOMAIN_ID`가 들어가야 한다. 모든 compose 파일은 `name:`으로 프로젝트 이름(`idsim-<k>`. 스모크도 생성된 파일을 쓰므로 같은 규칙)을 명시한다. 명시하지 않으면 디렉터리명이 프로젝트 이름이 되어 호스트의 다른 compose 프로젝트와 충돌한다. 이미지는 빌드에 쓴 버전을 `IDSIM_BUILD_<이름>` ENV(`<이름>`은 `versions.env` 항목 이름)로 남기고, 스모크와 테스트는 실행 전에 이 값을 `versions.env`와 대조한다.
 
 컨테이너와 프로세스 구성. "전체 아키텍처" 절의 그림이 실행 주체와 장비, 주고받는 것을 보였다면 이 절의 그림은 시뮬레이션의 컨테이너 배치, 즉 어느 컨테이너에서 어떤 프로세스가 돌고 무슨 프로토콜로 이어지는지를 보인다. 그림은 계층으로 나눈다. 개요가 스택 하나(스택 번호 k)의 컨테이너 묶음만 보이고, 그 아래 상세 그림 넷이 개요의 상자를 하나씩 펼친다. 이 절의 그림에서 화살표는 데이터가 흐르는 방향이고, 점선 화살표는 판정과 CI가 쓰지 않는 경로이며, 점선 테두리는 표시한 Phase에서 더해지는 것이다. 포트, 환경변수, 이미지 같은 세부는 그림에 넣지 않고 그림 아래 표와 서비스 표에 둔다.
 
@@ -452,7 +452,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `gazebo` | sim-base | `PX4_GZ_STANDALONE=1` 모드의 Gazebo 서버. `gz sim -r -s`로 월드를 직접 띄운다(`simulation-gazebo` 스크립트는 첫 실행 때 모델을 내려받으므로 쓰지 않는다). PX4-gazebo-models(모델, 월드, `server.config`)는 sim-base의 `/opt/px4-gz`에 한 벌만 두고 `GZ_SIM_SERVER_CONFIG_PATH`(PX4 전용 카메라, 광류 plugin 두 줄을 뺀 `server.idsim.config`), `GZ_SIM_RESOURCE_PATH`로 가리킨다. 월드 이름은 `config/fleet.yaml`의 `world.name`(모든 px4의 `PX4_GZ_WORLD`와 healthcheck 경로가 여기서 나온다). 헤드리스는 `gz sim -s`(서버만)로 얻는다. `HEADLESS`와 `PX4_GZ_SIM_RENDER_ENGINE`은 PX4 rcS 전용 변수라 이 서비스에는 주지 않는다. 여는 월드는 생성 스크립트가 만든 월드 SDF(`/opt/idsim/world/<월드>.sdf`. 실행 디렉터리의 `world/`를 읽기 전용으로 마운트)다. 명령은 `idsim_sim`의 wrapper 스크립트로, 서버를 띄우기 전에 그 SDF의 `<world name>`이 `world.name`과 같은지, `<spherical_coordinates>`가 정확히 하나인지 검사하고, 서버 기동 뒤 `scene/info`가 응답하면 준비 파일을 남긴다. 원점은 이 SDF로만 들어가고 wrapper는 런타임에 원점을 설정하지 않는다. 원점의 실제 적용은 px4 쪽 `sensor_gps` 좌표로 판정한다. px4 서비스에는 `PX4_HOME_*`를 주지 않는다(gz 경로에서 이 변수의 소비자는 `px4-rc.gzsim`의 원점 호출뿐이다. SIH 경로 `px4-rc.sihsim`도 이 변수를 읽으므로 SIH 변형을 추가하면 다시 본다) | 1 |
 | `px4-1` ... `px4-N` | px4 | 빌드된 `px4` 바이너리를 `px4 -d -i N`으로 직접 실행(`make`가 아님. `-d`는 데몬 모드로, 컨테이너 stdin이 닫힌 상태에서 대화형 셸이 프롬프트를 끝없이 출력해 로그가 부푸는 것을 막는다. `build/px4_sitl_default/bin`이 PATH에 있고 작업 디렉터리는 `rootfs`). `PX4_SIM_MODEL=gz_x500`, `PX4_GZ_MODELS`, `PX4_GZ_MODEL_POSE`, `PX4_UXRCE_DDS_NS`, `GZ_IP`, `COM_OBL_RC_ACT` 등은 생성 스크립트가 넣는다. 인스턴스마다 환경변수가 달라 compose `scale`로는 부족하므로 `config/fleet.yaml`에서 N개 서비스를 생성. 작업 디렉터리 `rootfs/N`은 `artifacts/runs/<실행 id>/px4-N/`의 바인드 마운트이며 실행마다 새로 만든다(이전 `parameters.bson`을 읽지 않고 ULog, dataman이 산출물로 남는다). 호스트 uid:gid로 실행하고 `HOME`은 컨테이너 안 `/tmp`다. MAVLink 포트는 생성 스크립트가 넘기는 `IDSIM_MAVLINK_OFFSET`(1000k)을 px4 이미지의 idsim용 `px4-rc.mavlink`가 읽어 정한다 | 1 (1대), 3 (N대) |
-| `xrce-agent` | xrce-agent (Micro XRCE-DDS Agent v2.4.3) | `MicroXRCEAgent udp4 -p <Agent 포트>`. 포트는 기준값 8888 + 스택 번호 k이며 PX4의 `PX4_UXRCE_DDS_PORT`와 같다. 모든 PX4가 여기로 접속 | 1 |
+| `xrce-agent` | xrce-agent (Micro XRCE-DDS Agent v2.4.3) | `MicroXRCEAgent udp4 -p <Agent 포트>`. 포트는 기준값 8888 + 스택 번호 k이며 PX4의 `PX4_UXRCE_DDS_PORT`와 같다. 지금의 compose는 모든 PX4가 여기로 접속한다(기체가 여러 대가 될 때 기체마다 하나로 바꾼다. Phase 3) | 1 |
 | `runner` (`tools` 프로필) | ros-ws | 상주하지 않는 판정용 컨테이너. 스모크 스크립트와 통합 테스트가 `compose run`으로 판정 명령(check 스크립트, pytest)을 실행한다. 호스트 uid:gid, 저장소 마운트와 `IDSIM_STACK_FILE`(실행 디렉터리의 `stack.json`)을 `bridge`와 같은 방식으로 받는다. 본 스택의 `up --wait` 대상이 아니다. `depends_on`은 standalone에서 `ops-N` 전부와 `targets`(표적이 있을 때), `sim-oracle`의 healthy이고, 판정 스크립트는 스택을 먼저 올린 뒤 `compose run --no-deps`로 부른다 | 1 |
 | `ops-1` ... `ops-N` | ros-ws | 기체별 운용 노드. 정적 launch(`idsim_mission`의 `vehicle_ops.launch.py`)로 기체당 컴포넌트 컨테이너(`component_container_isolated`) 하나에 Executor와 Collector(Phase 2)를 올려 프로세스와 DDS 참가자 수를 줄인다. 네임스페이스와 노드 이름은 launch 인자, 식별값은 생성된 `params/ops-N.yaml`로 받는다. 저장소를 `/opt/idsim`에 마운트하고 `tools/ros_ws.sh build`의 결과(`ros_ws/install`)를 쓴다. `init: true`, `stop_signal: SIGINT`, `stop_grace_period: 10s`, healthcheck는 Executor의 lifecycle 상태. `depends_on`은 `bridge`와 그 기체의 `px4-N` | 1 (Executor), 2 (Collector) |
 | `bridge` | ros-ws | ros_gz_bridge. 시계를 `/clock`으로만 노출한다(명령행 인자 하나. 표적은 `targets` 서비스가 맡는다). ros-ws 안의 vendor gz-transport와 sim-base의 OSRF gz-transport가 와이어로 호환되는지는 스모크 테스트가 실측하며, 실패하면 이 서비스만 sim-base 계열 이미지로 옮긴다 | 1 |

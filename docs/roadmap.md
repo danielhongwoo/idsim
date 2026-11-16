@@ -50,16 +50,16 @@
 
 목표: 기체 3대를 한 번에 띄우고, Fleet Manager가 기체 등록, 상태 집계, 미션 배분을 맡으며, gRPC 클라이언트 하나로 "표적 A는 1번 기체, 표적 B는 2번 기체"를 지시할 수 있게 한다. Phase 1-2의 노드와 판정 코드는 `config/fleet.yaml`의 기체 수만 바꿔 그대로 재사용되어야 한다. 안 되면 Phase 1 설계가 틀린 것이다. 기체가 여러 대가 되면서 새로 더하는 것은 아래 선행 항목의 통신 구조다.
 
-선행 항목: 시뮬레이션의 통신 구조를 실기체와 맞춘다. ROS 2 버스를 기체마다 DDS 도메인으로 나누고, Fleet Manager와 기체 운용 노드 사이를 Zenoh로 잇는다(architecture.md "전체 아키텍처"). 기체가 한 대인 Phase 1-2의 스택은 DDS 도메인 하나가 곧 그 기체의 버스라 이 구조와 같고, 달라지는 것은 기체가 여러 대이고 지상 쪽 서비스가 생기는 여기부터다. 통합 테스트의 `runner`는 기체의 버스에 붙어 `ExecuteMission`을 직접 부르고 기체 안의 토픽(`/fmu/out`, 정답 pose)으로 판정하며 지상 링크를 거치지 않는다. 지상 링크는 별도의 시험으로 본다(항목 7). 무선 구간의 지연과 손실은 시뮬레이션에 넣지 않는다. 정해지지 않은 것은 다음이고, 실험으로 정해 architecture.md와 interface.md에 반영한다.
+선행 항목: 시뮬레이션의 통신 구조를 실기체와 맞춘다. ROS 2 버스를 기체마다 DDS 도메인으로 나누고, Agent를 기체마다 하나씩 두며, Fleet Manager와 기체 운용 노드 사이를 Zenoh로 잇는다(architecture.md "전체 아키텍처"). 기체가 한 대인 Phase 1-2의 스택은 DDS 도메인 하나가 곧 그 기체의 버스라 이 구조와 같고, 달라지는 것은 기체가 여러 대이고 지상 쪽 서비스가 생기는 여기부터다. 통합 테스트의 `runner`는 기체의 버스에 붙어 `ExecuteMission`을 직접 부르고 기체 안의 토픽(`/fmu/out`, 정답 pose)으로 판정하며 지상 링크를 거치지 않는다. 지상 링크는 별도의 시험으로 본다(항목 7). 무선 구간의 지연과 손실은 시뮬레이션에 넣지 않는다. 정해지지 않은 것은 다음이고, 실험으로 정해 architecture.md와 interface.md에 반영한다.
 
 - Zenoh의 구성: bridge의 종류, 지상 링크를 건네는 토픽의 제한, router의 위치, 버전.
 - `/clock`, 표적 상태(`TargetState`), 정답 pose를 기체마다의 도메인에 어떻게 공급하는지. 지금은 `bridge`, `targets`, `sim-oracle`이 스택에 하나씩이고 스택의 도메인 하나에 발행한다.
 - 스택 번호 k와 기체 번호 N에서 도메인 ID를 파생하는 규칙. 지금은 `ROS_DOMAIN_ID` = 20 + k이고 k는 0-9다.
-- Agent를 기체마다 둘지, 하나로 둔다면 Agent 하나가 서로 다른 도메인의 PX4 세션을 함께 받는지(확인하지 않았다).
+- 기체별 Agent의 포트 파생 규칙. 지금은 Agent 하나가 8888 + k이다.
 - Logger, 개발용 WebSocket 어댑터, `viz` 프로필의 foxglove_bridge, `runner`가 기체마다의 도메인에 붙는 방법.
 - `MissionEvent`를 지상에서 구독할지(기록기의 위치와 함께).
 
-1. 멀티 인스턴스 스폰. [PX4 멀티 기체 문서](https://docs.px4.io/main/en/ros2/multi_vehicle.html) 규칙대로 `px4 -d -i N`, `PX4_GZ_MODEL_POSE`로 간격 배치(기체 간격 4 m 이상. 생성 스크립트가 2 m 미만을 거부한다). 기체 번호, 네임스페이스, `UXRCE_DDS_KEY`, `MAV_SYS_ID`, 포트는 Phase 1의 파생 규칙을 그대로 따르므로 이 식별자들에 새 결정은 없다. 기체마다의 DDS 도메인은 위 선행 항목이 정한다. `tools/gen_compose.py`가 3대 compose를 만든다.
+1. 멀티 인스턴스 스폰. [PX4 멀티 기체 문서](https://docs.px4.io/main/en/ros2/multi_vehicle.html) 규칙대로 `px4 -d -i N`, `PX4_GZ_MODEL_POSE`로 간격 배치(기체 간격 4 m 이상. 생성 스크립트가 2 m 미만을 거부한다). 기체 번호, 네임스페이스, `UXRCE_DDS_KEY`, `MAV_SYS_ID`, MAVLink 포트는 Phase 1의 파생 규칙을 그대로 따르므로 이 식별자들에 새 결정은 없다. 기체마다의 DDS 도메인과 Agent(포트 포함)는 위 선행 항목이 정한다. `tools/gen_compose.py`가 3대 compose를 만든다.
 2. 기체별 서비스 인스턴스. 기체당 컴포넌트 컨테이너 하나에 `idsim_mission`과 `idsim_telemetry`를 올려 3개 launch. 노드는 기체별 params(`stack.json`에서 생성)로 sysid를 받고 `idsim_common`의 대조 함수로 확인한다.
 3. `idsim_fleet` Fleet Manager (C++). 기체 레지스트리(`VehicleState` 수신으로 등록, `/clock` 기준 미수신 timeout으로 이탈 감지. 구독 대상을 params의 기체 목록으로 정할지 그래프에서 찾을지는 Phase 3 착수 때 정한다. 어느 쪽이든 그래프 항목의 생성과 소멸로 등록이나 이탈을 판정하지 않는다), 전체 기체 상태 집계, 미션 큐와 배분(가용 기체 중 표적에 가장 가까운 기체 선택 정도의 단순 규칙), 미션 상태 추적(대기 -> 배분 -> 실행 -> 완료/실패). gRPC 서버 스레드와 rclcpp executor라는 두 이벤트 루프가 공유하는 상태는 단일 뮤텍스로 보호하고, 설계 문서에 어떤 스레드가 어떤 상태를 쓰는지 표로 적는다.
 4. gRPC API (`proto/fleet.proto`). `ListVehicles`, `StreamVehicleStates`(server streaming), `StreamMissionEvents`(server streaming), `SubmitMission`, `AbortMission`, `GetMissionStatus`. Protobuf `VehicleState`와 ROS msg의 변환은 `idsim_fleet` 변환 모듈 한 곳에서만 하고 왕복 단위 테스트를 둔다. Python 클라이언트 CLI로 호출.

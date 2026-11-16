@@ -20,7 +20,7 @@
    - `rules.cpp`의 `is_after_disarm_send`가 하는 PX4 timestamp와 노드 ROS 시각의 비교가 `UXRCE_DDS_SYNCT=1`에서 같은 축인지 확인한다(px4-engineer, ros2-engineer).
    - gz NavSat altitude의 datum을 확인한다(sim-engineer, px4-engineer).
    - 링크 단절 중 `MissionEvent`(RELIABLE KEEP_LAST 10) 유실 여부를 Phase 2 계약 고정 전에 확인한다(ros2-engineer).
-3. 지상 링크의 Zenoh 구성 실험과 설계 토론(architect, ros2-engineer, ops-service-engineer). 기체마다 DDS 도메인을 나누고 그 사이를 Zenoh로 이어 `ExecuteMission`과 `VehicleState`만 건네는 구성을 시뮬레이션에 넣는다(`docs/roadmap.md` Phase 3의 선행 항목. 설계는 `docs/architecture.md`에 있고 compose는 아직 스택에 도메인 하나다). `/clock`, 표적 상태, 정답 pose의 공급 도메인, 도메인 ID 파생 규칙을 함께 정한다. Jazzy와 CycloneDDS에서의 bridge 버전 호환, 손실 링크 위의 action 동작(feedback 유실, 취소 지연)을 확인한다. 링크 단절 중 미션의 동작(계속 또는 중단, 재연결 뒤의 정합, 단절과 이탈의 구분)은 방식과 별개로 계약에서 정한다.
+3. 지상 링크의 Zenoh 구성 실험과 설계 토론(architect, ros2-engineer, ops-service-engineer). 기체마다 DDS 도메인을 나누고 그 사이를 Zenoh로 이어 `ExecuteMission`과 `VehicleState`만 건네는 구성을 시뮬레이션에 넣는다(`docs/roadmap.md` Phase 3의 선행 항목. 설계는 `docs/architecture.md`에 있고 compose는 아직 스택에 도메인 하나다). `/clock`, 표적 상태, 정답 pose의 공급 도메인, 도메인 ID와 기체별 Agent 포트의 파생 규칙을 함께 정한다. Agent를 기체마다 하나씩 두는 변경도 이 항목에 넣는다. Jazzy와 CycloneDDS에서의 bridge 버전 호환, 손실 링크 위의 action 동작(feedback 유실, 취소 지연)을 확인한다. 링크 단절 중 미션의 동작(계속 또는 중단, 재연결 뒤의 정합, 단절과 이탈의 구분)은 방식과 별개로 계약에서 정한다.
 
 ## 운영 규칙
 
@@ -41,7 +41,7 @@
 - `docs-for-agent/file-ownership.md`의 소유자는 architect.
 - 수동 비행을 하지 않으므로 QGroundControl을 지원하지 않는다(실행 도구, 버전 고정, 완료 기준에 없다). 화면 확인은 Gazebo GUI와 Lichtblick이다.
 - 프로젝트의 목적은 실기체 개발을 돕는 것이고 기준은 실기체의 구조다. 문서와 그림은 실기체를 먼저 쓰고 시뮬레이션은 그것을 대신하는 것으로 쓴다.
-- 시뮬레이션 환경은 실기체 환경과 최대한 같은 구조로 둔다. 시뮬레이션이 대신하는 것은 실물이 필요한 부분뿐이다. 시뮬레이션에서도 지상 링크는 Zenoh로 잇는다. 무선 구간의 지연과 손실은 시뮬레이션에 넣지 않는다.
+- 시뮬레이션 환경은 실기체 환경과 최대한 같은 구조로 둔다. 시뮬레이션이 대신하는 것은 실물이 필요한 부분뿐이다. 시뮬레이션에서도 지상 링크는 Zenoh로 잇고 uXRCE-DDS Agent는 기체마다 하나씩 둔다. 무선 구간의 지연과 손실은 시뮬레이션에 넣지 않는다.
 - 테스트는 계약의 경계에서 끊어서 한다. 통합 테스트는 기체의 버스에 붙어 계약을 직접 부르고 지상 링크를 거치지 않는다. 지상 링크의 시험은 따로 둔다.
 - 실기체 검증(실기체 기록물 리플레이, HITL, 지상 시험, 비행 시험, 실기체 조건 모사 시나리오)은 하드웨어 사양이 정해질 때까지 계획에 넣지 않는다.
 - Apple Silicon Mac(arm64)을 개발 호스트로 쓸 수 있게 한다. 이 작업은 별도 branch에서 진행 중이다. CI의 arm64 빌드와 companion computer용 arm64 이미지는 정하지 않았다.
