@@ -35,15 +35,16 @@ sitl_wait.raise_if). 판정 기준을 느슨하게 바꾸려면 근거와 함께
     "보정 실측의 GOTO s와 TRACK_ENTITY s_track 표본 전부가 B_M 이하"다(tests/support/calibration.py).
     시험 미션의 acceptance_radius_m은 R_JUDGE_M - B_M = 0.5 m이고 ACCEPTANCE_MIN_M(0.5 m) 이상이다. B_M은 상한
     B_MAX_M(0.5 m)과 같다.
-    근거(보정 실행): 로컬 부팅 30회(전부 통과), 실행 id 20261115-114952-k7-sitl-r1부터 20261115-141237-k7-sitl-r30,
-    commit 1664500(dirty 아님), 이미지 idsim/*:local, 스택 7. GOTO 도달 210건: mean(s) 0.2524, std(s) 0.0588,
-    max 0.4198 m. s_track 60건: mean -0.3668, std 0.2583, max 0.1195 m(t_f가 정확하지 않은 사건 0). 두 표본 모두
-    B_M 이하다. 참고(기록): 정규 허용한계 절차라면 k 4.237로 허용한계 0.5017(b 0.55)이고 Shapiro-Wilk p는 GOTO 0.0013,
-    s_track 0.00001로 정규성이 기각된다. t_f 시점 기체 수평 속도와 d_h의 상관은 0.64다(확인 지연 동안의 진행).
-  R_HOME_M 0.20 m: Rayleigh 허용한계(식은 README "b와 R_home 보정 확인"). 같은 보정 실행의 RTL 착륙 60건(F3, F4 x 30): R4 max 0.1313 m,
-    sigma_hat 0.0371 m, q 3.4616(m_home 2), f 1.1787(n 30), q x f x sigma_hat 0.1514 m -> ceil_0.05 0.20 m.
-    표본 최댓값이 허용한계 안이다. 착륙 위치 평균 벡터는 y축에서 0.026 m로 2 표준오차(0.008 m)를 넘는다(기록.
-    편향은 RMS에 들어가 보수적이라 기각 사유가 아니다).
+    근거(보정 실행): 로컬 부팅 30회(전부 통과), 실행 id 20261116-053017-k5-sitl-r1부터 20261116-075259-k5-sitl-r30,
+    commit a9c4dc2(dirty 아님), 이미지 idsim/*:local, 스택 5. GOTO 도달 210건: mean(s) -0.2350, std(s) 0.1247,
+    max 0.0075 m. s_track 60건: mean -0.6146, std 0.0810, max -0.4564 m. 두 표본 모두 B_M 이하다. GOTO d3 최대
+    0.5075 m(판정 반경 1.0 m), TRACK_ENTITY의 d3 - 임계 최대 -0.9564 m이고 반경 밖 사건은 0이다. 참고(기록): 정규
+    허용한계 절차라면 k 4.2372로 허용한계 GOTO 0.2932, s_track -0.2716이고 Shapiro-Wilk p는 GOTO 0.0000,
+    s_track 0.3669다. t_f 시점 기체 수평 속도 평균은 2.9684 m/s, d_h와의 상관은 -0.2830, s와의 상관은 -0.3175다.
+    EKF 위치가 정답보다 진행 방향으로 앞서지 않는다는 근거는 config/px4/sitl_params.env의 EKF2_GPS_DELAY 항목에 있다.
+  R_HOME_M 0.15 m: Rayleigh 허용한계(식은 README "b와 R_home 보정 확인"). 같은 보정 실행의 RTL 착륙 60건(F3, F4 x 30): R4 max 0.1108 m,
+    sigma_hat 0.0366 m, q x f 4.0801(m_home 2, n 30), q x f x sigma_hat 0.1492 m -> ceil_0.05 0.15 m.
+    표본 최댓값이 허용한계 안이다.
   L_S 0.2 s = target_fresh_age 0.1 s + Executor tick 0.05 s + 여유 0.05 s. 표적 접근의 임계값은 R_JUDGE_M + v x L_S이고
     v는 시나리오 표적 속도의 최댓값(stack.json targets의 구간 속도 최댓값)이다. L_S는 TRACK_ENTITY의 속도 feedforward를
     전제로 하고, PX4가 setpoint를 반영하는 지연을 약 한 tick으로 본 것은 [추정]이다(F2, F4 trace의 R3로 확인한다).
@@ -103,7 +104,7 @@ NAV_STATE_AUTO_RTL = 5
 # 판정 상수(머리말 참고)
 R_JUDGE_M = 1.0
 B_M = 0.5                        # 머리말 참고
-R_HOME_M = 0.20                  # Rayleigh 허용한계(머리말)
+R_HOME_M = 0.15                  # Rayleigh 허용한계(머리말)
 ACCEPTANCE_MIN_M = 0.5           # 시험 미션 acceptance_radius_m의 하한(b의 상한과 짝)
 B_MAX_M = 0.5                    # b의 상한(넘으면 올린다)
 R_HOME_MAX_M = 1.0               # R_HOME_M의 상한(넘으면 올린다)

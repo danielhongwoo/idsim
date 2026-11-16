@@ -177,7 +177,7 @@ def test_landing_judge_z_both_sides():
 
 
 def test_landing_judge_uses_r_home_constant_by_default():
-    assert sj.R_HOME_M == 0.20
+    assert sj.R_HOME_M == 0.15
     ref = (0.0, 0.0, 0.227)
     far = [OS(50.0, 0.25, 0.0, 0.227), OS(50.02, 0.25, 0.0, 0.227)]
     f, rec = sj.landing_judge(far, int(50.01 * US), ref, rtl=True)
