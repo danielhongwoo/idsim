@@ -4,7 +4,7 @@
 
 ## 목표와 범위
 
-이 프로젝트는 드론 자율비행 플랫폼 팀의 핵심 업무인 "자율비행 플랫폼 아키텍처, 비행제어-자율비행 알고리즘 간 데이터 파이프라인, Fleet Management, Mission Planning, Telemetry, 로그/리플레이, 테스트 자동화"를 PC 한 대 위의 시뮬레이션 환경으로 재현한다. 실제 기체 없이도 PX4 SITL + Gazebo로 비행 시험 검증 체계를 돌려 보는 것이 목적이다. 프로젝트명 idsim은 Drone Simulator의 약자로, 이동하는 표적(공격 드론 등)을 방어적 수단으로 요격하는 드론 플릿을 올릴 플랫폼을 시뮬레이션한다는 뜻이다.
+이 프로젝트는 드론 자율비행 플랫폼 팀의 핵심 업무인 "자율비행 플랫폼 아키텍처, 비행제어-자율비행 알고리즘 간 데이터 파이프라인, Fleet Management, Mission Planning, Telemetry, 로그/리플레이, 테스트 자동화"를 PC 한 대 위의 시뮬레이션 환경으로 재현한다. 목적은 실기체 개발을 돕는 것이다. 실기체 개발에 쓸 플랫폼 소프트웨어를 실제 기체 없이 PX4 SITL + Gazebo 위에서 만들고 비행 시험 검증 체계를 돌려 본다. 프로젝트명 idsim은 Drone Simulator의 약자로, 이동하는 표적(공격 드론 등)을 방어적 수단으로 요격하는 드론 플릿을 올릴 플랫폼을 시뮬레이션한다는 뜻이다.
 
 | 플랫폼 업무 항목 | 이 프로젝트에서의 대응 과제 | Phase (roadmap.md) |
 | --- | --- | --- |
@@ -21,7 +21,7 @@
 
 ## 전체 아키텍처
 
-세 레이어로 나눈다. 아래의 시뮬레이션 레이어(PX4 SITL x N + Gazebo)는 실제 기체를 대신하고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. 운용 서비스는 시뮬레이터의 토픽과 프로세스에 의존하지 않도록 설계해, PX4 SITL 컨테이너를 실기체로 바꿀 때 고칠 곳이 아래에 적은 SITL 전용 가정으로 좁혀지게 한다.
+세 레이어로 나눈다. 기준은 실기체의 구조다. 맨 아래가 기체 레이어(PX4가 비행제어를 맡는 기체 N대)이고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. 시뮬레이션은 이 구조에서 실물이 없는 부분을 대신한다. 이 저장소에서는 PX4 SITL x N과 Gazebo가 기체 레이어를 대신한다. 운용 서비스는 시뮬레이터의 토픽과 프로세스에 의존하지 않도록 설계해, 실기체에 올릴 때 고칠 곳이 아래에 적은 "시뮬레이션이 실기체와 달라지는 곳"으로 좁혀지게 한다.
 
 이 절의 그림은 논리 레이어, 즉 누가 무엇을 주고받는지를 보이고, 환경별 배치 그림 둘은 실행 주체가 어느 장비에 놓이는지만 보인다. 어느 컨테이너에서 어떤 프로세스가 도는지와 프로토콜, 포트는 "Docker Compose 실행 환경 설계" 절의 그림이 보인다. 큰 그림은 다음과 같다.
 
@@ -29,46 +29,20 @@
 flowchart TB
   OPS["운용 서비스<br/>Fleet, Mission, Telemetry, Replay"]
   BUS["ROS 2 버스<br/>기체별 토픽"]
-  SIM["시뮬레이션<br/>PX4 SITL x N + Gazebo"]
+  VEH["기체 x N<br/>PX4, 실물 또는 시뮬레이션"]
   EXT["외부 클라이언트<br/>웹, gRPC"]
   EXT <--> OPS
   OPS <-->|"setpoint / 상태"| BUS
-  BUS <-->|"uXRCE-DDS Agent"| SIM
+  BUS <-->|"uXRCE-DDS Agent"| VEH
 ```
 
-- 운용 서비스는 ROS 2 버스만 보고, Gazebo 토픽을 구독하거나 시뮬레이터 프로세스를 참조하지 않는다. 버스로 명령과 setpoint를 내리고 상태를 받는다.
-- 시뮬레이션 레이어는 실기체로 바꿀 수 있는 자리다. 기체 하나가 PX4 하나다.
+- 운용 서비스는 ROS 2 버스만 보고, 버스 아래가 실물인지 시뮬레이션인지에 의존하지 않는다. Gazebo 토픽을 구독하거나 시뮬레이터 프로세스를 참조하지 않는다. 버스로 명령과 setpoint를 내리고 상태를 받는다.
+- 맨 아래는 기체 레이어다. 기체 하나가 PX4 하나다. 실기체에서는 FMU의 PX4와 실제 기체이고, 이 저장소에서는 PX4 SITL과 Gazebo가 그것을 대신한다.
 - 외부 클라이언트는 ROS 2를 모르고 Fleet Manager의 API로만 플릿을 본다.
 
-운용 쪽에 남아 있는 SITL 전용 가정으로 확인된 것은 다음 셋이다. 이 밖의 가정이 없다는 것은 확인하지 않았다. 셋이 배치에서 어디에 해당하는지는 이 목록 아래의 환경별 배치 그림 둘이 보인다.
+환경별 배치. 아래 두 그림은 실행 주체가 어느 장비에 놓이는지를 보인다. 큰 그림이 논리 레이어를, "Docker Compose 실행 환경 설계" 절의 그림이 컨테이너와 프로토콜을 보이는 것과 구분되며, 컨테이너와 프로토콜은 여기에 그리지 않는다. 실기체 환경이 기준이고, 시뮬레이션 환경은 그 그림의 어느 부분을 무엇이 대신하는지로 읽는다. 같은 실행 주체는 두 그림에서 같은 이름과 같은 순서로 둔다. 상자 테두리(subgraph)는 장비 한 대다.
 
-- 시간 출처: 운용 노드는 `/clock`(시뮬레이션 시간)이 있어야 돈다. Executor는 `use_sim_time`이 true가 아니면 configure를 거부하고, /fmu/in에 넣는 timestamp는 ROS 시간 override가 켜진 시계에서만 만들어진다. 생성기도 운용 노드 params에 `use_sim_time: true`를 고정해 넣는다. PX4 쪽의 `UXRCE_DDS_SYNCT=0`도 SITL 전용 값이다(`docs/interface.md` "시간 기준" 절).
-- 고도 기준: world ENU와 기체 로컬 NED 사이의 변환(`idsim_common`의 geo)은 `world.origin`의 고도를 타원체 고로 다루고, PX4의 원점 고도는 AMSL이다. SITL에서는 두 값이 같은 수로 공급되어 차이가 드러나지 않는다(`docs/interface.md` "좌표계" 절). 이 변환은 Gazebo(gz-math)의 좌표 식을 그대로 옮긴 것이라 `idsim_common`에 Gazebo의 식과 이름이 있다. Gazebo 토픽과 include 의존은 없다.
-- 한 호스트 배치: DDS 설정(`config/cyclonedds.xml`)은 multicast를 끄고 peer를 127.0.0.1 하나로 둔다. 운용 노드, Agent, PX4가 한 호스트에 있다는 가정이다. 어느 토픽이 호스트 경계를 넘는지는 정하지 않았다.
-
-환경별 배치. 아래 두 그림은 실행 주체가 어느 장비에 놓이는지를 보인다. 큰 그림이 논리 레이어를, "Docker Compose 실행 환경 설계" 절의 그림이 컨테이너와 프로토콜을 보이는 것과 구분되며, 컨테이너와 프로토콜은 여기에 그리지 않는다. 같은 실행 주체는 두 그림에서 같은 이름과 같은 순서로 둔다. 상자 테두리(subgraph)는 장비 한 대다.
-
-시뮬레이션 환경. 모든 실행 주체가 개발 호스트 한 대에 있다.
-
-```mermaid
-flowchart TB
-  subgraph HOST["개발 호스트 한 대"]
-    FM["Fleet Manager<br/>Phase 3"]
-    OPS["기체 운용 노드 x N<br/>Executor, Collector(Phase 2)"]
-    AG["uXRCE-DDS Agent<br/>모든 기체에 하나"]
-    PX["PX4 SITL x N<br/>비행제어"]
-    GZ["Gazebo<br/>물리, 센서, 시계"]
-    TP["표적 어댑터<br/>표적 생산자"]
-  end
-  FM <-->|"미션, 상태"| OPS
-  OPS <-->|"/fmu 토픽"| AG
-  AG <-->|"토픽 중계"| PX
-  PX <-->|"센서, 구동"| GZ
-  GZ -->|"/clock"| OPS
-  TP -->|"TargetState"| OPS
-```
-
-실기체 환경. 아래 배치는 이 문서가 전제하는 기준 배치이고, 실기체 적용의 범위와 배치는 정해지지 않았다. 전제는 다음과 같다. PX4는 FMU에서 돌고, 기체마다 companion computer가 Agent와 그 기체의 운용 노드를 돌리며, 지상국이 Fleet Manager를 돌리고, 기체와 지상국은 무선 IP 링크로 이어진다.
+실기체 환경. 아래 배치는 이 문서가 전제하는 기준 배치이고, 실기체 적용의 범위와 배치의 세부는 정해지지 않았다. 전제는 다음과 같다. PX4는 FMU에서 돌고, 기체마다 companion computer가 Agent와 그 기체의 운용 노드를 돌리며, 지상국이 Fleet Manager를 돌리고, 기체와 지상국은 무선 IP 링크로 이어진다.
 
 ```mermaid
 flowchart TB
@@ -91,28 +65,52 @@ flowchart TB
   TP -->|"TargetState"| OPS
 ```
 
-위의 가정 셋은 두 그림의 차이에 다음과 같이 해당한다. 시간 출처는 시뮬레이션 그림의 `/clock` 화살표이고 실기체 그림에는 그 화살표가 없다. 고도 기준은 "센서, 구동"의 상대가 Gazebo에서 실제 GNSS로 바뀌는 곳이다. 한 호스트 배치는 상자 테두리가 하나에서 셋으로 나뉘는 것이고, 이 전제에서 무선 링크를 넘는 것은 Fleet Manager와 기체 운용 노드 사이의 계약(`ExecuteMission`, `VehicleState`, `MissionEvent`)이며 `/fmu` 토픽은 companion computer 안에 머문다.
+시뮬레이션 환경. 실기체 환경에서 실물이 필요한 부분을 대신한 것이다. FMU의 PX4는 PX4 SITL 프로세스가, 기체와 센서는 Gazebo가, 추적기는 표적 어댑터가 대신하고, 장비 셋(지상국, companion computer, FMU)은 개발 호스트 한 대가 대신한다. Fleet Manager, 기체 운용 노드, Agent는 실기체 환경과 같은 것이 돈다.
 
-환경별 실체. 역할은 두 환경에서 같고 실체가 다르다. 실기체 환경 열은 위의 전제를 따른다.
+```mermaid
+flowchart TB
+  subgraph HOST["개발 호스트 한 대"]
+    FM["Fleet Manager<br/>Phase 3"]
+    OPS["기체 운용 노드 x N<br/>Executor, Collector(Phase 2)"]
+    AG["uXRCE-DDS Agent<br/>모든 기체에 하나"]
+    PX["PX4 SITL x N<br/>FMU의 PX4를 대신"]
+    GZ["Gazebo<br/>기체와 센서를 대신"]
+    TP["표적 어댑터<br/>추적기를 대신"]
+  end
+  FM <-->|"미션, 상태"| OPS
+  OPS <-->|"/fmu 토픽"| AG
+  AG <-->|"토픽 중계"| PX
+  PX <-->|"센서, 구동"| GZ
+  GZ -->|"/clock"| OPS
+  TP -->|"TargetState"| OPS
+```
 
-| 컴포넌트 | 역할 | 시뮬레이션 환경 | 실기체 환경 |
+시뮬레이션이 실기체와 달라지는 곳으로 확인된 것은 다음 셋이다. 운용 쪽의 코드와 설정이 이 셋에서 시뮬레이션에 맞춰져 있어, 실기체에 올리려면 이 셋을 먼저 풀어야 한다. 이 밖에 없다는 것은 확인하지 않았다.
+
+- 시간 출처: 실기체 그림에는 없고 시뮬레이션 그림에만 있는 `/clock` 화살표다. 실기체에는 `/clock`을 공급하는 주체가 없는데, 운용 노드는 `/clock`(시뮬레이션 시간)이 있어야 돈다. Executor는 `use_sim_time`이 true가 아니면 configure를 거부하고, /fmu/in에 넣는 timestamp는 ROS 시간 override가 켜진 시계에서만 만들어진다. 생성기도 운용 노드 params에 `use_sim_time: true`를 고정해 넣는다. PX4 쪽의 `UXRCE_DDS_SYNCT=0`도 SITL 전용 값이다(`docs/interface.md` "시간 기준" 절).
+- 고도 기준: "센서, 구동"의 상대가 실제 GNSS가 아니라 Gazebo인 곳이다. PX4의 원점 고도는 AMSL이고, world ENU와 기체 로컬 NED 사이의 변환(`idsim_common`의 geo)은 `world.origin`의 고도를 타원체 고로 다룬다. 실제 GNSS에서는 두 값이 다르지만 SITL에서는 같은 수로 공급되어 차이가 드러나지 않는다(`docs/interface.md` "좌표계" 절). 이 변환은 Gazebo(gz-math)의 좌표 식을 그대로 옮긴 것이라 `idsim_common`에 Gazebo의 식과 이름이 있다. Gazebo 토픽과 include 의존은 없다.
+- 한 호스트 배치: 실기체 그림의 장비 테두리 셋이 시뮬레이션 그림에서 하나로 합쳐진 것이다. 실기체의 기준 배치에서 무선 링크를 넘는 것은 Fleet Manager와 기체 운용 노드 사이의 계약(`ExecuteMission`, `VehicleState`, `MissionEvent`)이고 `/fmu` 토픽은 companion computer 안에 머문다. 이것은 위 전제에서 따라 나오는 것이고, 어느 토픽이 장비 경계를 넘는지는 정해지지 않았다. 지금의 DDS 설정(`config/cyclonedds.xml`)은 multicast를 끄고 peer를 127.0.0.1 하나로 두어, 운용 노드, Agent, PX4가 한 호스트에 있다고 가정한다. 장비 사이의 DDS 구성은 정하지 않았다.
+
+환경별 실체. 역할은 두 환경에서 같다. 실기체 환경 열은 위의 전제를 따르고, 시뮬레이션 환경 열은 그것을 무엇이 대신하는지다.
+
+| 컴포넌트 | 역할 | 실기체 환경 | 시뮬레이션 환경(대신하는 것) |
 | --- | --- | --- | --- |
-| 비행제어(PX4) | 자세와 위치 제어, 모드와 failsafe, arm과 disarm | PX4 SITL 프로세스(기체마다 컨테이너 하나) | FMU의 PX4 펌웨어 |
-| 기체 물리와 센서 | 기체의 운동과 IMU, GNSS 등의 측정값 | Gazebo(모든 기체가 월드 하나를 공유) | 실제 기체와 센서 |
-| uXRCE-DDS Agent | PX4의 uORB 토픽과 ROS 2 토픽 사이의 중계 | 인스턴스 하나가 모든 기체를 UDP로 받는다 | companion computer마다 하나, FMU와 serial 또는 Ethernet |
-| ROS 2 버스(DDS 도메인) | 기체별 네임스페이스의 토픽 전달 | 한 호스트 안의 도메인 하나(peer는 loopback) | 정하지 않음(장비 사이의 발견과 설정) |
-| Mission Executor | 미션을 Offboard setpoint와 명령으로 실행 | 개발 호스트의 `ops-N` 컨테이너 | 그 기체의 companion computer |
-| Telemetry Collector(Phase 2) | PX4 상태를 `VehicleState`로 요약 | Executor와 같은 컨테이너 | 그 기체의 companion computer |
-| Fleet Manager(Phase 3) | 기체 레지스트리, 미션 배분, 외부 API | 개발 호스트 | 지상국 |
-| 표적 생산자 | `TargetState` 발행 | 표적 어댑터(fleet 파일의 궤적 정의를 평가) | 추적기. 위치는 정하지 않음 |
-| 시간 출처 | 판정, 집계, 기록의 시각 기준 | Gazebo 시뮬레이션 시간(`/clock`) | 정하지 않음(실기체에는 `/clock`을 공급하는 주체가 없다) |
-| 정답 pose | 판정이 쓰는 기체의 참값 위치 | `sim-oracle`이 Gazebo에서 읽어 발행 | 없음 |
-| GCS | MAVLink 지상 관제 | idsim이 띄우는 GCS는 없다. 외부 GCS가 GCS 포트로 붙을 수 있다 | 정하지 않음 |
-| 기록(ULog, rosbag2) | 비행 기록과 토픽 기록 | ULog는 px4 컨테이너의 실행 디렉터리, rosbag2는 개발 호스트(Phase 2) | ULog는 FMU의 저장 장치, rosbag2의 위치는 정하지 않음 |
+| 비행제어(PX4) | 자세와 위치 제어, 모드와 failsafe, arm과 disarm | FMU의 PX4 펌웨어 | PX4 SITL 프로세스(기체마다 컨테이너 하나) |
+| 기체 물리와 센서 | 기체의 운동과 IMU, GNSS 등의 측정값 | 실제 기체와 센서 | Gazebo(모든 기체가 월드 하나를 공유) |
+| uXRCE-DDS Agent | PX4의 uORB 토픽과 ROS 2 토픽 사이의 중계 | companion computer마다 하나, FMU와 serial 또는 Ethernet | 같은 Agent. 인스턴스 하나가 모든 기체를 UDP로 받는다 |
+| ROS 2 버스(DDS 도메인) | 기체별 네임스페이스의 토픽 전달 | 정하지 않음(장비 사이의 발견과 설정) | 한 호스트 안의 도메인 하나(peer는 loopback) |
+| Mission Executor | 미션을 Offboard setpoint와 명령으로 실행 | 그 기체의 companion computer | 같은 노드. 개발 호스트의 `ops-N` 컨테이너 |
+| Telemetry Collector(Phase 2) | PX4 상태를 `VehicleState`로 요약 | 그 기체의 companion computer | 같은 노드. Executor와 같은 컨테이너 |
+| Fleet Manager(Phase 3) | 기체 레지스트리, 미션 배분, 외부 API | 지상국 | 같은 서비스. 개발 호스트 |
+| 표적 생산자 | `TargetState` 발행 | 추적기. 위치는 정하지 않음 | 표적 어댑터(fleet 파일의 궤적 정의를 평가) |
+| 시간 출처 | 판정, 집계, 기록의 시각 기준 | 정하지 않음(실기체에는 `/clock`을 공급하는 주체가 없다) | Gazebo 시뮬레이션 시간(`/clock`) |
+| 정답 pose | 판정이 쓰는 기체의 참값 위치 | 없음 | `sim-oracle`이 Gazebo에서 읽어 발행 |
+| GCS | MAVLink 지상 관제 | 정하지 않음 | idsim이 띄우는 GCS는 없다. 외부 GCS가 GCS 포트로 붙을 수 있다 |
+| 기록(ULog, rosbag2) | 비행 기록과 토픽 기록 | ULog는 FMU의 저장 장치, rosbag2의 위치는 정하지 않음 | ULog는 px4 컨테이너의 실행 디렉터리, rosbag2는 개발 호스트(Phase 2) |
 
-이 원칙은 표적 경로에도 적용한다. Mission Executor는 Gazebo 토픽을 직접 구독하지 않고 `idsim_interfaces`의 `TargetState` 계약(`/targets/<id>/state`)만 구독한다. 시뮬레이션에서는 `idsim_sim`의 표적 어댑터 노드가 fleet 파일(`config/fleet.yaml` 등)의 궤적 정의를 시뮬레이션 시간에 평가해 이 계약으로 발행하고, Gazebo 월드의 Actor는 같은 정의로 생성해 화면에서 확인하는 용도다(Actor의 화면 위치는 참고용이다. Actor는 반복 재생으로만 만들고 `loop`가 false인 표적은 끝에 86400 s의 정지를 붙여 나타내므로, 그 뒤에는 화면의 Actor만 처음 위치로 돌아간다). 표적 어댑터는 Gazebo를 구독하지 않는다. 실기체에서는 같은 토픽을 추적기가 채운다.
+이 원칙은 표적 경로에도 적용한다. Mission Executor는 Gazebo 토픽을 직접 구독하지 않고 `idsim_interfaces`의 `TargetState` 계약(`/targets/<id>/state`)만 구독한다. 실기체에서는 이 토픽을 추적기가 채운다. 시뮬레이션에서는 추적기를 대신해 `idsim_sim`의 표적 어댑터 노드가 fleet 파일(`config/fleet.yaml` 등)의 궤적 정의를 시뮬레이션 시간에 평가해 이 계약으로 발행하고, Gazebo 월드의 Actor는 같은 정의로 생성해 화면에서 확인하는 용도다(Actor의 화면 위치는 참고용이다. Actor는 반복 재생으로만 만들고 `loop`가 false인 표적은 끝에 86400 s의 정지를 붙여 나타내므로, 그 뒤에는 화면의 Actor만 처음 위치로 돌아간다). 표적 어댑터는 Gazebo를 구독하지 않는다.
 
-운용 서비스 레이어. 큰 그림의 "운용 서비스" 상자를 펼친 것이다. 큰 그림의 "시뮬레이션" 상자 안쪽(PX4, Agent, Gazebo, bridge)은 여기서 펼치지 않는다. 그 컨테이너와 프로토콜은 "Docker Compose 실행 환경 설계" 절의 상세 1에만 그리고, 위의 환경별 배치 그림은 장비 경계와 실행 주체의 자리만 보인다.
+운용 서비스 레이어. 큰 그림의 "운용 서비스" 상자를 펼친 것이다. 큰 그림의 "기체" 상자와 그것을 대신하는 시뮬레이션 구성(PX4 SITL, Agent, Gazebo, bridge)은 여기서 펼치지 않는다. 그 컨테이너와 프로토콜은 "Docker Compose 실행 환경 설계" 절의 상세 1에만 그리고, 위의 환경별 배치 그림은 장비 경계와 실행 주체의 자리만 보인다.
 
 ```mermaid
 flowchart TB
@@ -130,7 +128,7 @@ flowchart TB
   BUS -->|"기록"| LR
 ```
 
-구성 요소가 하는 일. 큰 그림과 위 그림의 상자, 그리고 시뮬레이션 레이어의 구성 요소를 함께 적는다.
+구성 요소가 하는 일. 큰 그림과 위 그림의 상자, 그리고 기체 레이어를 대신하는 시뮬레이션의 구성 요소를 함께 적는다. 이 표에서 기체 레이어와 그 경계의 행(Agent, 표적 어댑터, 정답 pose, PX4 SITL, Gazebo)은 시뮬레이션 구성이고, 실기체 쪽의 실체는 위의 환경별 실체 표에 있다.
 
 | 구성 요소 | 레이어 | 하는 일 | Phase |
 | --- | --- | --- | --- |
@@ -139,12 +137,12 @@ flowchart TB
 | Telemetry Collector x N | 운용 서비스 | `/fmu/out` 구독 -> `VehicleState` 요약, WebSocket 스트림 | 2 |
 | Logger / Replay | 운용 서비스 | rosbag2 (MCAP), ULog 동기화 | 2 |
 | ROS 2 (DDS) 토픽 버스 | 버스 | `/px4_N/fmu/out/*`, `/px4_N/fmu/in/*`, `/targets/*/state`. 기체별 네임스페이스로 분리, px4_msgs 타입, sensor_data QoS, rmw는 CycloneDDS | 1 |
-| Micro XRCE-DDS Agent v2.4.3 | 버스와 시뮬레이션 사이 | udp4, 기준 포트 8888 + 스택 번호 k, 인스턴스 하나로 모든 기체 수용 | 1 |
+| Micro XRCE-DDS Agent v2.4.3 | 버스와 기체 사이 | PX4의 uXRCE-DDS client와 ROS 2 버스 사이의 중계. 시뮬레이션 구성: udp4, 기준 포트 8888 + 스택 번호 k, 인스턴스 하나로 모든 기체 수용 | 1 |
 | `idsim_sim` 표적 어댑터 + ros_gz_bridge | 버스와 시뮬레이션 사이 | 표적 어댑터는 궤적 정의 -> `TargetState`, ros_gz_bridge는 `/clock`만 | 1 |
 | `idsim_sim` 정답 pose 노드 (`sim-oracle`) | 버스와 시뮬레이션 사이 | Gazebo의 기체 pose -> `/sim/<vehicle_id>/pose`(base_link 기준). SITL 판정 전용이고 계약이 아니다 | 1 |
-| PX4 SITL `-i 1` | 시뮬레이션 | uXRCE-DDS client, 네임스페이스 `/px4_1`, MAVLink 14550 + 1000k (GCS) / 14541 + 1000k (API), ULog 기록 | 1 |
-| PX4 SITL `-i 2...N` | 시뮬레이션 | `UXRCE_DDS_KEY` = i+1 = `MAV_SYS_ID`, 네임스페이스 `/px4_i`, API 14540 + 1000k + i | 3 |
-| Gazebo Harmonic (`gz sim -s`, 서버 전용) | 시뮬레이션 | x500 기체 모델 x N, 이동 표적 Actor(화면 확인용), 물리/센서 plugin | 1 |
+| PX4 SITL `-i 1` | 기체(시뮬레이션이 대신) | uXRCE-DDS client, 네임스페이스 `/px4_1`, MAVLink 14550 + 1000k (GCS) / 14541 + 1000k (API), ULog 기록 | 1 |
+| PX4 SITL `-i 2...N` | 기체(시뮬레이션이 대신) | `UXRCE_DDS_KEY` = i+1 = `MAV_SYS_ID`, 네임스페이스 `/px4_i`, API 14540 + 1000k + i | 3 |
+| Gazebo Harmonic (`gz sim -s`, 서버 전용) | 기체(시뮬레이션이 대신) | x500 기체 모델 x N, 이동 표적 Actor(화면 확인용), 물리/센서 plugin | 1 |
 
 버스 위의 이름과 쓰는 쪽, 읽는 쪽.
 
@@ -159,7 +157,7 @@ flowchart TB
 | `/px4_N/vehicle_state` | Telemetry Collector (Phase 2) | Fleet Manager, 판정 노드 |
 | `/px4_N/mission_event` | Mission Executor | Logger, 판정 노드 |
 
-위쪽 서비스는 ROS 2 토픽만 보고 동작하고, 아래쪽 PX4는 uXRCE-DDS Agent 하나를 통해 모든 인스턴스가 같은 DDS 도메인에 올라온다. 기체를 실제로 움직이는 setpoint는 기체별 Mission Executor만 발행하고, Fleet Manager는 미션을 배분하고 상태를 집계할 뿐 `/fmu/in/*`에 직접 쓰지 않는다. MAVLink는 외부 GCS용 곁가지이며 운용 서비스는 사용하지 않는다. PX4 <-> Gazebo 사이의 모터, 센서 교환은 ROS 2를 거치지 않는 직접 연결이다.
+위쪽 서비스는 ROS 2 토픽만 보고 동작하고, 아래쪽 PX4는 uXRCE-DDS Agent를 통해 기체별 네임스페이스의 토픽으로 버스에 올라온다. 실기체의 기준 배치에서는 Agent가 기체마다 하나이고, 시뮬레이션에서는 Agent 하나가 모든 PX4 SITL 인스턴스를 같은 DDS 도메인에 올린다. 기체를 실제로 움직이는 setpoint는 기체별 Mission Executor만 발행하고, Fleet Manager는 미션을 배분하고 상태를 집계할 뿐 `/fmu/in/*`에 직접 쓰지 않는다. MAVLink는 외부 GCS용 곁가지이며 운용 서비스는 사용하지 않는다. PX4와 기체(모터, 센서) 사이의 교환은 ROS 2를 거치지 않는다. 시뮬레이션에서는 이것이 PX4 SITL <-> Gazebo의 직접 연결이다.
 
 ## 기체 식별과 설정의 단일 출처
 
@@ -217,7 +215,7 @@ x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리�
 
 ## 인터페이스 계약
 
-운용 서비스와 시뮬레이션 레이어 사이의 계약은 `idsim_interfaces`와 `docs/interface.md`가 정의한다. 정의 파일(msg 10개, action 1개)은 모두 있고, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춘다. 소비자 없이 고정하면 틀린 정의를 계약으로 굳히게 되기 때문이다.
+운용 서비스와 기체 레이어 사이의 계약은 `idsim_interfaces`와 `docs/interface.md`가 정의한다. 정의 파일(msg 10개, action 1개)은 모두 있고, 고정은 첫 소비자가 생기는 Phase의 완료에 맞춘다. 소비자 없이 고정하면 틀린 정의를 계약으로 굳히게 되기 때문이다.
 
 | 묶음 | 고정되는 것 | 고정 상태 |
 | --- | --- | --- |
