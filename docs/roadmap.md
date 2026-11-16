@@ -57,7 +57,7 @@
 - 스택 번호 k와 기체 번호 N에서 도메인 ID를 파생하는 규칙. 지금은 `ROS_DOMAIN_ID` = 20 + k이고 k는 0-9다.
 - 기체별 Agent의 포트 파생 규칙. 지금은 Agent 하나가 8888 + k이다.
 - Logger, 개발용 WebSocket 어댑터, `viz` 프로필의 foxglove_bridge, `runner`가 기체마다의 도메인에 붙는 방법.
-- `MissionEvent`를 지상에서 구독할지(기록기의 위치와 함께).
+- 기록기의 위치와 지상에서 `MissionEvent`를 구독하는 컴포넌트.
 
 1. 멀티 인스턴스 스폰. [PX4 멀티 기체 문서](https://docs.px4.io/main/en/ros2/multi_vehicle.html) 규칙대로 `px4 -d -i N`, `PX4_GZ_MODEL_POSE`로 간격 배치(기체 간격 4 m 이상. 생성 스크립트가 2 m 미만을 거부한다). 기체 번호, 네임스페이스, `UXRCE_DDS_KEY`, `MAV_SYS_ID`, MAVLink 포트는 Phase 1의 파생 규칙을 그대로 따르므로 이 식별자들에 새 결정은 없다. 기체마다의 DDS 도메인과 Agent(포트 포함)는 위 선행 항목이 정한다. `tools/gen_compose.py`가 3대 compose를 만든다.
 2. 기체별 서비스 인스턴스. 기체당 컴포넌트 컨테이너 하나에 `idsim_mission`과 `idsim_telemetry`를 올려 3개 launch. 노드는 기체별 params(`stack.json`에서 생성)로 sysid를 받고 `idsim_common`의 대조 함수로 확인한다.

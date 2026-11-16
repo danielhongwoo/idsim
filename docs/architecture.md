@@ -23,7 +23,7 @@ GPS 없는 비행도 다루지 않는다. GPS는 항상 수신된다고 가정�
 
 ## 전체 아키텍처
 
-세 레이어로 나눈다. 기준은 실기체의 구조다. 맨 아래가 기체 레이어(PX4가 비행제어를 맡는 기체 N대)이고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. ROS 2 버스는 기체마다 하나이고 그 기체 안에 있다. 운용 서비스는 놓이는 곳으로 둘로 나뉜다. 기체 운용 노드(Mission Executor, Telemetry Collector)는 기체 안에서 그 기체의 버스에 붙고, Fleet 서비스(Fleet Manager)는 지상에 있다. 둘 사이가 지상 링크이고, Fleet Manager가 이 구간 너머로 쓰는 계약은 `ExecuteMission`과 `VehicleState`다. `MissionEvent`를 지상에서 구독할지는 기록기의 위치와 함께 정하지 않았다. 지상 링크는 DDS가 아니라 Zenoh로 잇는다. Zenoh의 구성은 정하지 않았다.
+세 레이어로 나눈다. 기준은 실기체의 구조다. 맨 아래가 기체 레이어(PX4가 비행제어를 맡는 기체 N대)이고, 가운데 ROS 2 버스가 "비행제어-자율비행 알고리즘 간 데이터 파이프라인"이며, 위의 운용 서비스 레이어가 Fleet, Mission, Telemetry, Replay다. ROS 2 버스는 기체마다 하나이고 그 기체 안에 있다. 운용 서비스는 놓이는 곳으로 둘로 나뉜다. 기체 운용 노드(Mission Executor, Telemetry Collector)는 기체 안에서 그 기체의 버스에 붙고, Fleet 서비스(Fleet Manager)는 지상에 있다. 둘 사이가 지상 링크이고, 지상 링크를 건너는 계약은 `ExecuteMission`, `VehicleState`, `MissionEvent` 셋이고 `MissionEvent`는 지상에서 구독한다. 지상의 어느 컴포넌트가 구독하는지는 기록기의 위치와 함께 정하지 않았다. 지상 링크는 DDS가 아니라 Zenoh로 잇는다. Zenoh의 구성은 정하지 않았다.
 
 시뮬레이션은 이 구조에서 실물이 필요한 부분만 대신하고, 그 밖의 구조(실행 주체, 버스의 범위, 통신 방식)는 실기체 환경과 같게 둔다. 그래서 두 환경의 차이는 실물을 대신하는 것으로만 남아야 한다. 이 저장소에서는 PX4 SITL x N과 Gazebo가 기체 레이어를 대신하고, 개발 호스트 한 대가 지상국과 기체의 장비를 대신한다. 대신하는 것은 장비의 수이지 통신 구조가 아니다. 시뮬레이션에서도 ROS 2 버스는 기체마다 DDS 도메인으로 나누고, Fleet Manager와 기체 운용 노드 사이의 지상 링크는 Zenoh로 잇는다. 기체가 한 대인 스택에서는 스택의 DDS 도메인이 곧 그 기체의 버스이고 지상 쪽 서비스가 없으므로 이 구조와 이미 같다. 기체마다의 도메인과 Zenoh 지상 링크는 기체가 여러 대가 되고 Fleet Manager가 생기는 Phase 3에서 더한다. 그 전에 계약을 쓰는 것은 통합 테스트와 CLI `send_mission`이고, 이들은 지상 링크를 거치지 않고 기체의 버스에서 계약을 직접 쓴다. 무선 구간의 지연과 손실은 시뮬레이션에 넣지 않는다. 운용 서비스는 시뮬레이터의 토픽과 프로세스에 의존하지 않도록 설계해, 실기체에 올릴 때 고칠 곳이 아래에 적은 "시뮬레이션이 실기체와 달라지는 곳"으로 좁혀지게 한다.
 
@@ -56,7 +56,7 @@ flowchart TB
 
 - 기체 운용 노드는 그 기체의 ROS 2 버스만 보고, 버스 아래가 실물인지 시뮬레이션인지에 의존하지 않는다. Gazebo 토픽을 구독하거나 시뮬레이터 프로세스를 참조하지 않는다. 버스로 명령과 setpoint를 내리고 상태를 받는다.
 - ROS 2 버스는 기체마다 하나이고 companion computer 안에 있다. 그림에서 기체 운용 노드와 Agent 사이의 "/fmu 토픽"이 그 버스 위의 것이다.
-- Fleet Manager는 기체의 버스에 직접 붙지 않는다. Fleet Manager가 지상 링크 너머로 쓰는 계약은 `ExecuteMission`과 `VehicleState`다. `MissionEvent`를 지상에서 구독할지는 기록기(Logger)의 위치와 함께 정하지 않았다. 표적 추적기와 기록기가 놓이는 곳에 따라 `TargetState`와 기록 대상인 `/fmu` 토픽도 건널 수 있고, 이것도 정하지 않았다. 지상 링크는 Zenoh로 잇고, Zenoh의 구성은 정하지 않았다.
+- Fleet Manager는 기체의 버스에 직접 붙지 않는다. 지상 링크를 건너는 계약은 `ExecuteMission`, `VehicleState`, `MissionEvent` 셋이고 `MissionEvent`는 지상에서 구독한다. 지상의 어느 컴포넌트가 구독하는지는 기록기(Logger)의 위치와 함께 정하지 않았다. 표적 추적기와 기록기가 놓이는 곳에 따라 `TargetState`와 기록 대상인 `/fmu` 토픽도 건널 수 있고, 이것도 정하지 않았다. 지상 링크는 Zenoh로 잇고, Zenoh의 구성은 정하지 않았다.
 - 통신 방식: 기체 안은 ROS 2(DDS), PX4와는 Agent를 거친 XRCE-DDS, 지상 링크는 Zenoh, 외부 클라이언트는 gRPC이고 웹 브라우저는 gateway를 거친 WebSocket이다.
 - 맨 아래는 기체 레이어다. 기체 하나가 PX4 하나다.
 - 외부 클라이언트는 ROS 2를 모르고 Fleet Manager의 API로만 기체들을 본다. Fleet Manager가 생기기 전의 임시 WebSocket 어댑터(Phase 2)는 기체의 버스에서 `VehicleState`를 직접 읽는 개발용이고 그림에 넣지 않았다.
@@ -105,7 +105,7 @@ flowchart TB
 | 기체 물리와 센서 | 기체의 운동과 IMU, GNSS 등의 측정값 | 실제 기체와 센서 | Gazebo(모든 기체가 월드 하나를 공유) |
 | uXRCE-DDS Agent | PX4의 uORB 토픽과 ROS 2 토픽 사이의 중계 | companion computer마다 하나, FMU와 serial 또는 Ethernet | 같은 Agent. 기체마다 하나이다. 지금의 compose는 인스턴스 하나가 모든 기체를 UDP로 받고(기체가 한 대이면 이미 같은 구조), 기체가 여러 대가 될 때(Phase 3) 기체마다 하나로 바꾼다 |
 | ROS 2 버스 | 기체 운용 노드와 PX4 사이의 토픽 전달 | 기체마다 하나이고 companion computer 안에 있다 | 기체마다 DDS 도메인 하나. 모두 개발 호스트 한 대에 있고 peer는 loopback이다. 지금의 compose는 스택에 도메인 하나라 기체가 한 대이면 이와 같고, 여러 대의 도메인 분리는 Phase 3에서 더한다 |
-| 지상 링크 | Fleet Manager와 기체 운용 노드 사이의 계약 전달 | 지상국과 기체 사이의 무선 구간. Zenoh로 잇는다. Zenoh의 구성과, `ExecuteMission`과 `VehicleState` 밖에 무엇이 건너는지(`MissionEvent` 포함)는 정하지 않음 | 개발 호스트 안에서 Zenoh로 잇는다(Phase 3). 무선 장비는 없고 무선의 지연과 손실은 넣지 않는다. Zenoh의 구성은 정하지 않음. 지금의 compose에는 지상 쪽 서비스와 Zenoh 구성이 없다 |
+| 지상 링크 | Fleet Manager와 기체 운용 노드 사이의 계약 전달 | 지상국과 기체 사이의 무선 구간. Zenoh로 잇는다. 건너는 계약은 `ExecuteMission`, `VehicleState`, `MissionEvent`이고 `MissionEvent`는 지상에서 구독한다. Zenoh의 구성과 이 셋 밖에 무엇이 건너는지는 정하지 않음 | 개발 호스트 안에서 Zenoh로 잇는다(Phase 3). 무선 장비는 없고 무선의 지연과 손실은 넣지 않는다. Zenoh의 구성은 정하지 않음. 지금의 compose에는 지상 쪽 서비스와 Zenoh 구성이 없다 |
 | Mission Executor | 미션을 Offboard setpoint와 명령으로 실행 | 그 기체의 companion computer | 같은 노드. 개발 호스트의 `ops-N` 컨테이너 |
 | Telemetry Collector(Phase 2) | PX4 상태를 `VehicleState`로 요약 | 그 기체의 companion computer | 같은 노드. Executor와 같은 컨테이너 |
 | Fleet Manager(Phase 3) | 기체 레지스트리, 미션 배분, 외부 API | 지상국 | 같은 서비스. 개발 호스트 |
