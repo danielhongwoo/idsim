@@ -63,11 +63,13 @@ check_charset() {
   mapfile -t files < <(list_files .)
   if [ "${#files[@]}" -eq 0 ]; then result charset PASS-NO-TARGETS "(0 files)"; return 0; fi
   local out rc=0
-  # CLAUDE.md의 검사 명령과 같은 패턴. \x{AC00}-\x{D7A3}를 쓰려면 UTF-8 로캘이 필요하다.
-  out="$(LC_ALL=C.UTF-8 grep -nP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' -- "${files[@]}")" || rc=$?
-  if [ "$rc" -eq 1 ]; then result charset PASS "(${#files[@]} files)"; return 0; fi
+  # CLAUDE.md의 검사 명령과 같은 패턴. grep -P는 macOS의 grep에 없으므로 Linux와 macOS에 모두 있는 perl로 돈다.
+  # 파일을 UTF-8로 읽고(-CSD) 잘못된 UTF-8은 오류로 멈춘다. 파일마다 줄 번호를 다시 센다(close ARGV)
+  out="$(perl -CSD -Mwarnings=FATAL,utf8 -ne \
+    'print "$ARGV:$.:$_" if /[^\x00-\x7F\x{AC00}-\x{D7A3}]/; close ARGV if eof' -- "${files[@]}")" || rc=$?
+  if [ "$rc" -eq 0 ] && [ -z "$out" ]; then result charset PASS "(${#files[@]} files)"; return 0; fi
   [ -n "$out" ] && printf '%s\n' "$out"
-  result charset FAIL "완성형 한글과 아스키 밖의 문자 (grep exit ${rc})"
+  result charset FAIL "완성형 한글과 아스키 밖의 문자 (perl exit ${rc})"
   return 1
 }
 

@@ -13,6 +13,15 @@
   push  main 전용. key가 있으면 건너뛰고, 없으면 빌드해 <REGISTRY>/<이미지>:<key>로 푸시하고
         <REGISTRY>/<이미지>:buildcache 에 레이어 캐시(mode=min)를 내보낸다.
 
+플랫폼
+  빌드 플랫폼은 호스트 아키텍처(platform.machine())로 정하고 --platform으로 바꿀 수 있다. 모든 모드에서 bake에
+  --set *.platform=<플랫폼>을 주고 versions.env의 그 플랫폼 값(image_keys.PLATFORM_DEPENDENT_NAMES)을 넘긴다.
+  key는 플랫폼과 무관하게 하나다(image_keys.py의 플랫폼 절). 한 태그 아래 플랫폼별 manifest가 묶일 수 있으므로
+  key가 레지스트리에 있어도 그 플랫폼 이미지가 있다는 뜻은 아니다.
+  - pull: 태그에 이 플랫폼의 manifest가 있는지 보고 없으면 받지 않고 실패한다(다른 플랫폼 이미지를 받아
+    에뮬레이션으로 돌리지 않는다). docker pull에도 --platform을 준다.
+  - pr, push: CI 플랫폼(linux/amd64)에서만 받는다. GHCR에는 amd64 이미지만 올린다.
+
 베이스 해석
   베이스 key가 레지스트리에 있으면(원래 있었거나 이번 실행에서 푸시함) named context를
   docker-image://<REGISTRY>/<베이스>:<key> 로 바꿔 베이스를 다시 빌드하지 않는다. 없으면 bake 파일의
@@ -31,6 +40,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -132,26 +142,78 @@ def oci_labels() -> dict[str, str]:
     return labels
 
 
-def pull_images(targets: list[str], images, ref, dry_run: bool) -> int:
-    """targets의 <REGISTRY>/<이미지>:<key>를 받아 idsim/<이미지>:local로 태그한다. key가 하나라도 없으면 아무것도 받지 않고 실패한다."""
+_INDEX_TYPES = (
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+)
+
+
+def _imagetools(*args: str) -> str:
+    proc = subprocess.run(["docker", "buildx", "imagetools", "inspect", *args],
+                          capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout).strip().splitlines()
+        raise SystemExit(f"레지스트리 조회 실패: {args[-1]}: {err[-1] if err else proc.returncode}")
+    return proc.stdout
+
+
+def manifest_platforms(raw: dict, single_config=None) -> set[str]:
+    """manifest(또는 index) JSON의 플랫폼 집합 (os/architecture, variant 제외). attestation(unknown/unknown)은 뺀다.
+
+    단일 manifest는 플랫폼이 config에만 있으므로 single_config()가 돌려주는 image config로 읽는다.
+    """
+    if raw.get("mediaType") in _INDEX_TYPES or "manifests" in raw:
+        out = set()
+        for m in raw.get("manifests", []):
+            p = m.get("platform") or {}
+            if p.get("os") and p.get("os") != "unknown":
+                out.add(f"{p['os']}/{p.get('architecture')}")
+        return out
+    cfg = single_config() if single_config else {}
+    return {f"{cfg.get('os')}/{cfg.get('architecture')}"} if cfg.get("os") else set()
+
+
+def registry_platforms(ref: str) -> set[str]:
+    """레지스트리 태그가 가진 플랫폼 집합. 태그가 있다는 것은 registry_has로 먼저 확인한다."""
+    raw = json.loads(_imagetools("--raw", ref))
+    return manifest_platforms(raw, lambda: json.loads(_imagetools("--format", "{{json .Image}}", ref)))
+
+
+def pull_images(targets: list[str], images, ref, platform: str, dry_run: bool, platforms_of=registry_platforms) -> int:
+    """targets의 <REGISTRY>/<이미지>:<key>에서 platform 이미지를 받아 idsim/<이미지>:local로 태그한다.
+
+    key가 없거나 그 태그에 platform manifest가 없는 이미지가 하나라도 있으면 아무것도 받지 않고 실패한다.
+    """
     missing = []
+    wrong_arch = []
     for n in targets:
         has, why = registry_has(ref(n))
         if not has:
             missing.append(f"{n} {images[n].key} ({why})")
+            continue
+        have = platforms_of(ref(n))
+        if platform not in have:
+            wrong_arch.append(f"{n} {images[n].key} (태그에 있는 플랫폼: {', '.join(sorted(have)) or '없음'})")
     if missing:
         log("레지스트리에 key가 없다. 이미지 PR을 먼저 main에 넣어 build job이 key를 올리게 하거나 --mode load로 빌드하라:")
         for m in missing:
             log(f"  {m}")
+    if wrong_arch:
+        log(f"레지스트리 태그에 {platform} 이미지가 없다. 다른 플랫폼 이미지를 에뮬레이션으로 돌리지 않는다. "
+            f"--mode load로 이 호스트에서 빌드하라:")
+        for m in wrong_arch:
+            log(f"  {m}")
+    if missing or wrong_arch:
         return 1
     results = []
     for n in targets:
         local = f"{LOCAL_PREFIX}/{n}:{LOCAL_TAG}"
-        log(f"$ docker pull --quiet {ref(n)}")
+        pull_cmd = ["docker", "pull", "--quiet", "--platform", platform, ref(n)]
+        log("$ " + " ".join(pull_cmd))
         log(f"$ docker tag {ref(n)} {local}")
         t0 = time.monotonic()
         if not dry_run:
-            for cmd in (["docker", "pull", "--quiet", ref(n)], ["docker", "tag", ref(n), local]):
+            for cmd in (pull_cmd, ["docker", "tag", ref(n), local]):
                 proc = subprocess.run(cmd, check=False)
                 if proc.returncode != 0:
                     log(f"::error::{n}: {' '.join(cmd[:2])} 실패 (exit {proc.returncode})" if in_github()
@@ -165,6 +227,23 @@ def pull_images(targets: list[str], images, ref, dry_run: bool) -> int:
         ["mode `pull`", "", "| 이미지 | key | 결과 | 시간 |", "| --- | --- | --- | --- |"]
         + [f"| {n} | `{images[n].key}` | PULL+TAG | {dt} |" for n, dt in results])
     return 0
+
+
+def check_platform(mode: str, platform: str, versions: dict, environ) -> str | None:
+    """플랫폼과 모드의 조합이 안 되면 사유를, 되면 None을 돌려준다. versions는 그 플랫폼의 값(effective_versions)."""
+    if platform == image_keys.CI_PLATFORM:
+        return None
+    if mode in ("pr", "push"):
+        return (f"{platform} 호스트는 {mode} 모드를 쓸 수 없다(CI와 GHCR는 {image_keys.CI_PLATFORM} 전용). "
+                f"--mode load로 빌드하라")
+    if mode == "pull":
+        return None
+    mirror = environ.get("UBUNTU_APT_MIRROR")
+    if mirror and mirror != versions["UBUNTU_APT_MIRROR"]:
+        return (f"{platform}에서는 UBUNTU_APT_MIRROR 환경변수({mirror})를 받지 않는다. Dockerfile의 미러 치환이 "
+                f"archive/security 주소만 바꾸므로 arm64(ports) 이미지는 versions.env의 UBUNTU_APT_MIRROR_ARM64"
+                f"({versions['UBUNTU_APT_MIRROR']})만 쓸 수 있다. 환경변수를 지우고 다시 실행하라")
+    return None
 
 
 def make_env(environ, versions: dict, keys: dict) -> dict:
@@ -183,14 +262,22 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--mode", choices=["load", "pr", "push", "pull"], required=True)
     p.add_argument("--plan", action="store_true", help="레지스트리 확인까지만 하고 빌드하지 않는다")
     p.add_argument("--dry-run", action="store_true", help="bake 명령(pull 모드는 docker pull과 tag)을 출력만 한다")
+    p.add_argument("--platform", choices=image_keys.SUPPORTED_PLATFORMS, default=None,
+                   help="빌드 플랫폼 (기본: 호스트 아키텍처)")
     p.add_argument("images", nargs="*", help="대상 이미지 (기본: 전체)")
     args = p.parse_args(argv)
 
-    versions = image_keys.read_versions(image_keys.VERSIONS_FILE)
+    platform = args.platform or image_keys.host_platform()
+    raw_versions = image_keys.read_versions(image_keys.VERSIONS_FILE)
+    versions = image_keys.effective_versions(raw_versions, platform)
     images = image_keys.load_images()
-    order = image_keys.compute(images, versions)
+    order = image_keys.compute(images, raw_versions)
     registry = versions["REGISTRY"]
     mode = args.mode
+    why_not = check_platform(mode, platform, versions, os.environ)
+    if why_not:
+        log(f"::error::{why_not}" if in_github() else why_not)
+        return 2
 
     if mode == "push" and in_github():
         repo = os.environ.get("GITHUB_REPOSITORY", "").lower()
@@ -219,12 +306,12 @@ def main(argv: list[str] | None = None) -> int:
 
     env = make_env(os.environ, versions, {images[n].env_name: images[n].key for n in order})
 
-    log(f"mode={mode} registry={registry}")
+    log(f"mode={mode} platform={platform} registry={registry}")
     for n in targets:
         log(f"  {n:<11} key={images[n].key} base={images[n].base or '-'}")
 
     if mode == "pull":
-        return pull_images(targets, images, ref, args.dry_run)
+        return pull_images(targets, images, ref, platform, args.dry_run)
 
     # 1. 레지스트리 확인
     available: set[str] = set()
@@ -271,6 +358,7 @@ def main(argv: list[str] | None = None) -> int:
             chain.append(images[chain[-1]].base)
 
         cmd = ["docker", "buildx", "bake", "-f", BAKE_FILE_REL, "--progress=plain", n]
+        cmd += ["--set", f"*.platform={platform}"]
         for t in chain:
             base = images[t].base
             if base and base in available:

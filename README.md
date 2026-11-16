@@ -1,6 +1,6 @@
 # idsim
 
-idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy 위에서 드론 여러 대의 운용 서비스(Fleet, Mission, Telemetry, Replay)를 컨테이너로 돌리는 시뮬레이션 플랫폼이다. 지원 호스트는 x86_64 Linux뿐이다.
+idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy 위에서 드론 여러 대의 운용 서비스(Fleet, Mission, Telemetry, Replay)를 컨테이너로 돌리는 시뮬레이션 플랫폼이다. 지원 호스트는 x86_64 Linux이고, 개발 호스트로 Apple Silicon Mac(macOS, arm64)도 쓸 수 있다.
 
 계획과 단계는 `docs/roadmap.md`, 설계는 `docs/architecture.md`에 있다.
 
@@ -8,15 +8,28 @@ idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy �
 
 | 항목 | 조건 |
 | --- | --- |
-| OS와 CPU | x86_64 Linux (Ubuntu 24.04에서 확인) |
+| OS와 CPU | x86_64 Linux (Ubuntu 24.04에서 확인). Apple Silicon Mac(macOS, arm64)은 아래 "Apple Silicon Mac"의 조건으로 개발 호스트가 된다 |
 | Docker | Docker Engine 25.0 이상(healthcheck `start_interval`), compose v2 플러그인, buildx. 사용자가 docker 그룹에 속해야 한다(`sudo usermod -aG docker $USER` 뒤 다시 로그인). Ubuntu 24.04 패키지는 `docker.io`, `docker-compose-v2`, `docker-buildx`이고, Docker 공식 저장소는 `docker-ce`, `docker-compose-plugin`, `docker-buildx-plugin`이다 |
 | 저장소 경로 | 공백과 아스키 밖 문자가 없어야 한다(생성기 `PATH_SAFE_RE`가 거부한다) |
-| 도구 | git, python3 (표준 라이브러리만 사용. 3.12에서 확인, 하한 3.10), curl, sha256sum |
+| 도구 | bash 4 이상(PATH의 `bash`), git, python3 (표준 라이브러리만 사용. 3.12에서 확인, 하한 3.10), curl, sha256sum, perl, timeout |
 | 디스크 | 30GB 이상 권장. 근거: 이미지 5종 합 약 8.6GB(공유 레이어 중복 포함이라 실제 점유는 더 작다) + px4 builder 단계 7.7GB + buildkit 캐시 |
 | 메모리 | 16GB 이상. 개발 VM 31GB와 CI runner 16GB에서 확인했고 그 아래는 미실측 |
 | 선택 | gh (PR을 올리거나 합칠 때), 화면 확인용 X11 또는 XWayland 데스크톱 |
 
 조건은 `tools/check_host.sh`가 점검한다. 시스템을 바꾸지 않고 조회만 하며, 외부 네트워크 검사는 `--offline`으로 건너뛴다.
+
+### Apple Silicon Mac
+
+같은 Dockerfile, bake 파일, 생성기, 스크립트를 쓴다. Mac 전용 파일은 없고 "빠른 시작"의 명령도 같다. 다른 점은 아래뿐이다.
+
+| 항목 | 조건과 제약 |
+| --- | --- |
+| 컨테이너 런타임 | OrbStack 2.2.5(Docker Engine 29.8.2, compose 5.5.0)에서 확인했다. CPU 10, 메모리 16GB를 주었다. Docker Desktop은 확인하지 않았다(host network 기능을 켜야 하며 동작이 다를 수 있다) |
+| bash | macOS 기본 `/bin/bash`는 3.2라 쓸 수 없다. `brew install bash`로 4 이상을 PATH 앞에 둔다. 그 밖의 도구(`sha256sum`, `timeout`, `perl`)는 macOS 27 기본 설치에 있다 |
+| 이미지 | linux/arm64로 로컬에서 빌드한다(`python3 tools/ci/build_images.py --mode load`, 콜드 빌드 약 14분). GHCR에는 amd64 이미지만 있어 `--mode pull`은 받지 않고 실패한다. apt 미러는 `ports.ubuntu.com`으로 고정이다 |
+| 네트워크 | 컨테이너는 Linux VM 안에서 돈다. `network_mode: host`는 그 VM의 네트워크이고 스택 안의 통신은 Linux와 같다. Mac의 브라우저에서 Lichtblick과 foxglove 포트(127.0.0.1)에 닿는 것은 OrbStack에서 확인했다 |
+| Gazebo GUI | `tools/sim_stack.sh up --viz`의 `gz-gui`는 뜨지 않는다(X11 소켓 `/tmp/.X11-unix`와 Xauthority 파일을 넘기는 방식이 Mac에 없다). 화면은 Lichtblick으로 본다 |
+| 판정의 기준 | CI와 판정 상수의 보정은 amd64 Linux다. Mac에서 스모크 네 단계와 `tests/sitl/run_sitl.sh --stack 0`이 통과하는 것을 확인했으나, merge 전 확인의 기준은 CI다 |
 
 ## 빠른 시작
 

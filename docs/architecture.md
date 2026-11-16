@@ -105,11 +105,11 @@ flowchart TB
 
 ## 기술 스택 선정 근거
 
-x86_64 Linux 호스트 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리스 태그(v1.17.0) + Gazebo Harmonic + uXRCE-DDS 조합을 표준으로 잡는다. PX4 공식 문서의 예제는 아직 Humble + 22.04 기준이지만, [px4_msgs](https://index.ros.org/p/px4_msgs/) CI가 Jazzy를 함께 빌드하고 Jazzy의 기본 Gazebo가 Harmonic이라 조합이 자연스럽다. v1.16 알파 시절 Jazzy + 24.04에서 gz_bridge 클럭 timeout 보고([PX4 #24159](https://github.com/PX4/PX4-Autopilot/issues/24159))가 있었으므로 PX4는 알파, main 대신 릴리스 태그로 고정하고, Phase 1 첫 단계를 이 조합의 스모크 테스트로 잡는다.
+x86_64 Linux 호스트(개발은 Apple Silicon Mac도 된다. 아래 "개발 호스트") 위에서 Ubuntu 24.04 + ROS 2 Jazzy + PX4 정식 릴리스 태그(v1.17.0) + Gazebo Harmonic + uXRCE-DDS 조합을 표준으로 잡는다. PX4 공식 문서의 예제는 아직 Humble + 22.04 기준이지만, [px4_msgs](https://index.ros.org/p/px4_msgs/) CI가 Jazzy를 함께 빌드하고 Jazzy의 기본 Gazebo가 Harmonic이라 조합이 자연스럽다. v1.16 알파 시절 Jazzy + 24.04에서 gz_bridge 클럭 timeout 보고([PX4 #24159](https://github.com/PX4/PX4-Autopilot/issues/24159))가 있었으므로 PX4는 알파, main 대신 릴리스 태그로 고정하고, Phase 1 첫 단계를 이 조합의 스모크 테스트로 잡는다.
 
 | 구성 요소 | 선택 | 이유, 대안 |
 | --- | --- | --- |
-| 호스트 / OS / ROS 2 | x86_64 Linux 호스트, Ubuntu 24.04, ROS 2 Jazzy | [PX4 ROS 2 가이드](https://docs.px4.io/main/en/ros2/user_guide) 예제는 Humble 기준이라 명령어를 따를 때 humble -> jazzy 치환. Jazzy는 LTS 2029년까지(Humble은 2027). px4_msgs는 Humble, Jazzy 모두 CI 빌드. 컨테이너 안에서 돌리므로 호스트 배포판은 무관하나 아키텍처는 x86_64로 고정 |
+| 호스트 / OS / ROS 2 | x86_64 Linux 호스트(개발은 arm64 Mac도), Ubuntu 24.04, ROS 2 Jazzy | [PX4 ROS 2 가이드](https://docs.px4.io/main/en/ros2/user_guide) 예제는 Humble 기준이라 명령어를 따를 때 humble -> jazzy 치환. Jazzy는 LTS 2029년까지(Humble은 2027). px4_msgs는 Humble, Jazzy 모두 CI 빌드. 컨테이너 안에서 돌리므로 호스트 배포판은 무관하다. 이미지는 linux/amd64와 linux/arm64 두 플랫폼으로 빌드되고 CI와 판정의 기준은 amd64다 |
 | ROS 2 미들웨어 | CycloneDDS (`rmw_cyclonedds_cpp`), 모든 ROS 2 컨테이너에 `RMW_IMPLEMENTATION`으로 고정 | Jazzy 기본 FastDDS는 같은 호스트로 판단되는 참가자끼리 공유 메모리 전송을 시도해, 컨테이너마다 `/dev/shm`이 다르면 "토픽은 보이는데 데이터가 안 온다"가 된다. CycloneDDS는 기본이 UDP 전용이라 이 함정이 없고, 설정 파일 하나로 피어와 멀티캐스트를 제어하기 쉽다. uXRCE-DDS Agent는 내부적으로 FastDDS를 쓰지만 표준 RTPS로 CycloneDDS 노드와 통신한다. 단 Agent는 호스트 인터페이스 주소만 광고하므로 Cyclone 쪽에서 인터페이스를 lo로 고정하면 Agent를 찾지 못한다(실측). `config/cyclonedds.xml`은 인터페이스를 고정하지 않고 유니캐스트 피어 127.0.0.1과 멀티캐스트 끔만 둔다 |
 | 비행제어 | PX4 SITL, 정식 릴리스 태그 고정 (v1.17.0) | uXRCE-DDS는 v1.14부터 지원. px4_msgs는 펌웨어와 같은 release/1.17 브랜치의 커밋 SHA로 고정. v1.17.0은 메시지 버저닝 범위가 가장 넓어 토픽 매핑 설계를 가장 세게 시험한다. 태그를 올릴 때는 스모크 golden 단계 통과가 조건이다 |
 | 시뮬레이터 | Gazebo Harmonic (gz sim), x500 모델 | [PX4 Gazebo 문서](https://docs.px4.io/main/en/sim_gazebo_gz/) 기본값. `gz sim -s`(서버 전용)로 GUI 없이 실행 가능해 CI에 적합. 센서 변형(x500_depth, x500_gimbal 등)으로 확장 |
@@ -469,7 +469,7 @@ GUI와 GPU. 개발 중 Gazebo 화면은 `viz` 프로필의 `gz-gui` 서비스로
 
 시간 동기화. 모든 ROS 2 노드는 `use_sim_time:=true`로 Gazebo `/clock`을 따르고, rosbag2 기록도 `--use-sim-time`으로 한다. 그래야 `PX4_SIM_SPEED_FACTOR`로 배속 실행해도 로그와 테스트 타이밍이 흔들리지 않고, 재생 시 `ros2 bag play --clock`이 만드는 시계가 기록 당시 시계와 같아진다. `/clock` 자체는 기록 대상에서 제외한다. 재생기가 만드는 시계와 충돌하기 때문이다.
 
-개발 호스트. x86_64 Linux를 유일한 지원 환경으로 잡고, 이미지도 amd64만 빌드한다. Apple Silicon Mac 같은 arm64 호스트는 Docker Desktop의 host 네트워크 동작 차이와 multi-arch 빌드 비용 때문에 변수가 많으므로, Linux 개발 환경이 Phase 3까지 완전히 동작한 뒤 확장 단계에서 지원을 검토한다.
+개발 호스트. x86_64 Linux가 기준 환경이다. CI와 레지스트리(GHCR)의 이미지는 linux/amd64이고 판정 상수도 이 환경에서 보정한다. Apple Silicon Mac(macOS, arm64)은 개발 호스트로 지원한다. 같은 Dockerfile, bake 파일, 생성기, 스크립트를 쓰고 이미지만 linux/arm64로 로컬에서 빌드한다(아키텍처별 사본을 두지 않는다). 이미지 key는 아키텍처와 무관하게 이미지마다 하나이며, 레지스트리의 한 태그 아래 두 아키텍처를 묶을 수 있는 구조다. arm64 이미지는 레지스트리에 올리지 않는다. Mac에서는 컨테이너가 Linux VM 안에서 돌므로 `network_mode: host`는 그 VM의 네트워크를 뜻한다. 스택 안의 통신은 Linux와 같고, Mac 쪽에서 스택의 포트에 닿는지는 컨테이너 런타임에 달렸다. 요구 조건과 제약은 `README.md`의 "호스트 조건"에 둔다.
 
 저장소 레이아웃(초안):
 

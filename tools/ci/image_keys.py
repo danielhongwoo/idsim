@@ -24,6 +24,17 @@ bake 정규화 규칙. 근거: key는 "같은 key면 같은 이미지"를 뜻해
   - args에서 KEY_EXCLUDED_ARGS의 이름은 뺀다.
   - args의 식은 변수 이름 그대로 해시한다. 변수의 값은 6번(versions.env)이 따로 넣는다.
 
+플랫폼. key는 플랫폼과 무관하게 이미지마다 하나다. 같은 commit이면 amd64 Linux와 arm64 Mac에서 같은 key가 나온다.
+key 하나가 그 이미지의 플랫폼별 빌드(SUPPORTED_PLATFORMS) 전체를 가리키고, 레지스트리에서는 한 태그 아래
+플랫폼별 manifest로 묶인다(multi-arch). 그래서
+  - bake 파일에는 platforms를 두지 않는다. 빌드 플랫폼은 build_images.py가 호스트에서 정해 --set *.platform으로 준다.
+    빌드 호스트는 key 재료가 아니다.
+  - 플랫폼에 따라 값이 갈리는 versions.env 줄은 PLATFORM_DEPENDENT_NAMES에 등록하고 플랫폼마다
+    <이름><접미사>(PLATFORM_SUFFIX) 줄을 둔다. 그 이름을 Dockerfile이 ARG로 쓰면 6번에 모든 플랫폼의 줄이 들어간다
+    (arm64 값만 바꿔도 key가 바뀐다). 한 플랫폼의 줄이라도 없으면 key 계산이 멈춘다.
+  - 외부 이미지(UBUNTU_IMAGE 등)는 multi-arch index digest로 고정해 한 줄이 모든 플랫폼을 고정한다.
+key가 같아도 모든 플랫폼의 이미지가 레지스트리에 있다는 뜻은 아니다(지금 GHCR에는 amd64만 올린다).
+
 key에 들어가지 않는 것: UBUNTU_APT_MIRROR(KEY_EXCLUDED_ARGS).
 key에 들어가지 않는 것(빌드 시점 외부 상태): apt 저장소의 패키지 버전, pip 인덱스, 태그가 가리키는
 커밋. 이것들이 바뀌어도 key는 그대로이며, 같은 key의 이미지는 레지스트리에 한 번만 올라간다.
@@ -33,6 +44,8 @@ key에 들어가지 않는 것(빌드 시점 외부 상태): apt 저장소의 �
   tools/ci/image_keys.py --format env     # KEY_ROS_BASE=... (bake 변수 이름)
   tools/ci/image_keys.py --format json
   tools/ci/image_keys.py --explain px4    # 해시에 들어간 재료 출력
+  tools/ci/image_keys.py --print-platform                  # 이 호스트의 빌드 플랫폼 (linux/amd64 등)
+  tools/ci/image_keys.py --print-value UBUNTU_APT_MIRROR   # 이 호스트 플랫폼에서 쓰는 versions.env 값
 """
 
 from __future__ import annotations
@@ -42,15 +55,36 @@ import glob
 import hashlib
 import json
 import os
+import platform as _platform
 import re
 import sys
 from dataclasses import dataclass, field
 
-SCHEME = "idsim-image-key-v2"
+SCHEME = "idsim-image-key-v3"
 KEY_LEN = 16
 
 # Dockerfile이 ARG로 선언해도 key에 넣지 않는 versions.env 이름. apt 미러다. ubuntu.sources가 이미지에 남아 바이트가 달라지나 런타임이 apt를 쓰지 않아 같은 이미지로 본다.
 KEY_EXCLUDED_ARGS = {"UBUNTU_APT_MIRROR"}
+
+# 지원 플랫폼과 versions.env 접미사. CI와 GHCR는 linux/amd64(CI_PLATFORM)만 빌드한다. 플랫폼을 더하면 여기에 더한다.
+PLATFORM_SUFFIX = {
+    "linux/amd64": "",
+    "linux/arm64": "_ARM64",
+}
+CI_PLATFORM = "linux/amd64"
+SUPPORTED_PLATFORMS = tuple(PLATFORM_SUFFIX)
+# 플랫폼에 따라 값이 갈리는 versions.env 이름의 유일한 목록. 모든 플랫폼의 <이름><접미사> 줄이 있어야 한다.
+# 빌드 인자(build_images.py), key(이 파일), tools/check_host.sh(--print-value)가 이 목록을 읽는다.
+# 외부 이미지는 index digest라 넣지 않는다. 미러는 arm64 패키지가 ports.ubuntu.com 계열에만 있어 갈린다
+# (KEY_EXCLUDED_ARGS라 key에는 어느 플랫폼 값도 들어가지 않는다).
+PLATFORM_DEPENDENT_NAMES = ("UBUNTU_APT_MIRROR",)
+# platform.machine() -> 플랫폼
+MACHINE_PLATFORMS = {
+    "x86_64": "linux/amd64",
+    "amd64": "linux/amd64",
+    "arm64": "linux/arm64",
+    "aarch64": "linux/arm64",
+}
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DOCKER_DIR = os.path.join(REPO_ROOT, "docker")
@@ -84,6 +118,34 @@ class Image:
     @property
     def env_name(self) -> str:
         return "KEY_" + re.sub(r"[^A-Z0-9]", "_", self.name.upper())
+
+
+def host_platform(machine: str | None = None) -> str:
+    """호스트 CPU 아키텍처의 linux 플랫폼. 지원하지 않는 아키텍처면 멈춘다."""
+    m = (machine if machine is not None else _platform.machine()).lower()
+    if m not in MACHINE_PLATFORMS:
+        raise SystemExit(f"지원하지 않는 호스트 아키텍처: {m!r} (지원: {sorted(MACHINE_PLATFORMS)})")
+    return MACHINE_PLATFORMS[m]
+
+
+def check_platform_values(versions: dict[str, str]) -> None:
+    """PLATFORM_DEPENDENT_NAMES의 모든 플랫폼 줄이 있는지 본다. 하나라도 없으면 멈춘다(호스트와 무관하게)."""
+    missing = [n + suf for n in PLATFORM_DEPENDENT_NAMES for suf in PLATFORM_SUFFIX.values()
+               if n + suf not in versions]
+    if missing:
+        raise SystemExit(f"{VERSIONS_FILE}: 플랫폼별 값이 없다: {', '.join(missing)} "
+                         f"(PLATFORM_DEPENDENT_NAMES의 이름은 모든 플랫폼({', '.join(SUPPORTED_PLATFORMS)})의 줄이 필요하다)")
+
+
+def effective_versions(versions: dict[str, str], platform: str) -> dict[str, str]:
+    """그 플랫폼의 빌드에 넘길 versions.env 값. 플랫폼별 이름은 그 플랫폼의 줄 값으로 바꾼다."""
+    if platform not in PLATFORM_SUFFIX:
+        raise SystemExit(f"지원하지 않는 플랫폼: {platform} (지원: {', '.join(SUPPORTED_PLATFORMS)})")
+    check_platform_values(versions)
+    out = dict(versions)
+    for name in PLATFORM_DEPENDENT_NAMES:
+        out[name] = versions[name + PLATFORM_SUFFIX[platform]]
+    return out
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -429,6 +491,8 @@ def hash_context_path(src: str) -> list[str]:
 
 
 def compute(images: dict[str, Image], versions: dict[str, str]) -> list[str]:
+    """key를 계산한다. versions는 versions.env 그대로다. 빌드 호스트의 플랫폼은 쓰지 않는다."""
+    check_platform_values(versions)
     order = build_order(images)
     for name in order:
         img = images[name]
@@ -445,7 +509,13 @@ def compute(images: dict[str, Image], versions: dict[str, str]) -> list[str]:
         for src in context_sources(df_text):
             mat.extend(hash_context_path(src))
         for a in args:
-            if a in versions and a not in KEY_EXCLUDED_ARGS:
+            if a in KEY_EXCLUDED_ARGS:
+                continue
+            if a in PLATFORM_DEPENDENT_NAMES:
+                # 모든 플랫폼의 값을 넣는다. key는 플랫폼별 빌드 전체를 가리킨다
+                for suf in PLATFORM_SUFFIX.values():
+                    mat.append(f"env {a + suf}={versions[a + suf]}")
+            elif a in versions:
                 mat.append(f"env {a}={versions[a]}")
         if img.base:
             mat.append(f"base {img.base} {images[img.base].key}")
@@ -458,10 +528,23 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="이미지 캐시 key 계산")
     p.add_argument("--format", choices=["table", "env", "json"], default="table")
     p.add_argument("--explain", metavar="IMAGE", help="이 이미지의 해시 재료를 출력")
+    p.add_argument("--print-platform", action="store_true", help="이 호스트의 빌드 플랫폼만 출력")
+    p.add_argument("--print-value", metavar="NAME",
+                   help="이 호스트 플랫폼의 빌드가 쓰는 versions.env 값 하나만 출력 (key는 계산하지 않는다)")
     args = p.parse_args(argv)
 
+    versions = read_versions(VERSIONS_FILE)
+    if args.print_platform:
+        print(host_platform())
+        return 0
+    if args.print_value:
+        eff = effective_versions(versions, host_platform())
+        if args.print_value not in eff:
+            p.error(f"versions.env에 {args.print_value}가 없다")
+        print(eff[args.print_value])
+        return 0
     images = load_images()
-    order = compute(images, read_versions(VERSIONS_FILE))
+    order = compute(images, versions)
 
     if args.explain:
         if args.explain not in images:

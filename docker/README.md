@@ -2,7 +2,7 @@
 
 idsim의 실행 환경을 이루는 Docker 이미지와 compose 구성이다. 모든 구성 요소는 VM이 아니라 컨테이너로 돈다. 컨테이너는 호스트 커널을 공유하는 프로세스 격리 단위이므로, 기체 여러 대와 시뮬레이터를 PC 한 대에서 가볍게 띄울 수 있다.
 
-지원 호스트는 x86_64 Linux뿐이다. 설계 배경은 [../docs/architecture.md](../docs/architecture.md)의 "Docker Compose 실행 환경 설계" 절, 스모크 테스트 절차는 [../docs/smoke-test.md](../docs/smoke-test.md)에 있다.
+지원 호스트는 x86_64 Linux와 arm64(Apple Silicon Mac)이다. x86_64는 CI와 같은 linux/amd64 이미지를 GHCR에서 받거나 빌드하고, arm64는 같은 Dockerfile과 bake 파일로 linux/arm64 이미지를 로컬에서 빌드한다(아래 "플랫폼" 절). 설계 배경은 [../docs/architecture.md](../docs/architecture.md)의 "Docker Compose 실행 환경 설계" 절, 스모크 테스트 절차는 [../docs/smoke-test.md](../docs/smoke-test.md)에 있다.
 
 ## 파일
 
@@ -117,6 +117,19 @@ python3 tools/ci/build_images.py --mode load px4
 python3 tools/ci/image_keys.py --explain px4
 ```
 
+### 플랫폼 (amd64와 arm64)
+
+두 아키텍처가 같은 Dockerfile, `docker-bake.hcl`, 스크립트를 쓴다. 아키텍처별 사본을 두지 않는다. 갈리는 것은 다음뿐이며 모두 한 곳에 모은다.
+
+- 빌드 플랫폼: `docker-bake.hcl`에는 `platforms`를 두지 않는다. `build_images.py`가 호스트 아키텍처(`platform.machine()`, `--platform`으로 바꿀 수 있다)로 플랫폼을 정해 모든 모드에서 bake에 `--set *.platform=<플랫폼>`을 준다. CI는 `linux/amd64`, Apple Silicon Mac은 `linux/arm64`다.
+- `versions.env`의 값: 플랫폼에 따라 값이 다른 줄은 amd64 값을 접미사 없는 이름에, arm64 값을 `<이름>_ARM64`에 두고 `tools/ci/image_keys.py`의 `PLATFORM_DEPENDENT_NAMES`에 등록한다. 지금은 apt 미러(`UBUNTU_APT_MIRROR`, `UBUNTU_APT_MIRROR_ARM64`) 하나다. 한 줄이라도 없으면 어느 호스트에서든 key 계산과 빌드가 멈추고 단위 테스트가 실패한다.
+- 외부 이미지(`UBUNTU_IMAGE`, `LICHTBLICK_IMAGE`, `LINT_*`)는 multi-arch index digest로 고정한다. 한 줄이 두 플랫폼을 함께 고정하고 docker가 호스트에 맞는 manifest를 고른다. 갱신할 때도 index digest(`docker buildx imagetools inspect <이미지>:<태그>`의 맨 위 `Digest`)를 적는다.
+- Dockerfile 안의 apt 아키텍처는 `dpkg --print-architecture`로 얻는다(ROS, OSRF 저장소 줄).
+
+이미지 key는 플랫폼과 무관하게 이미지마다 하나다. 빌드 호스트는 key 재료가 아니고, 플랫폼별 값은 모든 플랫폼의 값이 재료에 들어간다(arm64 값만 바꿔도 key가 바뀐다. 미러는 어느 플랫폼 값도 key에 들어가지 않는다). 그래서 같은 commit이면 amd64 Linux와 arm64 Mac에서 `tools/ci/image_keys.py`의 결과와 `stack.json`의 이미지 태그가 같다. 레지스트리에서는 한 태그(`<이미지>:<key>`) 아래 플랫폼별 manifest를 묶을 수 있는 구조다.
+
+key가 같아도 그 태그에 모든 플랫폼의 이미지가 있는 것은 아니다. GHCR에는 지금 amd64 이미지만 올린다. `--mode pull`은 태그에 이 호스트 플랫폼의 manifest가 있는지 확인하고, 없으면 받지 않고 `--mode load`로 안내하며 실패한다(다른 플랫폼 이미지를 에뮬레이션으로 돌리지 않는다). `pr`과 `push`는 `linux/amd64`에서만 받는다. 로컬의 `idsim/<이미지>:local`이 호스트와 다른 아키텍처이면 `tools/check_host.sh`가 FAIL로 알린다. arm64의 apt 미러는 아래 "apt 미러" 절을 본다.
+
 ### ROS 2 패키지 빌드 (tools/ros_ws.sh)
 
 `ros_ws/src`의 패키지는 호스트가 아니라 ros-ws 컨테이너 안에서 빌드한다. install의 setup 스크립트와 CMake 경로가 `/opt/idsim/...` 절대 경로라 호스트에서는 쓸 수 없고, 스택의 노드 서비스도 같은 마운트 경로에서 `ros_ws/install`을 읽는다. 산출물은 저장소의 `ros_ws/build`, `ros_ws/install`, `ros_ws/log`(git 무시)에 호스트 uid:gid 소유로 생긴다.
@@ -150,7 +163,9 @@ http 미러만 가능하다(베이스 이미지에 CA 인증서가 없어 https 
 UBUNTU_APT_MIRROR=http://archive.ubuntu.com/ubuntu python3 tools/ci/build_images.py --mode load
 ```
 
-CI(`build-images.yml`)는 runner가 미국에 있어 위 방식으로 우분투 기본 미러를 쓴다. `tools/check_host.sh`의 미러 검사도 같은 값을 읽는다.
+CI(`build-images.yml`)는 runner가 미국에 있어 위 방식으로 우분투 기본 미러를 쓴다. `tools/check_host.sh`의 미러 검사도 같은 값을 읽는다(`tools/ci/image_keys.py --print-value UBUNTU_APT_MIRROR`).
+
+arm64 패키지는 archive.ubuntu.com과 그 미러(kr 미러 포함)에 없고 ports.ubuntu.com 계열에만 있다. arm64 빌드는 `UBUNTU_APT_MIRROR` 대신 `UBUNTU_APT_MIRROR_ARM64`(`http://ports.ubuntu.com/ubuntu-ports`)를 쓴다. arm64 베이스 이미지의 `ubuntu.sources`가 이미 이 주소라 미러 치환은 검사만 통과한다. Dockerfile의 치환식은 archive와 security 주소만 바꾸므로 arm64에서는 다른 ports 미러를 쓸 수 없고, `build_images.py`는 arm64에서 다른 값의 `UBUNTU_APT_MIRROR` 환경변수를 받으면 빌드 전에 멈춘다.
 
 스택 올리기와 내리기. 저장소 루트에서 실행한다. `up` 한 번이 생성, 떠 있던 같은 스택 내리기, 인프라 세 단계 `up --wait`(에이전트와 gazebo, px4-N, bridge. 1단계 뒤 이 스택의 모델이 Gazebo에 남아 있지 않은지 확인한다), 노드 단계(Mission Executor `ops-N`이 lifecycle active가 되고 `targets`와 `sim-oracle`의 표시 파일이 생길 때까지)를 모두 한다. `ros_ws/install/idsim_mission/`(표적이 있으면 `ros_ws/install/idsim_sim/`도)이 없거나 `ros_ws/src/idsim_sim/scripts/sim_oracle.py`가 없으면 아무것도 올리기 전에 실패하므로 먼저 `tools/ros_ws.sh build`를 한다(`sim-oracle`은 빌드 없이 마운트로 돈다). 실패하면 에이전트의 `bind error`와 px4의 `bind failed`를 찾아 알려 준다.
 

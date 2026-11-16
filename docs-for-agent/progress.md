@@ -22,6 +22,7 @@
 - 그림은 계층으로 나눈다. 개요 그림은 묶음과 주요 경로만, 상세 그림은 개요의 상자 하나를 펼치고 도입 문장에 어느 상자인지 적는다. 같은 내용을 두 그림에 그리지 않는다. 그림 하나는 node 8개, edge 10개 이하, subgraph 중첩 1단, node label 두 줄, edge label 15자 이하이고 넘으면 나눈다. 포트, 환경변수, 경로, 명령줄은 label에 넣지 않고 그림 아래에 둔다(사용자 결정).
 - 대표 시나리오의 통과를 기준으로 개발한다. 경계 상황은 보수적 기본 동작과 "미확인" 표기로 덮고, 새 실측은 관찰된 문제의 재현용으로만 하며, 산출물은 최소로 둔다.
 - 저장소 라이선스는 Apache-2.0. 새 소스와 CMake 파일에 머리말을 넣고 `ament_copyright`와 cpplint `legal/copyright` 검사를 켠 채로 둔다.
+- 개발 호스트는 x86_64 Linux와 Apple Silicon Mac(arm64, 로컬 빌드만)이다. 이미지 key는 아키텍처와 무관하게 이미지마다 하나이고, CI와 GHCR은 amd64만 다룬다. Mac의 조건과 제약은 `README.md` "호스트 조건".
 - 이미지 빌드의 apt 미러 기본값은 kr 미러(`docker/versions.env`의 `UBUNTU_APT_MIRROR`), CI는 우분투 기본 미러. ros-ws 이미지에 clang-tidy와 clang-format을 둔다.
 
 지금 유효한 사용자 결정.

@@ -32,9 +32,11 @@ group "default" {
   targets = ["ros-base", "xrce-agent"]
 }
 
+# platforms는 두지 않는다. 빌드 플랫폼은 build_images.py가 호스트 아키텍처로 정해 --set *.platform=<플랫폼>으로 준다
+# (CI는 linux/amd64, Apple Silicon Mac은 linux/arm64). key는 플랫폼과 무관하다(tools/ci/image_keys.py의 플랫폼 절).
+# 이 파일을 직접 bake하면 builder의 기본 플랫폼(보통 호스트)으로 빌드된다.
 target "_common" {
   context   = "docker"
-  platforms = ["linux/amd64"]
 }
 
 target "ros-base" {

@@ -455,7 +455,7 @@ if [ "$status" -ne 0 ]; then
 fi
 collect
 if [ -s "${out_dir}/pending.txt" ]; then
-  echo "${stage}: 통과 (미판정 $(wc -l <"${out_dir}/pending.txt")건 PENDING, ${out_rel}/pending.txt)"
+  echo "${stage}: 통과 (미판정 $(wc -l <"${out_dir}/pending.txt" | tr -d " ")건 PENDING, ${out_rel}/pending.txt)"
 else
   echo "${stage}: 통과"
 fi

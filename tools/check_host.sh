@@ -15,13 +15,9 @@ set -uo pipefail
 # 메모리: 개발 VM 31GB와 CI 러너 16GB에서 확인했다. 그 아래는 미실측이라 16GB 미만을 WARN으로 둔다.
 MIN_DISK_GB=30
 MIN_MEM_GB=16
-VERSIONS_ENV="$(dirname "$0")/../docker/versions.env"
-# 이미지 빌드가 쓰는 apt 미러 (환경변수가 있으면 그 값, 없으면 versions.env)
-MIRROR_BASE="${UBUNTU_APT_MIRROR:-$(sed -n 's/^UBUNTU_APT_MIRROR=//p' "$VERSIONS_ENV" 2> /dev/null | head -n 1)}"
-MIRROR_BASE="${MIRROR_BASE%/}"
-MIRROR_URL="${MIRROR_BASE}/dists/noble/Release"
-MIRROR_HOST="${MIRROR_BASE#*://}"
-MIRROR_HOST="${MIRROR_HOST%%/*}"
+# 저장소 스크립트가 요구하는 bash major(mapfile 등). macOS 기본 /bin/bash는 3.2이므로 homebrew 등의 bash를 PATH 앞에 둔다
+MIN_BASH_MAJOR=4
+IMAGE_KEYS_PY="$(dirname "$0")/ci/image_keys.py"
 
 offline=0
 for arg in "$@"; do
@@ -47,11 +43,23 @@ fail() {
 }
 
 # (a) 아키텍처
+# x86_64는 CI와 같은 amd64 이미지를 쓴다. arm64(Apple Silicon Mac 등)는 이미지를 로컬에서 linux/arm64로 빌드한다
+# (build_images.py --mode load. GHCR에는 amd64 이미지만 있어 --mode pull은 쓸 수 없다)
 arch="$(uname -m)"
-if [ "$arch" = "x86_64" ]; then
-  ok "아키텍처 x86_64"
+case "$arch" in
+  x86_64) ok "아키텍처 x86_64" ;;
+  arm64 | aarch64) ok "아키텍처 $arch: 이미지는 linux/arm64로 로컬 빌드한다(--mode load만, pull 불가)" ;;
+  *) fail "아키텍처 $arch: 지원 호스트 아키텍처는 x86_64와 arm64뿐이다" ;;
+esac
+
+# (a2) bash. 저장소 스크립트는 #!/usr/bin/env bash로 PATH의 bash를 쓴다. 이 스크립트를 돌리는 셸이 아니라 그 bash를 본다
+# shellcheck disable=SC2016 # 작은따옴표 안의 변수는 PATH의 bash가 펼친다
+env_bash_major="$(env bash -c 'echo "${BASH_VERSINFO[0]}"' 2> /dev/null || true)"
+if [ -n "$env_bash_major" ] && [ "$env_bash_major" -ge "$MIN_BASH_MAJOR" ] 2> /dev/null; then
+  # shellcheck disable=SC2016
+  ok "bash $(env bash -c 'echo "${BASH_VERSION}"') (PATH의 bash, ${MIN_BASH_MAJOR} 이상)"
 else
-  fail "아키텍처 $arch: 지원 호스트는 x86_64 Linux뿐이다"
+  fail "PATH의 bash($(command -v bash || echo 없음))가 ${env_bash_major:-?}이다. ${MIN_BASH_MAJOR} 이상이 필요하다. macOS는 brew install bash 뒤 그 bash가 PATH 앞에 오게 한다"
 fi
 
 # (b) docker 명령과 데몬 접근
@@ -79,11 +87,16 @@ fi
 # (c) compose v2
 if [ "$docker_ok" -eq 1 ] || command -v docker > /dev/null 2>&1; then
   cv="$(docker compose version --short 2> /dev/null || true)"
-  case "$cv" in
-    v2* | 2*) ok "docker compose $cv" ;;
-    "") fail "docker compose 플러그인이 없다(compose v2 필요)" ;;
-    *) fail "docker compose 버전 $cv: v2가 필요하다" ;;
-  esac
+  # compose 플러그인(v2 이후. 2.x 다음 판은 5.x다)을 받고, 옛 python 판(1.x)만 거른다
+  cv_major="${cv#v}"
+  cv_major="${cv_major%%.*}"
+  if [ -z "$cv" ]; then
+    fail "docker compose 플러그인이 없다(compose v2 이상 필요)"
+  elif [ "$cv_major" -ge 2 ] 2> /dev/null; then
+    ok "docker compose $cv"
+  else
+    fail "docker compose 버전 $cv: v2 이상이 필요하다"
+  fi
 
   # (d) buildx
   if bv="$(docker buildx version 2> /dev/null)" && [ -n "$bv" ]; then
@@ -142,17 +155,20 @@ else
   warn "디스크 여유를 확인하지 못했다($root_dir)"
 fi
 
-# (h) 메모리
-mem_kb="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2> /dev/null)"
-if [ -n "$mem_kb" ]; then
-  mem_gb=$(awk -v k="$mem_kb" 'BEGIN {printf "%.1f", k / 1024 / 1024}')
+# (h) 메모리. 컨테이너가 쓸 수 있는 메모리를 docker에게 묻는다(Linux는 호스트 메모리, macOS는 Docker VM에 준 메모리)
+mem_bytes=""
+if [ "$docker_ok" -eq 1 ]; then
+  mem_bytes="$(docker info --format '{{.MemTotal}}' 2> /dev/null || true)"
+fi
+if [ -n "$mem_bytes" ] && [ "$mem_bytes" -gt 0 ] 2> /dev/null; then
+  mem_gb=$(awk -v b="$mem_bytes" 'BEGIN {printf "%.1f", b / 1024 / 1024 / 1024}')
   if awk -v g="$mem_gb" -v m="$MIN_MEM_GB" 'BEGIN {exit !(g >= m * 0.95)}'; then
     ok "메모리 약 ${mem_gb}GB"
   else
     warn "메모리 약 ${mem_gb}GB: ${MIN_MEM_GB}GB(확인된 최소)보다 작다. 그 아래에서 PX4 빌드와 스택 실행은 미실측이다"
   fi
 else
-  warn "메모리를 확인하지 못했다"
+  warn "메모리를 확인하지 못했다(docker info MemTotal)"
 fi
 
 # (i) 화면. gz-gui(viz 프로필)는 DISPLAY와 XAUTHORITY 파일을 읽기 전용으로 받는다
@@ -166,12 +182,22 @@ if [ -n "${XAUTHORITY:-}" ] && [ -s "${XAUTHORITY}" ] && [ -r "${XAUTHORITY}" ];
 elif [ -n "${XAUTHORITY:-}" ]; then
   warn "XAUTHORITY 파일($XAUTHORITY)이 없거나 비어 있거나 읽을 수 없다. Gazebo GUI가 X 서버 인증에 실패한다"
 else
-  warn "XAUTHORITY가 비어 있다. Gazebo GUI(tools/sim_stack.sh up --viz)를 쓰려면 내보내라. GNOME Wayland: export XAUTHORITY=\$(ls /run/user/\$(id -u)/.mutter-Xwaylandauth.* | head -n 1)"
+  warn "XAUTHORITY가 비어 있다. Gazebo GUI(tools/sim_stack.sh up --viz)를 쓰려면 내보내라. Linux GNOME Wayland: export XAUTHORITY=\$(ls /run/user/\$(id -u)/.mutter-Xwaylandauth.* | head -n 1)"
 fi
 
-# (j) 포트 충돌 힌트
-if command -v ss > /dev/null 2>&1; then
-  ss_out="$(ss -ulnp 2> /dev/null || true)"
+# (j) 포트 충돌 힌트. 포트를 직접 bind해 본다(python3 표준 라이브러리. Linux와 macOS에서 같다)
+udp_port_busy() {
+  python3 - "$1" << 'PY' 2> /dev/null
+import socket, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    s.bind(("0.0.0.0", int(sys.argv[1])))
+except OSError:
+    sys.exit(0)
+sys.exit(1)
+PY
+}
+if command -v python3 > /dev/null 2>&1; then
   conflict=0
   k="${IDSIM_STACK_INDEX:-0}"
   case "$k" in [0-9]) ;; *) warn "IDSIM_STACK_INDEX '$k'가 0-9가 아니다. 0으로 본다"; k=0 ;; esac
@@ -189,15 +215,14 @@ if command -v ss > /dev/null 2>&1; then
     gcs_port=""
   fi
   for port in $agent_port $gcs_port; do
-    # ss -ulnp 출력에서 Local Address:Port는 4번째 열이다(5번째는 Peer)
-    if printf '%s\n' "$ss_out" | awk -v p=":$port" '$4 ~ p"$" {f=1} END {exit !f}'; then
+    if udp_port_busy "$port"; then
       warn "UDP 포트 $port 가 이미 쓰이고 있다. 스택 번호를 바꿔 실행하라(예: tools/sim_stack.sh up --stack 1). GCS 포트는 외부 GCS가 듣는 중이면 정상이다"
       conflict=1
     fi
   done
   [ "$conflict" -eq 0 ] && [ -n "$agent_port" ] && ok "UDP ${agent_port}(에이전트), ${gcs_port}(GCS) 사용 중이지 않음 (스택 번호 ${k})"
 else
-  warn "ss 명령이 없어 포트 충돌을 확인하지 못했다"
+  warn "python3가 없어 포트 충돌을 확인하지 못했다"
 fi
 
 # (k) 다른 compose 프로젝트(참고)
@@ -210,9 +235,31 @@ if [ "$docker_ok" -eq 1 ]; then
   fi
 fi
 
-# (l) apt 미러
+# (k2) 로컬 이미지의 아키텍처. 호스트와 다른 아키텍처의 이미지는 에뮬레이션으로 돌게 되므로 FAIL로 둔다
+if [ "$docker_ok" -eq 1 ] && command -v python3 > /dev/null 2>&1; then
+  host_plat="$(python3 "$IMAGE_KEYS_PY" --print-platform 2> /dev/null || true)"
+  for img in ros-base xrce-agent ros-ws sim-base px4; do
+    ref="idsim/${img}:local"
+    img_plat="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$ref" 2> /dev/null || true)"
+    [ -n "$img_plat" ] || continue
+    if [ "$img_plat" = "$host_plat" ]; then
+      ok "$ref $img_plat"
+    else
+      fail "$ref 의 플랫폼 $img_plat 이 호스트 ${host_plat:-?}와 다르다. python3 tools/ci/build_images.py --mode load ${img}로 다시 빌드하라"
+    fi
+  done
+fi
+
+# (l) apt 미러. 이미지 빌드가 쓰는 값(환경변수가 있으면 그 값, 없으면 이 호스트 플랫폼의 versions.env 값)
+MIRROR_BASE="${UBUNTU_APT_MIRROR:-$(python3 "$IMAGE_KEYS_PY" --print-value UBUNTU_APT_MIRROR 2> /dev/null || true)}"
+MIRROR_BASE="${MIRROR_BASE%/}"
+MIRROR_URL="${MIRROR_BASE}/dists/noble/Release"
+MIRROR_HOST="${MIRROR_BASE#*://}"
+MIRROR_HOST="${MIRROR_HOST%%/*}"
 if [ "$offline" -eq 1 ]; then
   echo "INFO --offline: apt 미러(${MIRROR_HOST}) 검사를 건너뜀"
+elif [ -z "$MIRROR_BASE" ]; then
+  warn "apt 미러 값을 읽지 못했다(tools/ci/image_keys.py --print-value UBUNTU_APT_MIRROR)"
 elif command -v curl > /dev/null 2>&1; then
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$MIRROR_URL" 2> /dev/null || true)"
   if [ "$code" = "200" ]; then
