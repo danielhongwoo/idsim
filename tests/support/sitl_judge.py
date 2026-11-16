@@ -44,7 +44,8 @@ sitl_wait.raise_if). 판정 기준을 느슨하게 바꾸려면 근거와 함께
     EKF 위치가 정답보다 진행 방향으로 앞서지 않는다는 근거는 config/px4/sitl_params.env의 EKF2_GPS_DELAY 항목에 있다.
   R_HOME_M 0.15 m: Rayleigh 허용한계(식은 README "b와 R_home 보정 확인"). 같은 보정 실행의 RTL 착륙 60건(F3, F4 x 30): R4 max 0.1108 m,
     sigma_hat 0.0366 m, q x f 4.0801(m_home 2, n 30), q x f x sigma_hat 0.1492 m -> ceil_0.05 0.15 m.
-    표본 최댓값이 허용한계 안이다.
+    표본 최댓값이 허용한계 안이다. 착륙 위치 평균 벡터는 x -0.017 m, y 0.016 m로 두 축 모두 2 표준오차(0.008,
+    0.009 m)보다 크다(기록. 편향은 RMS에 들어가 보수적이라 기각 사유가 아니다).
   L_S 0.2 s = target_fresh_age 0.1 s + Executor tick 0.05 s + 여유 0.05 s. 표적 접근의 임계값은 R_JUDGE_M + v x L_S이고
     v는 시나리오 표적 속도의 최댓값(stack.json targets의 구간 속도 최댓값)이다. L_S는 TRACK_ENTITY의 속도 feedforward를
     전제로 하고, PX4가 setpoint를 반영하는 지연을 약 한 tick으로 본 것은 [추정]이다(F2, F4 trace의 R3로 확인한다).
