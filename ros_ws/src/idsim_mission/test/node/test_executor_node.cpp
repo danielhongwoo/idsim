@@ -1082,7 +1082,7 @@ TEST_F(CanceledGoalEndTest, SucceedIsAllowed)
   EXPECT_EQ(end_canceled_goal(true), rclcpp_action::ResultCode::SUCCEEDED);
 }
 
-// ---- 검토 보완 ----
+// ---- 준비 중 취소, 두 번째 goal, 종료 때 disarm ----
 
 TEST_F(ExecutorNodeTest, CancelInPreparingIsCanceled)
 {

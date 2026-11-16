@@ -37,7 +37,7 @@
 //   - timestamp_us <- timestamp
 //   - received_tick, received_ns <- callback이 적은 tick 번호와 노드 시계 ROS 시각(ns)
 //   - identity <- idsim_common::verify(VehicleIdentity, msg)가 Match이면 kMatch, 아니면 kMismatch.
-//     identity_detail에 기대값과 받은 system_id, component_id를 적는다(M2의 detail로 쓰인다).
+//     identity_detail에 기대값과 받은 system_id, component_id를 적는다(식별 불일치 INTERNAL의 detail로 쓰인다).
 //   - arming <- arming_state: ARMING_STATE_ARMED이면 kArmed, 그 밖은 kDisarmed
 //   - nav <- nav_state, nav_user_intention <- nav_state_user_intention. 둘 다 같은 표로:
 //     NAVIGATION_STATE_OFFBOARD -> kOffboard, NAVIGATION_STATE_AUTO_LOITER -> kHold,

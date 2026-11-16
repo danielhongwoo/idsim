@@ -197,7 +197,7 @@ const char kCapPrefix[] = "mission end: cleanup cap reached (12000 ms), last bra
 
 // ---- 공중 Hold ----
 
-TEST(MissionEnd, T1AirHoldConfirmed)
+TEST(MissionEnd, AirHoldConfirmed)
 {
   Harness h(takeoff_loiter_mission());
   const EndStart st = start_air_end(h);
@@ -219,7 +219,7 @@ TEST(MissionEnd, T1AirHoldConfirmed)
   expect_end(h, st.s, "SUCCEEDED/NONE", "");
 }
 
-TEST(MissionEnd, T2TakeoffOnlyMission)
+TEST(MissionEnd, TakeoffOnlyMission)
 {
   Harness h(takeoff_only_mission());
   const EndStart st = start_air_takeoff_end(h);
@@ -233,7 +233,7 @@ TEST(MissionEnd, T2TakeoffOnlyMission)
   EXPECT_EQ(h.termination()->last_item_index, 0U);
 }
 
-TEST(MissionEnd, T3HoldResentAfterAcceptedAck)
+TEST(MissionEnd, HoldResentAfterAcceptedAck)
 {
   // 진행은 표본으로 하고 ack는 거부 판정에만 쓴다(README "구현 규칙"). ACCEPTED ack로 재전송이
   // 멈추지 않는다.
@@ -250,7 +250,7 @@ TEST(MissionEnd, T3HoldResentAfterAcceptedAck)
   expect_cell(h, kAir, Event::kHoldTimeout, kAirLand, "-", {}, before);
 }
 
-TEST(MissionEnd, T4OneLostHoldIsResent)
+TEST(MissionEnd, OneLostHoldIsResent)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -268,7 +268,7 @@ TEST(MissionEnd, T4OneLostHoldIsResent)
 
 // ---- Hold 실패: Land 경로 ----
 
-TEST(MissionEnd, T5AirRejectedThenLandObserved)
+TEST(MissionEnd, AirRejectedThenLandObserved)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
@@ -287,7 +287,7 @@ TEST(MissionEnd, T5AirRejectedThenLandObserved)
     "mission end: Hold rejected: TEMPORARILY_REJECTED; Land sent, AUTO_LAND observed");
 }
 
-TEST(MissionEnd, T5HoldRejectedOnThirdHoldSampleTick)
+TEST(MissionEnd, HoldRejectedOnThirdHoldSampleTick)
 {
   // Hold 3회째 표본과 Hold 거부 ack가 같은 tick이면 거부가 먼저다(Land 경로, Hold 확인 없음).
   Harness h(takeoff_loiter_mission());
@@ -311,7 +311,7 @@ TEST(MissionEnd, T5HoldRejectedOnThirdHoldSampleTick)
     "mission end: Hold rejected: TEMPORARILY_REJECTED; Land sent, AUTO_LAND observed");
 }
 
-TEST(MissionEnd, T6LostRejectAckIsCaughtOnResend)
+TEST(MissionEnd, LostRejectAckIsCaughtOnResend)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -327,7 +327,7 @@ TEST(MissionEnd, T6LostRejectAckIsCaughtOnResend)
     "mission end: Hold rejected: TEMPORARILY_REJECTED; Land sent, AUTO_LAND observed");
 }
 
-TEST(MissionEnd, T7AirTimeoutThenLandTimeout)
+TEST(MissionEnd, AirTimeoutThenLandTimeout)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -357,7 +357,7 @@ TEST(MissionEnd, T7AirTimeoutThenLandTimeout)
 
 // ---- 만료가 이긴다(공중 종료 단계의 두 쌍) ----
 
-TEST(MissionEnd, T8HoldTimeoutBeatsThirdHoldSample)
+TEST(MissionEnd, HoldTimeoutBeatsThirdHoldSample)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -372,7 +372,7 @@ TEST(MissionEnd, T8HoldTimeoutBeatsThirdHoldSample)
   EXPECT_FALSE(has_edge(h, Event::kHoldConfirmed, st.before));
 }
 
-TEST(MissionEnd, T8ContrastThirdHoldSampleBeforeTimeout)
+TEST(MissionEnd, ContrastThirdHoldSampleBeforeTimeout)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -385,7 +385,7 @@ TEST(MissionEnd, T8ContrastThirdHoldSampleBeforeTimeout)
   expect_end(h, st.s, "SUCCEEDED/NONE", "");
 }
 
-TEST(MissionEnd, T9CapBeatsThirdHoldSample)
+TEST(MissionEnd, CapBeatsThirdHoldSample)
 {
   Harness h(takeoff_loiter_mission());
   const EndStart st = start_air_end(h);
@@ -408,7 +408,7 @@ TEST(MissionEnd, T9CapBeatsThirdHoldSample)
 
 // ---- 지상 대기 ----
 
-TEST(MissionEnd, T10GroundEndWithFallbackDisarm)
+TEST(MissionEnd, GroundEndWithFallbackDisarm)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = start_ground_end(h);
@@ -437,7 +437,7 @@ TEST(MissionEnd, T10GroundEndWithFallbackDisarm)
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
-TEST(MissionEnd, T10LongFallbackDelayStillEndsByDisarm)
+TEST(MissionEnd, LongFallbackDelayStillEndsByDisarm)
 {
   // 지상 대기에 대비책 지연이 붙는 경로가 상한 식에 있으므로 지연을 길게(10 s) 줘도 지상 대기는
   // 상한이 아니라 대비책 disarm의 확인으로 끝난다. Hold 기한 S+60, disarm S+260, 확인 S+263,
@@ -458,7 +458,7 @@ TEST(MissionEnd, T10LongFallbackDelayStillEndsByDisarm)
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
-TEST(MissionEnd, T11AutoDisarmWhileWaitingForHold)
+TEST(MissionEnd, AutoDisarmWhileWaitingForHold)
 {
   Harness h(takeoff_loiter_mission());
   h.drive_to_loiter();
@@ -481,7 +481,7 @@ TEST(MissionEnd, T11AutoDisarmWhileWaitingForHold)
   expect_end(h, s, "SUCCEEDED/NONE", "ended on ground");
 }
 
-TEST(MissionEnd, T12GroundRejectThenAirReentry)
+TEST(MissionEnd, GroundRejectThenAirReentry)
 {
   Harness h(takeoff_only_mission(0.2));
   h.hold_response = HoldResponse::kReject;
@@ -526,7 +526,7 @@ EndStart drive_ground_wait(Harness & h, std::uint64_t until_offset)
   return st;
 }
 
-TEST(MissionEnd, T13FallbackFailsAndCapEnds)
+TEST(MissionEnd, FallbackFailsAndCapEnds)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_ground_wait(h, 161);
@@ -549,7 +549,7 @@ TEST(MissionEnd, T13FallbackFailsAndCapEnds)
       "ground");
 }
 
-TEST(MissionEnd, T14CapBeatsThirdGroundDisarmed)
+TEST(MissionEnd, CapBeatsThirdGroundDisarmed)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_ground_wait(h, 238);
@@ -562,7 +562,7 @@ TEST(MissionEnd, T14CapBeatsThirdGroundDisarmed)
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
 
-TEST(MissionEnd, T14ContrastThirdGroundDisarmedBeforeCap)
+TEST(MissionEnd, ContrastThirdGroundDisarmedBeforeCap)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_ground_wait(h, 237);
@@ -573,7 +573,7 @@ TEST(MissionEnd, T14ContrastThirdGroundDisarmedBeforeCap)
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
-TEST(MissionEnd, T15GroundDisarmedOnHoldTimeoutTick)
+TEST(MissionEnd, GroundDisarmedOnHoldTimeoutTick)
 {
   // 분류 지상 규칙: 분류가 지상인 tick은 hold_confirm_timeout을 보지 않는다(docs/interface.md
   // "공중에서 끝나는 미션").
@@ -593,7 +593,7 @@ TEST(MissionEnd, T15GroundDisarmedOnHoldTimeoutTick)
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
-TEST(MissionEnd, T16LandPathCapInAir)
+TEST(MissionEnd, LandPathCapInAir)
 {
   Harness h(takeoff_only_mission(0.2));
   h.land_response = CommandResponse::kIgnore;
@@ -611,7 +611,7 @@ TEST(MissionEnd, T16LandPathCapInAir)
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
 
-TEST(MissionEnd, T16ContrastLandPathCapOnGround)
+TEST(MissionEnd, ContrastLandPathCapOnGround)
 {
   Harness h(takeoff_only_mission(0.2));
   h.land_response = CommandResponse::kIgnore;
@@ -628,7 +628,7 @@ TEST(MissionEnd, T16ContrastLandPathCapOnGround)
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
 
-TEST(MissionEnd, T17aLandPathGroundDisarmed)
+TEST(MissionEnd, LandPathGroundDisarmed)
 {
   // Land 경로에서 AUTO_LAND를 보기 전에 지상 DISARMED 3회면 SUCCEEDED.
   Harness h(takeoff_loiter_mission());
@@ -646,7 +646,7 @@ TEST(MissionEnd, T17aLandPathGroundDisarmed)
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
-TEST(MissionEnd, T17aWaitingCommandIsClearedOnFirstGroundDisarmed)
+TEST(MissionEnd, WaitingCommandIsClearedOnFirstGroundDisarmed)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
@@ -662,7 +662,7 @@ TEST(MissionEnd, T17aWaitingCommandIsClearedOnFirstGroundDisarmed)
   EXPECT_TRUE(ticks_sending(h, CommandKind::kNavLand, st.s + 2, st.s + 11).empty());
 }
 
-TEST(MissionEnd, T17bLandPathGroundDisarmedOnLandTimeoutTick)
+TEST(MissionEnd, LandPathGroundDisarmedOnLandTimeoutTick)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
@@ -682,7 +682,7 @@ TEST(MissionEnd, T17bLandPathGroundDisarmedOnLandTimeoutTick)
 
 // ---- 상태 끊김 ----
 
-TEST(MissionEnd, T18aLinkLostInAir)
+TEST(MissionEnd, LinkLostInAir)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -696,7 +696,7 @@ TEST(MissionEnd, T18aLinkLostInAir)
   expect_end(h, st.s, "ABORTED/LINK_LOST", "mission end: vehicle_status lost");
 }
 
-TEST(MissionEnd, T18bLinkLostOnLandPath)
+TEST(MissionEnd, LinkLostOnLandPath)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
@@ -711,7 +711,7 @@ TEST(MissionEnd, T18bLinkLostOnLandPath)
   expect_end(h, st.s, "ABORTED/LINK_LOST", "mission end: vehicle_status lost");
 }
 
-TEST(MissionEnd, T18cLinkLostInGroundWaitBeforeFallback)
+TEST(MissionEnd, LinkLostInGroundWaitBeforeFallback)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_ground_wait(h, 61);
@@ -723,7 +723,7 @@ TEST(MissionEnd, T18cLinkLostInGroundWaitBeforeFallback)
   expect_end(h, st.s, "ABORTED/LINK_LOST", "mission end: vehicle_status lost");
 }
 
-TEST(MissionEnd, T18dLinkLostInGroundWaitAfterFallback)
+TEST(MissionEnd, LinkLostInGroundWaitAfterFallback)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_ground_wait(h, 161);
@@ -750,7 +750,7 @@ void expect_air_disarm(Harness & h, const EndStart & st, const std::string & fro
   expect_end(h, st.s, "ABORTED/FAILSAFE", "mission end: disarmed while not landed");
 }
 
-TEST(MissionEnd, T19AirDisarmInAir)
+TEST(MissionEnd, AirDisarmInAir)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -758,7 +758,7 @@ TEST(MissionEnd, T19AirDisarmInAir)
   expect_air_disarm(h, st, kAir);
 }
 
-TEST(MissionEnd, T19AirDisarmOnLandPath)
+TEST(MissionEnd, AirDisarmOnLandPath)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
@@ -768,7 +768,7 @@ TEST(MissionEnd, T19AirDisarmOnLandPath)
   expect_air_disarm(h, st, kAirLand);
 }
 
-TEST(MissionEnd, T19AirDisarmInGroundWait)
+TEST(MissionEnd, AirDisarmInGroundWait)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_ground_wait(h, 61);
@@ -782,7 +782,7 @@ const char kStampDetailGround[] =
 const char kStampDetailAir[] =
   "mission end: Px4Timestamp unavailable; vehicle state unknown, may remain armed in air";
 
-TEST(MissionEnd, T20StampFailureInAir)
+TEST(MissionEnd, StampFailureInAir)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -796,7 +796,7 @@ TEST(MissionEnd, T20StampFailureInAir)
   expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetailAir);
 }
 
-TEST(MissionEnd, T20StampFailureOnLandPath)
+TEST(MissionEnd, StampFailureOnLandPath)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
@@ -811,7 +811,7 @@ TEST(MissionEnd, T20StampFailureOnLandPath)
   expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetailAir);
 }
 
-TEST(MissionEnd, T20StampFailureInGroundWait)
+TEST(MissionEnd, StampFailureInGroundWait)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_ground_wait(h, 170);
@@ -823,7 +823,7 @@ TEST(MissionEnd, T20StampFailureInGroundWait)
   expect_end(h, st.s, "ABORTED/INTERNAL", kStampDetailGround);
 }
 
-TEST(MissionEnd, T20StampFailureOnFirstTickIsMonitorRow)
+TEST(MissionEnd, StampFailureOnFirstTickIsMonitorRow)
 {
   // 첫 tick(S)은 감시 표가 같은 tick에 먼저 시각을 묻는다
   // (CLEANUP.MISSION_END.NONE STAMP_UNAVAILABLE impossible의 근거).
@@ -851,7 +851,7 @@ void expect_cancel_ignored(Harness & h, const EndStart & st)
   expect_end(h, st.s, "SUCCEEDED/NONE", "");
 }
 
-TEST(MissionEnd, T21aCancelOnLoiterCompletionTick)
+TEST(MissionEnd, CancelOnLoiterCompletionTick)
 {
   Harness h(takeoff_loiter_mission());
   h.drive_to_loiter();
@@ -866,7 +866,7 @@ TEST(MissionEnd, T21aCancelOnLoiterCompletionTick)
   expect_cancel_ignored(h, st);
 }
 
-TEST(MissionEnd, T21bCancelOnTakeoffReachedTick)
+TEST(MissionEnd, CancelOnTakeoffReachedTick)
 {
   Harness h(takeoff_only_mission());
   const EndStart st = start_air_takeoff_end(h, true);
@@ -875,7 +875,7 @@ TEST(MissionEnd, T21bCancelOnTakeoffReachedTick)
   expect_cancel_ignored(h, st);
 }
 
-TEST(MissionEnd, T21cCancelDuringMissionEnd)
+TEST(MissionEnd, CancelDuringMissionEnd)
 {
   Harness h(takeoff_loiter_mission());
   const EndStart st = start_air_end(h);
@@ -886,7 +886,7 @@ TEST(MissionEnd, T21cCancelDuringMissionEnd)
 
 // ---- 마지막 항목의 겹침(기존 칸) ----
 
-TEST(MissionEnd, T22aLastLoiterCompletionAndItemTimeout)
+TEST(MissionEnd, LastLoiterCompletionAndItemTimeout)
 {
   Harness h(takeoff_loiter_mission());
   h.drive_to_loiter();
@@ -903,7 +903,7 @@ TEST(MissionEnd, T22aLastLoiterCompletionAndItemTimeout)
   EXPECT_EQ(termination_or_empty(h).reason, Reason::kItemTimeout);
 }
 
-TEST(MissionEnd, T22bLastTakeoffReachedAndExternalMode)
+TEST(MissionEnd, LastTakeoffReachedAndExternalMode)
 {
   Harness h(takeoff_only_mission());
   h.drive_to_takeoff();
@@ -922,7 +922,7 @@ TEST(MissionEnd, T22bLastTakeoffReachedAndExternalMode)
 
 // ---- 식별 불일치 ----
 
-TEST(MissionEnd, T23aMismatchedHoldSamplesAreNotCounted)
+TEST(MissionEnd, MismatchedHoldSamplesAreNotCounted)
 {
   Harness h(takeoff_loiter_mission());
   const EndStart st = start_air_end(h);
@@ -937,7 +937,7 @@ TEST(MissionEnd, T23aMismatchedHoldSamplesAreNotCounted)
   expect_end(h, st.s, "SUCCEEDED/NONE", "");
 }
 
-TEST(MissionEnd, T23bMismatchedAirSampleInGroundWaitDoesNotReenterAir)
+TEST(MissionEnd, MismatchedAirSampleInGroundWaitDoesNotReenterAir)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_ground_wait(h, 61);
@@ -950,7 +950,7 @@ TEST(MissionEnd, T23bMismatchedAirSampleInGroundWaitDoesNotReenterAir)
   EXPECT_EQ(h.view().branch, Branch::kGroundWait);
 }
 
-TEST(MissionEnd, T23cOnlyMismatchedSamplesInAir)
+TEST(MissionEnd, OnlyMismatchedSamplesInAir)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -970,7 +970,7 @@ TEST(MissionEnd, T23cOnlyMismatchedSamplesInAir)
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
 
-TEST(MissionEnd, T23dMismatchedTicksKeepFallbackBase)
+TEST(MissionEnd, MismatchedTicksKeepFallbackBase)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = drive_ground_wait(h, 100);
@@ -987,7 +987,7 @@ TEST(MissionEnd, T23dMismatchedTicksKeepFallbackBase)
     std::vector<std::uint64_t>{st.s + 161});
 }
 
-TEST(MissionEnd, T23eMismatchWhileClassifiedGround)
+TEST(MissionEnd, MismatchWhileClassifiedGround)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -1008,7 +1008,7 @@ TEST(MissionEnd, T23eMismatchWhileClassifiedGround)
 
 // ---- 묵은 표본 ----
 
-TEST(MissionEnd, T24aStaleDisarmedSampleIsIgnored)
+TEST(MissionEnd, StaleDisarmedSampleIsIgnored)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -1025,7 +1025,7 @@ TEST(MissionEnd, T24aStaleDisarmedSampleIsIgnored)
   EXPECT_TRUE(setpoint_at(h, st.s + 2));
 }
 
-TEST(MissionEnd, T24bStaleSampleDoesNotCount)
+TEST(MissionEnd, StaleSampleDoesNotCount)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -1041,7 +1041,7 @@ TEST(MissionEnd, T24bStaleSampleDoesNotCount)
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
-TEST(MissionEnd, T25LastLoiterAutoDisarmBeforeCompletion)
+TEST(MissionEnd, LastLoiterAutoDisarmBeforeCompletion)
 {
   // 지면 높이 마지막 목표에서 착지와 PX4 자동 disarm이 완료보다 먼저면 감시 표 순위 5다.
   Harness h(takeoff_loiter_mission());
@@ -1060,9 +1060,9 @@ TEST(MissionEnd, T25LastLoiterAutoDisarmBeforeCompletion)
 
 // ---- 분류 지상 규칙(분류 지상 동안의 분기 판정. docs/interface.md "공중에서 끝나는 미션") ----
 
-TEST(MissionEnd, T26DisarmedAutoLandSamplesAreNotLandObserved)
+TEST(MissionEnd, DisarmedAutoLandSamplesAreNotLandObserved)
 {
-  // ARMED AUTO_LAND 표본이면 Y9(LAND_PATH_MODE_OBSERVED)가 되는 대조는 T5가 덮는다.
+  // ARMED AUTO_LAND 표본이면 LAND_PATH_MODE_OBSERVED가 되는 대조는 AirRejectedThenLandObserved가 덮는다.
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kReject;
   h.land_response = CommandResponse::kIgnore;
@@ -1077,7 +1077,7 @@ TEST(MissionEnd, T26DisarmedAutoLandSamplesAreNotLandObserved)
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
-TEST(MissionEnd, T27aGroundDisarmedAcrossHoldTimeout)
+TEST(MissionEnd, GroundDisarmedAcrossHoldTimeout)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -1093,7 +1093,7 @@ TEST(MissionEnd, T27aGroundDisarmedAcrossHoldTimeout)
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
-TEST(MissionEnd, T27bGroundDisarmedAcrossLandTimeoutThenLinkLost)
+TEST(MissionEnd, GroundDisarmedAcrossLandTimeoutThenLinkLost)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -1113,7 +1113,7 @@ TEST(MissionEnd, T27bGroundDisarmedAcrossLandTimeoutThenLinkLost)
   expect_terminated_once_as(h, "ABORTED/LINK_LOST");
 }
 
-TEST(MissionEnd, T27cCapWhileClassifiedGroundSendsDisarm)
+TEST(MissionEnd, CapWhileClassifiedGroundSendsDisarm)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;
@@ -1132,7 +1132,7 @@ TEST(MissionEnd, T27cCapWhileClassifiedGroundSendsDisarm)
   expect_terminated_once_as(h, "ABORTED/MODE_SWITCH_FAILED");
 }
 
-TEST(MissionEnd, T28aRejectAckWhileClassifiedGroundIsDropped)
+TEST(MissionEnd, RejectAckWhileClassifiedGroundIsDropped)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = start_ground_end(h);
@@ -1148,7 +1148,7 @@ TEST(MissionEnd, T28aRejectAckWhileClassifiedGroundIsDropped)
   expect_end(h, st.s, "SUCCEEDED/NONE", "ended on ground");
 }
 
-TEST(MissionEnd, T28bDroppedAckAndClearedHoldStayGoneAfterRearm)
+TEST(MissionEnd, DroppedAckAndClearedHoldStayGoneAfterRearm)
 {
   Harness h(takeoff_only_mission(0.2));
   const EndStart st = start_ground_end(h);
@@ -1166,7 +1166,7 @@ TEST(MissionEnd, T28bDroppedAckAndClearedHoldStayGoneAfterRearm)
   EXPECT_EQ(h.count_command(CommandKind::kSetModeHold), 1);
 }
 
-TEST(MissionEnd, T29CapOnMismatchedTickWhileClassifiedGround)
+TEST(MissionEnd, CapOnMismatchedTickWhileClassifiedGround)
 {
   Harness h(takeoff_loiter_mission());
   h.hold_response = HoldResponse::kIgnore;

@@ -152,7 +152,7 @@ check_yamllint() {
 
 check_pytest() {
   # rclpy 없이 도는 단위 테스트만(tests/support, tests/tools). rclpy가 필요한 테스트는 ros-ws 이미지 안의
-  # unit job(이후 단계) 몫이다. 생성기 테스트를 위해 ros-ws와 같은 PyYAML(LINT_PYYAML_VERSION, S0이 대조)을 설치한다.
+  # unit job(이후 단계) 몫이다. 생성기 테스트를 위해 ros-ws와 같은 PyYAML(LINT_PYYAML_VERSION, 스모크 images 단계가 대조)을 설치한다.
   local files
   mapfile -t files < <(list_files 'tests/support/test_*.py' 'tests/tools/test_*.py')
   if [ "${#files[@]}" -eq 0 ]; then result pytest PASS-NO-TARGETS "(0 files)"; return 0; fi

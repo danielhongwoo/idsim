@@ -16,7 +16,7 @@
 //
 // test_runner 실행 파일의 모든 상태기 테스트가 끝난 뒤 Environment::TearDown에서 단정한다.
 // (1) 관측한 칸 집합 == "covered" 부류 (2) "impossible" 칸은 관측되지 않았다 (3) 목록에 없는 칸은
-// 관측되지 않았다 (4) untagged 기록 0 (5) "uncovered" 부류의 칸이 목록에 없다(B8b부터.
+// 관측되지 않았다 (4) untagged 기록 0 (5) "uncovered" 부류의 칸이 목록에 없다(
 // 상태기를 바꾸는 PR은 새 칸을 같은 PR에서 덮는다). Event 이름 집합 == 목록의 사건 집합,
 // 파일 형식, (5)는 보통 테스트로도 본다(일부만 돌려도 보인다). 일부만 돌면(--gtest_filter,
 // sharding, DISABLED_, GTEST_SKIP) 대조 대신 실패한다.
@@ -190,7 +190,7 @@ TEST(TransitionCells, FileIsWellFormed)
 
 TEST(TransitionCells, NoUncoveredCell)
 {
-  // B8b부터 "uncovered" 부류의 칸이 목록에 있으면 실패한다(idsim_mission README "테스트"). 새 칸은
+  // "uncovered" 부류의 칸이 목록에 있으면 실패한다(idsim_mission README "테스트"). 새 칸은
   // 같은 PR에서 테스트로 덮거나, core 계약 안의 [소스] 이유가 있으면 impossible로 둔다.
   const CellList list = load_cells();
   for (const auto & [cell, info] : list.cells) {

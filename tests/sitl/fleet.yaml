@@ -16,7 +16,7 @@ world:
   speed_factor: null
 
 vehicles:
-  # 기체 1은 원점에서 떨어진 (6, -3, 0)에 둔다. 스모크 S2가 NavSat 위경도 변환의 수평 반전을 가려낸다(config/fleet.yaml과 같다).
+  # 기체 1은 원점에서 떨어진 (6, -3, 0)에 둔다. 스모크 px4-out 단계가 NavSat 위경도 변환의 수평 반전을 가려낸다(config/fleet.yaml과 같다).
   - id: 1
     airframe: 4001_gz_x500
     pose: {x: 6.0, y: -3.0, z: 0.0, yaw: 0.0}

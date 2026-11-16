@@ -36,7 +36,7 @@ RUN git clone --depth 1 --branch "${XRCE_AGENT_TAG}" \
 
 FROM ${UBUNTU_IMAGE}
 ARG XRCE_AGENT_TAG
-# 스모크 S0가 versions.env와 대조하도록 빌드 인자를 남긴다
+# 스모크 images 단계가 versions.env와 대조하도록 빌드 인자를 남긴다
 ENV DEBIAN_FRONTEND=noninteractive \
     IDSIM_BUILD_XRCE_AGENT_TAG=${XRCE_AGENT_TAG}
 COPY --from=build /usr/local /usr/local

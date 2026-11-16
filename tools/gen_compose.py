@@ -22,8 +22,8 @@ ros-ws 컨테이너 안에서 실행한다(PyYAML 6.0.1). 호스트 진입점은
                  [--generated-at 2026-11-09T09:00:00Z] [--git-commit SHA] [--git-dirty true|false]
   gen_compose.py --print-gcs-port k     # QGC가 들을 GCS 포트(14550 + 1000k)만 출력
   gen_compose.py --print-agent-port k   # 에이전트 UDP 포트(8888 + k)만 출력
-  gen_compose.py --print-airframes          # 센서 높이가 등록된 airframe 목록(스모크 S0가 돈다)
-  gen_compose.py --print-sensor-z AIRFRAME  # airframe의 GNSS 센서 높이(m)만 출력(스모크 S0가 모델 SDF와 대조한다)
+  gen_compose.py --print-airframes          # 센서 높이가 등록된 airframe 목록(스모크 images 단계가 돈다)
+  gen_compose.py --print-sensor-z AIRFRAME  # airframe의 GNSS 센서 높이(m)만 출력(스모크 images 단계가 모델 SDF와 대조한다)
 종료 코드: 0 성공, 1 검증 실패(stderr에 이유), 2 인자 오류.
 """
 
@@ -960,7 +960,7 @@ def check_world_sdf(text, fleet_norm):
 
 
 def expect_gps(origin, pose, airframe):
-    """스폰 pose의 GNSS 센서(base_link) 기대 위경도와 고도. 스모크 S2의 기대값이다(운용 변환이 아니다).
+    """스폰 pose의 GNSS 센서(base_link) 기대 위경도와 고도. 스모크 px4-out 단계의 기대값이다(운용 변환이 아니다).
 
     원점 위도에서 계산한 WGS84 곡률 반지름의 국소 근사다. world ENU의 x는 동쪽, y는 북쪽이다.
     고도 = world.origin.alt + 스폰 z + 센서 높이. 센서 오프셋이 수직뿐이라 yaw와 무관하다.

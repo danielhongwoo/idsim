@@ -53,7 +53,7 @@ RUN chmod +x /usr/local/bin/ros-ws-entrypoint.sh
 # 저장소를 /opt/idsim에 마운트해 tools/ros_ws.sh로 빌드한다(install의 절대 경로가 스택의 마운트 경로와 같다).
 # 저장소 없이 이미지만으로 노드를 띄워야 하면 이 이미지를 바꾸지 않고 ros-ws 위에 소스를 COPY하는 별도 target을 둔다.
 
-# 스모크 S0가 versions.env와 대조하도록 빌드 인자를 남긴다
+# 스모크 images 단계가 versions.env와 대조하도록 빌드 인자를 남긴다
 ENV IDSIM_BUILD_PX4_MSGS_REF=${PX4_MSGS_REF} \
     IDSIM_BUILD_PX4_ROS_COM_REF=${PX4_ROS_COM_REF} \
     IDSIM_BUILD_LLVM_MAJOR=${LLVM_MAJOR} \

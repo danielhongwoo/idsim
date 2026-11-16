@@ -318,7 +318,7 @@ private:
   std::uint64_t offboard_confirm_timestamp_us_{0};
   std::uint64_t last_ack_tick_{0};
   std::int64_t branch_first_ns_{0};  // 정리 분기의 첫 명령 시각
-  std::int64_t cleanup_start_ns_{0};  // 정리를 시작한 tick의 ROS 시각(정리의 상한 M6의 기준)
+  std::int64_t cleanup_start_ns_{0};  // 정리를 시작한 tick의 ROS 시각(정리의 상한의 기준)
   std::uint64_t arm_first_tick_{0};  // P6에서 arm을 처음 보낸 tick
   std::int64_t first_armed_ns_{0};  // 첫 ARMED 표본을 본 tick의 ROS 시각(P6 확인 기한의 기준)
   std::uint64_t first_armed_tick_{0};

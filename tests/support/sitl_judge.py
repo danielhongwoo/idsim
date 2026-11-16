@@ -775,7 +775,7 @@ def track_judge(oracle, targets, start_us, t_f_us, offset, acceptance_m, v_max, 
 
 
 def tracking_errors(oracle, targets, offset, from_us, to_us):
-    """[from_us, to_us]의 정답 표본 시각마다 표적을 보간한 setpoint 점까지의 거리(R3의 추종 오차, R5의 수직 성분). 기록 전용.
+    """[from_us, to_us]의 정답 표본 시각마다 표적을 보간한 setpoint 점까지의 거리(R3의 추종 오차와 그 수직 성분). 기록 전용.
     표적 표본이 감싸지 않는 시각은 건너뛴다(외삽하지 않는다)."""
     xs = sorted(targets, key=lambda x: x.stamp_us)
     keys = [x.stamp_us for x in xs]
