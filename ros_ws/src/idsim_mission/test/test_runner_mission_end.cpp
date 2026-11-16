@@ -1269,8 +1269,9 @@ TEST(MissionEnd, GroundDisarmedCountRestartsAfterArmed)
 TEST(MissionEnd, FallbackDisarmConfirmKeptOnLandPath)
 {
   // 대비책 disarm을 보낸 뒤 Land 경로로 옮겨도 확인 함수(DisarmConfirm)로 센다.
-  // S+160 대비책 disarm(무시), S+162 공중 재진입(Land 경로,
-  // NAV_LAND), S+165-S+167 지상 DISARMED. 세는 표본은 모두 전송 tick보다 뒤 tick의 것이다.
+  // S+160 대비책 disarm(무시), S+162 공중 재진입
+  // (Land 경로, NAV_LAND), S+165-S+167 지상 DISARMED. 세는 표본은 모두 전송 tick보다 뒤
+  // tick의 것이다.
   Harness h(takeoff_only_mission(0.2));
   h.land_response = CommandResponse::kIgnore;
   const EndStart st = drive_ground_wait(h, 160);

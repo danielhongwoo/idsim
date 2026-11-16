@@ -15,7 +15,7 @@
 // 정리 단계 칸의 파라미터화 harness(idsim_mission README "테스트").
 // 파라미터 하나가 칸 하나(정리 원인, 분기, 사건)이고, 본문은 그 칸의 to와 reason을 이
 // runner의 전이 기록(expect_cell)과 종료 결과로 단정하고, 그 칸의 기록이 난 tick의 명령을
-// docs/interface.md "정리"의 표대로 단정한다(CleanupCell::sent).
+// docs/interface.md "취소"의 분기 표와 "정리의 상한"대로 단정한다(CleanupCell::sent).
 //
 // 구조
 // - CleanupRig는 세 단계로 칸에 닿는다. enter는 정리 원인마다 정해진 입구로 정리를 시작하고,
@@ -687,7 +687,7 @@ TEST_P(CleanupCellTest, ObservesCell)
   ASSERT_NE(edge, nullptr);
   const StepOutput * const out = output_of_tick(h, edge->tick);
   ASSERT_NE(out, nullptr);
-  // 그 tick의 명령은 docs/interface.md "정리"의 표대로 정확히 이것이다.
+  // 그 tick의 명령은 칸의 sent 열대로 정확히 이것이다.
   EXPECT_EQ(out->commands, commands_of(cell.sent)) << "tick " << edge->tick;
   const bool done = std::string(cell.to) == "DONE";
   if (done) {
