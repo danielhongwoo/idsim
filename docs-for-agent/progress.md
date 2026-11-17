@@ -65,6 +65,9 @@ main 머지 뒤 확인할 것.
 
 - Dockerfile 주석에 남은 계획 표지: `Dockerfile.px4` 36, 226행 "(S1)"은 "(스모크 embedded 단계)", `Dockerfile.ros-ws` 56행과 `Dockerfile.xrce-agent` 39행 "스모크 S0가"는 "스모크 images 단계가", `Dockerfile.sim-base` 4행 "(지금은 README의 수동 docker run, 3단계부터 gz-gui 서비스)"는 "(viz 프로필의 gz-gui 서비스)"로 바꾼다. Dockerfile을 바꾸면 이미지 key가 바뀌어 PR의 sitl이 실패하므로 주석만 따로 고치지 않고, 그 Dockerfile을 실제로 바꾸는 이미지 PR에 함께 넣는다(각 owner).
 - `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
+- `docs/interface.md` "시간 기준" 절의 FIFO 근거 문장은 `vehicle_command` queue에서 구독자가 뒤처지면 오래된 명령을 잃는다고 적는다. 그 경우가 DISARMED 확인의 논증에 무슨 뜻인지(arm이 유실되면 기체는 DISARMED다)를 덧붙일지 정한다. 고정 절이다(architect).
+- `config/px4/sitl_params.env`: `UXRCE_DDS_SYNCT` 주석의 날짜 "(2026-11-10 결정)"을 지운다. `COM_RC_IN_MODE` 항목의 "추측: ... px4-out 단계에서 실측하고, 막히면 1로 되돌린다"가 지금도 유효한지 보고 고친다(px4-engineer). 주석을 고치면 gen_compose golden의 sha256이 바뀐다.
+- `docker/versions.env`의 `GZ_SIM_VERSION` 주석은 버전을 바꿀 때 "시간 기준" 절의 행 번호만 다시 보라고 한다. "좌표계" 절에도 gz-sim과 gz-math의 행 번호가 있다. gz-math 버전은 기록도 대조도 없다(devops-engineer, sim-engineer).
 
 테스트 보강.
 
@@ -74,6 +77,7 @@ main 머지 뒤 확인할 것.
 - 성공 sitl run의 summary.md에 ULog `battery_status`, `cpuload`, `system_power` 마지막 표본 시각을 남겨 숨은 발행 정지를 센다. trace 이정표에 수신 시각을 남긴다(test-engineer, logging-engineer).
 - `test_px4_topic_names.py::test_argument_checks`의 SpinThread `InvalidHandle` 경고, `tools/vehicle_arming_state.py`의 rc 2 사례 테스트(test-engineer).
 - 스모크 images 단계가 `LLVM_MAJOR`, `FOXGLOVE_BRIDGE_VERSION`을 대조하지 않는다(test-engineer). `ros_ws.sh`에 `versions.env` 이름 기준 존재 검사를 둘지(devops-engineer, test-engineer).
+- `stack.json`의 `expect_gps.alt`는 스폰 z와 센서 높이만 더한 값이라 착지 정착(실측 약 13 mm)이 들어 있지 않다. 이 값을 쓰는 스모크 원점 판정의 고도 허용 오차가 그 차를 덮는지 확인한다(test-engineer, sim-engineer).
 
 빌드와 CI.
 
