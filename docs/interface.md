@@ -111,7 +111,8 @@ PX4 timestamp.
 - PX4는 /fmu/in 메시지를 받을 때 `timestamp`가 0이면 수신 시각으로 채우고, 아니면 `min(timestamp - time_offset, 수신 시각)`으로 쓴다(`Tools/msg/templates/ucdr/msg.h.em` 167-169행. `config/px4/sitl_params.env`의 근거 주석). 그래서 0이나 벽시계 값을 넣으면 PX4에는 "지금"으로 보이고, 묵은 setpoint를 `COM_OF_LOSS_T`로 판정하는 경로가 조용히 꺼진다. ROS 시각은 PX4 hrt보다 늦으므로 노드가 넣은 값은 이 `min`에서 잘리지 않는다. 근거는 전달 경로 구조와 위의 [실측](전송 뒤 첫 표본의 `timestamp`가 169건 모두 전송에 실은 값보다 8-20 ms 컸다. 노드 값이 PX4 hrt보다 크게 앞섰다면 나오지 않는 값이다)이고, 잘림 여부를 직접 본 것은 아니다. 시나리오 T(묵은 `timestamp`의 Offboard 신호를 PX4가 묵은 것으로 판정한다)는 노드 값이 그대로 쓰인다는 간접 근거다.
 - 규칙: 노드가 /fmu/in에 넣는 `timestamp`는 노드 시계의 ROS 시각(us)이다. 0과 벽시계 값은 보내지 않는다. `idsim_common::Px4Timestamp::now(clock)`가 유일한 생성 경로이고, 시계가 `RCL_ROS_TIME`이면서 ROS 시간 override가 켜져 있고(`/clock` 구독 중) 값이 1 us 이상일 때만 값을 만든다. 그 밖(override가 꺼진 ROS 시계, `RCL_SYSTEM_TIME`, `RCL_STEADY_TIME`, `/clock` 수신 전의 0)에서는 값이 없고, 값이 없으면 /fmu/in에 아무것도 보내지 않는다. Executor는 activate 때 값을 만들 수 없으면 activate를 실패시키고, goal 실행 중에 만들 수 없으면 그 tick의 발행과 명령을 버리고 goal을 ABORTED로 끝낸다(정리 중이 아니면 `REASON_INTERNAL`, 정리 중이면 원래 reason을 유지하고 detail에 적는다. `ros_ws/src/idsim_mission/src/core/mission_runner.cpp`). `VehicleCommandBuilder`와 setpoint helper는 `Px4Timestamp` 인자로만 timestamp를 받는다(`ros_ws/src/idsim_common/include/idsim_common/px4_timestamp.hpp`, `test/test_px4_timestamp.cpp`).
 - `UXRCE_DDS_SYNCT=0`에서 uXRCE-DDS client는 시간 동기화 callback을 달지 않으므로(`on_time_no_sync`. `src/modules/uxrce_dds_client/uxrce_dds_client.cpp` 206행, 318-323행) client 쪽의 `timesync_status` 발행이 없다. DDS writer는 만들어지므로 `fmu/out/timesync_status` 토픽은 그래프에 남지만 표본은 오지 않는다. MAVLink 모듈이 같은 uORB 토픽에 쓰는 경우(GCS가 TIMESYNC를 보낼 때)는 확인하지 않았다. 이 토픽으로 시간 동기 상태를 판정하지 않고, 이 토픽의 수신을 기다리지 않는다.
-- `UXRCE_DDS_SYNCT=0`은 SITL 전용 값이다. 실기체에서는 1로 되돌리며, 파라미터 한 줄이라 운용 노드는 차이를 모른다.
+- `UXRCE_DDS_SYNCT=0`은 시뮬레이션 환경 때문에 둔 값이고 실기체의 값은 정하지 않았다. 1이면 uXRCE-DDS client가 세션 `time_offset`(Agent 호스트 OS 시각과 PX4 시각의 차. `src/modules/uxrce_dds_client/module.yaml` 93행, `src/lib/timesync/Timesync.cpp` 51행)을 적용한다. /fmu/in은 `min(timestamp - time_offset, 수신 시각)`으로 읽고(`Tools/msg/templates/ucdr/msg.h.em` 169행), /fmu/out은 `timestamp`와 `timestamp_sample`에 `time_offset`을 더해 낸다(같은 파일 139-144행). 그래서 1로 바꾸려면 다음이 함께 바뀌어야 한다. (1) 노드가 /fmu/in에 넣는 `timestamp`의 기준이 Agent 호스트 OS 시계여야 한다. (2) 노드와 Agent가 같은 호스트에 있거나 두 호스트의 시계가 동기되어 있어야 한다. (3) /fmu/out의 `timestamp`가 PX4 hrt 축이 아니게 되므로 ULog와 정렬하려면 offset을 기록해야 한다. client는 세션을 만들 때 시간 동기화가 수렴할 때까지 반복해 기다리고 timeout이 거듭되면 오류를 낸다(`src/modules/uxrce_dds_client/uxrce_dds_client.cpp` 319-332행 부근). 그 오류 뒤의 동작과 Agent OS 시계가 epoch 기준인지는 [미확인]이다. PX4 `timestamp`를 노드의 ROS 시각과 직접 비교하는 곳(위 예외의 `is_after_disarm_send`)이 1에서도 같은 축에 있는지도 [미확인]이다. 보수적 동작: 이 절의 규칙은 0에서만 성립하는 것으로 두고, 위 조건과 미확인 항목을 정하기 전에는 1로 바꾸지 않는다. 1로 둔 기체는 이 계약 밖이다("SITL 파라미터" 절).
+- 이와 별개로 운용 노드는 `/clock`이 있어야 돈다. Executor는 `use_sim_time`이 true가 아니면 configure를 거부하고(`ros_ws/src/idsim_mission/src/node/mission_executor_node.cpp`), `Px4Timestamp`는 위 규칙대로 ROS 시간 override가 꺼진 시계에서 값을 만들지 않는다. 이것은 `UXRCE_DDS_SYNCT`와 무관한 노드 쪽 조건이다.
 
 ## 정의 작성 규칙
 
@@ -165,6 +166,7 @@ PX4 쪽은 지구 NED, 동체 FRD이고 ROS와 Gazebo 쪽은 지구 ENU, 동체 
 - px4_ros_com `frame_transforms`는 래핑하지 않고 `test/test_frames.cpp`의 차등 비교 기준으로만 쓴다(공분산 변환 오류와 NaN 번짐이 있다).
 - 원점 이동(world ENU <-> 기체 로컬 NED)은 `idsim_common::geo`(`geo.hpp`)에 있다. 사슬은 gz LOCAL2 -> WGS84 -> PX4 MapProjection이고, `world_enu_to_local_ned`와 `local_ned_to_world_enu`가 한 번에 거친다. 입력은 PX4가 실제로 쓰는 원점(`LocalReference`)과 params로 받은 `world.origin`(`WorldOrigin`. Executor는 누락, 비유한, 범위 밖이면 configure를 거부한다)이다. 기준이 유효한지 보는 술어는 호출하는 px4 어댑터가 먼저 거친다. 이 변환을 쓰는 곳은 Executor의 `Px4FramePort`(`ros_ws/src/idsim_mission/include/idsim_mission/px4/frame_port.hpp`)다. GOTO와 TRACK_ENTITY의 world ENU 점과 표적 속도를 그 tick의 기준(`vehicle_local_position`의 `ref_lat`, `ref_lon`, `ref_alt`)과 `world.origin`으로 로컬 NED로 바꾼다. 기준은 `xy_global`과 `z_global`이 true이고 `ref_lat`, `ref_lon`, `ref_alt`가 유한하며 `ref_alt`가 정확히 0.0이 아닐 때만 유효하다(PX4는 고도 원점이 없을 때 `ref_alt`에 NaN이 아니라 0을 낸다). 기준이 무효이거나 결과를 `trajectory_setpoint`에 실을 수 없으면(비유한 또는 float32 범위 밖) 변환은 값 없음이다. 기준은 그 tick의 위치와 같은 `vehicle_local_position` 표본에서 읽는다.
 - world ENU는 `world.origin`에서의 접평면 직교 좌표다(사슬의 첫 단계가 그 뜻을 정한다). z는 접평면 위 높이이고 타원체 고가 아니다. 그래서 원점에서 수평으로 멀어질수록 같은 z의 점이 타원체 위로 높아진다([계산] 원점에서 수평으로 1e4 m 떨어진 곳은 약 7.8 m, 좌표 상한(1e5 m)의 끝은 약 783 m, 상한 상자의 수평 꼭짓점(약 1.41e5 m)은 약 1.57 km 더 높다). 사슬은 이 차이를 고치지 않고 그대로 옮긴다. 미션의 좌표 상한("GoToItem과 TrackEntityItem" 절)은 float32 정밀도와 PX4의 확인된 동작 범위를 묶는 값이고 이 높이 차를 묶지 않는다. 높이 차는 원점에서의 수평 거리의 제곱에 비례하므로 world z를 지면 위 높이로 읽을 수 있는 곳은 원점 근처뿐이다.
+- 고도 기준(datum). PX4의 `ref_alt`는 AMSL이다. EKF2가 GNSS 표본의 `altitude_msl_m`을 높이로 쓰고, 높이 기준이 GNSS(`EKF2_HGT_REF=1`)일 때 원점 고도가 그 값이다(v1.17.0 `src/modules/ekf2/EKF2.cpp` 2452-2459행, 1597행, `EKF/aid_sources/gnss/gnss_height_control.cpp` 140행, `EKF/ekf_helper.cpp` 229-232행). 높이 기준이 기압계(0)이면 기압계 측정값이 원점 고도가 된다(`EKF/aid_sources/barometer/baro_height_control.cpp` 163-168행). `idsim_common::geo`는 `world.origin.alt`와 `ref_alt`를 같은 datum의 값으로 보고 gz-math의 식대로 타원체 고로 다루며 geoid 보정을 하지 않는다. SITL에서는 GZBridge가 gz NavSat의 altitude 한 값을 `altitude_msl_m`과 `altitude_ellipsoid_m`에 똑같이 넣으므로(`GZBridge.cpp` 727행, 780-781행) AMSL과 타원체 고가 같은 수이고 구분이 드러나지 않는다. gz NavSat의 altitude가 타원체 고인지는 [미확인]이다. 실제 GNSS에서는 두 값이 그 지점의 geoid 높이만큼 다르므로 `world.origin.alt`와 `ref_alt`의 datum이 다르면 world z가 그만큼 어긋난다. `world.origin.alt`를 어느 datum으로 적는지는 정하지 않았다.
 - 기체 로컬 NED의 원점은 월드 원점이 아니라 그 기체의 EKF 원점이다. SITL에서 EKF 원점은 EKF2가 첫 GNSS fix를 받는 순간의 GNSS 위치다(`src/modules/ekf2/EKF/aid_sources/gnss/gps_control.cpp`의 `resetHorizontalPositionToGnss`, 226-239행, 442-445행). 기체가 스폰 지점에 정지한 채 부팅하므로 스폰 지점 근처지만, GNSS 잡음만큼의 오차가 있을 수 있고 그 크기는 측정하지 않았다. 또 이 원점은 월드 `spherical_coordinates`가 첫 fix 전에 적용되어 있어야 의미가 있다. 그래서 변환 입력은 스폰 pose가 아니라 `vehicle_local_position`의 `ref_lat`, `ref_lon`, `ref_alt`로 한다. 비행 중 EKF 원점이 다시 정해지는 조건은 확인하지 않았다.
 - PX4로 가는 setpoint는 기체 로컬 NED 위치(m)와 NED yaw(rad)이고, TRACK_ENTITY는 여기에 로컬 NED 속도(m/s)를 더한다(`px4_setpoint.hpp`). ENU 값은 호출자가 `frames`로 바꿔서 넘긴다. 미션의 yaw 입력(`YawSetpoint`)은 ENU yaw이고 `idsim_mission` core가 같은 식으로 NED yaw로 바꾼다(`ros_ws/src/idsim_mission/include/idsim_mission/core/rules.hpp`의 `enu_to_ned_yaw`. core는 ROS 비의존이라 식을 따로 두고 단위 테스트로 덮는다).
 
@@ -364,27 +366,28 @@ source 값(노드 params와 테스트 상수. 서로 겹치지 않게 둔다).
 
 공통 SITL 파라미터는 `config/px4/sitl_params.env`(`config/fleet.yaml`의 `px4.params_file`) 한 파일이다. 형식은 `PX4_PARAM_<이름>=<값>`이고 compose가 px4 서비스에 `env_file`로 넘긴다. PX4 rcS가 airframe 스크립트보다 먼저 `param set`하고(rcS 130-136행), px4 이미지의 airframe 훅(`<airframe>.post`, `docker/Dockerfile.px4`)이 airframe 뒤에 한 번 더 적용해 이 파일의 값이 최종값이 된다(펌웨어 기본값과 같은 값은 airframe의 `set-default`가 덮어쓰기 때문이다). 실제 적용 값은 환경 스모크가 `pxh param show`로 `stack.json`의 `expected_params`, `derived_params`와 대조한다.
 
-계약으로 고정하는 값(근거는 `config/px4/sitl_params.env`의 항목 주석).
+계약으로 고정하는 값(근거는 `config/px4/sitl_params.env`의 항목 주석). 표의 모든 행이 계약이다. 마지막 열은 계약의 범위를 가르지 않고, 실기체로 옮길 때 그 값이 어떤 성격인지만 알린다.
 
-| 파라미터 | 값 | 의미 | 고정하는 이유 |
-| --- | --- | --- | --- |
-| `COM_OBL_RC_ACT` | 4 | Offboard 손실 시 Land | 그 자리에서 내려와 착지 뒤 자동 disarm으로 끝난다. Return은 다대에서 경로가 겹칠 수 있고, Hold는 손실이 길어지면 제자리에 남아 미션이 끝나지 않는다. 상태기의 실패 폴백은 이 값과 일치시킨다 |
-| `COM_OF_LOSS_T` | 1.0 s | Offboard 손실 판정 시간 | 기본값과 같지만 명시한다. 20 Hz 발행에서 연속 20개 손실이다 |
-| `NAV_DLL_ACT` | 0 | GCS 연결 손실 동작 끔 | airframe 기본은 Return이다. GCS를 붙였다 떼는 것만으로 RTL이 걸리지 않게 한다 |
-| `COM_RC_IN_MODE` | 4 | 수동 조종 입력 끔 | 수동 조종 손실 failsafe(`NAV_RCL_ACT`)를 검사하지 않게 해 외부 입력이 붙었다 끊겨도 Offboard 중 failsafe가 걸리지 않는다 |
-| `COM_DISARM_PRFLT` | -1 | 이륙 전 자동 disarm 끔 | 시동과 이륙 사이 간격이 부하로 길어져도 PX4가 스스로 disarm하지 않는다. 착지 뒤 자동 disarm(`COM_DISARM_LAND`, 기본 2 s)은 그대로다 |
-| `SDLOG_MODE` | 2 | ULog를 부팅부터 종료까지 | 컨테이너 한 번 실행에 ULog 한 파일. 첫 disarm 뒤 기록도 남는다 |
-| `UXRCE_DDS_SYNCT` | 0 | uXRCE-DDS 시간 동기화 끔 | "시간 기준" 절. SITL 전용이고 실기체에서는 1 |
-| `RTL_TYPE` | 0 | home이나 rally point 가운데 가까운 곳으로 직선 복귀 | 기본값과 같다. idsim은 rally point와 MAVLink 미션을 올리지 않으므로 목적지는 home이다. 2와 4는 MAVLink 미션 경로를 따른다 |
-| `RTL_CONE_ANG` | 0 | 귀환 고도 원뿔 없음 | 귀환 고도가 `max(현재 고도, home 고도 + RTL_RETURN_ALT)` 하나로 정해진다 |
-| `RTL_RETURN_ALT` | 10 m | 귀환 고도(home 위) | SITL 시험 미션의 순항 고도 5 m보다 높은 한 값이다. x500 기본 30 m(펌웨어 기본값은 60 m)는 시험 시간을 늘린다 |
-| `RTL_LAND_DELAY` | 0 | 귀환한 뒤 바로 착륙 | 기본값과 같다. 멀티콥터는 home 위에서 바로 착륙한다. -1이면 착륙하지 않아 RTL 항목의 완료 조건이 오지 않는다. 이 경로에서 `RTL_DESCEND_ALT`는 쓰이지 않는다 |
-| `COM_DISARM_LAND` | 2 s | 착지 뒤 자동 disarm | 기본값과 같지만 LAND와 RTL 항목의 완료와 공중 종료 단계의 지상 판정이 이 값에 기대므로 명시한다 |
-| `COM_LOW_BAT_ACT` | 2 | 저전압 시 Land | 실패의 fallback이 Land라는 원칙과 맞춘다. SITL 배터리는 50%에서 멈춰 닿지 않는다 |
-| `EKF2_HGT_REF` | 1 | 높이 기준 GNSS | 기본값과 같다. 높이 기준이 GNSS여야 EKF 원점의 초기 고도 잡음이 도착점에서 상쇄된다. 0(기압계)이면 초기 GNSS 고도 오차가 bias로 남는다 |
-| `IMU_GYRO_CAL_EN` | 0 | 정지 상태 gyro bias 온라인 보정 모듈을 시작하지 않음 | SITL에서 이 모듈이 있으면 arm과 disarm을 반복할 때 `battery_status` 등의 발행이 멈춰 이후 arm이 거부된 일이 있다(실측. 원인은 추정). SITL 센서는 Gazebo에서 오므로 보정이 없어도 EKF가 bias를 추정한다. SITL 전용이고 실기체에서는 1 |
-| `EKF2_GPS_DELAY` | 0 ms | GNSS 지연 보상 없음 | gz 경로의 GPS 표본 시각이 수신 시각이라 실제 지연이 약 0이다. 기본값 110 ms를 두면 EKF 위치가 진행 방향으로 앞서 GOTO 도달 판정 반경의 여유를 깎는다. SITL 전용이고 실기체에서는 수신기의 실제 지연이다 |
+| 파라미터 | 값 | 의미 | 고정하는 이유 | 실기체로 옮길 때 |
+| --- | --- | --- | --- | --- |
+| `COM_OBL_RC_ACT` | 4 | Offboard 손실 시 Land | 그 자리에서 내려와 착지 뒤 자동 disarm으로 끝난다. Return은 다대에서 경로가 겹칠 수 있고, Hold는 손실이 길어지면 제자리에 남아 미션이 끝나지 않는다. 상태기의 실패 fallback은 이 값과 일치시킨다 | 미션 계약 |
+| `COM_OF_LOSS_T` | 1.0 s | Offboard 손실 판정 시간 | 기본값과 같지만 명시한다. 20 Hz 발행에서 연속 20개 손실이다 | 미션 계약 |
+| `NAV_DLL_ACT` | 0 | GCS 연결 손실 동작 끔 | airframe 기본은 Return이다. GCS를 붙였다 떼는 것만으로 RTL이 걸리지 않게 한다 | 현장별 |
+| `COM_RC_IN_MODE` | 4 | 수동 조종 입력 끔 | 수동 조종 손실 failsafe(`NAV_RCL_ACT`)를 검사하지 않게 해 외부 입력이 붙었다 끊겨도 Offboard 중 failsafe가 걸리지 않는다 | SITL 전용 |
+| `COM_DISARM_PRFLT` | -1 | 이륙 전 자동 disarm 끔 | 시동과 이륙 사이 간격이 부하로 길어져도 PX4가 스스로 disarm하지 않는다. 착지 뒤 자동 disarm(`COM_DISARM_LAND`, 기본 2 s)은 그대로다 | SITL 전용 |
+| `SDLOG_MODE` | 2 | ULog를 부팅부터 종료까지 | 컨테이너 한 번 실행에 ULog 한 파일. 첫 disarm 뒤 기록도 남는다 | 현장별 |
+| `UXRCE_DDS_SYNCT` | 0 | uXRCE-DDS 시간 동기화 끔 | "시간 기준" 절. 1로 바꿀 때의 조건도 그 절에 있다 | SITL 전용 |
+| `RTL_TYPE` | 0 | home이나 rally point 가운데 가까운 곳으로 직선 복귀 | 기본값과 같다. idsim은 rally point와 MAVLink 미션을 올리지 않으므로 목적지는 home이다. 2와 4는 MAVLink 미션 경로를 따른다 | 미션 계약 |
+| `RTL_CONE_ANG` | 0 | 귀환 고도 원뿔 없음 | 귀환 고도가 `max(현재 고도, home 고도 + RTL_RETURN_ALT)` 하나로 정해진다 | 현장별 |
+| `RTL_RETURN_ALT` | 10 m | 귀환 고도(home 위) | SITL 시험 미션의 순항 고도 5 m보다 높은 한 값이다. x500 기본 30 m(펌웨어 기본값은 60 m)는 시험 시간을 늘린다 | 현장별 |
+| `RTL_LAND_DELAY` | 0 | 귀환한 뒤 바로 착륙 | 기본값과 같다. 멀티콥터는 home 위에서 바로 착륙한다. -1이면 착륙하지 않아 RTL 항목의 완료 조건이 오지 않는다. 이 경로에서 `RTL_DESCEND_ALT`는 쓰이지 않는다 | 미션 계약 |
+| `COM_DISARM_LAND` | 2 s | 착지 뒤 자동 disarm | 기본값과 같지만 LAND와 RTL 항목의 완료와 공중 종료 단계의 지상 판정이 이 값에 기대므로 명시한다 | 미션 계약 |
+| `COM_LOW_BAT_ACT` | 2 | 저전압 시 Land | 실패의 fallback이 Land라는 원칙과 맞춘다. SITL 배터리는 50%에서 멈춰 닿지 않는다 | 미션 계약 |
+| `EKF2_HGT_REF` | 1 | 높이 기준 GNSS | 기본값과 같다. 높이 기준이 GNSS여야 EKF 원점의 초기 고도 잡음이 도착점에서 상쇄된다. 0(기압계)이면 초기 GNSS 고도 오차가 bias로 남는다 | 미션 계약(좌표 사슬) |
+| `IMU_GYRO_CAL_EN` | 0 | 정지 상태 gyro bias 온라인 보정 모듈을 시작하지 않음 | SITL에서 이 모듈이 있으면 arm과 disarm을 반복할 때 `battery_status` 등의 발행이 멈춰 이후 arm이 거부된 일이 있다(실측. 원인은 추정). SITL 센서는 Gazebo에서 오므로 보정이 없어도 EKF가 bias를 추정한다. 시뮬레이션 환경 때문에 둔 값이고 실기체의 값은 정하지 않았다(PX4 기본값은 1) | SITL 전용 |
+| `EKF2_GPS_DELAY` | 0 ms | GNSS 지연 보상 없음 | gz 경로의 GPS 표본 시각이 수신 시각이라 실제 지연이 약 0이다. 기본값 110 ms를 두면 EKF 위치가 진행 방향으로 앞서 GOTO 도달 판정 반경의 여유를 깎는다. SITL 전용이고 실기체에서는 수신기의 실제 지연이다 | SITL 전용 |
 
+- "실기체로 옮길 때" 열. "SITL 전용"은 시뮬레이션 환경 때문에 둔 값이고 실기체의 값은 정하지 않았다. "미션 계약"은 Executor의 상태기와 판정이 기대는 값이라 실기체에서도 같은 동작이 필요하다. "현장별"은 실기체에서는 운용 환경마다 정할 값이고 표의 값은 SITL 시험용이다. `EKF2_HGT_REF`는 좌표 사슬("좌표계" 절)이 높이 기준 GNSS에 기대므로 미션 계약이지만, 실기체의 높이 기준 설정과 충돌할 수 있다. 이 열은 실기체 파라미터의 결정이 아니고, "SITL 전용"과 "현장별"인 행에 Executor의 동작이 기대지 않는다는 뜻도 아니다(예: "끝난 뒤 기체 상태"의 DISARM_FAILED 행은 `COM_DISARM_PRFLT=-1`에, "포트" 절의 GCS 입력 서술은 `COM_RC_IN_MODE=4`에 기댄다). 행마다 Executor가 그 값에 기대는지는 대조하지 않았으므로(미확인) 실기체 파라미터를 정할 때 행마다 다시 본다. 보수적 동작: 시뮬레이션에서는 표 전체를 계약으로 둔다.
 - `NAV_DLL_ACT` 값 0은 `Disabled`다. [소스] PX4 v1.17.0 `src/modules/commander/commander_params.c` 581-598행의 파라미터 정의가 값 0을 `Disabled`로 적는다. `src/modules/commander/failsafe/failsafe.h` 113-120행의 enum `gcs_connection_loss_failsafe_mode`는 `Disabled = 0`이다. `failsafe.cpp` 515행은 파라미터 값이 이 `Disabled`와 다르고 `COM_DLL_EXCEPT` 예외가 없을 때(`!dll_loss_ignored`)만 GCS 연결 손실 failsafe를 건다. 그래서 0이면 515행 failsafe는 걸리지 않는다. 같은 파일 532-538행에는 다른 경로가 있다. `COM_RC_IN_MODE`가 4이거나 AUTO_MISSION에서 RC 손실을 무시하는 예외(`rc_loss_ignored_mission`)가 있고, `NAV_DLL_ACT`가 `Disabled`이면서 사용자 의도 모드가 AUTO_MISSION이고 `mission_finished`이면 GCS 연결 손실에 RTL을 건다. idsim은 `COM_RC_IN_MODE` 4와 `NAV_DLL_ACT` 0을 두어 앞의 두 조건을 채우지만 이 경로는 AUTO_MISSION 전용이고 idsim은 AUTO_MISSION을 요청하지 않으므로 걸리지 않는다. 외부 GCS가 AUTO_MISSION으로 바꾼 경우는 확인하지 않았다(미확인). 보수적 동작: 판정과 CI에 외부 GCS를 쓰지 않는다. AUTO_MISSION을 쓰는 경로를 더하면 이 항목을 다시 본다.
 - `COM_FAIL_ACT_T`는 계약 표에 넣지 않고 PX4 기본값(v1.17.0에서 5 s)을 둔다. Offboard 손실은 이 지연을 거치지 않고 바로 Land다. 지연이 끼는 것은 Auto 조치(저전압 Land 등)이고 그 동안 기체는 failsafe Hold(`failsafe` true, AUTO_LOITER)다. Executor는 그 표본을 비행 중 감시 순위 6으로 끝낸다.
 - 기체별 `px4_params`는 공통 파일 값을 덮을 수 있고 생성기는 경고만 낸다. 위 표의 파라미터를 기체별로 덮으면 그 기체는 이 계약 밖이다.
@@ -811,6 +814,7 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 | TAKEOFF `height_m`이 float32 범위 안이지만 매우 큰 값(예 1e30)일 때 PX4의 수직 제어 | 상한을 두지 않는다. float32 범위 밖이면 지상에서 setpoint가 나가지 않아 준비 단계의 MODE_SWITCH_FAILED로 끝난다 |
 | 좌표 상한(world 성분 1e5 m) 근처의 실제 비행 | 상한 안의 값은 float32 술어와 PX4의 수평 속도 정규화에 닿지 않는 것으로 계산했다. 비행은 재지 않았다 |
 | Executor 컨테이너를 goal 실행 중에 멈췄을 때 종료 사건이 구독자에게 오는지 | Executor는 종료 처리에서 goal을 ABORTED, REASON_INTERNAL로 끝내고 종료 사건을 낸다. 오지 않으면 읽는 쪽은 결과 미상으로 다룬다 |
+| 비행 중 GPS 상실(전역 기준이 유효하지 않게 되는 경우) | 정하지 않았다. GPS가 항상 수신된다고 가정한다. Executor와 PX4가 이때 어떻게 끝나는지는 확인하지 않았다 |
 
 ### 참고: 노드 파라미터
 
@@ -834,7 +838,7 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 
 고정 상태: 고정 전(Phase 2 완료에 고정).
 
-토픽 `/<vehicle_id>/mission_event`. 미션 실행의 접수와 종료 기록이다. rosbag2(Jazzy)는 action의 goal과 result를 기록하지 않으므로, 기록물에서 미션 id와 결과를 읽을 일반 토픽을 따로 둔다. 정본은 action(GoalStatus와 result)이고 이 메시지는 기록과 관찰을 위한 사본이다. 소비자는 기록물 인덱스(Phase 2)와 통합 테스트다. Fleet은 배분 판단에 쓰지 않는다.
+토픽 `/<vehicle_id>/mission_event`. 미션 실행의 접수와 종료 기록이다. rosbag2(Jazzy)는 action의 goal과 result를 기록하지 않으므로, 기록물에서 미션 id와 결과를 읽을 일반 토픽을 따로 둔다. 정본은 action(GoalStatus와 result)이고 이 메시지는 기록과 관찰을 위한 사본이다. 소비자는 기록물 인덱스(Phase 2), 통합 테스트, 지상의 구독자다. 지상의 어느 컴포넌트가 구독하는지와 기록기의 위치는 정하지 않았다. Fleet은 배분 판단에 쓰지 않는다.
 
 | 필드 | 의미 |
 | --- | --- |
@@ -889,7 +893,7 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 - TRACK_ENTITY 계약 문장: setpoint는 표적 위치에 `offset`을 더한 점이다. 표적 표본이 신선하고 속도가 유효하면 표적 속도를 같은 setpoint에 feedforward로 싣는다. 그래서 일정 속도 표적에 대한 정상 추종 지연은 표본과 tick 지연 정도다(`target_fresh_age`에 tick 하나를 더한 것). 위치만 보내면 PX4 위치 제어는 순수 P 제어라([소스] `PositionControl.cpp` 124-138행, `MPC_XY_P` 0.95) 일정 속도 v의 목표를 약 1.05 s 뒤처져 따른다([추정] 선형 근사). `offboard_control_mode`는 position만 true인 채 그대로다. 표적 속도의 크기를 Executor가 자르지 않는다(수평과 수직 한계는 PX4 위치 제어가 적용한다).
 - 속도는 그 tick의 끝 상태가 TRACK_ENTITY 항목인 tick에만 나간다. 정리로 들어가는 tick, 종료 단계, 다음 항목으로 넘어가는 tick의 setpoint에는 속도가 없다(고정점을 유지하는 단계에 feedforward가 남지 않게). 속도 변환이 값 없음인 tick은 속도만 싣지 않고 위치는 보낸다.
 - 변환 값 없음: 기준이 무효이거나 결과가 `trajectory_setpoint`에 실을 수 없는 값(비유한 또는 float32 범위 밖)이면 점 변환은 값 없음이다("좌표계" 절). 값 없음인 tick은 직전 setpoint를 유지하고 완료의 연속을 끊는다(완료 계수가 0으로 돌아가고, 값을 다시 얻은 뒤 서로 다른 위치 표본 3개 연속을 처음부터 요구한다). 그래서 점 변환이 계속 값 없음인 항목은 발행을 끊지 않고 ITEM_TIMEOUT과 그 정리로 끝나며, 항목 시작부터 한 번도 값을 얻지 못했으면 `detail`에 그 사실을 적는다. 연속을 끊는 것은 도달을 늦출 뿐 거짓 완료를 만들지 않는다.
-- GOTO와 TRACK_ENTITY는 PX4 위치 추정의 전역 기준(`xy_global`, `z_global`)이 유효해지기 전에는 시작하지 않는다(변환이 값 없음이다). 기다리는 동안에도 항목 `timeout`이 흐르고, 넘기면 ITEM_TIMEOUT이며 `detail`에 사유를 적는다.
+- GOTO와 TRACK_ENTITY는 PX4 위치 추정의 전역 기준(`xy_global`, `z_global`)이 유효해지기 전에는 시작하지 않는다(변환이 값 없음이다). 기다리는 동안에도 항목 `timeout`이 흐르고, 넘기면 ITEM_TIMEOUT이며 `detail`에 사유를 적는다. 이 규칙은 GPS가 항상 수신된다는 가정 위에 있고, GPS 없는 비행은 범위 밖이다("미확인 목록" 절).
 - 같은 tick의 순서는 감시 표, TARGET_LOST, ITEM_TIMEOUT, 완료다("종료의 충돌 규칙"). 그 tick의 점 변환과 완료 계수 갱신은 이 순서보다 앞에서 한 번 하므로 감시 표나 ITEM_TIMEOUT이나 취소로 끝나는 tick에도 변환은 불리고, 값을 얻었으면 그 tick의 setpoint는 변환한 점이다.
 - 유효 표본(Executor가 거른다): `target_id`가 토픽 토큰과 같고, `frame_id`가 `world`이고, 위치(그리고 `velocity_valid`가 true이면 속도)가 유한하고, 위치 성분의 절댓값이 1e5 m 이하이고, `stamp`가 0보다 크고 직전 유효 표본보다 크다. 유효로 표시된 속도가 비유한이면 표본 전체가 무효다(속도만 떼어 위치를 쓰지 않는다). 거른 표본은 소실 판정을 앞당기지 않고, 유효 표본 없이 `target_timeout`이 지나면 TARGET_LOST다. 표본의 나이 `now - header.stamp`는 음수이면 0으로 본다.
 - 신선한 표본: 최신 유효 표본의 나이가 `target_fresh_age`(기본 0.1 s) 이하다. 표적 발행 간격 0.05 s의 두 배라 표본 하나 손실까지 신선하다고 본다. 이보다 작으면 정상 지터에도 feedforward가 깜박인다.
@@ -941,7 +945,7 @@ goal이 끝난 시점의 기체 상태다. 소비자(Fleet, 운용자, 통합 �
 | `position_valid`, `position` | world ENU(m). 위치 추정이 유효하고 world 변환이 가능할 때만 valid |
 | `yaw_valid`, `yaw_rad` | world ENU yaw, `[-pi, pi)` |
 | `velocity_valid`, `velocity` | world ENU(m/s) |
-| `geodetic_valid`, `latitude_deg`, `longitude_deg`, `altitude_amsl_m` | WGS84. 지도 표시용 |
+| `geodetic_valid`, `latitude_deg`, `longitude_deg`, `altitude_amsl_m` | 위도와 경도는 WGS84, `altitude_amsl_m`은 PX4가 내는 AMSL 고도이고 geoid 보정을 하지 않는다. SITL에서는 타원체 고와 같은 수다("좌표계" 절의 고도 기준). 지도 표시용 |
 | `battery_valid`, `battery_remaining` | 0.0-1.0 |
 
 - `MODE_*`의 잠정 대응: MANUAL은 조종사 입력 계열 전부, HOLD는 Hold(AUTO_LOITER), OFFBOARD는 OFFBOARD, TAKEOFF는 자동 이륙 계열, LAND는 AUTO_LAND, AUTO_PRECLAND, DESCEND, RTL은 AUTO_RTL, AUTO_OTHER는 그 밖의 자동 모드, TERMINATION은 비행 종료, OTHER는 변환표에 없는 값. 전체 표는 Phase 2에서 Collector 단위 테스트와 함께 확정한다. `MODE_HOLD`는 `MissionItem.TYPE_LOITER`와 다르다.

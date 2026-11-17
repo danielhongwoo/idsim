@@ -13,6 +13,14 @@
 ## 다음 작업
 
 1. Phase 2 착수 전 설계 토론("Phase 2와 3 전에 정할 것"의 첫 항목).
+2. SITL 전용 가정 문서화의 후속. Linux 머신에서 테스트와 함께 한다(생성기 입력 해시, golden, 계약 테스트에 닿을 수 있다).
+   - `VehicleState.msg`의 `altitude_amsl_m`과 `position` 주석에 고도 datum을 적는다(architect).
+   - `config/fleet.yaml`의 `world.origin` 주석("월드 SDF로만 들어간다")을 고치고 key 분류 주석을 단다(devops-engineer).
+   - `config/px4/sitl_params.env`를 SITL 전용, 미션 계약, 현장별 세 묶음 주석으로 나눈다. 값은 바꾸지 않는다(px4-engineer).
+   - `rules.cpp`의 `is_after_disarm_send`가 하는 PX4 timestamp와 노드 ROS 시각의 비교가 `UXRCE_DDS_SYNCT=1`에서 같은 축인지 확인한다(px4-engineer, ros2-engineer).
+   - gz NavSat altitude의 datum을 확인한다(sim-engineer, px4-engineer).
+   - 지상에서 구독하므로 링크 단절 중 `MissionEvent`(RELIABLE KEEP_LAST 10) 유실 여부를 Phase 2 계약 고정 전에 확인한다(ros2-engineer).
+3. 지상 링크의 Zenoh 구성 실험과 설계 토론(architect, ros2-engineer, ops-service-engineer). 기체마다 DDS 도메인을 나누고 그 사이를 Zenoh로 이어 `ExecuteMission`, `VehicleState`, `MissionEvent`만 건네는 구성을 시뮬레이션에 넣는다(`docs/roadmap.md` Phase 3의 선행 항목. 설계는 `docs/architecture.md`에 있고 compose는 아직 스택에 도메인 하나다). `/clock`, 표적 상태, 정답 pose의 공급 도메인, 도메인 ID와 기체별 Agent 포트의 파생 규칙을 함께 정한다. Agent를 기체마다 하나씩 두는 변경도 이 항목에 넣는다. Jazzy와 CycloneDDS에서의 bridge 버전 호환, 손실 링크 위의 action 동작(feedback 유실, 취소 지연)을 확인한다. 링크 단절 중 미션의 동작(계속 또는 중단, 재연결 뒤의 정합, 단절과 이탈의 구분)은 방식과 별개로 계약에서 정한다.
 
 ## 운영 규칙
 
@@ -29,18 +37,28 @@
 
 - 문자 집합 검사는 ripgrep(`rg`)으로 한다(`tools/ci/lint.sh charset`).
 - `FOXGLOVE_BRIDGE_VERSION`은 3.6.3이다. ROS apt 저장소에 옛 버전이 남지 않기 때문이다.
-- CI와 판정의 기준은 x86_64 Linux runner와 arm64 Linux runner 둘이다.
 - `sitl` job은 PR 머리 커밋마다(draft와 문서만 바뀐 PR 제외)와 main push에서 돈다. `lint`, `unit`도 `pull_request`와 `push: main`.
 - replay job의 trigger는 Phase 2에서 정한다. 그때 `docs/architecture.md` 테스트 층 표의 리플레이 행과 `docs/roadmap.md` Phase 2 완료 기준의 "모든 push"를 고친다.
 - CI `sitl` 목표 15분. 비행 시나리오(F1-F4)를 모두 PR CI에 두고, 넘으면 겹치는 비행 구간 -> waypoint 수 -> Hold 시간 순으로 줄인다. F2의 공중 종료와 F3의 공중 시작은 빼지 않는다.
 - Gazebo 정답 pose(`/sim/`)를 SITL MCAP 기록물에 넣는다(Phase 2부터 효과).
 - `docs-for-agent/file-ownership.md`의 소유자는 architect.
 - 수동 비행을 하지 않으므로 QGroundControl을 지원하지 않는다(실행 도구, 버전 고정, 완료 기준에 없다). 화면 확인은 Gazebo GUI와 Lichtblick이다.
+- 프로젝트의 목적은 실기체 개발을 돕는 것이고 기준은 실기체의 구조다. 문서와 그림은 실기체를 먼저 쓰고 시뮬레이션은 그것을 대신하는 것으로 쓴다.
+- 시뮬레이션 환경은 실기체 환경과 최대한 같은 구조로 둔다. 시뮬레이션이 대신하는 것은 실물이 필요한 부분뿐이다. 시뮬레이션에서도 지상 링크는 Zenoh로 잇고 uXRCE-DDS Agent는 기체마다 하나씩 둔다. 무선 구간의 지연과 손실은 시뮬레이션에 넣지 않는다.
+- 테스트는 계약의 경계에서 끊어서 한다. 통합 테스트는 기체의 버스에 붙어 계약을 직접 부르고 지상 링크를 거치지 않는다. 지상 링크의 시험은 따로 둔다.
+- 실기체 검증(실기체 기록물 리플레이, HITL, 지상 시험, 비행 시험, 실기체 조건 모사 시나리오)은 하드웨어 사양이 정해질 때까지 계획에 넣지 않는다.
+- CI와 판정의 기준은 x86_64 Linux runner와 arm64 Linux runner 둘이다. Apple Silicon Mac(arm64)은 개발 호스트이고 container runtime은 OrbStack 기준이다. companion computer용 arm64 이미지는 정하지 않았다.
+- GPS는 항상 쓸 수 있다고 가정한다. GPS 없는 비행은 범위 밖이다. 비행 중 GPS 상실 시의 동작은 정하지 않았고 확인하지도 않았다.
+- 지상 링크(지상국과 기체 사이의 무선 구간)는 DDS가 아니라 Zenoh로 잇는다. 기체의 ROS 2 버스는 기체 안에 머문다. Zenoh의 구성(bridge 종류, 건네는 토픽의 제한, router 위치)은 실험 뒤에 정한다.
+- `MissionEvent`를 지상에서 구독한다. 지상의 어느 컴포넌트가 구독하는지와 기록기의 위치는 정하지 않았다.
+- Zenoh bridge가 `ExecuteMission` action과 `VehicleState`, `MissionEvent` 두 토픽을 건네는지 이른 확인 항목(`docs/roadmap.md` Phase 2 항목 7)을 유지한다.
 
 ## 미해결 사항
 
 사용자가 미룬 것.
 
+- 실기체 적용 범위: 다음을 할지와 언제 할지를 사용자가 정한다. field 시간 모드(`/clock` 없는 실행과 `UXRCE_DDS_SYNCT=1`), 배치 경계(계약 밖에 무엇이 지상 링크를 넘는지, 기록기와 표적 추적기의 위치), `stack.json` 기체 항목의 식별값과 SITL 배치값 분리, 현장용 DDS 설정, FMU(NuttX)의 식별 설정.
+- `world.origin.alt`의 datum(AMSL 또는 타원체 고)을 정하지 않았다. 아래 고도 제한과 함께 정한다(상하한의 기준 높이가 datum에 달려 있다).
 - 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
 
 main 머지 뒤 확인할 것.
