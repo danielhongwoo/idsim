@@ -38,7 +38,9 @@
 #     방법이 있다(확인하지 않았다).
 #   - Xvnc, websockify, gz GUI 셋 중 하나가 끝나면 나머지를 끝내고 스크립트도 끝난다. 먼저 끝난 것은
 #     wait -n -p가 돌려준 pid로 가린다. SIGTERM, SIGINT를 받으면 trap이 셋에 TERM을 보내고(5초 안에 안
-#     끝나면 KILL) 끝낸다. 스크립트가 PID 1이어도 trap으로 신호를 받는다.
+#     끝나면 KILL) 끝낸다. 스크립트가 PID 1이어도(compose에 init이 없다) trap으로 신호를 받는다.
+#     trap은 main이 virtual 방식을 고른 직후에 건다. 그 앞(bash 시작과 방식 선택, 수 ms)에 온 TERM은
+#     PID 1이 버리므로 docker stop이 유예 뒤 KILL로 끝난다. host 방식은 trap 없이 gz로 exec한다.
 #     종료 코드: gz GUI가 먼저 끝나면 그 코드, Xvnc나 websockify가 먼저 끝나면 1, TERM 143, INT 130.
 #
 # 입력 환경변수
@@ -63,6 +65,10 @@ log() { echo "[gz_gui] $*" >&2; }
 # XAUTHORITY 없이 exec하면 Xlib이 HOME/.Xauthority를 찾아 인증에 실패한다(실측).
 readonly xauth_file=/tmp/.Xauthority
 readonly novnc_web=/usr/share/novnc
+
+# virtual 방식의 신호 상태. on_signal이 쓰고 run_virtual이 읽는다.
+term_rc=0
+pids=()
 
 # select_display_mode <요청> <DISPLAY 값> <Xauthority 파일>
 # 고른 방식(host 또는 virtual)을 stdout에 쓴다. 요청 값이 잘못되면 안내를 남기고 1을 돌려준다.
@@ -122,8 +128,8 @@ check_host_x11() {
   fi
 }
 
-# on_signal <종료 코드>: run_virtual의 TERM, INT trap. run_virtual의 지역 변수 term_rc, pids를 쓴다(bash의
-# 동적 범위). trap 문자열로만 불리므로 shellcheck가 호출을 찾지 못한다.
+# on_signal <종료 코드>: virtual 방식의 TERM, INT trap(main이 건다). 전역 term_rc에 종료 코드를 기록하고
+# 이미 띄운 자식(전역 pids)에 TERM을 보낸다. trap 문자열로만 불리므로 shellcheck가 호출을 찾지 못한다.
 # shellcheck disable=SC2329
 on_signal() {
   term_rc="$1"
@@ -165,13 +171,15 @@ run_virtual() {
   # 이 컨테이너 안에서 이 번호를 쓰는 X 서버는 이 스크립트가 띄운 것뿐이다.
   rm -f "/tmp/.X${vdisplay}-lock"
 
-  local term_rc=0 xvnc_pid ws_pid gz_pid
-  local -a pids=()
-  # 신호를 받으면 종료 코드를 기록하고 이미 띄운 자식에 TERM을 보낸다. 자식이 끝나므로 wait -n이 어느
-  # 시점에 시작되든 돌아온다. 자식을 띄운 직후와 pid를 기록하기 전 사이에 온 신호는 wait -n 직전의
-  # term_rc 확인이 잡는다. 정리는 아래 한곳에서 한다.
-  trap 'on_signal 143' TERM
-  trap 'on_signal 130' INT
+  local xvnc_pid ws_pid gz_pid
+  # TERM, INT trap(on_signal)은 main이 이미 걸었다. 신호를 받으면 종료 코드를 기록하고 이미 띄운 자식에
+  # TERM을 보낸다. 자식이 끝나므로 wait -n이 어느 시점에 시작되든 돌아온다. 자식을 띄우기 전이나 띄운
+  # 직후와 pid를 기록하기 전 사이에 온 신호는 아래의 term_rc 확인이 잡는다. 정리는 아래 한곳에서 한다.
+  if [ "${term_rc}" -ne 0 ]; then
+    rm -rf "${rundir}"
+    log "신호를 받아 끝낸다."
+    exit "${term_rc}"
+  fi
 
   Xvnc ":${vdisplay}" \
     -geometry "${geometry}" -depth 24 \
@@ -251,8 +259,12 @@ run_virtual() {
 }
 
 # stop_children <pid>...: TERM을 보내고 최대 5초 기다린 뒤 남은 것은 KILL한다.
-# gz sim -g는 기동 초기(시작 뒤 약 1초)에 받은 TERM에 끝나지 않는 경우가 있다(관찰: 8번 중 3번. 그때
-# TERM은 ruby의 handler에 잡혀 있고 주 스레드는 C++ 쪽 futex에서 기다린다. TERM을 다시 보내도 같다).
+# gz sim -g는 기동 초기(시작 뒤 약 1초)에 받은 TERM에 끝나지 않는 경우가 있다. 관찰 두 가지:
+#   - 시작 1초 뒤 gz에만 TERM을 보내고 2초 뒤 생존을 본 시험에서 8회 중 3회 살아 있었다. 그때 TERM은
+#     ruby의 handler에 잡혀 있고 주 스레드는 C++ 쪽 futex에서 기다린다. TERM을 다시 보내도 같다.
+#   - docker stop 시간을 잰 시험(시작 0.3-8초 뒤 stop)에서는 31회 중 2회가 5초대(5.15, 5.18초)였고,
+#     둘 다 시작 1.0초 뒤 stop이었다(1.0초 시험 11회 중 2회. 31회 중 15회는 TERM을 1초마다 다시 보내던
+#     변형으로 쟀고 5.15초가 그쪽이다). 나머지는 0.15-0.86초다.
 # 그 경우는 5초 뒤 KILL로 끝나며 docker stop의 기본 유예 10초 안이다.
 stop_children() {
   local pid alive i
@@ -279,6 +291,14 @@ stop_children() {
 main() {
   local mode
   mode="$(select_display_mode "${IDSIM_GZ_GUI_DISPLAY:-auto}" "${DISPLAY:-}" "${xauth_file}")" || exit 1
+
+  # virtual 방식은 스크립트가 PID 1로 남아 자식을 거두므로 여기서 바로 trap을 건다. 이 뒤의 설정 파일
+  # 확인, mktemp, xauth 중에 온 신호도 term_rc에 남아 run_virtual이 끝낸다. host 방식은 gz로 exec하므로
+  # 걸지 않는다(지금까지와 같다).
+  if [ "${mode}" = virtual ]; then
+    trap 'on_signal 143' TERM
+    trap 'on_signal 130' INT
+  fi
 
   if [ "${mode}" = host ]; then
     export XAUTHORITY="${xauth_file}"
