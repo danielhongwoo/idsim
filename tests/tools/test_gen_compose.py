@@ -372,6 +372,10 @@ def test_standalone_services_and_healthchecks():
     assert {v["source"] for v in gui["volumes"]} >= {"${XAUTHORITY:-/dev/null}", "/tmp/.X11-unix"}
     for name in gc.GUI_PASS_ENV:
         assert gui["environment"][name] is None
+    assert "IDSIM_GZ_GUI_DISPLAY" in gc.GUI_PASS_ENV
+    assert gui["environment"]["IDSIM_GZ_GUI_WEB_PORT"] == "6080"
+    assert gui["environment"]["IDSIM_GZ_GUI_VDISPLAY"] == "90"
+    assert stack["stack"]["gz_gui_web_port"] == 6080
     assert s["runner"]["environment"]["IDSIM_STACK_FILE"] == \
         "/opt/idsim/artifacts/runs/20261109-090000-k0/stack.json"
     assert stack["startup"]["stages"] == [["xrce-agent", "gazebo"], ["px4-1"], ["bridge"]]
@@ -465,7 +469,7 @@ def test_vehicle_derivations_and_params():
 
 def test_port_plan_all_stacks_pairwise():
     ranges = gc.check_port_plan(PMAX)
-    assert len(ranges) == 10 * (5 + 3 * 9)
+    assert len(ranges) == 10 * (6 + 3 * 9)
     gc.check_port_plan(gc.PARTICIPANT_INDEX_LIMIT)
     with pytest.raises(gc.FleetError):
         gc.check_port_plan(gc.PARTICIPANT_INDEX_LIMIT + 1)
@@ -478,7 +482,10 @@ def test_stack_json_matches_compose_and_formats():
     assert (st["ros_domain_id"], st["agent_port"], st["agent_port_hex"]) == (24, 8892, "22BC")
     assert (st["mavlink_offset"], st["mavlink_gcs_remote"], st["foxglove_port"], st["lichtblick_port"]) == \
         (4000, 18550, 8769, 18084)
+    assert st["gz_gui_web_port"] == 6084
     assert (st["dds"]["port_base"], st["dds"]["port_last"]) == (13400, 13649)
+    gui_env = compose["services"]["gz-gui"]["environment"]
+    assert (gui_env["IDSIM_GZ_GUI_WEB_PORT"], gui_env["IDSIM_GZ_GUI_VDISPLAY"]) == ("6084", "94")
     text = gc.dump_stack(stack)
     assert text.endswith("\n") and text.isascii()
     assert json.loads(text) == stack

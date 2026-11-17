@@ -71,6 +71,7 @@ K0_STANDALONE = r'''{
       "rmw_implementation": "rmw_cyclonedds_cpp"
     },
     "foxglove_port": 8765,
+    "gz_gui_web_port": 6080,
     "gz_ip": "127.0.0.1",
     "gz_partition": "idsim-0",
     "index": 0,
@@ -215,6 +216,7 @@ K1_EMBEDDED = r'''{
       "rmw_implementation": "rmw_cyclonedds_cpp"
     },
     "foxglove_port": 8766,
+    "gz_gui_web_port": 6081,
     "gz_ip": "127.0.0.1",
     "gz_partition": "idsim-1",
     "index": 1,

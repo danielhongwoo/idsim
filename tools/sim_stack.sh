@@ -26,6 +26,8 @@
 #      안내와 함께 실패한다(tools/ros_ws.sh build). sim-oracle이 있으면 ros_ws/src/idsim_sim/scripts/sim_oracle.py가 없을 때도 같다.
 #      embedded 변형에는 노드 단계가 없다.
 #   5. --viz면 viz 프로필(gz-gui, foxglove, lichtblick)을 `up -d`로 붙인다(기다리지 않는다. healthcheck 없음).
+#      호스트에 X11(DISPLAY와 XAUTHORITY)이 있으면 gz-gui가 호스트 화면에 뜨고, 없으면(Mac 등) 컨테이너 안의 가상 화면(Xvnc)에
+#      뜨며 http://127.0.0.1:<6080 + 스택 번호>/vnc.html?autoconnect=1&resize=scale 로 브라우저에서 본다(IDSIM_GZ_GUI_DISPLAY로 고른다).
 #   6. 실패하면 unhealthy 또는 exited 서비스 이름을 한 줄로 찍고, 에이전트 로그의 "bind error"와 px4 로그의 "bind failed"를 찾아 보고하고 종료 코드 1.
 #      노드 단계가 실패하면 ops-N, targets, sim-oracle의 로그 끝과 .State.Health.Log도 찍는다.
 #      스택은 조사할 수 있게 그대로 두며 `tools/sim_stack.sh down`으로 내린다.
@@ -284,8 +286,15 @@ do_up() {
     if [ -z "$vs" ]; then
       say "이 변형(${variant})에는 viz 서비스가 없다"
     else
-      [ -n "${DISPLAY:-}" ] || say "경고: DISPLAY가 비어 있다. gz-gui가 안내와 함께 끝난다"
-      [ -n "${XAUTHORITY:-}" ] || say "경고: XAUTHORITY가 비어 있다. gz-gui가 안내와 함께 끝난다"
+      local gp
+      gp="$(sj "$sf" stack.gz_gui_web_port)"
+      local gmode="${IDSIM_GZ_GUI_DISPLAY:-auto}" host_x=1
+      { [ -n "${DISPLAY:-}" ] && [ -n "${XAUTHORITY:-}" ]; } || host_x=0
+      if [ "$gmode" = "virtual" ] || { [ "$gmode" = "auto" ] && [ "$host_x" -eq 0 ]; }; then
+        say "gz-gui가 가상 화면으로 뜬다(호스트 X11 없음 또는 IDSIM_GZ_GUI_DISPLAY=virtual). 주소: http://127.0.0.1:${gp}/vnc.html?autoconnect=1&resize=scale"
+      elif [ "$gmode" = "host" ] && [ "$host_x" -eq 0 ]; then
+        say "경고: DISPLAY나 XAUTHORITY가 비어 있다. IDSIM_GZ_GUI_DISPLAY=host라 gz-gui가 안내와 함께 끝난다"
+      fi
       # shellcheck disable=SC2086
       docker compose -f "$f" --profile viz up -d $vs >&2
       local lp fp

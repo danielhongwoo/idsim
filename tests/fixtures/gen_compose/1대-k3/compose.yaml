@@ -291,6 +291,9 @@ services:
       HOME: /tmp/gz-home
       DISPLAY: ${DISPLAY:-}
       XAUTHORITY: /tmp/.Xauthority
+      IDSIM_GZ_GUI_WEB_PORT: '6083'
+      IDSIM_GZ_GUI_VDISPLAY: '93'
+      IDSIM_GZ_GUI_DISPLAY: null
       IDSIM_GZ_GUI_ENGINE: null
       QSG_RENDER_LOOP: null
       vblank_mode: null

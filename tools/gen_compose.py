@@ -51,6 +51,8 @@ ROS_DOMAIN_BASE = 20
 AGENT_PORT_BASE = 8888
 FOXGLOVE_PORT_BASE = 8765
 LICHTBLICK_PORT_BASE = 18080
+GZ_GUI_WEB_PORT_BASE = 6080  # noVNC(가상 화면 방식의 gz-gui). 127.0.0.1에만 연다
+GZ_GUI_VDISPLAY_BASE = 90  # gz-gui 안의 가상 X display 번호
 MAVLINK_OFFSET_STEP = 1000
 MAVLINK_GCS_REMOTE = 14550
 MAVLINK_GCS_LOCAL = 18570
@@ -174,7 +176,7 @@ PATH_SAFE_RE = re.compile(r"^/[A-Za-z0-9_./@+-]*\Z")
 # viz 서비스에만 허용하는 compose 보간. 이 밖의 ${...}와 $는 출력에 남으면 안 된다.
 ALLOWED_INTERPOLATIONS = ("${DISPLAY:-}", "${XAUTHORITY:-/dev/null}")
 # gz-gui에 이름만 통과시키는 환경변수(호스트에 있으면 그 값, 없으면 넘기지 않는다)
-GUI_PASS_ENV = ("IDSIM_GZ_GUI_ENGINE", "QSG_RENDER_LOOP", "vblank_mode")
+GUI_PASS_ENV = ("IDSIM_GZ_GUI_DISPLAY", "IDSIM_GZ_GUI_ENGINE", "QSG_RENDER_LOOP", "vblank_mode")
 
 FLEET_KEYS = {"schema", "world", "vehicles", "targets", "px4"}
 WORLD_KEYS = {"name", "template", "origin", "speed_factor"}
@@ -237,6 +239,7 @@ def port_ranges(k, participant_max, ids=range(VEHICLE_MIN, VEHICLE_MAX + 1)):
         (f"k{k} agent", agent_port(k), agent_port(k)),
         (f"k{k} foxglove", FOXGLOVE_PORT_BASE + k, FOXGLOVE_PORT_BASE + k),
         (f"k{k} lichtblick", LICHTBLICK_PORT_BASE + k, LICHTBLICK_PORT_BASE + k),
+        (f"k{k} gz_gui_web", GZ_GUI_WEB_PORT_BASE + k, GZ_GUI_WEB_PORT_BASE + k),
         (f"k{k} gcs_remote", gcs_remote_port(k), gcs_remote_port(k)),
     ]
     for n in ids:
@@ -1321,6 +1324,8 @@ def build(fleet_norm, ctx):
             "HOME": "/tmp/gz-home",
             "DISPLAY": "${DISPLAY:-}",
             "XAUTHORITY": XAUTH_IN_CONTAINER,
+            "IDSIM_GZ_GUI_WEB_PORT": str(GZ_GUI_WEB_PORT_BASE + k),
+            "IDSIM_GZ_GUI_VDISPLAY": str(GZ_GUI_VDISPLAY_BASE + k),
         })
         for name in GUI_PASS_ENV:
             genv[name] = None
@@ -1393,6 +1398,7 @@ def build(fleet_norm, ctx):
             "mavlink_gcs_remote": gcs_remote_port(k),
             "foxglove_port": FOXGLOVE_PORT_BASE + k,
             "lichtblick_port": LICHTBLICK_PORT_BASE + k,
+            "gz_gui_web_port": GZ_GUI_WEB_PORT_BASE + k,
             "viz_bind": VIZ_BIND,
             "dds": {"rmw_implementation": RMW, "cyclonedds_uri": CYCLONEDDS_URI,
                     "port_base": dlo, "port_last": dhi, "participant_index_max": pmax},

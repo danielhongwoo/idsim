@@ -14,7 +14,7 @@ idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy �
 | 도구 | bash 4 이상(PATH의 `bash`), git, python3 (표준 라이브러리만 사용. 3.12에서 확인, 하한 3.10), curl, sha256sum, rg(ripgrep), timeout. rg는 Ubuntu에서 `sudo apt-get install ripgrep`, Mac에서 `brew install ripgrep` |
 | 디스크 | 30GB 이상 권장. 근거: 이미지 5종 합 약 8.6GB(공유 레이어 중복 포함이라 실제 점유는 더 작다) + px4 builder 단계 7.7GB + buildkit 캐시 |
 | 메모리 | 16GB 이상. 개발 VM 31GB와 CI runner 16GB에서 확인했고 그 아래는 미실측 |
-| 선택 | gh (PR을 올리거나 합칠 때), 화면 확인용 X11 또는 XWayland 데스크톱 |
+| 선택 | gh (PR을 올리거나 합칠 때), Gazebo 화면을 호스트에 직접 띄울 X11 또는 XWayland 데스크톱(없으면 gz-gui가 컨테이너 안의 가상 화면에 뜨고 브라우저로 본다) |
 
 조건은 `tools/check_host.sh`가 점검한다. 시스템을 바꾸지 않고 조회만 하며, 외부 네트워크 검사는 `--offline`으로 건너뛴다.
 
@@ -27,8 +27,8 @@ idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy �
 | 컨테이너 런타임 | OrbStack 2.2.5(Docker Engine 29.8.2, compose 5.5.0)에서 확인했다. CPU 10, 메모리 16GB를 주었다. Mac에서는 OrbStack을 기준으로 한다 |
 | bash | macOS 기본 `/bin/bash`는 3.2라 쓸 수 없다. `brew install bash`로 4 이상을 PATH 앞에 둔다. `rg`는 `brew install ripgrep`으로 설치한다(문자 집합 검사가 쓴다). 그 밖의 도구(`sha256sum`, `timeout`)는 macOS 27 기본 설치에 있다 |
 | 이미지 | linux/arm64로 로컬에서 빌드한다(`python3 tools/ci/build_images.py --mode load`. cache 없는 첫 빌드가 이 조건에서 1회 실측 약 14분). GHCR에 arm64 index가 올라온 뒤에는 `--mode pull`로 받을 수 있고, 그 전에는 받지 않고 실패한다. apt 미러는 `ports.ubuntu.com`으로 고정이다 |
-| 네트워크 | 컨테이너는 Linux VM 안에서 돈다. `network_mode: host`는 그 VM의 네트워크이고 스택 안의 통신은 Linux와 같다. Mac 쪽 127.0.0.1에서 Lichtblick의 HTTP 응답(200)과 foxglove 포트의 TCP 연결은 OrbStack에서 확인했다. 브라우저 화면에서 토픽이 보이는지까지는 확인하지 않았다 |
-| Gazebo GUI | `tools/sim_stack.sh up --viz`의 `gz-gui`는 그대로는 뜨지 않는다(`XAUTHORITY`가 없어 `gz_gui.sh`가 끝난다. compose가 넘기는 X11 소켓 `/tmp/.X11-unix`도 macOS에는 없다). XQuartz를 거치는 방법은 확인하지 않았다. 화면은 Lichtblick으로 본다 |
+| 네트워크 | 컨테이너는 Linux VM 안에서 돈다. `network_mode: host`는 그 VM의 네트워크이고 스택 안의 통신은 Linux와 같다. Mac 쪽 127.0.0.1에서 Lichtblick의 HTTP 응답(200)과 foxglove 포트의 TCP 연결, noVNC 포트(6080 + k)의 접속은 OrbStack에서 확인했다. Lichtblick 화면에서 토픽이 보이는지까지는 확인하지 않았다. 스택은 `GZ_IP=127.0.0.1`로 VM 안 loopback에 묶여 있어 Mac에 설치한 Gazebo(Homebrew gz-sim 8.15.0)의 `gz topic -l`은 서버의 토픽을 찾지 못한다(관찰). 그래서 Mac의 Gazebo GUI를 서버에 붙이는 방법은 쓰지 않는다 |
+| Gazebo GUI | macOS에는 X11 소켓과 `XAUTHORITY`가 없으므로 `tools/sim_stack.sh up --viz`의 `gz-gui`가 컨테이너 안의 가상 화면(Xvnc)에 GUI를 띄운다. `up --viz` 뒤 브라우저에서 `http://127.0.0.1:6080/vnc.html?autoconnect=1&resize=scale`(스택 0. 스택 k는 6080 + k)을 연다. 렌더링은 Mesa llvmpipe(OpenGL 4.5) 소프트웨어 경로다. 이 조건에서 GUI 유무에 따른 시뮬레이션 RTF 차이는 없었다(0.9996 대 0.9997, 30 s 창, VM CPU 10개. GUI가 CPU 약 2개를 쓴다). XQuartz는 쓰지 않는다. XQuartz 2.8.5에 TCP로 붙으면 X 접속은 되지만 GLX context 생성이 실패한다(관찰: `X_GLXCreateNewContext` BadValue. 이 XQuartz는 간접 GLX가 꺼져 있다) |
 | 판정의 기준 | CI와 판정의 기준은 x86_64 Linux runner와 arm64 Linux runner 둘이고, 판정 상수는 amd64에서 보정했다. Mac에서 스모크 네 단계와 `tests/sitl/run_sitl.sh --stack 0`이 통과하는 것을 확인했으나, merge 전 확인의 기준은 CI다 |
 
 ## 빠른 시작
@@ -88,7 +88,7 @@ tests/sitl/run_sitl.sh --stack 0 -- -k test_b          # `--` 뒤는 pytest 인�
 
 ## 화면으로 보기
 
-스택을 `tools/sim_stack.sh up --viz`로 올리면 Gazebo GUI(compose `viz` 프로필의 `gz-gui`)가 함께 뜬다. 월드 원점은 `config/fleet.yaml`의 `world.origin`(기본 서울시청)이고 생성기가 월드 SDF에 넣는다. 기체 출발 위치는 `vehicles[].pose`다(기체 1은 원점에서 동쪽 6 m, 남쪽 3 m). 자세한 것은 `docker/README.md`의 "시각 도구" 절을 따른다.
+스택을 `tools/sim_stack.sh up --viz`로 올리면 Gazebo GUI(compose `viz` 프로필의 `gz-gui`)가 함께 뜬다. 호스트에 X11(`DISPLAY`와 `XAUTHORITY`)이 있으면 호스트 화면에 뜨고, 없으면(Mac, SSH로 붙은 Linux) 컨테이너 안의 가상 화면에 뜨며 `http://127.0.0.1:6080/vnc.html?autoconnect=1&resize=scale`(6080 + 스택 번호)을 브라우저로 연다. 주소는 `up --viz`가 출력한다. 월드 원점은 `config/fleet.yaml`의 `world.origin`(기본 서울시청)이고 생성기가 월드 SDF에 넣는다. 기체 출발 위치는 `vehicles[].pose`다(기체 1은 원점에서 동쪽 6 m, 남쪽 3 m). 자세한 것은 `docker/README.md`의 "시각 도구" 절을 따른다.
 
 ## 스택과 스택 번호
 

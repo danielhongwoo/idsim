@@ -61,7 +61,7 @@ _SPEC = {
         "index": _INT, "compose_project": _STR, "ros_domain_id": _INT, "gz_partition": _STR,
         "gz_ip": _STR, "agent_port": _INT, "agent_port_hex": _STR, "mavlink_offset": _INT,
         "mavlink_gcs_remote": _INT, "foxglove_port": _INT, "lichtblick_port": _INT,
-        "viz_bind": _STR,
+        "gz_gui_web_port": _INT, "viz_bind": _STR,
         "dds": {"rmw_implementation": _STR, "cyclonedds_uri": _STR, "port_base": _INT,
                 "port_last": _INT, "participant_index_max": _INT},
     },
