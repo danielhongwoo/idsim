@@ -71,7 +71,6 @@ K0_STANDALONE = r'''{
       "rmw_implementation": "rmw_cyclonedds_cpp"
     },
     "foxglove_port": 8765,
-    "gz_gui_web_port": 6080,
     "gz_ip": "127.0.0.1",
     "gz_partition": "idsim-0",
     "index": 0,
@@ -216,7 +215,6 @@ K1_EMBEDDED = r'''{
       "rmw_implementation": "rmw_cyclonedds_cpp"
     },
     "foxglove_port": 8766,
-    "gz_gui_web_port": 6081,
     "gz_ip": "127.0.0.1",
     "gz_partition": "idsim-1",
     "index": 1,
@@ -696,7 +694,7 @@ def test_v5_standalone_second_vehicle_expect_gps_null_rejected():
 
 def test_v5_golden_standalone_one_vehicle():
     s = _golden("1대-k0")
-    assert s.generator_version == 5
+    assert s.generator_version == 6
     assert s.world_template.endswith("world_template.sdf")
     assert s.world_file == s.dir / "world" / "default.sdf"
     assert s.targets == [] and s.targets_service is None and s.sim_oracle_service == "sim-oracle"
@@ -731,3 +729,23 @@ def test_v5_golden_key_removed_fails(name, drop):
     del o[drop[-1]]
     with pytest.raises(stk.StackError, match="필수 필드 누락"):
         stk.loads(json.dumps(d), "x/stack.json")
+
+
+# --- 판 6: stack.gz_gui_web_port ---
+
+def test_v6_requires_gz_gui_web_port():
+    def f(d):
+        _v5(d)
+        d["generator"]["version"] = 6
+        d["stack"]["gz_gui_web_port"] = 6080
+    stk.loads(_mutate(K0_STANDALONE, f), "x/stack.json")
+
+    def g(d):
+        f(d)
+        d["stack"].pop("gz_gui_web_port")
+    with pytest.raises(stk.StackError, match="gz_gui_web_port"):
+        stk.loads(_mutate(K0_STANDALONE, g), "x/stack.json")
+
+
+def test_v5_without_gz_gui_web_port_still_loads():
+    stk.loads(_v5_text(), "x/stack.json")

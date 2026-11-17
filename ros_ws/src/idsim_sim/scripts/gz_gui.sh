@@ -6,7 +6,7 @@
 #   host     호스트 X11에 창을 띄운다. 실행 전에 X11 접속 조건을 점검하고, 빠졌으면 안내 메시지와
 #            함께 종료 코드 1로 끝낸다. 점검을 통과하면 gz sim -g로 exec한다.
 #   virtual  컨테이너 안의 가상 X 화면(Xvnc)에 띄우고 noVNC(websockify)로 브라우저에 보인다.
-#            호스트 X11이 없을 때(Mac, SSH로 붙은 Linux 등) 쓴다.
+#            호스트 X11이 없는 호스트(Mac 등)에서 쓴다.
 # IDSIM_GZ_GUI_DISPLAY=auto(기본)는 DISPLAY가 비어 있지 않고 Xauthority 파일을 읽을 수 있고 비어 있지
 # 않으면 host, 아니면 virtual을 고른다. 조건은 호스트 X11이 있느냐뿐이다(OS로 나누지 않는다).
 #
@@ -24,17 +24,21 @@
 #     gz 창은 그 크기로 화면 왼쪽 위(0,0)에 뜨고, 화면 크기를 창 크기와 같게 해야 창이 화면을 채운다.
 #     client(noVNC)의 화면 크기 변경 요청은 받지 않는다(-AcceptSetDesktopSize=0). 브라우저에서는
 #     resize=scale로 축소, 확대해 본다.
-#   - X는 TCP로 열지 않는다(-nolisten tcp). /tmp/.X11-unix는 읽기 전용 마운트라 Xvnc는 abstract
-#     socket(@/tmp/.X11-unix/X<번호>)으로만 연다. host network에서는 abstract socket이 호스트, 다른
-#     스택과 공유되므로 번호는 compose가 스택마다 나눠 주고, 접속은 컨테이너 안에서 만든
-#     MIT-MAGIC-COOKIE로 제한한다.
+#   - X는 TCP로 열지 않는다(-nolisten tcp). 마운트된 /tmp/.X11-unix에는 파일 socket을 만들지 못하고
+#     (관찰: 소유자가 root가 아니면 "Owner of /tmp/.X11-unix should be set to root", root 소유 0755
+#     읽기 전용이면 "Mode ... should be set to 1777" 뒤 "failed to bind listener") abstract socket
+#     (@/tmp/.X11-unix/X<번호>)으로만 연다. gz는 그 abstract socket으로 붙는다. host network에서는
+#     abstract socket이 호스트, 다른 스택과 공유되므로 번호는 compose가 스택마다 나눠 주고, 접속은
+#     컨테이너 안에서 만든 MIT-MAGIC-COOKIE로 제한한다. cookie는 argv에 드러나지 않게 stdin으로 넣는다.
 #   - VNC도 TCP로 열지 않는다(-rfbport -1). 컨테이너 안의 unix socket(0600)에만 열고 websockify가
-#     --unix-target으로 붙는다. 밖으로 여는 것은 127.0.0.1:<IDSIM_GZ_GUI_WEB_PORT>(noVNC HTTP와
-#     WebSocket) 하나다.
+#     --unix-target으로 붙는다. TCP로 여는 것은 websockify의 127.0.0.1:<IDSIM_GZ_GUI_WEB_PORT>(noVNC
+#     HTTP와 WebSocket) 하나다(관찰: host netns에 5900대, 6000대 LISTEN 없음).
 #   - VNC 비밀번호는 없다(-SecurityTypes None). 웹 포트가 127.0.0.1에만 열린다는 전제다. 그 호스트에
-#     로그인한 사용자는 누구나 화면을 보고 조작할 수 있다. 원격에서는 ssh -L로 포트를 넘겨 본다.
-#   - Xvnc, websockify, gz GUI 셋 중 하나가 끝나면 나머지를 끝내고 스크립트도 끝난다. SIGTERM, SIGINT를
-#     받으면 셋을 끝낸다(5초 안에 안 끝나면 KILL). 스크립트가 PID 1이어도 trap으로 신호를 받는다.
+#     로그인한 사용자는 누구나 화면을 보고 조작할 수 있다. 원격 호스트라면 ssh -L로 포트를 넘겨 보는
+#     방법이 있다(확인하지 않았다).
+#   - Xvnc, websockify, gz GUI 셋 중 하나가 끝나면 나머지를 끝내고 스크립트도 끝난다. 먼저 끝난 것은
+#     wait -n -p가 돌려준 pid로 가린다. SIGTERM, SIGINT를 받으면 trap이 셋에 TERM을 보내고(5초 안에 안
+#     끝나면 KILL) 끝낸다. 스크립트가 PID 1이어도 trap으로 신호를 받는다.
 #     종료 코드: gz GUI가 먼저 끝나면 그 코드, Xvnc나 websockify가 먼저 끝나면 1, TERM 143, INT 130.
 #
 # 입력 환경변수
@@ -118,6 +122,16 @@ check_host_x11() {
   fi
 }
 
+# on_signal <종료 코드>: run_virtual의 TERM, INT trap. run_virtual의 지역 변수 term_rc, pids를 쓴다(bash의
+# 동적 범위). trap 문자열로만 불리므로 shellcheck가 호출을 찾지 못한다.
+# shellcheck disable=SC2329
+on_signal() {
+  term_rc="$1"
+  if [ "${#pids[@]}" -gt 0 ]; then
+    kill -TERM "${pids[@]}" 2>/dev/null || true
+  fi
+}
+
 # virtual 방식. Xvnc, websockify, gz GUI를 자식으로 띄우고 하나가 끝나거나 신호를 받으면 모두 끝낸다.
 run_virtual() {
   local gui_config="$1"
@@ -145,15 +159,19 @@ run_virtual() {
   local sock="${rundir}/vnc.sock" cookie="${rundir}/Xauthority"
   # 빈 파일을 먼저 만들어 xauth의 "file does not exist" 경고를 없앤다(rundir은 0700).
   : >"${cookie}"
-  xauth -q -f "${cookie}" add ":${vdisplay}" MIT-MAGIC-COOKIE-1 "$(mcookie)"
+  # cookie 값이 xauth의 argv(ps, /proc/<pid>/cmdline)에 드러나지 않게 명령을 stdin으로 준다.
+  xauth -q -f "${cookie}" source - <<<"add :${vdisplay} MIT-MAGIC-COOKIE-1 $(mcookie)"
   # 같은 컨테이너가 재시작되면 지난 Xvnc의 lock 파일이 남아 "already active"로 거부된다.
   # 이 컨테이너 안에서 이 번호를 쓰는 X 서버는 이 스크립트가 띄운 것뿐이다.
   rm -f "/tmp/.X${vdisplay}-lock"
 
   local term_rc=0 xvnc_pid ws_pid gz_pid
-  # 신호는 기록만 하고 wait를 깨운다. 정리는 아래 한곳에서 한다.
-  trap 'term_rc=143' TERM
-  trap 'term_rc=130' INT
+  local -a pids=()
+  # 신호를 받으면 종료 코드를 기록하고 이미 띄운 자식에 TERM을 보낸다. 자식이 끝나므로 wait -n이 어느
+  # 시점에 시작되든 돌아온다. 자식을 띄운 직후와 pid를 기록하기 전 사이에 온 신호는 wait -n 직전의
+  # term_rc 확인이 잡는다. 정리는 아래 한곳에서 한다.
+  trap 'on_signal 143' TERM
+  trap 'on_signal 130' INT
 
   Xvnc ":${vdisplay}" \
     -geometry "${geometry}" -depth 24 \
@@ -163,6 +181,7 @@ run_virtual() {
     -SecurityTypes None \
     -AcceptSetDesktopSize=0 &
   xvnc_pid=$!
+  pids+=("${xvnc_pid}")
 
   # Xvnc는 X listen socket을 연 뒤 VNC unix socket을 만든다. 그 socket이 생기면 준비된 것으로 본다.
   local i
@@ -173,17 +192,21 @@ run_virtual() {
     fi
     sleep 0.1
   done
-  if [ ! -S "${sock}" ]; then
-    err "Xvnc :${vdisplay}가 뜨지 못했다(바로 끝났거나 10초 안에 준비되지 않았다). 같은 번호를 다른 스택이나 호스트의 X 서버가 쓰고 있지 않은지 확인하라."
+  if [ "${term_rc}" -ne 0 ] || [ ! -S "${sock}" ]; then
+    [ "${term_rc}" -ne 0 ] || err "Xvnc :${vdisplay}가 뜨지 못했다(바로 끝났거나 10초 안에 준비되지 않았다). 같은 번호를 다른 스택이나 호스트의 X 서버가 쓰고 있지 않은지 확인하라."
     kill -TERM "${xvnc_pid}" 2>/dev/null || true
     wait "${xvnc_pid}" 2>/dev/null || true
     rm -rf "${rundir}"
-    [ "${term_rc}" -ne 0 ] && exit "${term_rc}"
+    if [ "${term_rc}" -ne 0 ]; then
+      log "신호를 받아 끝낸다."
+      exit "${term_rc}"
+    fi
     exit 1
   fi
 
   websockify --web "${novnc_web}" --unix-target="${sock}" "127.0.0.1:${port}" &
   ws_pid=$!
+  pids+=("${ws_pid}")
 
   # XDG_RUNTIME_DIR이 없으면 Qt가 경고를 남기고 /tmp/runtime-<사용자>를 만든다. 0700인 rundir을 준다.
   DISPLAY=":${vdisplay}" XAUTHORITY="${cookie}" XDG_RUNTIME_DIR="${rundir}" gz sim -g \
@@ -191,26 +214,33 @@ run_virtual() {
     --render-engine-gui "${IDSIM_GZ_GUI_ENGINE:-ogre2}" \
     "$@" &
   gz_pid=$!
+  pids+=("${gz_pid}")
 
   log "가상 화면 :${vdisplay} (${geometry}). 브라우저 주소: http://127.0.0.1:${port}/vnc.html?autoconnect=1&resize=scale"
 
-  # 셋 중 하나가 끝나거나 trap한 신호가 오면 wait -n이 돌아온다.
-  local rc=0
-  wait -n "${xvnc_pid}" "${ws_pid}" "${gz_pid}" || rc=$?
+  # 셋 중 하나가 끝나거나 trap한 신호가 오면 wait -n이 돌아온다. 끝난 자식의 pid는 done_pid에 온다
+  # (신호로 깨어나면 비어 있다). 신호가 이미 와 있으면 기다리지 않는다.
+  local rc=0 done_pid=""
+  if [ "${term_rc}" -eq 0 ]; then
+    wait -n -p done_pid "${pids[@]}" || rc=$?
+  fi
   trap '' TERM INT
 
   local exit_rc
   if [ "${term_rc}" -ne 0 ]; then
     log "신호를 받아 끝낸다."
     exit_rc="${term_rc}"
-  elif ! kill -0 "${gz_pid}" 2>/dev/null; then
+  elif [ "${done_pid:-}" = "${gz_pid}" ]; then
     log "gz GUI가 끝났다(종료 코드 ${rc})."
     exit_rc="${rc}"
-  elif ! kill -0 "${xvnc_pid}" 2>/dev/null; then
+  elif [ "${done_pid:-}" = "${xvnc_pid}" ]; then
     err "Xvnc가 먼저 끝났다(종료 코드 ${rc})."
     exit_rc=1
-  else
+  elif [ "${done_pid:-}" = "${ws_pid}" ]; then
     err "websockify가 먼저 끝났다(종료 코드 ${rc}). 포트 127.0.0.1:${port}를 다른 프로세스가 쓰고 있지 않은지 확인하라."
+    exit_rc=1
+  else
+    err "끝난 자식을 가리지 못했다(wait 종료 코드 ${rc})."
     exit_rc=1
   fi
 
@@ -221,6 +251,9 @@ run_virtual() {
 }
 
 # stop_children <pid>...: TERM을 보내고 최대 5초 기다린 뒤 남은 것은 KILL한다.
+# gz sim -g는 기동 초기(시작 뒤 약 1초)에 받은 TERM에 끝나지 않는 경우가 있다(관찰: 8번 중 3번. 그때
+# TERM은 ruby의 handler에 잡혀 있고 주 스레드는 C++ 쪽 futex에서 기다린다. TERM을 다시 보내도 같다).
+# 그 경우는 5초 뒤 KILL로 끝나며 docker stop의 기본 유예 10초 안이다.
 stop_children() {
   local pid alive i
   for pid in "$@"; do

@@ -547,7 +547,7 @@ services:
       - /opt/idsim/sim/scripts/gz_gui.sh
     volumes:
       - type: bind
-        source: /tmp/.X11-unix
+        source: ${IDSIM_X11_SOCKET_DIR:-/tmp/.X11-unix}
         target: /tmp/.X11-unix
         read_only: true
         bind:

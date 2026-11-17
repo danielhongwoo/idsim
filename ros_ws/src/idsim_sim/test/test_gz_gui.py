@@ -56,7 +56,7 @@ def xauth(tmp_path):
         ("auto", ":0", "empty", "virtual"),  # Mac: Xauthority 자리에 /dev/null
         ("auto", ":0", "missing", "virtual"),
         ("auto", "", "empty", "virtual"),
-        ("host", "", "empty", "host"),  # host는 점검을 main이 하고 안내와 함께 1로 끝낸다
+        ("host", "", "empty", "host"),  # 점검은 main의 check_host_x11이 한다(test_forced_host_*)
         ("virtual", ":0", "full", "virtual"),
     ],
 )
@@ -117,3 +117,59 @@ def test_window_geometry_missing_fails(tmp_path):
     r = _call("gui_window_geometry", str(cfg))
     assert r.returncode == 1
     assert r.stdout == ""
+
+
+def _run_main(env_extra):
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": "/nonexistent"}
+    env.update(env_extra)
+    return subprocess.run(
+        ["bash", str(SCRIPT)], capture_output=True, text=True, check=False, env=env, timeout=30
+    )
+
+
+def test_forced_host_without_display_exits_1():
+    # 점검이 GUI 설정 파일 확인과 gz 실행보다 먼저라 컨테이너와 gz 없이 돌릴 수 있다
+    r = _run_main({"IDSIM_GZ_GUI_DISPLAY": "host", "DISPLAY": ""})
+    assert r.returncode == 1
+    assert "DISPLAY가 비어 있다" in r.stderr
+
+
+@pytest.mark.skipif(
+    os.path.exists("/tmp/.Xauthority") and os.path.getsize("/tmp/.Xauthority") > 0,
+    reason="이 호스트의 /tmp/.Xauthority가 비어 있지 않다",
+)
+def test_forced_host_without_xauthority_exits_1():
+    r = _run_main({"IDSIM_GZ_GUI_DISPLAY": "host", "DISPLAY": ":0"})
+    assert r.returncode == 1
+    assert "Xauthority 파일(/tmp/.Xauthority)이 없거나 비어 있다" in r.stderr
+
+
+def _function_body(name):
+    text = SCRIPT.read_text(encoding="utf-8")
+    start = text.index(f"\n{name}() {{\n")
+    end = text.index("\n}\n", start)
+    return text[start:end]
+
+
+@pytest.mark.parametrize(
+    "fragment",
+    [
+        "-nolisten tcp",  # X를 TCP로 열지 않는다
+        "-rfbport -1 ",  # VNC를 TCP로 열지 않는다
+        '-rfbunixpath "${sock}"',  # VNC는 컨테이너 안 unix socket에만
+        "-rfbunixmode 0600",
+        '-auth "${cookie}"',  # abstract socket은 호스트와 공유되므로 cookie로 제한한다
+        '--unix-target="${sock}" "127.0.0.1:${port}"',  # 밖으로 여는 것은 127.0.0.1의 웹 포트 하나
+        'source - <<<"add :${vdisplay} MIT-MAGIC-COOKIE-1 $(mcookie)"',  # cookie를 argv에 두지 않는다
+    ],
+)
+def test_virtual_security_arguments_present(fragment):
+    # 실행 시험은 컨테이너가 필요하다. 보안 인자가 지워지거나 바뀌는 것을 정적으로 막는다
+    assert fragment in _function_body("run_virtual")
+
+
+def test_virtual_binds_nothing_but_loopback():
+    body = _function_body("run_virtual")
+    assert "0.0.0.0" not in body
+    assert body.count("websockify --web") == 1
+    assert "-rfbport 5" not in body and "-listen tcp" not in body

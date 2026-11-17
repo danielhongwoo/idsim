@@ -31,7 +31,7 @@ ubuntu:24.04 -> xrce-agent
 | 이미지 | 베이스 | 들어가는 것 | 크기 (실측) |
 | --- | --- | --- | --- |
 | `ros-base` | Ubuntu 24.04 (digest 고정) | ROS 2 Jazzy, CycloneDDS rmw, 공통 도구. `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` 고정 | 838MB |
-| `sim-base` | `ros-base` | OSRF 저장소의 Gazebo Harmonic, PX4-gazebo-models의 모델과 월드, 센서 설정 파일(`/opt/px4-gz`), gz-gui의 가상 화면용 `tigervnc-standalone-server`, `novnc`, `websockify`, `xauth` | 2.97GB |
+| `sim-base` | `ros-base` | OSRF 저장소의 Gazebo Harmonic, PX4-gazebo-models의 모델과 월드, 센서 설정 파일(`/opt/px4-gz`), gz-gui의 가상 화면용 `tigervnc-standalone-server`, `websockify`, `xauth`(apt)와 noVNC 정적 파일(novnc deb에서 꺼낸 `/usr/share/novnc`. novnc를 apt로 설치하면 nodejs 등이 따라와 쓰지 않는다) | 2.97GB에 가상 화면 레이어 11.2MB를 더한 값(`docker history` 실측. 더한 뒤 이미지 전체 크기는 따로 재지 않았다) |
 | `px4` | `sim-base` | PX4 SITL 빌드 결과물(`px4` 바이너리, 시작 스크립트), idsim용 `px4-rc.mavlink`와 airframe `.post` 훅. 빌드 도구와 소스는 최종 이미지에 없다 | 3.06GB |
 | `ros-ws` | `ros-base` | px4_msgs, px4_ros_com, ros_gz_bridge, colcon, clang-tidy-18, clang-format-18. 이 프로젝트의 소스는 이미지에 넣지 않고 실행 시 `/opt/idsim`에 마운트한다. Gazebo 서버는 없다 | 1.99GB |
 | `xrce-agent` | Ubuntu 24.04 (digest 고정) | Micro XRCE-DDS Agent. ROS 없음 | 153MB |
@@ -68,9 +68,9 @@ xrce-agent --> gazebo --> px4-1..N --> bridge --> ops-1..N, targets, sim-oracle 
 | `targets` | ros-ws | 표적 어댑터(`ros2 run idsim_sim target_adapter`). `fleet.yaml`의 `targets` 궤적(`params/targets.yaml`)을 시뮬레이션 시간에 맞춰 평가해 `/targets/<id>/state`로 발행한다. 표적이 없으면 서비스와 params를 만들지 않고, `embedded` 변형에서도 뜨지 않는다 | 표시 파일 `/tmp/idsim/targets_ready`(모든 표적이 한 번 이상 발행된 뒤 노드가 만든다) | 호스트 uid:gid |
 | `sim-oracle` | sim-base | SITL 전용 정답 pose 공급자. `idsim_sim/scripts/sim_oracle.py`(마운트)가 gz-transport로 `/world/<월드>/pose/info`를 직접 구독해 기체 base_link pose를 `/sim/<vehicle_id>/pose`로 발행한다(bridge를 거치지 않는다). 기체 목록은 환경 변수 `IDSIM_ORACLE_VEHICLES`(`px4_1=x500_1 ...`, `fleet.yaml`의 기체에서 생성). `standalone`이면 표적과 무관하게 항상 만들고 `embedded`에는 없다. replay와 `--infra-only`에서는 뜨지 않는다 | 표시 파일 `/tmp/idsim/oracle_ready`(모든 기체의 pose를 한 번 이상 낸 뒤 노드가 만든다) | 호스트 uid:gid |
 | `runner` | ros-ws | 상주하지 않는다. 스크립트가 `compose run`으로 판정 명령을 실행할 때 쓴다. 프로필 `tools` | 없음 | 호스트 uid:gid |
-| `gz-gui` | sim-base | Gazebo GUI 클라이언트. 프로필 `viz`. 호스트 X11이 있으면 호스트 화면에, 없으면 컨테이너 안의 가상 화면(Xvnc)에 띄우고 noVNC로 서빙한다. 아래 "시각 도구" 절 | 가상 화면 방식에서 noVNC 127.0.0.1:6080 + k (host network) | 호스트 uid:gid |
+| `gz-gui` | sim-base | Gazebo GUI 클라이언트. 프로필 `viz`. 호스트 X11을 쓸 수 있으면 호스트 화면에, 아니면 컨테이너 안의 가상 화면(Xvnc)에 띄우고 noVNC로 브라우저에 내보낸다(가상 화면 방식의 포트는 127.0.0.1의 6080 + k. host network라 compose `ports`는 없다). 아래 "시각 도구" 절 | 없음 | 호스트 uid:gid |
 | `foxglove` | ros-ws | foxglove_bridge. 기체 토픽(`/px4_N/...`)을 읽기 전용 WebSocket으로 내보낸다. 프로필 `viz`. 아래 "시각 도구" 절 | 없음 | 호스트 uid:gid |
-| `lichtblick` | 공식 Lichtblick 이미지(`LICHTBLICK_IMAGE`) | 브라우저 뷰어를 정적 파일로 서빙한다. 프로필 `viz` | 없음 | root |
+| `lichtblick` | 공식 Lichtblick 이미지(`LICHTBLICK_IMAGE`) | 브라우저 뷰어를 정적 파일로 내보낸다. 프로필 `viz` | 없음 | root |
 
 변형은 둘이다(`--variant`).
 
@@ -254,13 +254,20 @@ tools/sim_stack.sh down --stack 8                     # 끝나면
 
 | 값 | 동작 |
 | --- | --- |
-| `auto`(기본) | 호스트에 `DISPLAY`와 Xauthority가 있으면 `host`, 없으면 `virtual` |
+| `auto`(기본) | `DISPLAY`가 비어 있지 않고 Xauthority 파일(`XAUTHORITY`가 가리키는 파일)을 읽을 수 있고 비어 있지 않으면 `host`, 아니면 `virtual` |
 | `host` | 호스트 X 서버에 띄운다(X11 소켓 마운트). 호스트 X11이 없으면 `gz_gui.sh`가 안내와 함께 끝난다 |
-| `virtual` | 컨테이너 안의 가상 화면(Xvnc, display 번호 90 + k)에 띄우고 noVNC로 서빙한다. 호스트 X11이 필요 없다(Mac의 OrbStack, SSH로 붙은 Linux) |
+| `virtual` | 컨테이너 안의 가상 화면(Xvnc, display 번호 90 + k)에 띄우고 noVNC로 브라우저에 내보낸다. 호스트 X11이 필요 없다(Mac의 OrbStack에서 확인했다. Linux 호스트에서는 돌려 보지 않았다) |
 
-가상 화면 방식의 주소는 `http://127.0.0.1:<6080 + k>/vnc.html?autoconnect=1&resize=scale`이다(스택 0이면 6080). `tools/sim_stack.sh up --viz`가 `stack.json`의 `stack.gz_gui_web_port`를 읽어 출력한다. 포트와 display 번호는 compose가 `IDSIM_GZ_GUI_WEB_PORT`, `IDSIM_GZ_GUI_VDISPLAY`로 넣는다. host network라 compose `ports`는 없고 `gz_gui.sh`가 127.0.0.1에만 연다(`foxglove`, `lichtblick`과 같다). 비밀번호는 없다. 같은 호스트의 다른 사용자는 이 포트로 GUI를 조작할 수 있으므로 공용 호스트에서는 쓰지 않는다. 원격 호스트에서는 SSH 포트 전달로 본다: `ssh -L 6080:127.0.0.1:6080 <호스트>` 뒤 로컬 브라우저에서 같은 주소를 연다.
+가상 화면 방식의 주소는 `http://127.0.0.1:<6080 + k>/vnc.html?autoconnect=1&resize=scale`이다(스택 0이면 6080). `tools/sim_stack.sh up --viz`가 `stack.json`의 `stack.gz_gui_web_port`를 읽어 출력한다. 포트와 display 번호는 compose가 `IDSIM_GZ_GUI_WEB_PORT`, `IDSIM_GZ_GUI_VDISPLAY`로 넣는다. host network라 compose `ports`는 없고 `gz_gui.sh`가 127.0.0.1에만 연다(`foxglove`, `lichtblick`과 같다).
 
-가상 화면은 GPU 없이 Mesa llvmpipe(OpenGL 4.5) 소프트웨어 렌더링이다. Apple Silicon Mac의 OrbStack(VM CPU 10개)에서 30 s 창으로 잰 시뮬레이션 RTF는 GUI 없이 0.9996, 가상 화면 GUI와 함께 0.9997로 차이가 없었고, GUI가 CPU 약 2개를 썼다.
+- 화면 크기는 `gui.config`의 창 크기(1000x845)로 고정된다. client의 화면 크기 변경 요청은 받지 않으므로 `resize=scale`로 축소, 확대해 본다.
+- 열린 포트: host netns의 TCP LISTEN 가운데 화면 관련은 `127.0.0.1:6089`(websockify, 스택 9에서 잰 값) 하나이고 5900대와 6000대는 없다. X는 abstract socket `@/tmp/.X11-unix/X99`, VNC는 컨테이너 안 unix socket이다.
+- 비밀번호가 없다. 그 호스트에 로그인한 사용자는 누구나 화면을 보고 조작할 수 있고, websockify가 WebSocket의 Origin을 검사하지 않으므로 그 호스트의 브라우저가 연 웹 페이지도 이 포트에 붙을 수 있다(재현하지 않은 일반 지식). 개발용 화면이라는 전제이며 공용 호스트에서는 쓰지 않는다.
+- 원격 호스트에서는 SSH 포트 전달(`ssh -L 6080:127.0.0.1:6080 <호스트>`) 뒤 로컬 브라우저에서 같은 주소를 연다. 이 방법은 확인하지 않았다.
+- 호스트에 `/tmp/.X11-unix`가 없으면(XQuartz가 없는 Mac 등) compose의 bind 원본이 없어 컨테이너가 만들어지지 못하므로, `tools/sim_stack.sh`가 실행 디렉터리의 빈 `x11-empty/`를 `IDSIM_X11_SOCKET_DIR`로 넘겨 대신 마운트한다(호스트 `/tmp`에는 만들지 않는다). compose를 직접 올릴 때는 `IDSIM_X11_SOCKET_DIR`을 빈 디렉터리로 주거나 `/tmp/.X11-unix`를 만들어 둔다. 없는 경로의 bind가 실패하고 빈 디렉터리를 주면 컨테이너가 만들어지는 것은 1회성 compose로 확인했다.
+- 확인한 범위: 가상 화면 방식은 Mac(OrbStack)에서 확인했다. 읽기 전용 root 소유 0755 `/tmp/.X11-unix`(named volume으로 Linux 조건을 흉내 냄)에서도 Xvnc가 abstract socket으로 뜨고 `vnc.html`이 200이었다. 실제 Linux 호스트에서는 돌려 보지 않았다. 호스트 방식도 이번 변경 뒤에는 다시 돌리지 않았고 코드 대조만 했다.
+
+가상 화면은 GPU 없이 Mesa llvmpipe(OpenGL 4.5) 소프트웨어 렌더링이다. Mac(OrbStack VM CPU 10개), 기체 1대, 인프라만(운용 노드 없음)에서 30 s 창을 네 번씩 잰 RTF가 GUI와 함께 0.9993-0.9998, GUI 없이 0.9984-0.9997로 차이가 없다. `gz-gui` 컨테이너는 CPU 약 2코어(180-217%)를 쓴다. 그 밖의 조건(CPU가 적은 호스트, 기체 여러 대)은 재지 않았다. 3D view 갱신은 llvmpipe에서 약 12-16 fps다(VNC 갱신 횟수로 추정한 값).
 
 ```
 tools/sim_stack.sh up --viz           # 스택과 GUI를 함께

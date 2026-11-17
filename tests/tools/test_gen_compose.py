@@ -369,7 +369,9 @@ def test_standalone_services_and_healthchecks():
     assert gui["depends_on"] == {"gazebo": {"condition": "service_healthy"}}
     assert gui["environment"]["DISPLAY"] == "${DISPLAY:-}"
     assert gui["environment"]["HOME"] == "/tmp/gz-home"
-    assert {v["source"] for v in gui["volumes"]} >= {"${XAUTHORITY:-/dev/null}", "/tmp/.X11-unix"}
+    assert {v["source"] for v in gui["volumes"]} >= {"${XAUTHORITY:-/dev/null}", "${IDSIM_X11_SOCKET_DIR:-/tmp/.X11-unix}"}
+    # 호스트에 소켓 디렉터리가 없어도 만들어지도록 원본은 보간이다(sim_stack.sh가 빈 디렉터리를 넘긴다)
+    assert {v["target"] for v in gui["volumes"]} >= {"/tmp/.X11-unix", "/tmp/.Xauthority"}
     for name in gc.GUI_PASS_ENV:
         assert gui["environment"][name] is None
     assert "IDSIM_GZ_GUI_DISPLAY" in gc.GUI_PASS_ENV
@@ -608,7 +610,7 @@ def test_ops_service_details():
         assert v["vehicle_id"] == v["ns"][1:] == v["px4_ns"]
         assert v["params_file"] == f"params/ops-{v['id']}.yaml"
     assert stack["run"]["params_dir"] == "params"
-    assert stack["generator"]["version"] == 5
+    assert stack["generator"]["version"] == gc.GENERATOR_VERSION
 
 
 def test_render_dirs():
@@ -1040,7 +1042,7 @@ def test_no_origin_env_and_invariants_catch_it():
 
 def test_stack_json_world_and_v5_keys():
     _, stack, _ = gen()
-    assert stack["generator"]["version"] == 5
+    assert stack["generator"]["version"] == gc.GENERATOR_VERSION
     assert stack["world"] == {"name": "default", "template": FIXTURE_TEMPLATE, "file": "world/default.sdf",
                               "origin": {"lat": 37.5665, "lon": 126.978, "alt": 38.0}, "speed_factor": None}
     assert stack["inputs"]["world_template"] == {"path": FIXTURE_TEMPLATE, "sha256": "b" * 64}
@@ -1329,7 +1331,7 @@ def test_marker_dir_is_tmpfs_for_every_marker_service():
     # 바인드 마운트와 겹치지 않는다(volumes에 /tmp/idsim이 없다)
     assert all(v["target"] != gc.MARKER_DIR for svc in s.values() for v in svc.get("volumes", []))
     # stack.json에는 tmpfs가 없다
-    assert gc.GENERATOR_VERSION == 5 and "tmpfs" not in gc.dump_stack(stack)
+    assert gc.GENERATOR_VERSION == 6 and "tmpfs" not in gc.dump_stack(stack)
 
 
 def test_marker_tmpfs_follows_the_ci_uid():

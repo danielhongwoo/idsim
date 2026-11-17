@@ -55,15 +55,18 @@
 
 - 실기체 적용 범위: 다음을 할지와 언제 할지를 사용자가 정한다. field 시간 모드(`/clock` 없는 실행과 `UXRCE_DDS_SYNCT=1`), 배치 경계(계약 밖에 무엇이 지상 링크를 넘는지, 기록기와 표적 추적기의 위치), `stack.json` 기체 항목의 식별값과 SITL 배치값 분리, 현장용 DDS 설정, FMU(NuttX)의 식별 설정.
 - `world.origin.alt`의 datum(AMSL 또는 타원체 고)을 정하지 않았다. 아래 고도 제한과 함께 정한다(상하한의 기준 높이가 datum에 달려 있다).
+- gz-gui 가상 화면의 접근 제한: noVNC 포트(127.0.0.1의 6080 + k)는 비밀번호가 없고 websockify는 WebSocket의 Origin을 검사하지 않는다. 그 호스트에 로그인한 사용자와 그 호스트의 브라우저가 연 웹 페이지가 화면에 붙어 GUI를 조작할 수 있다(재현하지 않았다). 개발용 화면으로 받아들일지, 실행마다 만드는 비밀번호나 token으로 막을지 사용자가 정한다.
 - 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
 
 main 머지 뒤 확인할 것.
 
 - arm64 runner의 `sitl` 판정 확인: 판정 상수는 amd64에서 보정했다. arm64 runner에서는 build workflow 수동 실행(입력 `sitl`)으로 `run_sitl.sh --stack 0` 1회 통과(21 passed, 판정 구간 RTF 1.000)만 보았다. 새 key가 GHCR에 올라간 뒤 `sitl (arm64)` job의 결과(RTF, 목표 15분)와 반복 실행의 흔들림을 확인한다.
+- gz-gui 화면 방식의 Linux 확인: 가상 화면 방식(Xvnc와 noVNC)은 Apple Silicon Mac(OrbStack, XQuartz 설치됨)에서만 돌려 보았다. x86_64 Linux에서 host 방식(`gz_gui.sh`를 함수로 나눈 뒤 다시 돌리지 않았다)과 virtual 방식(`IDSIM_GZ_GUI_DISPLAY=virtual`), 원격 호스트의 `ssh -L` 포트 전달을 1회씩 확인한다. `/tmp/.X11-unix`가 없는 호스트(XQuartz 없는 Mac)에서 `tools/sim_stack.sh`가 빈 디렉터리를 만들어 넘기는 분기는 `IDSIM_X11_SOCKET_DIR`을 손으로 준 조건으로만 보았다(sim-engineer, devops-engineer).
+- 표준 빌드 경로의 gz-gui 확인: 가상 화면은 `idsim/sim-base:vizexp` 태그로 빌드한 이미지를 gz-gui 서비스에만 넣어 확인했다. `build_images.py --mode load` 뒤 `tools/sim_stack.sh up --viz` 그대로는 돌리지 않았다(devops-engineer).
 
 문서 정리(정형, 다음 문서 정리 때).
 
-- Dockerfile 주석에 남은 계획 표지: `Dockerfile.px4` 36, 226행 "(S1)"은 "(스모크 embedded 단계)", `Dockerfile.ros-ws` 56행과 `Dockerfile.xrce-agent` 39행 "스모크 S0가"는 "스모크 images 단계가", `Dockerfile.sim-base` 4행 "(지금은 README의 수동 docker run, 3단계부터 gz-gui 서비스)"는 "(viz 프로필의 gz-gui 서비스)"로 바꾼다. Dockerfile을 바꾸면 이미지 key가 바뀌어 PR의 sitl이 실패하므로 주석만 따로 고치지 않고, 그 Dockerfile을 실제로 바꾸는 이미지 PR에 함께 넣는다(각 owner).
+- Dockerfile 주석에 남은 계획 표지: `Dockerfile.px4` 36, 226행 "(S1)"은 "(스모크 embedded 단계)", `Dockerfile.ros-ws` 56행과 `Dockerfile.xrce-agent` 39행 "스모크 S0가"는 "스모크 images 단계가"로 바꾼다. Dockerfile을 바꾸면 이미지 key가 바뀌어 PR의 sitl이 실패하므로 주석만 따로 고치지 않고, 그 Dockerfile을 실제로 바꾸는 이미지 PR에 함께 넣는다(각 owner).
 - `idsim_common/vehicle_command.hpp` 주석의 MAVLink 재송출 문장에 소스 행(v1.17.0 `COMMAND_LONG.hpp` 82-96행)을 적는다(ros2-engineer). `gz_server.sh` 머리 주석의 "문자열 그대로 넘긴다"를 고친다(sim-engineer).
 - `docs/interface.md` "시간 기준" 절의 FIFO 근거 문장은 `vehicle_command` queue에서 구독자가 뒤처지면 오래된 명령을 잃는다고 적는다. 그 경우가 DISARMED 확인의 논증에 무슨 뜻인지(arm이 유실되면 기체는 DISARMED다)를 덧붙일지 정한다. 고정 절이다(architect).
 - `config/px4/sitl_params.env`: `UXRCE_DDS_SYNCT` 주석의 날짜 "(2026-11-10 결정)"을 지운다. `COM_RC_IN_MODE` 항목의 "추측: ... px4-out 단계에서 실측하고, 막히면 1로 되돌린다"가 지금도 유효한지 보고 고친다(px4-engineer). 주석을 고치면 gen_compose golden의 sha256이 바뀐다.
