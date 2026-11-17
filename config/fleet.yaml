@@ -7,6 +7,14 @@
 #   - 파생값: 포트, 네임스페이스, MAV_SYS_ID, UXRCE_DDS_KEY, 모델 이름, 서비스 이름. 모르는 key는 모두 실패다.
 #   - 스택 번호 k(0-9): 생성 인자 --stack, 없으면 IDSIM_STACK_INDEX, 없으면 0.
 #   - px4_params의 식별 파라미터: MAV_SYS_ID, UXRCE_DDS_KEY, UXRCE_DDS_DOM_ID, UXRCE_DDS_AG_IP, SYS_AUTOSTART.
+#
+# key 분류(쓰이는 곳, docs/architecture.md)
+#   - 운용 쪽에도 쓰이는 key: vehicles[].id(기체 식별의 출처)와 world.origin(운용 노드 params에도 들어간다).
+#   - 시뮬레이션 전용 key: airframe, pose, px4_params, world.name, world.template, world.speed_factor, targets,
+#     px4.params_file, px4.start. px4_params와 px4.params_file의 값 가운데 미션 계약이 요구하는 것은
+#     docs/interface.md "SITL 파라미터" 절의 분류가 가른다.
+#   - schema는 파일 형식의 판이라 어느 쪽에도 속하지 않는다.
+#   - 파일 형식은 이 구분을 key 구조로 드러내지 않는다(world.origin이 world 아래에 있다).
 
 # 파일 형식 번호. 2만 받는다. world.file key는 없고, 월드 템플릿은 world.template이다.
 schema: 2
@@ -19,7 +27,10 @@ world:
   # 템플릿에는 월드 직속 plugin, spherical_coordinates, actor, include를 둘 수 없다(생성기가 거부한다).
   template: ros_ws/src/idsim_sim/worlds/idsim_base.sdf
   # 월드 원점(WGS84 위도와 경도는 도, 고도는 m). 필수이고 셋을 모두 적는다. 기본값은 서울시청.
-  # 월드 SDF의 <spherical_coordinates>로만 들어간다(heading 0, ENU).
+  # 월드 SDF의 <spherical_coordinates>(heading 0, ENU)와 운용 노드(ops-N)의 params(params/ops-N.yaml의
+  # world.origin.lat/lon/alt) 양쪽에 들어가고, 기체별 기대 GPS(stack.json vehicles[].expect_gps) 계산에도 쓴다.
+  # embedded 변형은 월드 SDF와 ops-N params를 만들지 않는다.
+  # alt를 어느 datum의 값으로 적는지는 정하지 않았다(docs/interface.md).
   origin:
     lat: 37.5665
     lon: 126.9780
