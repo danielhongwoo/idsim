@@ -37,6 +37,7 @@
 
 - 문자 집합 검사는 ripgrep(`rg`)으로 한다(`tools/ci/lint.sh charset`).
 - `FOXGLOVE_BRIDGE_VERSION`은 3.6.3이다. ROS apt 저장소에 옛 버전이 남지 않기 때문이다.
+- GHCR의 기존 이미지와 태그(이전 key 태그, `buildcache`)는 지우지 않는다. 이전 commit으로 돌아가 빌드할 때 필요하다. 정리 정책은 multi-arch index push가 main에서 동작하는 것을 확인한 뒤에 사용자가 정한다.
 - `sitl` job은 PR 머리 커밋마다(draft와 문서만 바뀐 PR 제외)와 main push에서 돈다. `lint`, `unit`도 `pull_request`와 `push: main`.
 - replay job의 trigger는 Phase 2에서 정한다. 그때 `docs/architecture.md` 테스트 층 표의 리플레이 행과 `docs/roadmap.md` Phase 2 완료 기준의 "모든 push"를 고친다.
 - CI `sitl` 목표 15분. 비행 시나리오(F1-F4)를 모두 PR CI에 두고, 넘으면 겹치는 비행 구간 -> waypoint 수 -> Hold 시간 순으로 줄인다. F2의 공중 종료와 F3의 공중 시작은 빼지 않는다.
