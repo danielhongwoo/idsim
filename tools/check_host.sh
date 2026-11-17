@@ -190,6 +190,8 @@ case "$gmode" in
   auto)
     if [ "$host_x" -eq 1 ]; then
       ok "DISPLAY=$DISPLAY, XAUTHORITY=$XAUTHORITY: Gazebo GUI(tools/sim_stack.sh up --viz)가 호스트 화면에 뜬다"
+    elif [ -n "${DISPLAY:-}" ] && [ "${DISPLAY#/}" != "${DISPLAY}" ]; then
+      ok "DISPLAY=$DISPLAY: 컨테이너에서 닿지 않는 호스트 socket 경로(macOS XQuartz)여서 Gazebo GUI(up --viz)는 가상 화면에 뜬다. 주소는 up --viz가 출력한다(http://127.0.0.1:6080/vnc.html, 6080 + 스택 번호)"
     else
       ok "DISPLAY=${DISPLAY:-없음}, XAUTHORITY=${XAUTHORITY:-없음}: XAUTHORITY 파일이 없거나 비었거나 읽을 수 없거나 DISPLAY가 비어 Gazebo GUI(up --viz)는 가상 화면에 뜬다. 주소는 up --viz가 출력한다(http://127.0.0.1:6080/vnc.html, 6080 + 스택 번호). 호스트 화면에 띄우려면 XAUTHORITY를 내보내라(Linux GNOME Wayland: export XAUTHORITY=\$(ls /run/user/\$(id -u)/.mutter-Xwaylandauth.* | head -n 1))"
     fi ;;

@@ -302,6 +302,10 @@ do_up() {
             say "gz-gui는 호스트 화면(DISPLAY=${DISPLAY})에 뜬다"
           elif [ -z "${DISPLAY:-}" ]; then
             say "호스트 X11이 없어(DISPLAY가 비어 있다) gz-gui가 가상 화면으로 뜬다. 주소: ${url}"
+          elif [ "${DISPLAY#/}" != "${DISPLAY}" ]; then
+            # DISPLAY가 경로면 호스트의 unix socket 파일이다(macOS XQuartz의 launchd socket). 컨테이너에서 닿지 않고
+            # XAUTHORITY를 내보내도 호스트 화면에 뜨지 않으므로 그 안내를 하지 않는다
+            say "DISPLAY=${DISPLAY}는 컨테이너에서 닿지 않는 호스트 socket 경로여서 gz-gui가 가상 화면으로 뜬다. 주소: ${url}"
           else
             say "DISPLAY=${DISPLAY}는 있으나 XAUTHORITY 파일이 없거나 비어 있거나 읽을 수 없어 gz-gui가 가상 화면으로 뜬다. 주소: ${url}"
             say "호스트 화면에 띄우려면 XAUTHORITY를 내보내고 다시 올려라. GNOME Wayland(Xwayland): export XAUTHORITY=\$(ls /run/user/\$(id -u)/.mutter-Xwaylandauth.* | head -n 1)"
