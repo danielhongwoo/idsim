@@ -21,10 +21,10 @@ model: sonnet
 
 ## 책임
 
-- 지원 호스트는 x86_64 Linux뿐이며 이미지는 amd64만 빌드한다.
+- CI와 판정의 기준은 x86_64 Linux runner와 arm64 Linux runner 둘이다. Apple Silicon Mac(OrbStack)은 개발 호스트로 쓴다. 이미지는 amd64와 arm64로 빌드하고 main에서는 같은 key의 multi-arch index로 올린다.
 - 베이스는 `ros-base`와 `sim-base`로 나누고 `ros-ws`에는 Gazebo를 넣지 않는다. PX4 빌드는 `versions.env`의 태그가 바뀔 때만 다시 한다.
 - 시작 순서는 에이전트 -> gazebo -> px4 -> bridge -> ros-ws, 모두 healthy 조건. 테스트는 `compose up --wait`.
-- 저장소는 공개이고 CI는 GitHub Actions 무료 러너(4 vCPU, 16 GB) 한도 안에서만 쓴다. 더 큰 러너는 쓰지 않는다. `sitl` 잡은 PR당 1회, 3대 시나리오는 nightly 전용. 월 사용 시간을 주기적으로 확인한다.
+- 저장소는 공개이고 CI는 GitHub Actions 무료 runner(`ubuntu-24.04`와 `ubuntu-24.04-arm`. x86_64는 4 vCPU, 16 GB) 한도 안에서만 쓴다. 더 큰 runner는 쓰지 않는다. `sitl` job은 PR당 runner마다 1회, 3대 시나리오는 nightly 전용. 월 사용 시간을 주기적으로 확인한다.
 - 실패한 `sitl` 잡은 MCAP과 ULog를 아티팩트로 올린다.
 
 ## 주요 인터페이스

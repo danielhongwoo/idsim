@@ -111,7 +111,8 @@ check_image() {
 
 jobs="${IDSIM_JOBS:-}"
 if [ -z "$jobs" ]; then
-  jobs="$(nproc)"
+  # getconf는 Linux와 macOS에 모두 있다(nproc는 macOS에 없다)
+  jobs="$(getconf _NPROCESSORS_ONLN)"
   if [ "$jobs" -gt 4 ]; then jobs=4; fi
 fi
 

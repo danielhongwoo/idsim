@@ -6,7 +6,7 @@
 #         clang-format px4-api sim-topic cargo
 #   clang-tidy와 ament_lint는 compile_commands.json과 ROS 헤더가 필요해서 여기에 없다. unit job의 tools/ros_ws.sh ci 안에서 돈다.
 #
-# 대상 파일은 git이 추적하거나 무시 목록에 없는 새 파일이다(git ls-files -co --exclude-standard).
+# 대상 파일은 git이 추적하거나 무시 목록에 없는 새 파일이다(git ls-files -co --exclude-standard). charset은 같은 범위를 rg로 본다.
 # 그래서 로컬의 artifacts/, __pycache__/ 같은 무시 대상은 보지 않고 CI 체크아웃과 같은 파일을 본다.
 # 도구는 docker/versions.env의 LINT_* 이미지로 실행한다(호스트에 린터 설치가 필요 없다).
 #
@@ -58,17 +58,71 @@ drun() {
   docker run --rm -v "${repo_root}:/src:ro" -w /src "${extra[@]}" "$image" "$@"
 }
 
+# 문자 집합 검사의 한 줄 명령(사람이 손으로 돌려도 같다). 아래 check_charset이 이 배열을 그대로 실행한다.
+#   rg -n -a --hidden --no-ignore-dot --no-ignore-parent -g '!.git' '[^\x00-\x7F\x{AC00}-\x{D7A3}]' .
+# 일치가 없으면 exit 1(통과), 있으면 exit 0(위반), 파일을 열지 못하는 등 오류면 exit 2(실패)다.
+# 패턴은 Rust regex가 -P(PCRE2) 없이 받으므로 PCRE2 없이 빌드된 rg도 쓸 수 있다.
+# --hidden은 .github, .claude 같은 숨김 경로를 보게 한다. .gitignore는 따르되 .ignore와 .rgignore, 상위 디렉터리의
+# 무시 파일은 따르지 않는다(git ls-files -co --exclude-standard 의 범위와 맞춘다). -a는 NUL이 든 파일도 건너뛰지 않고 본다.
+# rg 한 줄은 올바른 UTF-8 안의 금지 문자(한글 완성형 범위 밖, ASCII 밖)를 잡는다. 잘못된 UTF-8 바이트(CP949로 저장한
+# 한글 등)는 rg가 일치로 세지 않고, UTF-8 BOM은 rg가 지우고 읽으며, UTF-16은 BOM을 보고 디코드해 읽는다. 그래서
+# check_charset은 같은 대상 파일 목록(rg --files)에 두 번째 판정(charset_bytes, python3 표준 라이브러리)을 더 돌린다:
+# strict UTF-8 디코드 실패, UTF-8 BOM, UTF-16/32 BOM, NUL 바이트(BOM 없는 UTF-16)가 있으면 실패한다.
+# 도구는 LINT_* 이미지가 아니라 호스트의 rg를 쓴다. 한 줄 명령을 사람이 그대로 돌릴 수 있게 하려는 것이다.
+# ubuntu-24.04 runner 이미지에 rg가 없어서 lint.yml의 charset 검사에서 apt로 설치한다(버전은 배포판 패키지를 따른다).
+charset_rg=(rg -n -a --hidden --no-ignore-dot --no-ignore-parent -g '!.git')
+charset_pattern='[^\x00-\x7F\x{AC00}-\x{D7A3}]'
+# 두 번째 판정. stdin으로 NUL로 구분한 경로 목록을 받아 위반 파일을 한 줄씩 출력하고, 있으면 exit 1이다.
+charset_bytes='
+import sys
+bad = 0
+for raw in sys.stdin.buffer.read().split(b"\0"):
+    if not raw:
+        continue
+    name = raw.decode("utf-8", "replace")
+    try:
+        with open(raw, "rb") as f:
+            data = f.read()
+    except OSError as e:
+        print(f"{name}: 열 수 없다 ({e.strerror})"); bad += 1; continue
+    why = None
+    if data.startswith(b"\xef\xbb\xbf"):
+        why = "UTF-8 BOM"
+    elif data[:4] in (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff") or data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        why = "UTF-16/32 BOM"
+    elif b"\x00" in data:
+        why = f"NUL 바이트 (byte {data.index(bytes(1))})"
+    else:
+        try:
+            data.decode("utf-8")
+        except UnicodeDecodeError as e:
+            line = data.count(b"\n", 0, e.start) + 1
+            why = f"잘못된 UTF-8 ({line}행, byte {e.start})"
+    if why:
+        print(f"{name}: {why}"); bad += 1
+sys.exit(1 if bad else 0)
+'
+
 check_charset() {
-  local files
-  mapfile -t files < <(list_files .)
-  if [ "${#files[@]}" -eq 0 ]; then result charset PASS-NO-TARGETS "(0 files)"; return 0; fi
-  local out rc=0
-  # CLAUDE.md의 검사 명령과 같은 패턴. \x{AC00}-\x{D7A3}를 쓰려면 UTF-8 로캘이 필요하다.
-  out="$(LC_ALL=C.UTF-8 grep -nP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' -- "${files[@]}")" || rc=$?
-  if [ "$rc" -eq 1 ]; then result charset PASS "(${#files[@]} files)"; return 0; fi
-  [ -n "$out" ] && printf '%s\n' "$out"
-  result charset FAIL "완성형 한글과 아스키 밖의 문자 (grep exit ${rc})"
-  return 1
+  if ! command -v rg > /dev/null 2>&1; then
+    result charset FAIL "rg(ripgrep)가 없다. Mac은 brew install ripgrep, Ubuntu는 sudo apt-get install ripgrep"
+    return 1
+  fi
+  local n out rc=0
+  n="$("${charset_rg[@]}" --files . | wc -l | tr -d ' ')"
+  if [ "$n" -eq 0 ]; then result charset PASS-NO-TARGETS "(0 files)"; return 0; fi
+  out="$("${charset_rg[@]}" "$charset_pattern" .)" || rc=$?
+  if [ "$rc" -ne 1 ]; then
+    [ -n "$out" ] && printf '%s\n' "$out"
+    result charset FAIL "완성형 한글과 아스키 밖의 문자 (rg exit ${rc})"
+    return 1
+  fi
+  # 두 번째 판정: 같은 파일 목록의 인코딩(rg가 보지 못하는 잘못된 UTF-8, BOM, UTF-16)
+  if ! "${charset_rg[@]}" --files -0 . | python3 -c "$charset_bytes"; then
+    result charset FAIL "UTF-8(BOM 없음)이 아닌 파일"
+    return 1
+  fi
+  result charset PASS "(${n} files)"
 }
 
 check_shellcheck() {

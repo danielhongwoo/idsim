@@ -15,7 +15,7 @@
 #     GZ_APT_KEY_FPR      OSRF apt 서명 key의 주 key 지문(40자리 16진수)
 #     GZ_SIM_VERSION      기대하는 gz-sim upstream 버전. 예: 8.15.0 (deb revision 없이)
 #   versions.env는 이 파일이 만들지 않는다. 값이 비면 빌드가 실패한다.
-# - ros-base는 Ubuntu 24.04(noble), amd64, root 사용자이며 apt를 쓸 수 있다.
+# - ros-base는 Ubuntu 24.04(noble), amd64 또는 arm64, root 사용자이며 apt를 쓸 수 있다.
 #   curl, git, gnupg 유무는 가정하지 않고 여기서 설치한다.
 # - bake의 sim-base target이 GZ_APT_KEY_FPR, GZ_SIM_VERSION을 넘긴다(devops-engineer).
 #

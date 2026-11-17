@@ -51,6 +51,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      # ubuntu-24.04 runner 이미지에는 rg가 없다. charset 검사만 쓴다(step if이며 job은 건너뛰지 않는다).
+      # 다른 검사는 LINT_* 이미지로 도는데, charset은 한 줄 명령을 사람이 그대로 돌릴 수 있게 호스트의 rg를 쓴다.
+      - name: ripgrep 설치
+        if: matrix.check == 'charset'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ripgrep
       - name: tools/ci/lint.sh ${{ matrix.check }}
         env:
           CHECK: ${{ matrix.check }}

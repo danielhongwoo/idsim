@@ -1,10 +1,13 @@
 # build: 이미지 5종(ros-base, sim-base, px4, ros-ws, xrce-agent).
-# 실제 단계는 재사용 워크플로 build-images.yml 과 tools/ci/build_images.py 에 있다.
+# 실제 단계는 재사용 workflow build-images.yml 과 tools/ci/build_images.py 에 있다. linux/amd64와 linux/arm64를
+# 각자의 native runner에서 빌드한다(build-images.yml의 matrix).
 #
-# - PR, main 이외 브랜치의 수동 실행: 빌드만 한다(푸시 없음). 포크 PR에는 쓰기 토큰이 없다.
+# - PR, main 이외 branch의 수동 실행: 빌드와 스모크만 한다(push 없음). 포크 PR에는 쓰기 token이 없다.
 #   권한은 contents: read, packages: read(레지스트리 key 확인과 캐시 읽기).
-# - main push, main의 수동 실행: key가 없는 이미지만 빌드해 GHCR에 푸시한다. packages: write는 이 job만.
-# key가 레지스트리에 이미 있으면 그 이미지는 빌드하지 않는다(tools/ci/image_keys.py).
+#   수동 실행의 입력 sitl이 true이면 두 runner에서 스모크 뒤에 tests/sitl/run_sitl.sh --stack 0도 돈다.
+# - main push, main의 수동 실행: 플랫폼마다 key가 없는 이미지만 빌드해 GHCR에 push하고, 두 플랫폼이 모두 성공하면
+#   key 태그를 multi-arch index로 병합한다. packages: write는 이 job만.
+# 그 플랫폼의 이미지가 registry에 이미 있으면 빌드하지 않는다(tools/ci/image_keys.py, build_images.py).
 name: build
 
 on:
@@ -12,6 +15,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      sitl:
+        description: 스모크 뒤에 tests/sitl/run_sitl.sh --stack 0을 amd64와 arm64에서 돌린다(main 이외 branch)
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -30,6 +38,7 @@ jobs:
     uses: ./.github/workflows/build-images.yml
     with:
       push: false
+      sitl: ${{ inputs.sitl || false }}
 
   publish:
     name: build and push (main)

@@ -29,5 +29,5 @@ tools: Read, Grep, Glob, Bash
 
 ## 규칙
 
-- 검사 명령: `grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git --exclude-dir=target --exclude-dir=build --exclude-dir=install .`
+- 검사 명령: `rg -n -a --hidden --no-ignore-dot --no-ignore-parent -g '!.git' '[^\x00-\x7F\x{AC00}-\x{D7A3}]' .`
 - 결정은 내리지 않는다. 결정이 필요하면 아키텍트에게 넘긴다.
