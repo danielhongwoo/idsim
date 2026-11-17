@@ -1,6 +1,6 @@
 # idsim
 
-idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy 위에서 드론 여러 대의 운용 서비스(Fleet, Mission, Telemetry, Replay)를 컨테이너로 돌리는 시뮬레이션 플랫폼이다. 지원 호스트는 x86_64 Linux이고, 개발 호스트로 Apple Silicon Mac(macOS, arm64)도 쓸 수 있다.
+idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy 위에서 드론 여러 대의 운용 서비스(Fleet, Mission, Telemetry, Replay)를 컨테이너로 돌리는 시뮬레이션 플랫폼이다. 지원 호스트는 x86_64 Linux와 arm64 Linux이고, 개발 호스트로 Apple Silicon Mac(macOS, arm64)도 쓸 수 있다.
 
 계획과 단계는 `docs/roadmap.md`, 설계는 `docs/architecture.md`에 있다.
 
@@ -8,7 +8,7 @@ idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy �
 
 | 항목 | 조건 |
 | --- | --- |
-| OS와 CPU | x86_64 Linux (Ubuntu 24.04에서 확인). Apple Silicon Mac(macOS, arm64)은 아래 "Apple Silicon Mac"의 조건으로 개발 호스트가 된다 |
+| OS와 CPU | x86_64 Linux, arm64 Linux (x86_64는 Ubuntu 24.04에서 확인). Apple Silicon Mac(macOS, arm64)은 아래 "Apple Silicon Mac"의 조건으로 개발 호스트가 된다 |
 | Docker | Docker Engine 25.0 이상(healthcheck `start_interval`), compose v2 플러그인, buildx. 사용자가 docker 그룹에 속해야 한다(`sudo usermod -aG docker $USER` 뒤 다시 로그인). Ubuntu 24.04 패키지는 `docker.io`, `docker-compose-v2`, `docker-buildx`이고, Docker 공식 저장소는 `docker-ce`, `docker-compose-plugin`, `docker-buildx-plugin`이다 |
 | 저장소 경로 | 공백과 아스키 밖 문자가 없어야 한다(생성기 `PATH_SAFE_RE`가 거부한다) |
 | 도구 | bash 4 이상(PATH의 `bash`), git, python3 (표준 라이브러리만 사용. 3.12에서 확인, 하한 3.10), curl, sha256sum, rg(ripgrep), timeout. rg는 Ubuntu에서 `sudo apt-get install ripgrep`, Mac에서 `brew install ripgrep` |
@@ -26,10 +26,10 @@ idsim은 Drone Simulator의 약자다. PX4 SITL, Gazebo Harmonic, ROS 2 Jazzy �
 | --- | --- |
 | 컨테이너 런타임 | OrbStack 2.2.5(Docker Engine 29.8.2, compose 5.5.0)에서 확인했다. CPU 10, 메모리 16GB를 주었다. Mac에서는 OrbStack을 기준으로 한다 |
 | bash | macOS 기본 `/bin/bash`는 3.2라 쓸 수 없다. `brew install bash`로 4 이상을 PATH 앞에 둔다. `rg`는 `brew install ripgrep`으로 설치한다(문자 집합 검사가 쓴다). 그 밖의 도구(`sha256sum`, `timeout`)는 macOS 27 기본 설치에 있다 |
-| 이미지 | linux/arm64로 로컬에서 빌드한다(`python3 tools/ci/build_images.py --mode load`. cache 없는 첫 빌드가 이 조건에서 1회 실측 약 14분). GHCR에는 amd64 이미지만 있어 `--mode pull`은 받지 않고 실패한다. apt 미러는 `ports.ubuntu.com`으로 고정이다 |
+| 이미지 | linux/arm64로 로컬에서 빌드한다(`python3 tools/ci/build_images.py --mode load`. cache 없는 첫 빌드가 이 조건에서 1회 실측 약 14분). GHCR에 arm64 index가 올라온 뒤에는 `--mode pull`로 받을 수 있고, 그 전에는 받지 않고 실패한다. apt 미러는 `ports.ubuntu.com`으로 고정이다 |
 | 네트워크 | 컨테이너는 Linux VM 안에서 돈다. `network_mode: host`는 그 VM의 네트워크이고 스택 안의 통신은 Linux와 같다. Mac 쪽 127.0.0.1에서 Lichtblick의 HTTP 응답(200)과 foxglove 포트의 TCP 연결은 OrbStack에서 확인했다. 브라우저 화면에서 토픽이 보이는지까지는 확인하지 않았다 |
 | Gazebo GUI | `tools/sim_stack.sh up --viz`의 `gz-gui`는 그대로는 뜨지 않는다(`XAUTHORITY`가 없어 `gz_gui.sh`가 끝난다. compose가 넘기는 X11 소켓 `/tmp/.X11-unix`도 macOS에는 없다). XQuartz를 거치는 방법은 확인하지 않았다. 화면은 Lichtblick으로 본다 |
-| 판정의 기준 | CI와 판정 상수의 보정은 amd64 Linux다. Mac에서 스모크 네 단계와 `tests/sitl/run_sitl.sh --stack 0`이 통과하는 것을 확인했으나, merge 전 확인의 기준은 CI다 |
+| 판정의 기준 | CI와 판정의 기준은 x86_64 Linux runner와 arm64 Linux runner 둘이고, 판정 상수는 amd64에서 보정했다. Mac에서 스모크 네 단계와 `tests/sitl/run_sitl.sh --stack 0`이 통과하는 것을 확인했으나, merge 전 확인의 기준은 CI다 |
 
 ## 빠른 시작
 
@@ -109,7 +109,7 @@ tests/sitl/run_sitl.sh --stack 0 -- -k test_b          # `--` 뒤는 pytest 인�
 ## 알려진 제약
 
 - 이미지 빌드의 apt 미러는 `docker/versions.env`의 `UBUNTU_APT_MIRROR`(기본 kr 미러)이다. 다른 호스트에서 바꾸는 방법은 `docker/README.md`의 "apt 미러" 절을 본다. 해당 미러가 막히면 콜드 빌드가 실패한다.
-- GHCR의 이미지를 빌드 없이 받아 쓰는 경로는 아직 없다.
+- main의 build가 GHCR에 key 태그(multi-arch index)를 올리기 전에는 그 key의 이미지를 받아 쓸 수 없고 로컬 빌드(`--mode load`)가 필요하다.
 
 ## 문서 지도
 
