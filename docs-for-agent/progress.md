@@ -43,6 +43,10 @@
 
 - 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
 
+main 머지 뒤 확인할 것.
+
+- arm64 runner의 `sitl` 판정 확인: 판정 상수는 amd64에서 보정했다. arm64 runner에서는 build workflow 수동 실행(입력 `sitl`)으로 `run_sitl.sh --stack 0` 1회 통과(21 passed, 판정 구간 RTF 1.000)만 보았다. 새 key가 GHCR에 올라간 뒤 `sitl (arm64)` job의 결과(RTF, 목표 15분)와 반복 실행의 흔들림을 확인한다.
+
 문서 정리(정형, 다음 문서 정리 때).
 
 - Dockerfile 주석에 남은 계획 표지: `Dockerfile.px4` 36, 226행 "(S1)"은 "(스모크 embedded 단계)", `Dockerfile.ros-ws` 56행과 `Dockerfile.xrce-agent` 39행 "스모크 S0가"는 "스모크 images 단계가", `Dockerfile.sim-base` 4행 "(지금은 README의 수동 docker run, 3단계부터 gz-gui 서비스)"는 "(viz 프로필의 gz-gui 서비스)"로 바꾼다. Dockerfile을 바꾸면 이미지 key가 바뀌어 PR의 sitl이 실패하므로 주석만 따로 고치지 않고, 그 Dockerfile을 실제로 바꾸는 이미지 PR에 함께 넣는다(각 owner).
