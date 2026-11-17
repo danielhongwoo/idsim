@@ -25,7 +25,7 @@ bake 정규화 규칙. 근거: key는 "같은 key면 같은 이미지"를 뜻해
   - args의 식은 변수 이름 그대로 해시한다. 변수의 값은 6번(versions.env)이 따로 넣는다.
 
 플랫폼. key는 플랫폼과 무관하게 이미지마다 하나다. 같은 commit이면 amd64와 arm64 호스트에서 같은 key가 나온다.
-key 하나가 그 이미지의 플랫폼별 빌드(SUPPORTED_PLATFORMS) 전체를 가리키고, 레지스트리의 <이미지>:<key> 태그는
+key 하나가 그 이미지의 플랫폼별 빌드(SUPPORTED_PLATFORMS) 전체를 가리키고, registry의 <이미지>:<key> 태그는
 모든 플랫폼의 manifest를 묶은 multi-arch index다(build_images.py의 push와 merge 모드). 그래서
   - bake 파일에는 platforms를 두지 않는다. 빌드 플랫폼은 build_images.py가 호스트에서 정해 --set *.platform으로 준다.
     빌드 호스트는 key 재료가 아니다.
@@ -33,8 +33,8 @@ key 하나가 그 이미지의 플랫폼별 빌드(SUPPORTED_PLATFORMS) 전체�
     <이름><접미사>(PLATFORM_SUFFIX) 줄을 둔다. 그 이름을 Dockerfile이 ARG로 쓰면 6번에 모든 플랫폼의 줄이 들어간다
     (arm64 값만 바꿔도 key가 바뀐다). 한 플랫폼의 줄이라도 없으면 key 계산이 멈춘다.
   - 외부 이미지(UBUNTU_IMAGE 등)는 multi-arch index digest로 고정해 한 줄이 모든 플랫폼을 고정한다.
-key 태그가 있어도 모든 플랫폼의 이미지가 있다는 뜻은 아니다(이 구조 이전에 올린 amd64 단일 태그). 그래서
-레지스트리 판정은 언제나 플랫폼별로 한다(build_images.py).
+key 태그가 있어도 모든 플랫폼의 이미지가 있다는 뜻은 아니다(이 구조 이전에 올린 amd64 전용 index). 그래서
+registry 판정은 언제나 플랫폼별로 한다(build_images.py).
 
 key에 들어가지 않는 것: UBUNTU_APT_MIRROR(KEY_EXCLUDED_ARGS).
 key에 들어가지 않는 것(빌드 시점 외부 상태): apt 저장소의 패키지 버전, pip 인덱스, 태그가 가리키는
@@ -75,7 +75,7 @@ PLATFORM_SUFFIX = {
 }
 # CI matrix의 유일한 정의. lint를 뺀 workflow(build-images, unit, sitl)의 matrix.include가 이 값과 같아야 한다
 # (tests/tools/test_image_keys.py가 검사한다. GitHub Actions는 workflow 사이에 matrix를 공유할 수단이 없다).
-#   runner      GitHub 제공 표준 runner(공개 저장소 무료). QEMU 에뮬레이션은 쓰지 않는다.
+#   runner      GitHub 제공 표준 runner(공개 저장소 무료). QEMU emulation은 쓰지 않는다.
 #   apt_mirror  CI가 주는 UBUNTU_APT_MIRROR 환경변수. runner(미국)에서는 kr 미러가 느리거나 불안정할 것으로 추정되므로(미실측)
 #               amd64는 우분투 기본 미러로 덮어쓴다. arm64는 비워 versions.env의 ports 값을 쓴다(MIRROR_OVERRIDE_PLATFORMS).
 CI_MATRIX = (

@@ -1,4 +1,5 @@
 """tools/ci/image_keys.py의 미러 key 제외와 build_images.py의 환경변수 우선 범위 테스트(초안 devops-engineer, 승인 test-engineer)."""
+import json
 import os
 import sys
 
@@ -294,7 +295,7 @@ def test_build_images_platform_and_mode():
     v = _versions()
     amd = image_keys.effective_versions(v, AMD64)
     arm = image_keys.effective_versions(v, ARM64)
-    # CI는 두 플랫폼 모두 빌드하고 푸시한다(각자 native runner). 모드로 막는 조합은 없다
+    # CI는 두 플랫폼 모두 빌드하고 push한다(각자 native runner). 모드로 막는 조합은 없다
     for mode in ("load", "pr", "push", "pull", "merge"):
         assert build_images.check_platform(mode, AMD64, amd, {}) is None
         assert build_images.check_platform(mode, ARM64, arm, {}) is None
@@ -307,7 +308,7 @@ def test_build_images_platform_and_mode():
         assert build_images.check_platform(mode, ARM64, arm, {"UBUNTU_APT_MIRROR": ""}) is None
 
 
-# 레지스트리 흉내. tags: 참조 -> 플랫폼 집합. registry_has와 registry_platforms를 이것으로 바꾼다.
+# registry 흉내. tags: 참조 -> 플랫폼 집합. registry_has와 registry_platforms를 이것으로 바꾼다.
 def _fake_registry(monkeypatch, tags):
     monkeypatch.setattr(build_images, "registry_has",
                         lambda ref, strict=False: (ref in tags, "manifest 있음" if ref in tags else "not found"))
@@ -339,7 +340,7 @@ def test_locate_prefers_key_tag_then_platform_tag(monkeypatch):
     tags = {"r/a:k": {AMD64}, "r/a:k-arm64": {ARM64}, "r/b:k": {AMD64, ARM64}, "r/c:k-arm64": {AMD64}}
     _fake_registry(monkeypatch, tags)
     assert build_images.locate("r/a:k", "r/a:k-amd64", AMD64, False)[0] == "r/a:k"
-    # key 태그에 arm64가 없으면(이 구조 이전의 amd64 단일 태그) 플랫폼 태그를 쓴다
+    # key 태그에 arm64가 없으면(이 구조 이전에 올린 amd64 전용 index) 플랫폼 태그를 쓴다
     assert build_images.locate("r/a:k", "r/a:k-arm64", ARM64, False)[0] == "r/a:k-arm64"
     assert build_images.locate("r/b:k", "r/b:k-arm64", ARM64, False)[0] == "r/b:k"
     found, why = build_images.locate("r/x:k", "r/x:k-arm64", ARM64, False)
@@ -350,7 +351,7 @@ def test_locate_prefers_key_tag_then_platform_tag(monkeypatch):
 
 
 def test_build_images_plan_is_per_platform(tmp_path, monkeypatch, capsys):
-    # GHCR의 key 태그가 amd64 단일 태그뿐이면: amd64는 전부 건너뛰고 arm64는 전부 빌드한다
+    # GHCR의 key 태그가 amd64 전용 index뿐이면: amd64는 전부 건너뛰고 arm64는 전부 빌드한다
     read = _outputs(tmp_path, monkeypatch)
     keys, reg, ref, pref = _refs()
     _fake_registry(monkeypatch, {ref(n): {AMD64} for n in keys})
@@ -372,7 +373,7 @@ def _bake_lines(out):
 
 
 def test_build_images_push_uses_platform_tags_and_caches(tmp_path, monkeypatch, capsys):
-    # 새 key: 플랫폼마다 플랫폼 태그로 푸시하고, 자식은 같은 실행에서 푸시한 자기 플랫폼의 베이스를 context로 쓴다
+    # 새 key: 플랫폼마다 플랫폼 태그로 push하고, 자식은 같은 실행에서 push한 자기 플랫폼의 베이스를 context로 쓴다
     _outputs(tmp_path, monkeypatch)
     keys, reg, ref, pref = _refs()
     _fake_registry(monkeypatch, {})
@@ -386,7 +387,7 @@ def test_build_images_push_uses_platform_tags_and_caches(tmp_path, monkeypatch, 
             assert f"--set {n}.tags={pref(n, arch)} " in line and "--push" in line
             assert f"{n}.cache-to=type=registry,ref={reg}/{n}:buildcache-{arch}," in line
             assert f"cache-from=type=registry,ref={reg}/{n}:buildcache-{arch}" in line
-            # key 태그와 다른 플랫폼의 태그, 캐시는 쓰지 않는다
+            # key 태그와 다른 플랫폼의 태그, cache는 쓰지 않는다
             assert f"{ref(n)} " not in line and not line.endswith(ref(n))
             other = "arm64" if arch == "amd64" else "amd64"
             assert other not in line.replace(f"*.platform=linux/{arch}", "")
@@ -440,25 +441,29 @@ def test_build_images_pr_load_loads_built_and_pulls_skipped(tmp_path, monkeypatc
 
 def test_plan_merge_never_makes_half_index():
     tags = {
-        # 이 구조 이전의 amd64 단일 태그 + arm64 플랫폼 태그 -> 기존 key 태그를 원본에 넣어 병합
+        # amd64만 가진 key 태그 + arm64 플랫폼 태그 -> 기존 key 태그(그 index)를 원본에 넣어 병합
         "r/a:k": {AMD64}, "r/a:k-arm64": {ARM64},
         # 새 key, 두 플랫폼 태그 -> 플랫폼 태그 둘로 병합
         "r/b:k-amd64": {AMD64}, "r/b:k-arm64": {ARM64},
         # 이미 완성
         "r/c:k": {AMD64, ARM64},
     }
+    # 원본은 판단한 시점의 digest로 고정한다(<repo>@<digest>). 흉내: 태그 r/a:k의 digest는 sha256:r/a:k
     has = lambda r: r in tags  # noqa: E731
-    plats = lambda r: tags[r]  # noqa: E731
+    digest = lambda r: "sha256:" + r  # noqa: E731
+    plats = lambda r: tags[r.split("@sha256:", 1)[1]]  # noqa: E731
     ref = lambda n: f"r/{n}:k"  # noqa: E731
     pref = lambda n, p: f"r/{n}:k-{p.split('/')[1]}"  # noqa: E731
-    plans, missing = build_images.plan_merge(["a", "b", "c"], ref, pref, platforms_of=plats, has=has)
+    kw = dict(platforms_of=plats, has=has, digest_of=digest)
+    plans, missing = build_images.plan_merge(["a", "b", "c"], ref, pref, **kw)
     assert missing == []
-    assert plans == [("a", {AMD64}, ["r/a:k", "r/a:k-arm64"]),
-                     ("b", set(), ["r/b:k-amd64", "r/b:k-arm64"]),
+    assert plans == [("a", {AMD64}, ["r/a@sha256:r/a:k", "r/a@sha256:r/a:k-arm64"]),
+                     ("b", set(), ["r/b@sha256:r/b:k-amd64", "r/b@sha256:r/b:k-arm64"]),
                      ("c", {AMD64, ARM64}, [])]
+    assert build_images.pin("localhost:5055/t/img:k-arm64", "sha256:1") == "localhost:5055/t/img@sha256:1"
     # arm64 job이 실패해 플랫폼 태그가 없으면 빠진 것으로 잡힌다
     del tags["r/b:k-arm64"]
-    _, missing = build_images.plan_merge(["a", "b", "c"], ref, pref, platforms_of=plats, has=has)
+    _, missing = build_images.plan_merge(["a", "b", "c"], ref, pref, **kw)
     assert missing == ["b: linux/arm64 이미지 없음 (r/b:k-arm64)"]
 
 
@@ -474,16 +479,19 @@ def test_merge_images_creates_nothing_when_any_platform_is_missing(monkeypatch, 
 def test_merge_images_checks_digests_kept(monkeypatch, capsys):
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
     monkeypatch.setattr(build_images, "plan_merge",
-                        lambda *a: ([("a", {AMD64}, ["r/a:k", "r/a:k-arm64"])], []))
+                        lambda *a: ([("a", {AMD64}, ["r/a@sha256:1i", "r/a@sha256:2i"])], []))
     ran = []
 
     class P:
         returncode = 0
     monkeypatch.setattr(build_images.subprocess, "run", lambda cmd, **k: ran.append(cmd) or P())
     digests = iter([{AMD64: "sha256:1"}, {AMD64: "sha256:1", ARM64: "sha256:2"}])
-    monkeypatch.setattr(build_images, "platform_digests", lambda ref: next(digests))
+    seen = []
+    monkeypatch.setattr(build_images, "platform_digests", lambda ref: seen.append(ref) or next(digests))
     assert build_images.merge_images(["a"], lambda n: "r/a:k", None, dry_run=False) == 0
-    assert ran == [["docker", "buildx", "imagetools", "create", "-t", "r/a:k", "r/a:k", "r/a:k-arm64"]]
+    assert ran == [["docker", "buildx", "imagetools", "create", "-t", "r/a:k", "r/a@sha256:1i", "r/a@sha256:2i"]]
+    # 병합 전 digest는 고정한 원본에서, 병합 뒤 digest는 key 태그에서 읽는다
+    assert seen == ["r/a@sha256:1i", "r/a:k"]
     # 이미 있던 amd64의 digest가 바뀌면 멈춘다
     digests = iter([{AMD64: "sha256:1"}, {AMD64: "sha256:9", ARM64: "sha256:2"}])
     with pytest.raises(SystemExit, match="digest가 바뀐 플랫폼"):
@@ -505,9 +513,13 @@ def test_ci_matrix_matches_workflows():
                 continue
             include = job["strategy"]["matrix"]["include"]
             assert [(m["arch"], m["runner"]) for m in include] == want, (name, job_id)
+            # matrix.apt_mirror를 쓰는 job은 모든 항목에 apt_mirror가 있고 CI_MATRIX와 같아야 한다
+            uses_mirror = "matrix.apt_mirror" in json.dumps(job)
             for m, c in zip(include, image_keys.CI_MATRIX):
-                if "apt_mirror" in m:
-                    assert m["apt_mirror"] == c["apt_mirror"], (name, job_id)
+                if uses_mirror:
+                    assert m.get("apt_mirror") == c["apt_mirror"], (name, job_id, m)
+                else:
+                    assert "apt_mirror" not in m, (name, job_id)
             seen[name] = job_id
     assert set(seen) == {"build-images.yml", "unit.yml", "sitl.yml"}
 
@@ -593,7 +605,7 @@ def _pull(monkeypatch, capsys, platform, have):
 
 
 def test_pull_rejects_tag_without_host_platform(monkeypatch, capsys):
-    # 태그에 다른 플랫폼 이미지만 있으면 받지 않는다(에뮬레이션으로 돌리지 않는다)
+    # 태그에 다른 플랫폼 이미지만 있으면 받지 않는다(emulation으로 돌리지 않는다)
     rc, out, calls = _pull(monkeypatch, capsys, ARM64, {AMD64})
     assert rc == 1 and "linux/arm64 이미지가 없다" in out and "--mode load" in out and not calls
 

@@ -6,7 +6,12 @@
 #   3대 시나리오는 이 job에 넣지 않는다(Phase 3의 nightly 전용).
 # 문서만 바뀐 PR을 workflow 수준 paths로 거르지 않는 이유: 필수 검사로 걸었을 때 대기 상태로 남는다.
 #   그래서 앞에 changes job(git diff로 코드 경로 변경 여부를 output으로 낸다. 외부 action 없음)을 두고
-#   sitl job이 그 output을 보는 if로 건너뛴다. main push와 수동 실행은 건너뛰지 않는다.
+#   sitl job이 그 output을 보고 건너뛴다. main push와 수동 실행은 건너뛰지 않는다.
+#   건너뛰기는 job 수준 if가 아니라 첫 step(gate)과 step 수준 if로 한다. job 수준 if가 false이면 matrix가 펼쳐지지 않아
+#   check 이름이 이름 식 그대로 나오고 필수 검사 `sitl`, `sitl (arm64)`가 보고되지 않는다. 그래서 sitl job은 늘 두 runner로
+#   펼쳐지고(changes가 draft로 건너뛰어도), gate가 건너뛸 때는 나머지 step을 모두 건너뛴다(checkout도 하지 않아 runner
+#   시간은 job 시작 몇 초뿐이다). 이때 check는 success로 끝나므로 판정을 돌리지 않았다는 사실을 notice 주석과 step summary
+#   첫 줄("sitl 건너뜀")로 남긴다. changes job이 실패하면 gate가 실패시킨다(건너뜀으로 숨기지 않는다).
 #
 # 플랫폼: sitl job은 linux/amd64(ubuntu-24.04)와 linux/arm64(ubuntu-24.04-arm) 두 native runner에서 같은 단계를 돈다.
 #   matrix.include는 tools/ci/image_keys.py의 CI_MATRIX와 같아야 한다(tests/tools/test_image_keys.py가 검사).
@@ -90,7 +95,8 @@ jobs:
     # amd64의 이름은 그대로 둔다(필수 검사 이름). 다른 플랫폼만 뒤에 아키텍처를 붙인다.
     name: sitl${{ matrix.arch != 'amd64' && format(' ({0})', matrix.arch) || '' }}
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # 위 머리 주석의 건너뛰기 설계. changes가 건너뛰거나 실패해도 job은 펼쳐지고 gate가 판단한다.
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -102,12 +108,31 @@ jobs:
             runner: ubuntu-24.04-arm
     timeout-minutes: 30
     steps:
+      - name: gate (run or skip)
+        id: gate
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+        run: |
+          case "$CHANGES_RESULT" in
+            success)
+              if [ "$CODE" = "true" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+              reason="코드 경로가 바뀌지 않았다" ;;
+            skipped) reason="draft PR이다" ;;
+            *) echo "::error title=sitl::changes job이 ${CHANGES_RESULT}로 끝났다. 건너뛰지 않고 실패시킨다"; exit 1 ;;
+          esac
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          echo "::notice title=sitl 건너뜀::${reason}. 시나리오 판정을 돌리지 않았다(이 check의 success는 판정 통과가 아니다)"
+          echo "## sitl 건너뜀: ${reason}. 시나리오 판정을 돌리지 않았다" >> "$GITHUB_STEP_SUMMARY"
+
       - name: checkout
+        if: steps.gate.outputs.run == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
       - name: docker version
+        if: steps.gate.outputs.run == 'true'
         run: |
           # start_interval(ops-N와 bridge의 healthcheck)은 Docker Engine 25 이상이다. 실제 runner의 판을 남긴다.
           docker version
@@ -118,6 +143,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: pull images
+        if: steps.gate.outputs.run == 'true'
         run: |
           t0=$(date +%s)
           tools/ci/build_images.py --mode pull
@@ -125,6 +151,7 @@ jobs:
           echo "| pull images | $((t1 - t0)) |" >> "$GITHUB_STEP_SUMMARY"
 
       - name: build ros_ws
+        if: steps.gate.outputs.run == 'true'
         run: |
           t0=$(date +%s)
           tools/ros_ws.sh build
@@ -132,6 +159,7 @@ jobs:
           echo "| build ros_ws | $((t1 - t0)) |" >> "$GITHUB_STEP_SUMMARY"
 
       - name: tests/sitl/run_sitl.sh
+        if: steps.gate.outputs.run == 'true'
         run: |
           t0=$(date +%s)
           tests/sitl/run_sitl.sh --stack 0
@@ -139,7 +167,7 @@ jobs:
           echo "| run_sitl.sh (전체) | $((t1 - t0)) |" >> "$GITHUB_STEP_SUMMARY"
 
       - name: upload run records (failure)
-        if: failure() || cancelled()
+        if: (failure() || cancelled()) && steps.gate.outputs.run == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: sitl-run-failure-${{ matrix.arch }}
@@ -150,7 +178,7 @@ jobs:
           retention-days: 7
 
       - name: upload run records (success)
-        if: success()
+        if: success() && steps.gate.outputs.run == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: sitl-run-${{ matrix.arch }}

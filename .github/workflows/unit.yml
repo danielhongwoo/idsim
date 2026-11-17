@@ -71,7 +71,7 @@ jobs:
             echo "ros-ws ${KEY_ROS_WS}: pull"
           else
             echo "pulled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=unit::레지스트리에 ros-ws ${KEY_ROS_WS}의 이 플랫폼 이미지가 없어 runner에서 빌드한다"
+            echo "::notice title=unit::registry에 ros-ws ${KEY_ROS_WS}의 이 플랫폼 이미지가 없어 runner에서 빌드한다"
           fi
           t1=$(date +%s)
           {

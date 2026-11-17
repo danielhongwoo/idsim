@@ -55,7 +55,9 @@ jobs:
       # 다른 검사는 LINT_* 이미지로 도는데, charset은 한 줄 명령을 사람이 그대로 돌릴 수 있게 호스트의 rg를 쓴다.
       - name: ripgrep 설치
         if: matrix.check == 'charset'
-        run: sudo apt-get install -y --no-install-recommends ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ripgrep
       - name: tools/ci/lint.sh ${{ matrix.check }}
         env:
           CHECK: ${{ matrix.check }}
