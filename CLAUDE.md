@@ -11,10 +11,10 @@ idsim은 Drone Simulator의 약자다. 설계는 docs/architecture.md, 계획은
   - 화살표는 "->", 양방향은 "<->"로 쓴다.
   - 긴 줄표와 짧은 줄표는 "-"로 쓴다. 범위는 "1-3"처럼 쓴다.
   - 곱셈과 개수는 "x N"으로, 말줄임표는 "..."로 쓴다.
-- 검사 명령. 결과가 비어 있어야 한다.
+- 검사 명령. 결과가 비어 있어야 한다. ripgrep(rg)을 쓰며 Linux와 macOS에서 같다. `tools/ci/lint.sh charset`이 같은 명령을 실행한다.
 
 ```
-grep -rnP '[^\x00-\x7F\x{AC00}-\x{D7A3}]' --exclude-dir=.git .
+rg -n -a --hidden --no-ignore-dot --no-ignore-parent -g '!.git' '[^\x00-\x7F\x{AC00}-\x{D7A3}]' .
 ```
 
 - 문서는 한국어로 쓴다. 기술 용어, 식별자, 명령어, 경로는 영문 아스키 그대로 둔다.
