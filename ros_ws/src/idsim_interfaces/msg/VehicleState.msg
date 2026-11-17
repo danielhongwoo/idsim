@@ -41,7 +41,7 @@ bool landed_valid
 bool landed                    # 지상 판정
 
 bool position_valid            # false면 position은 0
-# world ENU, m. z는 world.origin의 접평면 위 높이이고 타원체 고도 AMSL도 아니다.
+# world ENU, m. z는 world.origin의 접평면 위 높이이고 타원체 고도, AMSL도 아니다.
 # 원점에서 수평으로 멀어질수록 같은 z의 점이 타원체 위로 높아지므로 지면 위 높이로 읽을 수 있는 곳은 원점 근처뿐이다.
 geometry_msgs/Point position
 bool yaw_valid
