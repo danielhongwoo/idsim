@@ -18,6 +18,12 @@
           sim-base 이미지의 /opt/px4-gz/worlds/default.sdf
     옮긴 것: physics, gravity, magnetic_field, atmosphere, scene, ground_plane 모델,
           sunUTC light. 값은 원본 그대로다(원본 첫머리의 UTF-8 BOM은 뺐다).
+          단 하나 바꾼 값: sunUTC의 cast_shadows를 true에서 false로 했다. GPU 없는
+          호스트(Mac, OrbStack)의 software 렌더링(Mesa llvmpipe)에서 gz-gui 3D view
+          프레임이 초당 약 8장(132 ms)이었고, 그림자를 끄면 19-22장(48-52 ms)이 된다
+          (기체 1대, 카메라 10초 회전 실측). sim-base에 든 gz-gui 8의 MinimalScene
+          plugin에서는 그림자 설정 항목을 찾지 못해(binary의 문자열 검사) 월드에서 끈다. scene의 shadows는 그대로 둔다. 렌더링
+          센서(카메라 등)를 달 때 이 값을 다시 본다.
     뺀 것: 원본의 spherical_coordinates(원점은 생성기가 넣는다).
 
     이 템플릿에 넣지 않는 것(생성기가 있으면 거부한다)
@@ -30,6 +36,7 @@
     world 요소는 정확히 하나이고 여는 태그를 한 줄로 쓴다(gz_server.sh가 줄 단위로 읽는다).
 
     PX4_GZ_MODELS_REF를 올릴 때는 새 default.sdf와 대조해 위 요소를 다시 옮긴다.
+    그때도 sunUTC의 cast_shadows는 false로 둔다(스모크 S0가 이 한 값만 허용된 차이로 본다).
   -->
   <world name="idsim_base">
     <physics type="ode">
@@ -97,7 +104,7 @@
     </model>
     <light name="sunUTC" type="directional">
       <pose>0 0 500 0 -0 0</pose>
-      <cast_shadows>true</cast_shadows>
+      <cast_shadows>false</cast_shadows>
       <intensity>1</intensity>
       <direction>0.001 0.625 -0.78</direction>
       <diffuse>0.904 0.904 0.904 1</diffuse>

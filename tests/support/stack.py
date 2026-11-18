@@ -27,6 +27,8 @@ NODE_KEYS_MIN_GENERATOR_VERSION = 3
 # 생성기 판 5부터 world template, 표적, 정답 pose 서비스, 기체별 기대 GPS key가 있다(docs/architecture.md "Docker Compose 실행 환경 설계").
 # 판 5 이상이면 필수로 검사하고, 그보다 낮은 판은 읽기만 한다(접근자는 StackError).
 WORLD_KEYS_MIN_GENERATOR_VERSION = 5
+# 생성기 판 6부터 stack.gz_gui_web_port(gz-gui의 noVNC 포트)가 있다. 판 6 이상이면 필수로 검사한다.
+GZ_GUI_KEYS_MIN_GENERATOR_VERSION = 6
 
 
 class StackError(Exception):
@@ -107,6 +109,7 @@ _V5_SPEC = {
     "targets": (list,),
     "services": {"targets": _NSTR, "sim_oracle": _NSTR},
 }
+_V6_SPEC = {"stack": {"gz_gui_web_port": _INT}}
 _V5_VEHICLE_SPEC = {"expect_gps": (dict, _NONE)}
 _NUM = (int, float)
 _TARGET_SPEC = {"id": _STR, "start_s": _NUM, "loop": (bool,), "waypoints": (list,)}
@@ -169,6 +172,8 @@ def _validate(data):
         _validate_v5(data)
     elif data["world"]["file"] is None:
         raise StackError("world.file: null은 생성기 판 5부터 허용한다")
+    if data["generator"]["version"] >= GZ_GUI_KEYS_MIN_GENERATOR_VERSION:
+        _check(data, _V6_SPEC, "")
 
 
 def _validate_v5(data):

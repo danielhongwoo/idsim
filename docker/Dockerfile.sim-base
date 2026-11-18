@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #
 # sim-base: ros-base 위에 OSRF apt의 Gazebo와 PX4-gazebo-models를 올린 이미지.
-# 담당: sim-engineer. 뜨는 컨테이너는 gazebo 서비스와 GUI client(지금은 README의 수동 docker run, 3단계부터 gz-gui 서비스)이며,
+# 담당: sim-engineer. 뜨는 컨테이너는 gazebo 서비스와 GUI client(viz 프로필의 gz-gui 서비스)이며,
 # px4 이미지의 베이스가 된다.
 #
 # 가정 (devops-engineer와 맞출 것)
@@ -27,6 +27,8 @@
 # - GZ_SIM_RESOURCE_PATH, GZ_SIM_SERVER_CONFIG_PATH 기본값. compose가 덮어쓸 수 있다.
 # - Gazebo GUI client(gz sim -g) 실행용 libqt5svg5. GUI 설정 파일(gui.config)은
 #   이미지에 넣지 않고 ros_ws/src/idsim_sim/config/gui.config를 마운트한다.
+# - GUI client의 가상 화면 런타임(Xvnc, noVNC, websockify, xauth). 호스트 X11이 없을 때
+#   ros_ws/src/idsim_sim/scripts/gz_gui.sh의 virtual 방식이 쓴다(6단계).
 #
 # 헤드리스 메모
 # - gazebo 서비스는 `gz sim -r -s <월드>`로 서버만 띄운다. GPU는 없다.
@@ -168,3 +170,32 @@ ENV GZ_SIM_RESOURCE_PATH=/opt/px4-gz/models:/opt/px4-gz/worlds \
 ENV IDSIM_BUILD_GZ_RELEASE=${GZ_RELEASE} \
     IDSIM_BUILD_PX4_GZ_MODELS_REF=${PX4_GZ_MODELS_REF} \
     IDSIM_BUILD_GZ_SIM_VERSION=${GZ_SIM_VERSION}
+
+# 6. GUI client의 가상 화면 런타임(호스트 X11이 없는 호스트. Mac 등).
+#    ros_ws/src/idsim_sim/scripts/gz_gui.sh가 virtual 방식에서 쓴다. 위 1단계의 큰 gz 설치
+#    레이어 cache를 깨지 않도록 맨 뒤에 별도 레이어로 둔다.
+#    - tigervnc-standalone-server: Xvnc(X 서버와 VNC 서버를 겸한다). gz GUI가 이 위에 뜬다.
+#    - websockify: 브라우저의 WebSocket을 Xvnc의 VNC unix socket으로 중계하고 noVNC 파일을 HTTP로 준다.
+#    - xauth: Xvnc 접속용 MIT-MAGIC-COOKIE를 만든다(host network에서는 X의 abstract socket이
+#      호스트와 공유되므로 cookie 없이 열어 두지 않는다). tigervnc-standalone-server의 의존이지만 직접 쓰므로 적는다.
+#    - noVNC 웹 client(/usr/share/novnc): Ubuntu novnc 패키지의 정적 파일(HTML, JS, 이미지, 약 0.9 MB)만
+#      꺼내 둔다. 이 패키지를 apt로 설치하면 쓰지 않는 nodejs와 OpenStack용 python 라이브러리
+#      (python3-oslo.*, python3-eventlet 등) 49개 패키지가 함께 들어와 이 레이어가 135 MB가 된다(noble arm64,
+#      2026-11-17 실측. 정적 파일만 꺼내면 11.2 MB).
+#      apt-get download는 서명된 저장소 색인의 해시로 파일을 검증한다. 판은 apt가 고른 것을 쓴다(다른 apt 패키지와 같다).
+#      받는 디렉터리를 _apt 소유로 두어 apt가 권한을 낮춰(_apt 사용자로) 받게 한다. root 소유 0700
+#      디렉터리면 "Download is performed unsandboxed as root" 경고가 난다.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      tigervnc-standalone-server \
+      websockify \
+      xauth \
+ && novnc_tmp="$(mktemp -d)" \
+ && chown _apt "${novnc_tmp}" \
+ && (cd "${novnc_tmp}" && apt-get download novnc) \
+ && dpkg-deb -x "${novnc_tmp}"/novnc_*.deb "${novnc_tmp}/root" \
+ && cp -a "${novnc_tmp}/root/usr/share/novnc" /usr/share/novnc \
+ && rm -rf "${novnc_tmp}" /var/lib/apt/lists/* \
+ && command -v Xvnc websockify xauth mcookie \
+ && test -f /usr/share/novnc/vnc.html \
+ && test -f /usr/share/novnc/core/rfb.js

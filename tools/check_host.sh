@@ -175,19 +175,37 @@ else
   warn "메모리를 확인하지 못했다(docker info MemTotal)"
 fi
 
-# (i) 화면. gz-gui(viz 프로필)는 DISPLAY와 XAUTHORITY 파일을 읽기 전용으로 받는다
-if [ -n "${DISPLAY:-}" ]; then
-  ok "DISPLAY=$DISPLAY"
-else
-  warn "DISPLAY가 비어 있다. 화면 확인 도구(Gazebo GUI)를 쓰지 않으면 무시해도 된다"
+# (i) 화면. gz-gui(viz 프로필)는 IDSIM_GZ_GUI_DISPLAY(auto, host, virtual. 기본 auto)로 화면 방식을 고른다.
+# auto는 DISPLAY가 있고 XAUTHORITY가 읽을 수 있는 비어 있지 않은 파일을 가리키면 호스트 화면, 아니면 컨테이너 안의
+# 가상 화면(브라우저로 본다)이다. 어느 쪽이든 필수는 아니다(sim_stack.sh의 --viz 분기와 같다)
+gmode="${IDSIM_GZ_GUI_DISPLAY:-auto}"
+host_x=0
+if [ -n "${DISPLAY:-}" ] && [ -n "${XAUTHORITY:-}" ] && [ -s "${XAUTHORITY}" ] && [ -r "${XAUTHORITY}" ]; then
+  host_x=1
 fi
-if [ -n "${XAUTHORITY:-}" ] && [ -s "${XAUTHORITY}" ] && [ -r "${XAUTHORITY}" ]; then
-  ok "XAUTHORITY=$XAUTHORITY"
-elif [ -n "${XAUTHORITY:-}" ]; then
-  warn "XAUTHORITY 파일($XAUTHORITY)이 없거나 비어 있거나 읽을 수 없다. Gazebo GUI가 X 서버 인증에 실패한다"
-else
-  warn "XAUTHORITY가 비어 있다. Gazebo GUI(tools/sim_stack.sh up --viz)를 쓰려면 내보내라. Linux GNOME Wayland: export XAUTHORITY=\$(ls /run/user/\$(id -u)/.mutter-Xwaylandauth.* | head -n 1)"
+if [ -n "${XAUTHORITY:-}" ] && [ ! -e "${XAUTHORITY}" ]; then
+  warn "XAUTHORITY=$XAUTHORITY가 가리키는 파일이 없다. tools/sim_stack.sh up --viz의 gz-gui 컨테이너가 만들어지지 못한다. 고치거나 내보내지 말라"
 fi
+case "$gmode" in
+  auto)
+    if [ "$host_x" -eq 1 ]; then
+      ok "DISPLAY=$DISPLAY, XAUTHORITY=$XAUTHORITY: Gazebo GUI(tools/sim_stack.sh up --viz)가 호스트 화면에 뜬다"
+    elif [ -n "${DISPLAY:-}" ] && [ "${DISPLAY#/}" != "${DISPLAY}" ]; then
+      ok "DISPLAY=$DISPLAY: 컨테이너에서 닿지 않는 호스트 socket 경로(macOS XQuartz)여서 Gazebo GUI(up --viz)는 가상 화면에 뜬다. 주소는 up --viz가 출력한다(http://127.0.0.1:6080/vnc.html, 6080 + 스택 번호)"
+    else
+      ok "DISPLAY=${DISPLAY:-없음}, XAUTHORITY=${XAUTHORITY:-없음}: XAUTHORITY 파일이 없거나 비었거나 읽을 수 없거나 DISPLAY가 비어 Gazebo GUI(up --viz)는 가상 화면에 뜬다. 주소는 up --viz가 출력한다(http://127.0.0.1:6080/vnc.html, 6080 + 스택 번호). 호스트 화면에 띄우려면 XAUTHORITY를 내보내라(Linux GNOME Wayland: export XAUTHORITY=\$(ls /run/user/\$(id -u)/.mutter-Xwaylandauth.* | head -n 1))"
+    fi ;;
+  virtual)
+    ok "IDSIM_GZ_GUI_DISPLAY=virtual: Gazebo GUI(up --viz)는 가상 화면에 뜬다. 주소는 up --viz가 출력한다(http://127.0.0.1:6080/vnc.html, 6080 + 스택 번호)" ;;
+  host)
+    if [ "$host_x" -eq 1 ]; then
+      ok "IDSIM_GZ_GUI_DISPLAY=host, DISPLAY=$DISPLAY, XAUTHORITY=$XAUTHORITY: Gazebo GUI(up --viz)가 호스트 화면에 뜬다"
+    else
+      warn "IDSIM_GZ_GUI_DISPLAY=host인데 DISPLAY나 XAUTHORITY 파일을 쓸 수 없다(없거나 비었거나 읽을 수 없다). Gazebo GUI(up --viz)의 gz-gui가 안내와 함께 끝난다"
+    fi ;;
+  *)
+    warn "IDSIM_GZ_GUI_DISPLAY=${gmode}는 auto, host, virtual 중 하나가 아니다. Gazebo GUI(up --viz)의 gz-gui가 안내와 함께 끝난다" ;;
+esac
 
 # (j) 포트 충돌 힌트. 포트를 직접 bind해 본다(python3 표준 라이브러리. Linux와 macOS에서 같다)
 udp_port_busy() {

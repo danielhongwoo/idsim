@@ -26,6 +26,10 @@
 #      안내와 함께 실패한다(tools/ros_ws.sh build). sim-oracle이 있으면 ros_ws/src/idsim_sim/scripts/sim_oracle.py가 없을 때도 같다.
 #      embedded 변형에는 노드 단계가 없다.
 #   5. --viz면 viz 프로필(gz-gui, foxglove, lichtblick)을 `up -d`로 붙인다(기다리지 않는다. healthcheck 없음).
+#      DISPLAY가 있고 XAUTHORITY가 읽을 수 있는 비어 있지 않은 파일을 가리키면 gz-gui가 호스트 화면에 뜨고, 아니면 컨테이너 안의
+#      가상 화면(Xvnc)에 뜨며 http://127.0.0.1:<6080 + 스택 번호>/vnc.html?autoconnect=1&resize=scale 로 브라우저에서 본다
+#      (IDSIM_GZ_GUI_DISPLAY=auto, host, virtual로 고른다). 호스트에 /tmp/.X11-unix가 없으면 실행 디렉터리의 x11-empty/를
+#      IDSIM_X11_SOCKET_DIR로 넘겨 대신 마운트한다(호스트 /tmp에 아무것도 만들지 않는다).
 #   6. 실패하면 unhealthy 또는 exited 서비스 이름을 한 줄로 찍고, 에이전트 로그의 "bind error"와 px4 로그의 "bind failed"를 찾아 보고하고 종료 코드 1.
 #      노드 단계가 실패하면 ops-N, targets, sim-oracle의 로그 끝과 .State.Health.Log도 찍는다.
 #      스택은 조사할 수 있게 그대로 두며 `tools/sim_stack.sh down`으로 내린다.
@@ -284,8 +288,45 @@ do_up() {
     if [ -z "$vs" ]; then
       say "이 변형(${variant})에는 viz 서비스가 없다"
     else
-      [ -n "${DISPLAY:-}" ] || say "경고: DISPLAY가 비어 있다. gz-gui가 안내와 함께 끝난다"
-      [ -n "${XAUTHORITY:-}" ] || say "경고: XAUTHORITY가 비어 있다. gz-gui가 안내와 함께 끝난다"
+      local gp gmode="${IDSIM_GZ_GUI_DISPLAY:-auto}" xa="${XAUTHORITY:-}" host_x=0 url
+      gp="$(sj "$sf" stack.gz_gui_web_port)"
+      url="http://127.0.0.1:${gp}/vnc.html?autoconnect=1&resize=scale"
+      # gz_gui.sh의 auto 판단과 같다: DISPLAY가 비어 있지 않고 Xauthority 파일이 읽을 수 있고 비어 있지 않다
+      if [ -n "${DISPLAY:-}" ] && [ -n "$xa" ] && [ -r "$xa" ] && [ -s "$xa" ]; then host_x=1; fi
+      if [ -n "$xa" ] && [ ! -e "$xa" ]; then
+        say "경고: XAUTHORITY=${xa}가 가리키는 파일이 없다. gz-gui 컨테이너가 만들어지지 못한다. 올바른 파일로 고치거나 내보내지 말라"
+      fi
+      case "$gmode" in
+        auto|"")
+          if [ "$host_x" -eq 1 ]; then
+            say "gz-gui는 호스트 화면(DISPLAY=${DISPLAY})에 뜬다"
+          elif [ -z "${DISPLAY:-}" ]; then
+            say "호스트 X11이 없어(DISPLAY가 비어 있다) gz-gui가 가상 화면으로 뜬다. 주소: ${url}"
+          elif [ "${DISPLAY#/}" != "${DISPLAY}" ]; then
+            # DISPLAY가 경로면 호스트의 unix socket 파일이다(macOS XQuartz의 launchd socket). 컨테이너에서 닿지 않고
+            # XAUTHORITY를 내보내도 호스트 화면에 뜨지 않으므로 그 안내를 하지 않는다
+            say "DISPLAY=${DISPLAY}는 컨테이너에서 닿지 않는 호스트 socket 경로여서 gz-gui가 가상 화면으로 뜬다. 주소: ${url}"
+          else
+            say "DISPLAY=${DISPLAY}는 있으나 XAUTHORITY 파일이 없거나 비어 있거나 읽을 수 없어 gz-gui가 가상 화면으로 뜬다. 주소: ${url}"
+            say "호스트 화면에 띄우려면 XAUTHORITY를 내보내고 다시 올려라. GNOME Wayland(Xwayland): export XAUTHORITY=\$(ls /run/user/\$(id -u)/.mutter-Xwaylandauth.* | head -n 1)"
+          fi ;;
+        virtual)
+          say "gz-gui가 가상 화면으로 뜬다(IDSIM_GZ_GUI_DISPLAY=virtual). 주소: ${url}" ;;
+        host)
+          if [ "$host_x" -eq 1 ]; then
+            say "gz-gui는 호스트 화면(DISPLAY=${DISPLAY})에 뜬다(IDSIM_GZ_GUI_DISPLAY=host)"
+          else
+            say "경고: IDSIM_GZ_GUI_DISPLAY=host인데 DISPLAY나 XAUTHORITY 파일이 쓸 수 없다. gz-gui가 안내와 함께 끝난다"
+          fi ;;
+        *)
+          say "경고: IDSIM_GZ_GUI_DISPLAY=${gmode}는 auto, host, virtual 중 하나가 아니다. gz-gui가 안내와 함께 끝난다" ;;
+      esac
+      # 호스트에 X11 소켓 디렉터리가 없으면(XQuartz 없는 Mac 등) bind 원본이 없어 gz-gui가 만들어지지 못한다.
+      # 호스트 /tmp를 건드리지 않고 실행 디렉터리 안의 빈 디렉터리를 대신 마운트한다(가상 화면은 이 소켓을 쓰지 않는다)
+      if [ -z "${IDSIM_X11_SOCKET_DIR:-}" ] && [ ! -d /tmp/.X11-unix ]; then
+        mkdir -p "${run_dir}/x11-empty"
+        export IDSIM_X11_SOCKET_DIR="${run_dir}/x11-empty"
+      fi
       # shellcheck disable=SC2086
       docker compose -f "$f" --profile viz up -d $vs >&2
       local lp fp

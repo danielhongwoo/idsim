@@ -537,6 +537,9 @@ services:
       HOME: /tmp/gz-home
       DISPLAY: ${DISPLAY:-}
       XAUTHORITY: /tmp/.Xauthority
+      IDSIM_GZ_GUI_WEB_PORT: '6080'
+      IDSIM_GZ_GUI_VDISPLAY: '90'
+      IDSIM_GZ_GUI_DISPLAY: null
       IDSIM_GZ_GUI_ENGINE: null
       QSG_RENDER_LOOP: null
       vblank_mode: null
@@ -544,7 +547,7 @@ services:
       - /opt/idsim/sim/scripts/gz_gui.sh
     volumes:
       - type: bind
-        source: /tmp/.X11-unix
+        source: ${IDSIM_X11_SOCKET_DIR:-/tmp/.X11-unix}
         target: /tmp/.X11-unix
         read_only: true
         bind:

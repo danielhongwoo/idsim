@@ -161,6 +161,7 @@ PY
 }
 # 월드 템플릿 대조: sim-base의 원본 default.sdf와 템플릿(ros_ws/src/idsim_sim/worlds/idsim_base.sdf)의 월드 직속 자식 요소를
 # canonical 형태(공백, 주석, 속성 순서 무시)로 순서까지 비교한다. 제외: 원본의 spherical_coordinates, world의 name 속성.
+# 허용된 차이(ALLOWED_DIFFS)는 sunUTC light의 cast_shadows 한 건뿐이다(원본 true, 템플릿 false). 값을 단정하고 나머지는 엄격하게 비교한다.
 # 원본에 월드 직속 plugin, include, actor가 있으면 템플릿으로 옮길 수 없으므로 따로 실패한다(모델 안의 plugin은 월드 직속이 아니라 대상이 아니다).
 # 템플릿은 stdin이 python 스크립트에 쓰이므로 읽기 전용 마운트로 넘긴다.
 check_world_template() {
@@ -188,6 +189,10 @@ def load(path):
     return worlds[0]
 
 
+# 허용된 차이: (월드 직속 light의 name, 직속 자식 태그, 원본 값, 템플릿 값). 이 목록 밖의 차이는 모두 실패다.
+ALLOWED_DIFFS = [("sunUTC", "cast_shadows", "true", "false")]
+
+
 def canon(e):
     return (e.tag, tuple(sorted(e.attrib.items())), (e.text or "").strip(), tuple(canon(c) for c in e))
 
@@ -204,6 +209,26 @@ if bad:
              % (", ".join(bad), ref_src, ref_tpl))
 a = [c for c in src if c.tag not in SKIP]
 b = [c for c in tpl if c.tag not in SKIP]
+refs = "원본 ref %s, 템플릿 ref %s" % (ref_src, ref_tpl)
+
+
+def find_child(world_children, light_name, tag):
+    for c in world_children:
+        if c.tag == "light" and c.get("name") == light_name:
+            hits = [k for k in c if k.tag == tag]
+            return hits[0] if len(hits) == 1 else None
+    return None
+
+
+for light_name, tag, want_src, want_tpl in ALLOWED_DIFFS:
+    es, et = find_child(a, light_name, tag), find_child(b, light_name, tag)
+    vs = (es.text or "").strip() if es is not None else None
+    vt = (et.text or "").strip() if et is not None else None
+    if vs != want_src or vt != want_tpl:
+        sys.exit("FAIL 허용된 차이 <light name=%s>/<%s>: 원본 %s(기대 %s), 템플릿 %s(기대 %s). %s. "
+                 "원본이 바뀌었다면 PX4_GZ_MODELS_REF 변경을 확인하고 허용 목록을 다시 판단하라"
+                 % (light_name, tag, vs, want_src, vt, want_tpl, refs))
+    es.text = et.text  # 단정한 한 건만 같은 값으로 맞춰 나머지 비교에서 뺀다
 for i in range(max(len(a), len(b))):
     x = a[i] if i < len(a) else None
     y = b[i] if i < len(b) else None
@@ -212,7 +237,7 @@ for i in range(max(len(a), len(b))):
         sys.exit("FAIL 월드 템플릿 어긋남: 자리 %d 원본 %s, 템플릿 %s (%s). 원본 ref %s, 템플릿 ref %s. "
                  "PX4_GZ_MODELS_REF를 올렸다면 새 default.sdf와 대조해 템플릿을 다시 옮기고 ref 줄을 고치라"
                  % (i + 1, label(x) if x is not None else "-", label(y) if y is not None else "-", kind, ref_src, ref_tpl))
-print("ok 월드 직속 요소 %d개 일치(원본 ref %s, 템플릿 ref %s)" % (len(a), ref_src, ref_tpl))
+print("ok 월드 직속 요소 %d개 일치, 허용된 차이 %d건(원본 ref %s, 템플릿 ref %s)" % (len(a), len(ALLOWED_DIFFS), ref_src, ref_tpl))
 PY
   then
     echo "ok   idsim/sim-base:local 월드 템플릿 == 원본 default.sdf: $(tail -n 1 "$log")"

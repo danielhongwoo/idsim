@@ -42,7 +42,7 @@ import xml.etree.ElementTree as ET
 # ---------------------------------------------------------------- 기준값(생성기 상수)
 SCHEMA = 1  # stack.json의 schema
 FLEET_SCHEMA = 2  # fleet.yaml의 schema
-GENERATOR_VERSION = 5
+GENERATOR_VERSION = 6
 GENERATOR_SCRIPT = "tools/gen_compose.py"
 
 STACK_MIN, STACK_MAX = 0, 9
@@ -51,6 +51,8 @@ ROS_DOMAIN_BASE = 20
 AGENT_PORT_BASE = 8888
 FOXGLOVE_PORT_BASE = 8765
 LICHTBLICK_PORT_BASE = 18080
+GZ_GUI_WEB_PORT_BASE = 6080  # noVNC(가상 화면 방식의 gz-gui). 127.0.0.1에만 연다
+GZ_GUI_VDISPLAY_BASE = 90  # gz-gui 안의 가상 X display 번호
 MAVLINK_OFFSET_STEP = 1000
 MAVLINK_GCS_REMOTE = 14550
 MAVLINK_GCS_LOCAL = 18570
@@ -142,6 +144,12 @@ GZ_SERVER_CONFIG = "/opt/px4-gz/server.idsim.config"
 GZ_RESOURCE_PATH = "/opt/px4-gz/models:/opt/px4-gz/worlds"
 GZ_READY_FILE = f"{MARKER_DIR}/ready"
 X11_SOCKET_DIR = "/tmp/.X11-unix"
+# gz-gui가 마운트하는 호스트의 X11 소켓 디렉터리. 기본은 X11_SOCKET_DIR이고 IDSIM_X11_SOCKET_DIR로 바꾼다.
+# 호스트에 그 디렉터리가 없으면(XQuartz 없는 Mac, /tmp/.X11-unix가 없는 Linux) bind 원본이 없어 컨테이너가
+# 만들어지지 않으므로 tools/sim_stack.sh가 실행 디렉터리 안의 빈 디렉터리를 이 변수로 넘긴다.
+# 호스트의 /tmp에 디렉터리를 만들지 않으려는 것이다(Docker가 만든 root 0755 디렉터리가 남으면 나중에
+# 사용자 권한 X 서버가 소켓을 만들지 못할 수 있다).
+X11_SOCKET_SOURCE = "${IDSIM_X11_SOCKET_DIR:-/tmp/.X11-unix}"
 XAUTH_IN_CONTAINER = "/tmp/.Xauthority"
 
 IMAGE_NAMES = ("xrce-agent", "sim-base", "px4", "ros-ws")
@@ -172,9 +180,9 @@ RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 PATH_SAFE_RE = re.compile(r"^/[A-Za-z0-9_./@+-]*\Z")
 
 # viz 서비스에만 허용하는 compose 보간. 이 밖의 ${...}와 $는 출력에 남으면 안 된다.
-ALLOWED_INTERPOLATIONS = ("${DISPLAY:-}", "${XAUTHORITY:-/dev/null}")
+ALLOWED_INTERPOLATIONS = ("${DISPLAY:-}", "${XAUTHORITY:-/dev/null}", X11_SOCKET_SOURCE)
 # gz-gui에 이름만 통과시키는 환경변수(호스트에 있으면 그 값, 없으면 넘기지 않는다)
-GUI_PASS_ENV = ("IDSIM_GZ_GUI_ENGINE", "QSG_RENDER_LOOP", "vblank_mode")
+GUI_PASS_ENV = ("IDSIM_GZ_GUI_DISPLAY", "IDSIM_GZ_GUI_ENGINE", "QSG_RENDER_LOOP", "vblank_mode")
 
 FLEET_KEYS = {"schema", "world", "vehicles", "targets", "px4"}
 WORLD_KEYS = {"name", "template", "origin", "speed_factor"}
@@ -237,6 +245,7 @@ def port_ranges(k, participant_max, ids=range(VEHICLE_MIN, VEHICLE_MAX + 1)):
         (f"k{k} agent", agent_port(k), agent_port(k)),
         (f"k{k} foxglove", FOXGLOVE_PORT_BASE + k, FOXGLOVE_PORT_BASE + k),
         (f"k{k} lichtblick", LICHTBLICK_PORT_BASE + k, LICHTBLICK_PORT_BASE + k),
+        (f"k{k} gz_gui_web", GZ_GUI_WEB_PORT_BASE + k, GZ_GUI_WEB_PORT_BASE + k),
         (f"k{k} gcs_remote", gcs_remote_port(k), gcs_remote_port(k)),
     ]
     for n in ids:
@@ -1321,6 +1330,8 @@ def build(fleet_norm, ctx):
             "HOME": "/tmp/gz-home",
             "DISPLAY": "${DISPLAY:-}",
             "XAUTHORITY": XAUTH_IN_CONTAINER,
+            "IDSIM_GZ_GUI_WEB_PORT": str(GZ_GUI_WEB_PORT_BASE + k),
+            "IDSIM_GZ_GUI_VDISPLAY": str(GZ_GUI_VDISPLAY_BASE + k),
         })
         for name in GUI_PASS_ENV:
             genv[name] = None
@@ -1331,7 +1342,7 @@ def build(fleet_norm, ctx):
             "environment": genv,
             "command": [f"{SIM_PKG_IN_CONTAINER}/scripts/gz_gui.sh"],
             "volumes": [
-                _bind(X11_SOCKET_DIR, X11_SOCKET_DIR, True),
+                _bind(X11_SOCKET_SOURCE, X11_SOCKET_DIR, True),
                 _bind("${XAUTHORITY:-/dev/null}", XAUTH_IN_CONTAINER, True),
                 _bind(sim_pkg_host, SIM_PKG_IN_CONTAINER, True),
             ],
@@ -1393,6 +1404,7 @@ def build(fleet_norm, ctx):
             "mavlink_gcs_remote": gcs_remote_port(k),
             "foxglove_port": FOXGLOVE_PORT_BASE + k,
             "lichtblick_port": LICHTBLICK_PORT_BASE + k,
+            "gz_gui_web_port": GZ_GUI_WEB_PORT_BASE + k,
             "viz_bind": VIZ_BIND,
             "dds": {"rmw_implementation": RMW, "cyclonedds_uri": CYCLONEDDS_URI,
                     "port_base": dlo, "port_last": dhi, "participant_index_max": pmax},

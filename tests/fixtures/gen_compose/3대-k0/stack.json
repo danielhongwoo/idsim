@@ -4,7 +4,7 @@
     "git_commit": "0000000000000000000000000000000000000000",
     "git_dirty": false,
     "script": "tools/gen_compose.py",
-    "version": 5
+    "version": 6
   },
   "images": {
     "lichtblick": "ghcr.io/lichtblick-suite/lichtblick:1.30.0@sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -89,6 +89,7 @@
       "rmw_implementation": "rmw_cyclonedds_cpp"
     },
     "foxglove_port": 8765,
+    "gz_gui_web_port": 6080,
     "gz_ip": "127.0.0.1",
     "gz_partition": "idsim-0",
     "index": 0,
