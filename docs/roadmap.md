@@ -40,15 +40,15 @@
 4. replay 모드. compose 프로필 `replay`: 시뮬레이터, PX4, Agent 없이 `ros2 bag play --clock`으로 토픽을 재생하고, 수집기, WebSocket, (Phase 3의) Fleet Manager가 그대로 올라온다. 모든 노드가 `use_sim_time`을 따르므로 재생 속도를 바꿔도 동일하게 동작. `viz` 프로필을 함께 켜면 재생 토픽을 Lichtblick으로도 본다.
 5. 기록물 인덱스. 기록물 디렉터리를 훑어 미션 id, 기체, 기간, 결과를 SQLite 한 개에 정리하는 CLI(`idsim-log ls / show / replay`, Python). 미션 id와 결과는 기록물의 `mission_event` 토픽에서 읽는다(action의 goal과 result는 기록되지 않는다). 실행 단위의 key는 (기체 id, goal id)이고, 종료 사건이 없는 접수는 결과 미상으로 둔다. 대규모 로깅 시스템의 축소판.
 6. 검증. Phase 1 통합 테스트를 "라이브로 1회 실행 -> 기록 -> replay로 같은 판정 통과"로 확장. SITL 기록물에 정답 pose가 있으므로 replay 판정은 waypoint 도달과 표적 접근의 정답 판정까지 덮고, 정답 pose가 없는 기록물에서는 계약 판정만 돈다. 이것은 시스템이 아니라 수집기와 판정 코드의 회귀 테스트이며, 시뮬레이터가 필요 없어 CI에서 수 초에 돈다. replay CI job을 이 단계에서 추가. CI `sitl` job의 실패 산출물에 MCAP 기록물을 더한다(Phase 1에는 recorder가 없어 ULog, compose logs, ros_log, 판정 trace만 올린다).
-7. 계약 고정 전에 정할 것. `VehicleState`와 `MissionEvent`를 고정하기 전에, Zenoh의 ROS 2 bridge를 건너는 `ExecuteMission`, `VehicleState`, `MissionEvent`의 계약을 다음에 대해 정한다. 스택의 구성은 바꾸지 않는다(기체가 한 대인 스택은 DDS 도메인 하나가 곧 그 기체의 버스다). Zenoh의 구성을 정하는 것은 Phase 3이다.
+7. 계약 고정 전에 정할 것. `VehicleState`와 `MissionEvent`를 고정하기 전에, Zenoh의 ROS 2 bridge로 전달되는 `ExecuteMission`, `VehicleState`, `MissionEvent`의 계약을 다음에 대해 정한다. 스택의 구성은 바꾸지 않는다(기체가 한 대인 스택은 DDS 도메인 하나가 곧 그 기체의 버스다). Zenoh의 구성을 정하는 것은 Phase 3이다.
    - 지상에서 `MissionEvent`를 빠짐없이 받아야 하는지. `mission_event` 구독을 action client보다 먼저 같은 노드에서 만드는 규칙만으로는 bridge 너머에서 접수 사건이 빠질 수 있다. 빠짐없이 받아야 하면 bridge 너머의 구독이 맺어졌음을 goal 전에 확인하는 방법을 계약에 두고, 아니면 접수 사건의 유실을 허용하고 action을 유일한 정본으로 둔다.
    - 지상 링크가 끊긴 동안 끝난 미션의 결과를 지상이 어떻게 아는지(result를 다시 물을 수 있는 기간, 기체 쪽 결과 보관 기간, 사건의 재전달). bridge를 다시 띄운 경우 단절 중의 `VehicleState`, `MissionEvent`, feedback은 재연결 뒤에 오지 않는다.
    - action 내부 토픽(`_action/feedback`, `_action/status`)의 type hash가 bridge에서 달라지는 것을 type hash 기반 계약 검사에서 어떻게 다루는지.
-   - bridge가 같은 goal 요청을 두 번 건넬 때 Executor가 두 번째를 접수하지 않는 방어가 필요한지. 필요하면 수락 정책(거절을 쓰지 않는다)의 문장과 소비자 규칙이 바뀌므로 변경 절차(architecture.md)를 따른다.
+   - bridge가 같은 goal 요청을 두 번 전달할 때 Executor가 두 번째를 접수하지 않는 방어가 필요한지. 필요하면 수락 정책(거절을 쓰지 않는다)의 문장과 소비자 규칙이 바뀌므로 변경 절차(architecture.md)를 따른다.
    - 지상이 받는 `MissionEvent`가 goal마다 접수 하나와 종료 하나가 아닐 수 있을 때 읽는 쪽 규칙(같은 vehicle_id, goal_id, status의 사건은 하나로 다룸)을 둘지.
-   - 지상 노드의 시간 기준. 지상에 `/clock`을 건네지 않으면 `use_sim_time` true 노드의 시계가 0에 머문다.
+   - 지상 노드의 시간 기준. 지상에 `/clock`을 전달하지 않으면 `use_sim_time` true 노드의 시계가 0에 머문다.
 
-완료 기준: 기록물 하나를 Lichtblick(Foxglove 호환 오픈소스 뷰어)에서 열어 궤적과 상태 변화를 확인할 수 있고, `replay` 프로필로 올린 WebSocket 페이지에 같은 움직임이 다시 나오며, replay CI job이 모든 push에서 돈다. `VehicleState`(WebSocket JSON 스키마와 함께)와 `MissionEvent`의 계약을 고정하며, 고정 전에 항목 7의 사항이 정해져 있고, 고정할 `VehicleState`와 `MissionEvent`의 타입과 QoS, 항목 7에서 정한 것이 Zenoh의 ROS 2 bridge를 그대로 건너는지 개발 호스트에서 확인한다.
+완료 기준: 기록물 하나를 Lichtblick(Foxglove 호환 오픈소스 뷰어)에서 열어 궤적과 상태 변화를 확인할 수 있고, `replay` 프로필로 올린 WebSocket 페이지에 같은 움직임이 다시 나오며, replay CI job이 모든 push에서 돈다. `VehicleState`(WebSocket JSON 스키마와 함께)와 `MissionEvent`의 계약을 고정하며, 고정 전에 항목 7의 사항이 정해져 있고, 고정할 `VehicleState`와 `MissionEvent`의 타입과 QoS, 항목 7에서 정한 것이 Zenoh의 ROS 2 bridge를 거쳐 그대로 전달되는지 개발 호스트에서 확인한다.
 
 함정은 QoS와 데이터량이다. PX4 토픽은 best-effort로 발행되므로 rosbag2가 기록할 때는 퍼블리셔 QoS를 자동으로 따라가지만, 재생 시 구독자가 reliable을 요구하면 받지 못하므로 수집기와 테스트는 라이브와 같은 sensor_data QoS를 써야 하고 필요하면 `--qos-profile-overrides-path`로 맞춘다. 또 PX4 토픽이 수백 Hz로 나와 기록 대상을 골라야 한다.
 
@@ -58,7 +58,7 @@
 
 선행 항목: 시뮬레이션의 통신 구조를 실기체와 맞춘다. ROS 2 버스를 기체마다 DDS 도메인으로 나누고, Agent를 기체마다 하나씩 두며, Fleet Manager와 기체 운용 노드 사이를 Zenoh로 잇는다(architecture.md "전체 아키텍처"). 기체가 한 대인 Phase 1-2의 스택은 DDS 도메인 하나가 곧 그 기체의 버스라 이 구조와 같고, 달라지는 것은 기체가 여러 대이고 지상 쪽 서비스가 생기는 여기부터다. 통합 테스트의 `runner`는 기체의 버스에 붙어 `ExecuteMission`을 직접 부르고 기체 안의 토픽(`/fmu/out`, 정답 pose)으로 판정하며 지상 링크를 거치지 않는다. 지상 링크는 별도의 시험으로 본다(항목 7). 무선 구간의 지연과 손실은 시뮬레이션에 넣지 않는다. 정해지지 않은 것은 다음이고, 실험으로 정해 architecture.md와 interface.md에 반영한다.
 
-- Zenoh의 구성: bridge의 종류, 지상 링크를 건네는 토픽의 제한, router의 위치, 버전. bridge 버전에 따라 기체 쪽 DDS 설정(저장소 `config/cyclonedds.xml`로 bridge가 늦게 뜬 노드를 찾는지, bridge 전용 설정이 필요한지)이 달라진다. 기체 쪽 bridge의 action route가 다시 만들어진 뒤에는 요청이 두 번 건너가므로, bridge의 기동 순서와 재시작 묶음(그 기체의 action server가 뜬 뒤에 뜨고 함께 다시 뜨는 것)을 구성 실험에서 본다. 건네는 토픽의 제한(allow)은 기체에서 지상 방향과 지상에서 기체 방향 모두 시험한다.
+- Zenoh의 구성: bridge의 종류, 지상 링크로 전달하는 토픽의 제한, router의 위치, 버전. 지금까지 확인한 bridge의 동작과 한계는 `docs/tech/zenoh.md`에 있다. bridge 버전에 따라 기체 쪽 DDS 설정(저장소 `config/cyclonedds.xml`로 bridge가 늦게 뜬 노드를 찾는지, bridge 전용 설정이 필요한지)이 달라진다. 기체 쪽 bridge의 action route가 다시 만들어진 뒤에는 요청이 두 번 전달되므로, bridge의 기동 순서와 재시작 묶음(그 기체의 action server가 뜬 뒤에 뜨고 함께 다시 뜨는 것)을 구성 실험에서 본다. 전달하는 토픽의 제한(allow)은 기체에서 지상 방향과 지상에서 기체 방향 모두 시험한다.
 - `/clock`, 표적 상태(`TargetState`), 정답 pose를 기체마다의 도메인에 어떻게 공급하는지. 지금은 `bridge`, `targets`, `sim-oracle`이 스택에 하나씩이고 스택의 도메인 하나에 발행한다.
 - 스택 번호 k와 기체 번호 N에서 도메인 ID를 파생하는 규칙. 지금은 `ROS_DOMAIN_ID` = 20 + k이고 k는 0-9다.
 - 기체별 Agent의 포트 파생 규칙. 지금은 Agent 하나가 8888 + k이다.
@@ -74,7 +74,7 @@
 4. gRPC API (`proto/fleet.proto`). `ListVehicles`, `StreamVehicleStates`(server streaming), `StreamMissionEvents`(server streaming), `SubmitMission`, `AbortMission`, `GetMissionStatus`. Protobuf `VehicleState`와 ROS msg의 변환은 `idsim_fleet` 변환 모듈 한 곳에서만 하고 왕복 단위 테스트를 둔다. Python 클라이언트 CLI로 호출.
 5. 브라우저 gateway (`gateway/`, Rust). tonic으로 Fleet Manager의 두 스트림을 구독해 WebSocket으로 중계하고, 미션 제출과 중단을 HTTP JSON으로 받아 gRPC로 넘기며, Phase 2 페이지를 정적으로 서빙한다. ROS 2 비의존이므로 cargo만으로 빌드하고 단위 테스트는 gRPC 서버 목으로 한다. Phase 2에서 고정한 WebSocket JSON 스키마를 그대로 지킨다.
 6. 시나리오 정의. `missions/scenario_*.yaml`에 기체 수, 초기 배치, 표적 Actor 경로, 미션 목록을 한 파일로. 시나리오 runner(Python)가 `config/fleet.yaml` 생성 -> compose 생성 -> `up --wait` -> 미션 제출 -> 기록 -> 판정까지 한 번에.
-7. 검증. 시나리오 "3대, 표적 2개, 동시 배분"에서 두 미션이 서로 다른 기체에 배분되고 모두 완료되는지, 한 기체의 px4 컨테이너를 강제 종료했을 때 Fleet Manager가 이탈을 감지하고 미션을 다른 기체에 재배분하는지를 pytest로. 배분 규칙은 단위 테스트로 먼저 덮고, SITL 테스트는 nightly 전용. 지상 링크의 시험은 따로 둔다. Fleet Manager가 Zenoh를 거쳐 `ExecuteMission`을 부르고 `VehicleState`와 `MissionEvent`를 받는지, 한 기체의 도메인에 있는 `/fmu` 토픽이 다른 기체의 도메인과 지상 쪽에 보이지 않는지를 본다. 기체 운용 컨테이너의 재시작과 지상 client의 재접속 뒤에도 goal 하나가 Phase 2 항목 7에서 정한 규칙대로 지상에 보이는지, 취소가 건너는지, bridge의 재시작 뒤 단절 중에 끝난 미션의 결과를 지상이 아는지도 본다.
+7. 검증. 시나리오 "3대, 표적 2개, 동시 배분"에서 두 미션이 서로 다른 기체에 배분되고 모두 완료되는지, 한 기체의 px4 컨테이너를 강제 종료했을 때 Fleet Manager가 이탈을 감지하고 미션을 다른 기체에 재배분하는지를 pytest로. 배분 규칙은 단위 테스트로 먼저 덮고, SITL 테스트는 nightly 전용. 지상 링크의 시험은 따로 둔다. Fleet Manager가 Zenoh를 거쳐 `ExecuteMission`을 부르고 `VehicleState`와 `MissionEvent`를 받는지, 한 기체의 도메인에 있는 `/fmu` 토픽이 다른 기체의 도메인과 지상 쪽에 보이지 않는지를 본다. 기체 운용 컨테이너의 재시작과 지상 client의 재접속 뒤에도 goal 하나가 Phase 2 항목 7에서 정한 규칙대로 지상에 보이는지, 취소가 전달되는지, bridge의 재시작 뒤 단절 중에 끝난 미션의 결과를 지상이 아는지도 본다.
 
 완료 기준: 3대 시나리오가 headless로 nightly에서 통과하고, 재배분 테스트가 통과하고, 지상 링크 시험(Fleet Manager가 Zenoh를 거쳐 `ExecuteMission`, `VehicleState`, `MissionEvent`를 주고받고 다른 기체의 `/fmu` 토픽은 보이지 않음)이 통과하며, 3대의 토픽이 네임스페이스로 구분되어 기록물에 들어 있다(기록물 하나인지는 위 선행 항목의 기록 방법 결정에 따른다).
 
@@ -93,11 +93,11 @@ PC 한 대에서 Gazebo + PX4 3대 + 노드들을 돌리면 CPU가 부족할 수
 | 컨테이너 간 DDS 데이터 미수신 | 토픽은 보이나 데이터가 안 오거나 간헐적으로 끊김 | rmw를 CycloneDDS로 고정해 공유 메모리 전송 경로를 없애고, `network_mode: host`, `config/cyclonedds.xml`에 unicast peer 명시(인터페이스는 고정하지 않음. Agent가 호스트 인터페이스 주소만 광고한다) |
 | 같은 호스트의 스택 충돌 | 개발자 둘 또는 병렬 CI job이 서로의 토픽과 포트를 봄 | 생성 인자 k로 `ROS_DOMAIN_ID`, Agent 포트, MAVLink 포트 분리 |
 | 스택 둘의 MAVLink 포트 충돌 | 오프셋이 없으면 스택 k가 달라도 같은 N의 PX4가 같은 로컬 포트(18570+N, 14580+N)에 bind해 두 번째 스택이 `bind failed` 경고를 내고(실측) GCS 14550도 공유된다 | PATH 앞의 idsim용 `px4-rc.mavlink`가 스택 오프셋 1000k를 적용하고, 스모크가 px4 로그에 `bind failed`가 없음을 판정한다. `MAV_SYS_ID`는 스택 간에 같아 외부 GCS 하나는 한 번에 한 스택만 본다는 제약을 `docs/interface.md`에 적는다 |
-| 시뮬레이션의 통신 구조가 실기체와 다르다 | 모든 기체와 지상 쪽이 DDS 도메인 하나에서 만나면 지상 링크를 건너는 것의 범위, 기체 간 버스 분리, Zenoh 구간의 동작에서 생기는 문제가 시뮬레이션에서 드러나지 않는다 | Phase 3의 선행 항목(기체마다의 DDS 도메인, Zenoh 지상 링크)으로 통신 구조를 같게 한다. 기체가 한 대인 Phase 1-2의 스택은 도메인 하나가 그 기체의 버스라 구조가 같다. 무선의 지연과 손실은 시뮬레이션에 넣지 않으므로 그 문제는 시뮬레이션으로 덮이지 않는다 |
+| 시뮬레이션의 통신 구조가 실기체와 다르다 | 모든 기체와 지상 쪽이 DDS 도메인 하나에서 만나면 지상 링크로 전달되는 것의 범위, 기체 간 버스 분리, Zenoh 구간의 동작에서 생기는 문제가 시뮬레이션에서 드러나지 않는다 | Phase 3의 선행 항목(기체마다의 DDS 도메인, Zenoh 지상 링크)으로 통신 구조를 같게 한다. 기체가 한 대인 Phase 1-2의 스택은 도메인 하나가 그 기체의 버스라 구조가 같다. 무선의 지연과 손실은 시뮬레이션에 넣지 않으므로 그 문제는 시뮬레이션으로 덮이지 않는다 |
 | 지상 링크 bridge가 기체 쪽 노드를 찾지 못한다 | bridge(zenoh-bridge-ros2dds 1.10.2)가 저장소 `config/cyclonedds.xml` 조건(multicast 끔, unicast peer 127.0.0.1)에서 자기보다 늦게 뜬 DDS 참가자를 찾지 못하고 그 참가자도 bridge를 찾지 못한다. 같은 participant 포트로 다시 뜬 Executor는 약 30 s 뒤에야 찾는다 | Phase 3 선행 항목에서 bridge 버전과 기체 쪽 DDS 설정을 정한다. 정한 구성은 bridge와 노드의 기동 순서를 바꿔 지상 링크 시험에서 확인한다 |
-| bridge의 action route가 다시 만들어진 뒤 요청이 두 번 건너간다 | 같은 goal 요청이 같은 요청 id로 Executor에 두 번 닿고 rclcpp_action이 예외를 던져 Executor 프로세스가 끝난다(bridge 1.10.2, 1.9.0). 노드 코드가 잡을 수 없는 위치다. OFFBOARD 비행 중이면 Offboard 손실 failsafe로 Land에 간다(문서와 파라미터 확인, 실측 아님) | Executor 쪽 방어가 필요한지와 그에 따른 소비자 규칙을 계약 고정 전에 정하고(Phase 2 항목 7), bridge의 기동 순서와 재시작 묶음은 Phase 3의 구성으로 정한다 |
+| bridge의 action route가 다시 만들어진 뒤 요청이 두 번 전달된다 | 같은 goal 요청이 같은 요청 id로 Executor에 두 번 닿고 rclcpp_action이 예외를 던져 Executor 프로세스가 끝난다(bridge 1.10.2, 1.9.0). 노드 코드가 잡을 수 없는 위치다. OFFBOARD 비행 중이면 Offboard 손실 failsafe로 Land에 간다(문서와 파라미터 확인, 실측 아님) | Executor 쪽 방어가 필요한지와 그에 따른 소비자 규칙을 계약 고정 전에 정하고(Phase 2 항목 7), bridge의 기동 순서와 재시작 묶음은 Phase 3의 구성으로 정한다 |
 | 지상 링크가 끊긴 동안의 사건과 결과가 지상에 오지 않는다 | bridge 재시작 뒤 `MissionEvent`와 feedback이 유실되고, 끊긴 동안 끝난 미션의 종료 사건과 result가 지상에 오지 않을 수 있다. Executor의 result 보관 기간이 짧아 나중에 되찾지 못할 수 있다 | 지상이 결과를 아는 방법을 계약 고정 전에 정한다(Phase 2 항목 7). 링크 단절 중 미션의 동작은 방식과 별개로 계약에서 정한다 |
-| bridge가 건네는 범위 | 건네는 토픽의 제한이 없으면 지상에서 `/fmu` 토픽을 이름으로 구독할 수 있고 지상에서 발행한 토픽이 기체 쪽에 생기며, Executor의 lifecycle과 parameter service도 지상의 목록에 보인다 | bridge 설정으로 건네는 것을 정한 목록(계약 셋과, 정해지면 그 밖의 것)으로 제한하고 지상 링크 시험이 양 방향에서 확인한다 |
+| bridge가 전달하는 범위 | 전달하는 토픽의 제한이 없으면 지상에서 `/fmu` 토픽을 이름으로 구독할 수 있고 지상에서 발행한 토픽이 기체 쪽에 생기며, Executor의 lifecycle과 parameter service도 지상의 목록에 보인다 | bridge 설정으로 전달하는 것을 정한 목록(계약 셋과, 정해지면 그 밖의 것)으로 제한하고 지상 링크 시험이 양 방향에서 확인한다 |
 | 시작 순서 | gazebo 전에 px4가 스폰을 시도해 실패, 테스트 flaky | healthcheck + `depends_on` 조건 + `compose up --wait` |
 | 시간 기준 불일치 | 라이브와 replay의 판정이 다름 | 정식 기준은 `/clock`, 기록은 `--use-sim-time`, `/clock` 미기록 |
 | PC 성능 | 3대 시나리오에서 Gazebo 물리 스텝 드롭, PX4 타이밍 경고 | headless 기본, `PX4_SIM_SPEED_FACTOR` 조절, 카메라와 라이다 없는 기본 x500 모델 사용, 표적은 Actor |
