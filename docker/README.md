@@ -267,7 +267,7 @@ tools/sim_stack.sh down --stack 8                     # 끝나면
 - 호스트에 `/tmp/.X11-unix`가 없으면(XQuartz가 없는 Mac 등) compose의 bind 원본이 없어 컨테이너가 만들어지지 못하므로, `tools/sim_stack.sh`가 실행 디렉터리의 빈 `x11-empty/`를 `IDSIM_X11_SOCKET_DIR`로 넘겨 대신 마운트한다(호스트 `/tmp`에는 만들지 않는다). compose를 직접 올릴 때는 `IDSIM_X11_SOCKET_DIR`을 빈 디렉터리로 주거나 `/tmp/.X11-unix`를 만들어 둔다. 없는 경로의 bind가 실패하고 빈 디렉터리를 주면 컨테이너가 만들어지는 것은 1회성 compose로 확인했다.
 - 확인한 범위: 가상 화면 방식은 Mac(OrbStack)에서 확인했다. 읽기 전용 root 소유 0755 `/tmp/.X11-unix`(named volume으로 Linux 조건을 흉내 냄)에서도 Xvnc가 abstract socket으로 뜨고 `vnc.html`이 200이었다. 실제 Linux 호스트에서는 돌려 보지 않았다. 호스트 방식도 이번 변경 뒤에는 다시 돌리지 않았고 코드 대조만 했다.
 
-가상 화면은 GPU 없이 Mesa llvmpipe(OpenGL 4.5) 소프트웨어 렌더링이다. Mac(OrbStack VM CPU 10개), 기체 1대, 인프라만(운용 노드 없음)에서 30 s 창을 네 번씩 잰 RTF가 GUI와 함께 0.9993-0.9998, GUI 없이 0.9984-0.9997로 차이가 없다. `gz-gui` 컨테이너는 CPU 약 2코어(180-217%)를 쓴다. 그 밖의 조건(CPU가 적은 호스트, 기체 여러 대)은 재지 않았다. 3D view 갱신은 llvmpipe에서 약 12-16 fps다(VNC 갱신 횟수로 추정한 값).
+가상 화면은 GPU 없이 Mesa llvmpipe(OpenGL 4.5) software 렌더링이다. Mac(OrbStack VM CPU 10개), 기체 1대, 인프라만(운용 노드 없음)에서 30 s 창을 네 번씩 잰 RTF가 GUI와 함께 0.9993-0.9998, GUI 없이 0.9984-0.9997로 차이가 없다. `gz-gui` 컨테이너는 CPU 약 2코어(180-217%)를 쓴다. 그 밖의 조건(CPU가 적은 호스트, 기체 여러 대)은 재지 않았다. 3D view 갱신은 llvmpipe에서 월드 광원 sunUTC의 그림자를 끈 상태(`idsim_base.sdf`)로 초당 19-22장(프레임 시간 48-52 ms)이고, 그림자를 켜면 약 8장(132 ms)이다(기체 1대, 카메라를 10초 돌리며 gz-gui 프레임 시간을 잰 값. 끈 쪽은 실행 중에 끈 두 번과 바뀐 월드 파일로 올린 두 번, 켠 쪽 두 번).
 
 ```
 tools/sim_stack.sh up --viz           # 스택과 GUI를 함께
