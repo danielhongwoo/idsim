@@ -13,9 +13,8 @@
 ## 다음 작업
 
 1. Phase 2 착수 전 설계 토론("Phase 2와 3 전에 정할 것"의 첫 항목).
-2. SITL 전용 가정 문서화의 후속.
-   - 지상에서 구독하므로 링크 단절 중 `MissionEvent`(RELIABLE KEEP_LAST 10) 유실 여부를 Phase 2 계약 고정 전에 확인한다(ros2-engineer).
-3. 지상 링크의 Zenoh 구성 실험과 설계 토론(architect, ros2-engineer, ops-service-engineer). 기체마다 DDS 도메인을 나누고 그 사이를 Zenoh로 이어 `ExecuteMission`, `VehicleState`, `MissionEvent`만 건네는 구성을 시뮬레이션에 넣는다(`docs/roadmap.md` Phase 3의 선행 항목. 설계는 `docs/architecture.md`에 있고 compose는 아직 스택에 도메인 하나다). `/clock`, 표적 상태, 정답 pose의 공급 도메인, 도메인 ID와 기체별 Agent 포트의 파생 규칙을 함께 정한다. Agent를 기체마다 하나씩 두는 변경도 이 항목에 넣는다. Jazzy와 CycloneDDS에서의 bridge 버전 호환, 손실 링크 위의 action 동작(feedback 유실, 취소 지연)을 확인한다. 링크 단절 중 미션의 동작(계속 또는 중단, 재연결 뒤의 정합, 단절과 이탈의 구분)은 방식과 별개로 계약에서 정한다.
+2. Zenoh 실험 결과의 계약 반영(architect). 중복 goal id 요청을 접수하지 않는 결정안(아래 "지상 링크 실험 결과")과 `MissionEvent` 접수 사건 유실, 단절 중 끝난 미션의 결과, action 내부 토픽 type hash, 지상 노드의 시간 기준을 `VehicleState`와 `MissionEvent` 고정 전에 정한다. 사용자 승인과 "미해결 사항"의 질문이 먼저다.
+3. 지상 링크의 Zenoh 구성(architect, ros2-engineer, ops-service-engineer, devops-engineer). bridge 버전과 DDS 설정, 기동 순서와 재시작 묶음, allow 목록, router 위치는 정하지 않았다. 기체마다 DDS 도메인을 나누고 그 사이를 Zenoh로 이어 `ExecuteMission`, `VehicleState`, `MissionEvent`만 건네는 구성을 시뮬레이션에 넣는다(`docs/roadmap.md` Phase 3의 선행 항목. 설계는 `docs/architecture.md`에 있고 compose는 아직 스택에 도메인 하나다). `/clock`, 표적 상태, 정답 pose의 공급 도메인, 도메인 ID와 기체별 Agent 포트의 파생 규칙을 함께 정한다. Agent를 기체마다 하나씩 두는 변경도 이 항목에 넣는다. 링크 단절 중 미션의 동작(계속 또는 중단, 재연결 뒤의 정합, 단절과 이탈의 구분)은 방식과 별개로 계약에서 정한다. 단절 중과 재연결 뒤의 cancel, 손실 링크 위의 action 동작(feedback 유실, 취소 지연)은 확인하지 않았다.
 
 ## 운영 규칙
 
@@ -47,7 +46,7 @@
 - GPS는 항상 쓸 수 있다고 가정한다. GPS 없는 비행은 범위 밖이다. 비행 중 GPS 상실 시의 동작은 정하지 않았고 확인하지도 않았다.
 - 지상 링크(지상국과 기체 사이의 무선 구간)는 DDS가 아니라 Zenoh로 잇는다. 기체의 ROS 2 버스는 기체 안에 머문다. Zenoh의 구성(bridge 종류, 건네는 토픽의 제한, router 위치)은 실험 뒤에 정한다.
 - `MissionEvent`를 지상에서 구독한다. 지상의 어느 컴포넌트가 구독하는지와 기록기의 위치는 정하지 않았다.
-- Zenoh bridge가 `ExecuteMission` action과 `VehicleState`, `MissionEvent` 두 토픽을 건네는지 이른 확인 항목(`docs/roadmap.md` Phase 2 항목 7)을 유지한다.
+- Zenoh bridge가 `ExecuteMission` action과 `VehicleState`, `MissionEvent` 두 토픽을 건너는 것은 조건부로 확인했다(`VehicleState`는 임시 발행자로만 보았다. 조건과 계약에 닿는 예외는 아래 "지상 링크 실험 결과"). `docs/roadmap.md` Phase 2 항목 7은 계약 고정 전에 정할 것의 목록이고, 정한 것이 bridge를 건너는지는 고정 전에 다시 확인한다.
 
 ## 미해결 사항
 
@@ -56,6 +55,15 @@
 - 실기체 적용 범위: 다음을 할지와 언제 할지를 사용자가 정한다. field 시간 모드(`/clock` 없는 실행과 `UXRCE_DDS_SYNCT=1`), 배치 경계(계약 밖에 무엇이 지상 링크를 넘는지, 기록기와 표적 추적기의 위치), `stack.json` 기체 항목의 식별값과 SITL 배치값 분리, 현장용 DDS 설정, FMU(NuttX)의 식별 설정.
 - `world.origin.alt`의 datum(AMSL 또는 타원체 고)을 정하지 않았다. 아래 고도 제한과 함께 정한다(상하한의 기준 높이가 datum에 달려 있다).
 - 고도 제한: 미션 고도에 상하한이 없다(TAKEOFF `height_m`은 양수만, GOTO z와 offset z는 좌표 상한만, 음수 허용). TRACK_ENTITY setpoint z는 실행 중 검사가 없고 PX4 `GF_MAX_VER_DIST`도 꺼져 있다(v1.17.0 기본 0). 범위 값과 두 겹(미션 검증, PX4 geofence)을 사용자가 정한다.
+- Zenoh 지상 링크 실험에서 나온 질문(근거는 아래 "지상 링크 실험 결과").
+  - 중복 goal id 요청을 접수하지 않는 결정안(Phase 1에 고정한 수락 정책의 변경)을 승인할지, 구현과 그 뒤의 실측(개발 호스트에서 50회 남짓)을 Phase 2 완료 전에 할지 완료 기준과 떼어 따로 할지. 전자이면 지상의 `MissionEvent` 중복이 보일 때 `MissionEvent` 고정이 그 처리 뒤로 밀린다.
+  - upstream(zenoh-plugin-ros2dds) 보고를 누가, 언제, 어느 계정으로 하는지, 프로젝트의 구성과 로그를 공개 issue에 어디까지 실을지, 기존 issue #702에 덧붙일지 새로 낼지.
+  - 지상이 `MissionEvent`를 빠짐없이 받아야 하는지. 그렇다면 bridge 너머의 구독이 맺어졌음을 goal 전에 확인하는 방법을 계약에 둘지, 접수 사건의 유실을 허용하고 action을 유일한 정본으로 둘지.
+  - 지상 링크가 끊긴 동안 끝난 미션의 결과를 지상이 어떻게 알아야 하는지(재연결 뒤 result를 다시 물을 수 있는 기간, 기체 쪽 결과 보관 기간, 사건의 TRANSIENT_LOCAL 재전달). `VehicleState`에 미션 상태와 마지막 결과를 싣는 안은 제안 단계다. 지금 계약은 TRANSIENT_LOCAL을 쓰지 않는다.
+  - 지상에 `/clock`을 건넬지, 지상 노드(Fleet Manager, 수집기 쪽)의 시간 기준을 무엇으로 할지(실기체에서 `/clock`이 없을 때 포함). 제안 단계이고 결정하지 않았다.
+  - bridge 버전(1.9.0, 1.10.x, 또는 upstream 수정판 PR #705(열림, #702와 #703을 고침)를 기다리거나 쓰는 것), 배포물(공식 Docker 이미지와 릴리스 바이너리), 고정할 곳(`docker/versions.env` 등), 1.10.x를 쓸 때 bridge 전용 CycloneDDS 설정을 둘지(lo만 또는 interface 이름을 적음), bridge를 기체 쪽 노드보다 나중에 띄우는 순서 제약을 둘지.
+  - action 내부 토픽의 type hash가 bridge에서 달라지는 것을 type hash 기반 계약 검사에서 어떻게 다룰지.
+  - 위 구성 문제를 Phase 3의 "Zenoh의 구성"에서 다룰지, Phase 2 항목 7(계약 고정 전에 정할 것)에서 다룰지.
 
 main 머지 뒤 확인할 것.
 
@@ -107,6 +115,21 @@ Phase 2와 3 전에 정할 것.
 - Gazebo 기반 표적 생산자(확장 항목).
 - gz-gui 생존 확인 자동화(플래키가 보일 때).
 - Phase 3: Fleet 재시작 복구 경로, 이탈 기체 goal 재배분 한 번, 주기 하한 계약이 필요한 토픽 목록(px4-engineer), lockstep 반대 방향(PX4가 느릴 때 Gazebo가 기다리는지).
+
+## 지상 링크 실험 결과
+
+Zenoh bridge 확인 실험의 결론이다. 근거와 실측값은 이 절을 넣은 PR의 본문에 있다. 보고서 원본은 저장소 밖 한 PC에만 있다(`/Users/daniel/Library/Application Support/Claude/side-session-notes/local_c8ac02d7-85f5-465a-81ea-b759c83115ec/zenoh-bridge-check/`). 조건은 Apple Silicon Mac, OrbStack, 기체 1대(실제 SITL Executor)와 지상 쪽 별도 DDS 도메인, bridge 1.10.2(다른 판은 적음), 무선 지연과 손실 없음이다. 확인 수준은 [관찰], [소스], [추론], [추측], [미확인]이다. Zenoh의 구성은 정하지 않았다. 결과가 계약과 Phase 3 구성에 반영되면 이 절을 지운다.
+
+- [관찰] `ExecuteMission`의 완료, 비행 중 cancel, 즉시 ABORTED가 지상에서 건넜다(각 1회). `VehicleState`(임시 발행자로만 봄)와 `MissionEvent`는 타입, type hash, QoS가 같고 계약 구독 QoS로 받았다.
+- [관찰] allow를 기체와 지상 양쪽에 두면 지상에 계약 셋만 보이고 `/fmu/out` 토픽 하나를 이름으로 8 s 구독해도 받지 못했다. 지상에서 기체 방향의 발행과 service 호출, `/fmu/in/*`, 한쪽만 둔 조합은 시험하지 않았다. allow가 없으면 `/fmu` 구독이 되고 지상 발행이 기체 쪽에 생기며 Executor의 lifecycle과 parameter service가 지상에 보인다.
+- 접수 사건 유실(`docs/interface.md`의 "계약 토픽 QoS", "MissionEvent" 절, `docs/architecture.md`의 "인터페이스 계약" 절에 닿음). [관찰] 지상에 먼저 떠 있던 다른 사건 구독자가 없을 때, `mission_event` 구독을 action client보다 먼저 같은 노드에서 만들어도 지상에서 즉시 ABORTED로 끝나는 goal 7회 중 접수 사건 0회, 종료 사건 2회를 받았다. 구독자가 5 s 먼저 떠 있으면 3회 모두 받았다. [추측] 지상 쪽 구독을 기체 쪽에 알리는 시간이 goal 왕복보다 길다. 긴 미션에서 같은지는 [미확인].
+- 재연결(`docs/interface.md`의 "MissionEvent" 절, `docs/architecture.md`의 "인터페이스 계약" 절에 닿음). [관찰] bridge를 멈췄다 켠 3회 모두 지상 client가 result를 받지 못했고(종료 사건은 2회 받음), 끊긴 동안의 `VehicleState`, `MissionEvent`, feedback은 오지 않았으며 action client는 단절을 알리지 않았다. Executor의 result는 종료 약 18 s 뒤 조회되지 않았다. 보관 기간 안의 재조회와 단절 중이나 재연결 뒤의 cancel은 [미확인].
+- [관찰] action 내부 토픽(`_action/feedback`, `_action/status`)의 type hash가 지상 쪽에서 기체 쪽과 달랐다. 그래도 action은 동작했다. 원인은 [추측].
+- [관찰] 지상의 `/clock`은 allow에 넣어야 건너고, 없으면 `use_sim_time` true 노드의 시계가 0에 머문다. `VehicleState.header.stamp`와 `MissionEvent.stamp`는 기체 시계 값 그대로 건넌다.
+- discovery. [관찰] bridge 1.10.2는 저장소 `config/cyclonedds.xml`(multicast 끔, peer 127.0.0.1) 조건에서 자기보다 늦게 뜬 DDS 참가자를 서로 찾지 못한다(각 1회). 원인은 [소스]와 [관찰]로 본 CycloneDDS 11.0.1의 SPDP 검사로 보이고 bridge의 interface 선택과 어긋난다(늦게 뜬 노드의 SPDP가 버려지는 순간은 못 봄, 나머지 [추론]). bridge 전용 DDS 설정에 interface로 lo만 또는 eth0와 lo를 주면 해소된다(각 1-2회, 이름 `eth0`는 호스트마다 다를 수 있음). 1.9.0(CycloneDDS 0.11.0)은 저장소 xml 그대로 찾는다.
+- Executor 종료. [관찰] 기체 쪽 bridge의 action route가 다시 만들어진 뒤(Executor 재시작, 또는 Executor가 없는 동안 지상 client가 공지됐다 물러난 뒤 Executor가 뜸) 오는 같은 goal 요청이 같은 요청 id로 두 번 건너가고, rclcpp_action이 예외를 던져 Executor 프로세스가 끝났다(4회 중 4회, 앞선 6회도 같음, route를 한 번만 만든 8회는 정상). 관찰은 1.10.2(저장소 DDS 설정 그대로인 조합과 bridge 전용 DDS 설정에 eth0와 lo를 준 조합)와 1.9.0(저장소 DDS 설정, 1회)에서이고, lo만 준 조합은 discovery만 확인했다. 예외는 [소스]상 노드 코드가 잡을 수 없는 위치에서 난다. 비행 중이면 Offboard 손실 failsafe로 Land에 간다(문서와 파라미터 확인, 실측 아님).
+- Executor 종료의 결정안(architect, 사용자 승인 대기, 문서와 코드에 반영하지 않음). 이미 접수한 goal id로 다시 온 요청을 접수하지 않는다(rejected 응답). 이것은 고정된 수락 정책의 변경이라 변경 절차(`docs/architecture.md`)를 탄다. 구현 뒤 실측(route가 다시 만들어지는 두 경로 각 10회, 실행 중 지상 client 재기동 각 5회를 1.10.2와 1.9.0에서)에서 죽는 회차가 있으면 결정을 다시 연다. 이 방어를 넣은 뒤 지상이 받는 응답(accepted 또는 rejected)과, 지상이 받는 `MissionEvent`가 goal마다 접수 하나와 종료 하나인지는 [미확인](저장소 DDS 설정 조합 2회에서 같은 goal id의 접수 사건이 두 번 왔다).
+- upstream: bridge 저장소의 열린 issue #702(같은 이름 노드 재시작 뒤 route 비활성)와 #703(subscriber 반복 생성과 삭제 뒤 DDS 불안정)은 1.9.0에서 보고됐고, 둘을 고치는 PR #705는 열려 있다. Executor 재시작 경로는 #702와 닿고 지상 client 공지 경로가 #705로 고쳐지는지는 [미확인].
 
 ## 새 개발 PC에서 시작할 때
 
